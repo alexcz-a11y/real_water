@@ -1,7 +1,7 @@
 export {
   PREWARM_MANIFEST_SCHEMA,
   PREWARM_MANIFEST_VERSION,
-  createMockPrewarmManifest,
+  createMinimalWaterPrewarmManifest,
 } from "./manifest.js";
 export type {
   PrewarmDeclaration,
@@ -52,6 +52,8 @@ export type {
 
 export { createThreeHostLifecycleAdapter } from "./three-host.js";
 export type {
+  ThreeHostCamera,
   ThreeHostLifecycleAdapterOptions,
   ThreeHostRenderer,
+  ThreeHostScene,
 } from "./three-host.js";

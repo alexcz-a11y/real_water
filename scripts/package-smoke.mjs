@@ -89,7 +89,7 @@ try {
   const requiredExports = [
     "RealWaterStartupError",
     "createMemoryHostLifecycleAdapter",
-    "createMockPrewarmManifest",
+    "createMinimalWaterPrewarmManifest",
     "createThreeHostLifecycleAdapter",
     "prepareRealWater",
   ];
@@ -100,7 +100,7 @@ try {
     '  if (!(name in realWater)) throw new Error("Missing packed export: " + name);',
     "}",
     "const run = realWater.prepareRealWater({",
-    "  manifest: realWater.createMockPrewarmManifest(),",
+    "  manifest: realWater.createMinimalWaterPrewarmManifest(),",
     "  loading: { present() {} },",
     "  host: realWater.createMemoryHostLifecycleAdapter({ stepDelayMs: 0 }),",
     "});",
@@ -119,9 +119,9 @@ try {
   writeFileSync(
     join(consumerRoot, "index.mts"),
     [
-      'import { createMemoryHostLifecycleAdapter, createMockPrewarmManifest, prepareRealWater } from "real-water";',
+      'import { createMemoryHostLifecycleAdapter, createMinimalWaterPrewarmManifest, prepareRealWater } from "real-water";',
       "const run = prepareRealWater({",
-      "  manifest: createMockPrewarmManifest(),",
+      "  manifest: createMinimalWaterPrewarmManifest(),",
       "  loading: { present() {} },",
       "  host: createMemoryHostLifecycleAdapter({ stepDelayMs: 0 }),",
       "});",

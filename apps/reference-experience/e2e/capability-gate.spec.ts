@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 test("does not expose the Memory Host outside the QA route", async ({
   page,
@@ -75,15 +75,79 @@ test("accepts a real Core WebGPU renderer when the browser profile provides it",
     "Core WebGPU is unavailable in this browser profile.",
   );
 
+  await installCanvasStartupRecorder(page);
   await page.goto("/?host=three");
 
-  const placeholder = page.getByTestId("reference-placeholder");
-  await expect(placeholder).toBeVisible();
-  await expect(placeholder).toHaveAttribute("data-backend", "core-webgpu");
-  await expect(placeholder).toHaveAttribute(
+  const stage = page.getByTestId("reference-stage");
+  await expect(stage).toBeVisible();
+  await expect(stage).toBeFocused();
+  await expect(stage).toHaveAttribute("data-backend", "core-webgpu");
+  await expect(stage).toHaveAttribute(
     "data-timestamp-query",
     /^(?:true|false)$/u,
   );
   await expect(page.getByTestId("loading-experience")).toHaveCount(0);
-  await expect(page.locator("canvas")).toHaveCount(0);
+  await expect(page.getByTestId("reference-placeholder")).toHaveCount(0);
+
+  const canvas = stage.locator("canvas");
+  await expect(canvas).toHaveCount(1);
+  await expect(canvas).toBeVisible();
+  expect(
+    await canvas.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        height: bounds.height,
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+      };
+    }),
+  ).toEqual({
+    height: await page.evaluate(() => window.innerHeight),
+    left: 0,
+    top: 0,
+    width: await page.evaluate(() => window.innerWidth),
+  });
+
+  const frames = await page.evaluate(() => {
+    const state = globalThis as typeof globalThis & CanvasStartupRecorderState;
+    return state.canvasStartupFrames;
+  });
+  const readyFrame = frames.find(
+    (frame) => frame.loadingState === "ready" && !frame.canvasAttached,
+  );
+  const revealFrame = frames.find((frame) => frame.canvasAttached);
+  expect(readyFrame).toBeDefined();
+  expect(revealFrame).toBeDefined();
+  expect(readyFrame?.frame).toBeLessThan(revealFrame?.frame ?? 0);
 });
+
+interface CanvasStartupRecorderState {
+  canvasStartupFrames: Array<{
+    frame: number;
+    loadingState: string | null;
+    canvasAttached: boolean;
+  }>;
+}
+
+async function installCanvasStartupRecorder(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const state = globalThis as typeof globalThis & CanvasStartupRecorderState;
+    state.canvasStartupFrames = [];
+
+    let frame = 0;
+    const recordFrame = (): void => {
+      frame += 1;
+      state.canvasStartupFrames.push({
+        frame,
+        loadingState:
+          document.querySelector<HTMLElement>(
+            '[data-testid="loading-experience"]',
+          )?.dataset.state ?? null,
+        canvasAttached: document.querySelector("canvas") !== null,
+      });
+      requestAnimationFrame(recordFrame);
+    };
+    requestAnimationFrame(recordFrame);
+  });
+}

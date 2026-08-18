@@ -8,7 +8,7 @@
 export function createMemoryHostLifecycleAdapter(options?: MemoryHostLifecycleAdapterOptions): HostLifecycleAdapter;
 
 // @public
-export function createMockPrewarmManifest(): PrewarmManifest;
+export function createMinimalWaterPrewarmManifest(): PrewarmManifest;
 
 // @public
 export function createThreeHostLifecycleAdapter(options: ThreeHostLifecycleAdapterOptions): HostLifecycleAdapter;
@@ -295,14 +295,26 @@ export interface StartupProgress {
 export type StartupSnapshot = LoadingStartupSnapshot | PreparingStartupSnapshot | ReadyStartupSnapshot | ErrorStartupSnapshot;
 
 // @public
+export interface ThreeHostCamera {
+    readonly isCamera: boolean;
+}
+
+// @public
 export interface ThreeHostLifecycleAdapterOptions {
+    readonly camera: ThreeHostCamera;
     readonly renderer: ThreeHostRenderer;
+    readonly scene: ThreeHostScene;
 }
 
 // @public
 export interface ThreeHostRenderer {
     // (undocumented)
     init(): Promise<unknown>;
+}
+
+// @public
+export interface ThreeHostScene {
+    readonly isScene: boolean;
 }
 
 // (No @packageDocumentation comment for this package)

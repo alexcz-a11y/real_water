@@ -205,7 +205,7 @@ export interface RealWaterLease {
  */
 export interface PreparationRun {
   /**
-   * Resolves only after the complete mock Readiness Gate passes.
+   * Resolves only after the complete Readiness Gate passes.
    */
   readonly ready: Promise<RealWaterLease>;
 

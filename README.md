@@ -1,24 +1,30 @@
 # Real Water
 
 Real Water is an ESM-only TypeScript Module for a reusable native Three.js Open
-Water Domain. The repository is currently at the workspace and startup
-foundation stage.
+Water Domain. The repository now includes the first complete, fail-closed water
+prewarm and reveal path.
 
-Issues #12 and #13 deliver the startup and capability foundation:
+Issue #14 adds one minimal water plane to the startup and capability foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- a versioned mock Prewarm Manifest declares all work;
-- Memory and Three Host Adapters report completed work without fabricated
-  timing;
-- the default Reference Experience initializes a Host-owned Three r185 renderer
-  and accepts only Core WebGPU with the required limits;
+- the canonical minimal-water Prewarm Manifest declares exactly eight work
+  units: a texture, render target, plane geometry, TSL NodeMaterial,
+  RenderPipeline route, eight hidden stabilization frames, completion readback,
+  and main-camera guard frame;
+- the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
+  restores their state after preparation, and never disposes them;
+- progress advances monotonically only when declared manifest work completes;
+- the prepared route and guard frame receive GPU completion readbacks before the
+  ready lease resolves;
+- the Reference Experience keeps the canvas hidden through preparation and
+  reveals it on the next refresh after readiness;
 - WebGL fallback, Compatibility Mode, missing limits, device loss, failure,
   cancellation, and disposal paths stay behind the Loading Experience with
   structured diagnostics;
-- a placeholder appears only after a capability-checked ready lease resolves.
+- lease disposal is idempotent and releases only Real Water-owned resources.
 
-This milestone verifies renderer capabilities but does not render water or claim
-Native Quality or production water behavior.
+This milestone renders a deliberately minimal water surface. It does not yet
+claim Native Quality or production water behavior.
 
 ## Required toolchain
 

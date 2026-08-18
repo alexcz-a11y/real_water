@@ -20,6 +20,7 @@
 html,
 body,
 #app {
+  width: 100%;
   min-height: 100%;
   margin: 0;
 }
@@ -164,6 +165,19 @@ h1 {
 .reference-placeholder {
   place-content: center;
   min-height: 100vh;
+}
+
+.reference-stage {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #031019;
+}
+
+.reference-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 @keyframes readiness-pulse {

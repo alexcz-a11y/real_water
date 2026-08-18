@@ -15,7 +15,7 @@ export const PREWARM_MANIFEST_SCHEMA = "real-water/prewarm" as const;
 export const PREWARM_MANIFEST_VERSION = 1 as const;
 
 /**
- * Structural declaration kinds supported by the first mock Readiness Gate.
+ * Structural declaration kinds supported by the first Readiness Gate.
  *
  * @public
  */
@@ -66,42 +66,91 @@ const DECLARATION_KINDS: readonly PrewarmDeclarationKind[] = [
   "conditional-route",
 ];
 
+export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
+  texture: "water-texture",
+  renderTarget: "water-render-target",
+  geometry: "water-geometry",
+  material: "water-material",
+  renderRoute: "water-render-route",
+  hiddenStabilization: "water-hidden-stabilization",
+  completionProbe: "water-completion-probe",
+  mainCameraGuard: "water-main-camera-guard",
+} as const);
+
+const MINIMAL_WATER_MANIFEST_ID = "reference-minimal-water";
+const MINIMAL_WATER_MANIFEST_HASH =
+  "sha256:cd1f46244381f23881c64cdad5d729ae2a6fd07e4af6a64e08509d2c080fa2f4";
+const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.texture,
+    kind: "resource",
+    label: "Minimal water texture",
+    fingerprint:
+      "sha256:6a6c8aa146e7dd50e15eed0c5b627b961a11fbd49b4655147345a44a5d0bb1bc",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderTarget,
+    kind: "resource",
+    label: "Minimal water render target",
+    fingerprint:
+      "sha256:65d1be5b0a29b0f3c321446487931e44cfe098e96943d4bed09c77f82e4815f0",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.geometry,
+    kind: "resource",
+    label: "Minimal water plane geometry",
+    fingerprint:
+      "sha256:591743214c490dd4ebbe364ce7bbcc92854d0664e90f1e117b28f3fe115fa313",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.material,
+    kind: "effect-state",
+    label: "Minimal water material",
+    fingerprint:
+      "sha256:95764a91129a768c4751b33e8d51a3d281218e210d74798f05d9bad47d5d580b",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
+    kind: "conditional-route",
+    label: "Minimal water render route",
+    fingerprint:
+      "sha256:1980a55d78567111049b94ebc51967e22a7c07656dcefebe38436ed3c8a35d8b",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.hiddenStabilization,
+    kind: "effect-state",
+    label: "Eight hidden stabilization frames",
+    fingerprint:
+      "sha256:6a7b2642ef2717c31419931da4593f74b3b165ce2832a3b319e8612fbbecdeaf",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.completionProbe,
+    kind: "conditional-route",
+    label: "GPU completion probe",
+    fingerprint:
+      "sha256:8d9e2a4c4179496527e5dbda169711fedd3efb8673d53a6456b0167f13af83ab",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.mainCameraGuard,
+    kind: "conditional-route",
+    label: "Main-camera guard frame",
+    fingerprint:
+      "sha256:02ad80f6c1c5a4735739945ef8d52e6072cda68c7641b261257f6761c80f03e7",
+  },
+];
+
 /**
- * Returns the deterministic mock manifest used by the first Reference
- * Experience startup path.
+ * Returns the complete manifest for the first prewarmed water plane.
  *
  * @public
  */
-export function createMockPrewarmManifest(): PrewarmManifest {
+export function createMinimalWaterPrewarmManifest(): PrewarmManifest {
   return freezeManifest({
     schema: PREWARM_MANIFEST_SCHEMA,
     version: PREWARM_MANIFEST_VERSION,
-    id: "reference-startup-mock",
-    manifestHash:
-      "sha256:7b807d5a90545af7858f7c82b9239fb3f4de4c6035e88380c4db8ad466babfe3",
-    declarations: [
-      {
-        id: "loading-shell",
-        kind: "resource",
-        label: "Loading shell",
-        fingerprint:
-          "sha256:8b86a5bc0adf8e2f9e82b24d961682878bca3f2e27e879b6bc9ad8500e38150f",
-      },
-      {
-        id: "placeholder-surface",
-        kind: "effect-state",
-        label: "Placeholder surface",
-        fingerprint:
-          "sha256:82be4e46bb971827fe8fb96de0b5f89a9af17311e4a4964a6c5fd0b53f5f84e6",
-      },
-      {
-        id: "atomic-reveal",
-        kind: "conditional-route",
-        label: "Atomic reveal route",
-        fingerprint:
-          "sha256:6e1dc6cbfc0cc9cc7182253753c432c1f46ed3d3f3bc6adf51084b0eb817ecf7",
-      },
-    ],
+    id: MINIMAL_WATER_MANIFEST_ID,
+    manifestHash: MINIMAL_WATER_MANIFEST_HASH,
+    declarations: MINIMAL_WATER_DECLARATIONS,
   });
 }
 
@@ -227,13 +276,17 @@ export function normalizePrewarmManifest(
     });
   }
 
-  return freezeManifest({
+  const manifest = freezeManifest({
     schema: PREWARM_MANIFEST_SCHEMA,
     version: PREWARM_MANIFEST_VERSION,
     id: value.id,
     manifestHash: value.manifestHash,
     declarations,
   });
+
+  assertMinimalWaterPrewarmManifest(manifest);
+
+  return manifest;
 }
 
 export function manifestIdentity(
@@ -256,6 +309,76 @@ function freezeManifest(manifest: PrewarmManifest): PrewarmManifest {
       ),
     ),
   });
+}
+
+export function assertMinimalWaterPrewarmManifest(
+  manifest: PrewarmManifest,
+): void {
+  if (manifest.id !== MINIMAL_WATER_MANIFEST_ID) {
+    throw manifestError(
+      "This release supports only the minimal-water Prewarm Manifest.",
+      {
+        expectedManifestId: MINIMAL_WATER_MANIFEST_ID,
+        receivedManifestId: manifest.id,
+      },
+    );
+  }
+
+  if (manifest.manifestHash !== MINIMAL_WATER_MANIFEST_HASH) {
+    throw manifestError(
+      "The minimal-water Prewarm Manifest hash does not match its supported work plan.",
+      {
+        expectedManifestHash: MINIMAL_WATER_MANIFEST_HASH,
+        manifestId: manifest.id,
+        receivedManifestHash: manifest.manifestHash,
+      },
+    );
+  }
+
+  for (const required of MINIMAL_WATER_DECLARATIONS) {
+    const candidate = manifest.declarations.find(
+      (declaration) => declaration.id === required.id,
+    );
+    if (candidate === undefined) {
+      throw manifestError(
+        "The minimal-water Prewarm Manifest is missing required work.",
+        {
+          manifestId: manifest.id,
+          missingDeclarationId: required.id,
+        },
+      );
+    }
+
+    if (
+      candidate.kind !== required.kind ||
+      candidate.label !== required.label ||
+      candidate.fingerprint !== required.fingerprint
+    ) {
+      throw manifestError(
+        "A minimal-water prewarm declaration does not match the supported work plan.",
+        {
+          declarationId: required.id,
+          manifestId: manifest.id,
+        },
+      );
+    }
+  }
+
+  if (manifest.declarations.length !== MINIMAL_WATER_DECLARATIONS.length) {
+    const unexpected = manifest.declarations.find(
+      (candidate) =>
+        !MINIMAL_WATER_DECLARATIONS.some(
+          (required) => required.id === candidate.id,
+        ),
+    );
+    throw manifestError(
+      "The minimal-water Prewarm Manifest contains unsupported work.",
+      {
+        manifestId: manifest.id,
+        unexpectedDeclarationId: unexpected?.id ?? "unknown",
+      },
+    );
+  }
 }
 
 function isNonEmptyText(value: unknown): value is string {

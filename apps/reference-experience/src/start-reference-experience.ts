@@ -1,6 +1,6 @@
 import {
   RealWaterStartupError,
-  createMockPrewarmManifest,
+  createMinimalWaterPrewarmManifest,
   prepareRealWater,
   type HostLifecycleAdapter,
   type PreparationRun,
@@ -10,8 +10,11 @@ import { DomLoadingPresenter } from "./loading-presenter.js";
 
 export interface StartReferenceExperienceOptions {
   readonly createHost: () => HostLifecycleAdapter;
+  readonly createReadyStage?: ReadyStageFactory;
   readonly revealDelayFrames?: number;
 }
+
+type ReadyStageFactory = (lease: RealWaterLease) => HTMLElement;
 
 export interface ReferenceExperienceSession {
   dispose(): Promise<void>;
@@ -45,7 +48,7 @@ export function startReferenceExperience(
     const attemptId = ++attempt;
     const host = options.createHost();
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       host,
       loading: presenter,
     });
@@ -84,7 +87,8 @@ export function startReferenceExperience(
           return;
         }
 
-        const stage = createPlaceholder(lease);
+        const stage =
+          options.createReadyStage?.(lease) ?? createPlaceholder(lease);
         presenter.dispose();
         mount.replaceChildren(stage);
         stage.focus({ preventScroll: true });

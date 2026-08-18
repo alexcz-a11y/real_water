@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   RealWaterStartupError,
   createMemoryHostLifecycleAdapter,
-  createMockPrewarmManifest,
+  createMinimalWaterPrewarmManifest,
   prepareRealWater,
   type HostLifecycleAdapter,
   type HostPreparedLease,
@@ -28,7 +28,7 @@ const TEST_CAPABILITIES = Object.freeze({
 describe("prepareRealWater", () => {
   it("publishes deeply immutable Core WebGPU capabilities from the Memory Host", async () => {
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading: new RecordingLoadingPresenter(),
       host: createMemoryHostLifecycleAdapter({
         scenario: { kind: "success", timestampQuery: true },
@@ -51,7 +51,7 @@ describe("prepareRealWater", () => {
 
   it("reports only completed manifest work before resolving a ready lease", async () => {
     const loading = new RecordingLoadingPresenter();
-    const manifest = createMockPrewarmManifest();
+    const manifest = createMinimalWaterPrewarmManifest();
     const run = prepareRealWater({
       manifest,
       loading,
@@ -65,13 +65,18 @@ describe("prepareRealWater", () => {
 
     expect(loading.snapshots.map((snapshot) => snapshot.status)).toEqual([
       "loading",
-      "preparing",
-      "preparing",
-      "preparing",
-      "preparing",
+      ...Array.from(
+        { length: manifest.declarations.length + 1 },
+        () => "preparing" as const,
+      ),
       "ready",
     ]);
-    expect(progress).toEqual([0, 1, 2, 3]);
+    expect(progress).toEqual(
+      Array.from(
+        { length: manifest.declarations.length + 1 },
+        (_, index) => index,
+      ),
+    );
     expect(lease.manifest).toEqual({
       schema: "real-water/prewarm",
       version: 1,
@@ -97,7 +102,7 @@ describe("prepareRealWater", () => {
       hostStarted = true;
     });
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading,
       host,
     });
@@ -114,7 +119,7 @@ describe("prepareRealWater", () => {
   it("rejects a Memory WebGL fallback with stable capability diagnostics", async () => {
     const loading = new RecordingLoadingPresenter();
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading,
       host: createMemoryHostLifecycleAdapter({
         scenario: { kind: "webgl-fallback" },
@@ -147,7 +152,7 @@ describe("prepareRealWater", () => {
   it("rejects Memory WebGPU Compatibility Mode before readiness", async () => {
     const loading = new RecordingLoadingPresenter();
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading,
       host: createMemoryHostLifecycleAdapter({
         scenario: { kind: "compatibility-mode" },
@@ -175,7 +180,7 @@ describe("prepareRealWater", () => {
   it("rejects a Memory Core device that misses a required limit", async () => {
     const loading = new RecordingLoadingPresenter();
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading,
       host: createMemoryHostLifecycleAdapter({
         scenario: { kind: "missing-limit" },
@@ -204,7 +209,7 @@ describe("prepareRealWater", () => {
   it("reports Memory WebGPU device loss as a retryable capability failure", async () => {
     const loading = new RecordingLoadingPresenter();
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading,
       host: createMemoryHostLifecycleAdapter({
         scenario: {
@@ -235,12 +240,12 @@ describe("prepareRealWater", () => {
   it("keeps failed progress at the last actually completed declaration", async () => {
     const loading = new RecordingLoadingPresenter();
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading,
       host: createMemoryHostLifecycleAdapter({
         scenario: {
           kind: "failure",
-          declarationId: "placeholder-surface",
+          declarationId: "water-render-target",
           message: "Synthetic pipeline failure.",
         },
         stepDelayMs: 0,
@@ -255,7 +260,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 1,
-        totalWork: 3,
+        totalWork: 8,
       },
     });
   });
@@ -263,7 +268,7 @@ describe("prepareRealWater", () => {
   it("cancels once and rejects only after cancellation is presented", async () => {
     const loading = new RecordingLoadingPresenter();
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading,
       host: createMemoryHostLifecycleAdapter({ stepDelayMs: 100 }),
     });
@@ -295,7 +300,7 @@ describe("prepareRealWater", () => {
       },
     });
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading: new RecordingLoadingPresenter(),
       host,
     });
@@ -312,9 +317,9 @@ describe("prepareRealWater", () => {
   it("fails invalid manifest versions before invoking the Host Adapter", async () => {
     let hostStarted = false;
     const manifest = {
-      ...createMockPrewarmManifest(),
+      ...createMinimalWaterPrewarmManifest(),
       version: 2,
-    } as unknown as ReturnType<typeof createMockPrewarmManifest>;
+    } as unknown as ReturnType<typeof createMinimalWaterPrewarmManifest>;
     const run = prepareRealWater({
       manifest,
       loading: new RecordingLoadingPresenter(),
@@ -329,9 +334,59 @@ describe("prepareRealWater", () => {
     expect(hostStarted).toBe(false);
   });
 
+  it("fails before Host preparation when required water work is absent", async () => {
+    const manifest = createMinimalWaterPrewarmManifest();
+    for (const missingDeclaration of manifest.declarations) {
+      const hostStarted = vi.fn();
+      const run = prepareRealWater({
+        manifest: {
+          ...manifest,
+          declarations: manifest.declarations.filter(
+            (declaration) => declaration.id !== missingDeclaration.id,
+          ),
+        },
+        loading: new RecordingLoadingPresenter(),
+        host: createReadyHost(hostStarted),
+      });
+
+      await expect(run.ready).rejects.toMatchObject({
+        code: "MANIFEST_INVALID",
+        diagnostics: {
+          missingDeclarationId: missingDeclaration.id,
+        },
+        phase: "manifest-validation",
+        retryable: false,
+      });
+      expect(hostStarted).not.toHaveBeenCalled();
+    }
+  });
+
+  it("rejects a changed minimal-water work plan with a syntactically valid hash", async () => {
+    const hostStarted = vi.fn();
+    const manifest = createMinimalWaterPrewarmManifest();
+    const run = prepareRealWater({
+      manifest: {
+        ...manifest,
+        manifestHash: "sha256:" + "0".repeat(64),
+      },
+      loading: new RecordingLoadingPresenter(),
+      host: createReadyHost(hostStarted),
+    });
+
+    await expect(run.ready).rejects.toMatchObject({
+      code: "MANIFEST_INVALID",
+      diagnostics: {
+        expectedManifestHash: manifest.manifestHash,
+        receivedManifestHash: "sha256:" + "0".repeat(64),
+      },
+      phase: "manifest-validation",
+    });
+    expect(hostStarted).not.toHaveBeenCalled();
+  });
+
   it("rejects a Host that claims readiness before completing the manifest", async () => {
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading: new RecordingLoadingPresenter(),
       host: {
         async prepare() {
@@ -352,7 +407,7 @@ describe("prepareRealWater", () => {
   it("settles cancellation even when the Host ignores the AbortSignal", async () => {
     let hostStarted = false;
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading: new RecordingLoadingPresenter(),
       host: {
         prepare() {
@@ -390,7 +445,7 @@ describe("prepareRealWater", () => {
       resolveHost = resolve;
     });
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading: new RecordingLoadingPresenter(),
       host: {
         prepare() {
@@ -428,7 +483,7 @@ describe("prepareRealWater", () => {
     const finalPresentation = new Promise<void>((resolve) => {
       releaseFinal = resolve;
     });
-    const manifest = createMockPrewarmManifest();
+    const manifest = createMinimalWaterPrewarmManifest();
     const loading: LoadingPresenterAdapter = {
       present(snapshot) {
         if (
@@ -482,7 +537,7 @@ describe("prepareRealWater", () => {
   it("latches a reporter failure even when the Host catches it", async () => {
     let disposalCalls = 0;
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading: new RecordingLoadingPresenter(),
       host: {
         async prepare(request) {
@@ -519,7 +574,7 @@ describe("prepareRealWater", () => {
 
   it("surfaces a swallowed reporter failure even when the Host never settles", async () => {
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading: new RecordingLoadingPresenter(),
       host: {
         async prepare(request) {
@@ -568,7 +623,7 @@ describe("prepareRealWater", () => {
       },
     };
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading,
       host: createReadyHost(),
     });
@@ -587,11 +642,12 @@ describe("prepareRealWater", () => {
   it("cancels after Host readiness while progress presentation is pending", async () => {
     let progressPresentationStarted = false;
     let disposalCalls = 0;
+    const manifest = createMinimalWaterPrewarmManifest();
     const loading: LoadingPresenterAdapter = {
       present(snapshot, signal) {
         if (
           snapshot.status === "preparing" &&
-          snapshot.progress.completedWork === 3
+          snapshot.progress.completedWork === manifest.declarations.length
         ) {
           progressPresentationStarted = true;
           return new Promise((_, reject) => {
@@ -607,7 +663,7 @@ describe("prepareRealWater", () => {
       },
     };
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest,
       loading,
       host: {
         async prepare(request) {
@@ -649,7 +705,7 @@ describe("prepareRealWater", () => {
     let savedRequest:
       Parameters<HostLifecycleAdapter["prepare"]>[0] | undefined;
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading,
       host: {
         async prepare(request) {
@@ -666,7 +722,7 @@ describe("prepareRealWater", () => {
       code: "UNSUPPORTED_ENVIRONMENT",
     });
     const snapshotsBeforeLateReport = loading.snapshots.length;
-    const firstId = createMockPrewarmManifest().declarations[0]?.id;
+    const firstId = createMinimalWaterPrewarmManifest().declarations[0]?.id;
     expect(firstId).toBeDefined();
     await expect(
       savedRequest?.progress.complete(firstId ?? ""),
@@ -694,7 +750,7 @@ describe("prepareRealWater", () => {
       },
     };
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading,
       host: createReadyHost(undefined, { dispose: disposeHostLease }),
     });
@@ -725,7 +781,9 @@ describe("prepareRealWater", () => {
     });
     const loading = new RecordingLoadingPresenter();
     const nullRun = prepareRealWater({
-      manifest: null as unknown as ReturnType<typeof createMockPrewarmManifest>,
+      manifest: null as unknown as ReturnType<
+        typeof createMinimalWaterPrewarmManifest
+      >,
       loading,
       host,
     });
@@ -734,11 +792,11 @@ describe("prepareRealWater", () => {
     });
 
     const sparseDeclarations = new Array(2) as ReturnType<
-      typeof createMockPrewarmManifest
+      typeof createMinimalWaterPrewarmManifest
     >["declarations"];
     const sparseRun = prepareRealWater({
       manifest: {
-        ...createMockPrewarmManifest(),
+        ...createMinimalWaterPrewarmManifest(),
         declarations: sparseDeclarations,
       },
       loading,
@@ -750,13 +808,13 @@ describe("prepareRealWater", () => {
 
     const inheritedDeclarations = new Array(1) as unknown[];
     Object.setPrototypeOf(inheritedDeclarations, {
-      0: createMockPrewarmManifest().declarations[0],
+      0: createMinimalWaterPrewarmManifest().declarations[0],
     });
     const inheritedRun = prepareRealWater({
       manifest: {
-        ...createMockPrewarmManifest(),
+        ...createMinimalWaterPrewarmManifest(),
         declarations: inheritedDeclarations as ReturnType<
-          typeof createMockPrewarmManifest
+          typeof createMinimalWaterPrewarmManifest
         >["declarations"],
       },
       loading,
@@ -770,7 +828,7 @@ describe("prepareRealWater", () => {
 
   it("allows truthful declarations to complete in any serialized order", async () => {
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading: new RecordingLoadingPresenter(),
       host: {
         async prepare(request) {
@@ -794,7 +852,7 @@ describe("prepareRealWater", () => {
 
   it("fails deterministically for an unknown configured mock failure", async () => {
     const run = prepareRealWater({
-      manifest: createMockPrewarmManifest(),
+      manifest: createMinimalWaterPrewarmManifest(),
       loading: new RecordingLoadingPresenter(),
       host: createMemoryHostLifecycleAdapter({
         scenario: {
@@ -812,19 +870,29 @@ describe("prepareRealWater", () => {
     });
   });
 
-  it("returns a deeply immutable deterministic mock manifest", () => {
-    const manifest = createMockPrewarmManifest();
+  it("returns a deeply immutable deterministic minimal-water manifest", () => {
+    const manifest = createMinimalWaterPrewarmManifest();
     const first = manifest.declarations[0];
 
     expect(Object.isFrozen(manifest)).toBe(true);
     expect(Object.isFrozen(manifest.declarations)).toBe(true);
     expect(Object.isFrozen(first)).toBe(true);
+    expect(manifest.declarations.map((declaration) => declaration.id)).toEqual([
+      "water-texture",
+      "water-render-target",
+      "water-geometry",
+      "water-material",
+      "water-render-route",
+      "water-hidden-stabilization",
+      "water-completion-probe",
+      "water-main-camera-guard",
+    ]);
     expect(() => {
       if (first !== undefined) {
         (first as { label: string }).label = "mutated";
       }
     }).toThrow(TypeError);
-    expect(manifest.declarations[0]?.label).toBe("Loading shell");
+    expect(manifest.declarations[0]?.label).toBe("Minimal water texture");
   });
 });
 
