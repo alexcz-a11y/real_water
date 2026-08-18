@@ -4,17 +4,21 @@ Real Water is an ESM-only TypeScript Module for a reusable native Three.js Open
 Water Domain. The repository is currently at the workspace and startup
 foundation stage.
 
-Issue #12 delivers a deliberately fake, complete startup path:
+Issues #12 and #13 deliver the startup and capability foundation:
 
 - an accessible Loading Experience appears before preparation begins;
 - a versioned mock Prewarm Manifest declares all work;
-- a Memory Host Adapter reports completed work without fabricated timing;
-- unsupported, failure, cancellation, and disposal paths stay behind the Loading
-  Experience;
-- a placeholder appears only after the mock ready lease resolves.
+- Memory and Three Host Adapters report completed work without fabricated
+  timing;
+- the default Reference Experience initializes a Host-owned Three r185 renderer
+  and accepts only Core WebGPU with the required limits;
+- WebGL fallback, Compatibility Mode, missing limits, device loss, failure,
+  cancellation, and disposal paths stay behind the Loading Experience with
+  structured diagnostics;
+- a placeholder appears only after a capability-checked ready lease resolves.
 
-This milestone does not claim WebGPU rendering, Native Quality, or production
-water behavior.
+This milestone verifies renderer capabilities but does not render water or claim
+Native Quality or production water behavior.
 
 ## Required toolchain
 
@@ -33,7 +37,8 @@ Run these commands from the repository root:
 6. pnpm test
 7. pnpm test:package
 8. pnpm api:check
-9. pnpm check:boundaries
+9. pnpm check:licenses
+10. pnpm check:boundaries
 
 The complete local gate is also available as pnpm run verify.
 

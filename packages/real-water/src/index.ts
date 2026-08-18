@@ -10,8 +10,15 @@ export type {
   PrewarmManifestIdentity,
 } from "./manifest.js";
 
+export type {
+  RealWaterCapabilities,
+  RenderingCapabilities,
+} from "./capabilities.js";
+
 export { RealWaterStartupError } from "./errors.js";
 export type {
+  HostCompatibilityErrorCode,
+  HostPreparationFailureCode,
   RealWaterStartupErrorInit,
   StartupDiagnostics,
   StartupErrorCode,
@@ -42,3 +49,9 @@ export type {
   StartupProgress,
   StartupSnapshot,
 } from "./startup.js";
+
+export { createThreeHostLifecycleAdapter } from "./three-host.js";
+export type {
+  ThreeHostLifecycleAdapterOptions,
+  ThreeHostRenderer,
+} from "./three-host.js";

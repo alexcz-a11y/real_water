@@ -3,6 +3,10 @@ import type {
   HostPreparedLease,
   HostPreparationRequest,
 } from "./startup.js";
+import {
+  coreWebGPULimits,
+  evaluateRenderingCapability,
+} from "./internal/rendering-capability.js";
 
 /**
  * Deterministic outcomes supported by the Memory Host Adapter.
@@ -12,9 +16,24 @@ import type {
 export type MemoryHostScenario =
   | Readonly<{
       readonly kind: "success";
+      readonly timestampQuery?: boolean;
     }>
   | Readonly<{
       readonly kind: "unsupported";
+      readonly reason?: string;
+    }>
+  | Readonly<{
+      readonly kind: "webgl-fallback";
+    }>
+  | Readonly<{
+      readonly kind: "compatibility-mode";
+    }>
+  | Readonly<{
+      readonly kind: "missing-limit";
+    }>
+  | Readonly<{
+      readonly kind: "device-lost";
+      readonly message?: string;
       readonly reason?: string;
     }>
   | Readonly<{
@@ -59,6 +78,35 @@ export function createMemoryHostLifecycleAdapter(
         };
       }
 
+      const capability = evaluateRenderingCapability(
+        scenario.kind === "webgl-fallback"
+          ? { backend: "webgl2" }
+          : scenario.kind === "compatibility-mode"
+            ? { backend: "webgpu-compatibility" }
+            : scenario.kind === "device-lost"
+              ? {
+                  backend: "device-lost",
+                  message:
+                    scenario.message ?? "The mock WebGPU device was lost.",
+                  reason: scenario.reason ?? null,
+                }
+              : {
+                  backend: "core-webgpu",
+                  limits:
+                    scenario.kind === "missing-limit"
+                      ? coreWebGPULimits({
+                          maxStorageBufferBindingSize: 67_108_864,
+                        })
+                      : coreWebGPULimits(),
+                  timestampQuery:
+                    scenario.kind === "success" &&
+                    scenario.timestampQuery === true,
+                },
+      );
+      if (capability.status !== "supported") {
+        return capability;
+      }
+
       const failureId =
         scenario.kind === "failure"
           ? (scenario.declarationId ??
@@ -92,6 +140,7 @@ export function createMemoryHostLifecycleAdapter(
 
       return {
         status: "ready" as const,
+        capabilities: capability.capabilities,
         lease: createMemoryPreparedLease(),
       };
     },

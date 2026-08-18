@@ -1,4 +1,23 @@
 /**
+ * Stable Host compatibility rejection identifiers.
+ *
+ * @public
+ */
+export type HostCompatibilityErrorCode =
+  | "UNSUPPORTED_ENVIRONMENT"
+  | "CORE_WEBGPU_REQUIRED"
+  | "WEBGPU_COMPATIBILITY_MODE_UNSUPPORTED"
+  | "WEBGPU_LIMIT_UNSUPPORTED";
+
+/**
+ * Stable retryable Host preparation failure identifiers.
+ *
+ * @public
+ */
+export type HostPreparationFailureCode =
+  "RENDERER_INITIALIZATION_FAILED" | "WEBGPU_DEVICE_LOST";
+
+/**
  * Stable startup error identifiers suitable for control flow and diagnostics.
  *
  * @public
@@ -6,7 +25,8 @@
 export type StartupErrorCode =
   | "MANIFEST_INVALID"
   | "MANIFEST_VERSION_UNSUPPORTED"
-  | "UNSUPPORTED_ENVIRONMENT"
+  | HostCompatibilityErrorCode
+  | HostPreparationFailureCode
   | "HOST_PROTOCOL_VIOLATION"
   | "PREWARM_FAILED"
   | "LOADING_PRESENTER_FAILED"

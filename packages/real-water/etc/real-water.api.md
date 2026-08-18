@@ -11,6 +11,9 @@ export function createMemoryHostLifecycleAdapter(options?: MemoryHostLifecycleAd
 export function createMockPrewarmManifest(): PrewarmManifest;
 
 // @public
+export function createThreeHostLifecycleAdapter(options: ThreeHostLifecycleAdapterOptions): HostLifecycleAdapter;
+
+// @public
 export interface ErrorStartupSnapshot {
     // (undocumented)
     readonly error: RealWaterStartupError;
@@ -25,10 +28,16 @@ export interface ErrorStartupSnapshot {
 }
 
 // @public
+export type HostCompatibilityErrorCode = "UNSUPPORTED_ENVIRONMENT" | "CORE_WEBGPU_REQUIRED" | "WEBGPU_COMPATIBILITY_MODE_UNSUPPORTED" | "WEBGPU_LIMIT_UNSUPPORTED";
+
+// @public
 export interface HostLifecycleAdapter {
     // (undocumented)
     prepare(request: HostPreparationRequest): Promise<HostPreparationResult>;
 }
+
+// @public
+export type HostPreparationFailureCode = "RENDERER_INITIALIZATION_FAILED" | "WEBGPU_DEVICE_LOST";
 
 // @public
 export interface HostPreparationRequest {
@@ -43,10 +52,19 @@ export interface HostPreparationRequest {
 // @public
 export type HostPreparationResult = Readonly<{
     readonly status: "ready";
+    readonly capabilities: RealWaterCapabilities;
     readonly lease: HostPreparedLease;
 }> | Readonly<{
     readonly status: "unsupported";
+    readonly code?: HostCompatibilityErrorCode;
     readonly reason: string;
+    readonly retryable?: boolean;
+    readonly diagnostics?: StartupDiagnostics;
+}> | Readonly<{
+    readonly status: "failed";
+    readonly code: HostPreparationFailureCode;
+    readonly reason: string;
+    readonly retryable: boolean;
     readonly diagnostics?: StartupDiagnostics;
 }>;
 
@@ -85,8 +103,19 @@ export interface MemoryHostLifecycleAdapterOptions {
 // @public
 export type MemoryHostScenario = Readonly<{
     readonly kind: "success";
+    readonly timestampQuery?: boolean;
 }> | Readonly<{
     readonly kind: "unsupported";
+    readonly reason?: string;
+}> | Readonly<{
+    readonly kind: "webgl-fallback";
+}> | Readonly<{
+    readonly kind: "compatibility-mode";
+}> | Readonly<{
+    readonly kind: "missing-limit";
+}> | Readonly<{
+    readonly kind: "device-lost";
+    readonly message?: string;
     readonly reason?: string;
 }> | Readonly<{
     readonly kind: "failure";
@@ -187,7 +216,15 @@ export interface ReadyStartupSnapshot {
 }
 
 // @public
+export interface RealWaterCapabilities {
+    // (undocumented)
+    readonly rendering: RenderingCapabilities;
+}
+
+// @public
 export interface RealWaterLease {
+    // (undocumented)
+    readonly capabilities: RealWaterCapabilities;
     dispose(): Promise<void>;
     // (undocumented)
     readonly manifest: PrewarmManifestIdentity;
@@ -225,10 +262,18 @@ export interface RealWaterStartupErrorInit {
 }
 
 // @public
+export interface RenderingCapabilities {
+    // (undocumented)
+    readonly backend: "core-webgpu";
+    // (undocumented)
+    readonly timestampQuery: boolean;
+}
+
+// @public
 export type StartupDiagnostics = Readonly<Record<string, string | number | boolean | null>>;
 
 // @public
-export type StartupErrorCode = "MANIFEST_INVALID" | "MANIFEST_VERSION_UNSUPPORTED" | "UNSUPPORTED_ENVIRONMENT" | "HOST_PROTOCOL_VIOLATION" | "PREWARM_FAILED" | "LOADING_PRESENTER_FAILED" | "PREPARATION_CANCELLED";
+export type StartupErrorCode = "MANIFEST_INVALID" | "MANIFEST_VERSION_UNSUPPORTED" | HostCompatibilityErrorCode | HostPreparationFailureCode | "HOST_PROTOCOL_VIOLATION" | "PREWARM_FAILED" | "LOADING_PRESENTER_FAILED" | "PREPARATION_CANCELLED";
 
 // @public
 export type StartupPhase = "loading-experience" | "manifest-validation" | "host-compatibility" | "prewarm" | "readiness-gate";
@@ -248,6 +293,17 @@ export interface StartupProgress {
 
 // @public
 export type StartupSnapshot = LoadingStartupSnapshot | PreparingStartupSnapshot | ReadyStartupSnapshot | ErrorStartupSnapshot;
+
+// @public
+export interface ThreeHostLifecycleAdapterOptions {
+    readonly renderer: ThreeHostRenderer;
+}
+
+// @public
+export interface ThreeHostRenderer {
+    // (undocumented)
+    init(): Promise<unknown>;
+}
 
 // (No @packageDocumentation comment for this package)
 

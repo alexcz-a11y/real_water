@@ -6,6 +6,7 @@ import {
   readdirSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -53,6 +54,11 @@ try {
   const packageRoot = join(consumerRoot, "node_modules", "real-water");
   mkdirSync(join(consumerRoot, "node_modules"), { recursive: true });
   renameSync(extractedPackageRoot, packageRoot);
+  symlinkSync(
+    resolve("node_modules", "three"),
+    join(consumerRoot, "node_modules", "three"),
+    "dir",
+  );
 
   const packedPackage = JSON.parse(
     readFileSync(join(packageRoot, "package.json"), "utf8"),
@@ -84,6 +90,7 @@ try {
     "RealWaterStartupError",
     "createMemoryHostLifecycleAdapter",
     "createMockPrewarmManifest",
+    "createThreeHostLifecycleAdapter",
     "prepareRealWater",
   ];
   const runtimeSmoke = [

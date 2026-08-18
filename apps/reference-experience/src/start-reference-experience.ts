@@ -1,17 +1,15 @@
 import {
   RealWaterStartupError,
-  createMemoryHostLifecycleAdapter,
   createMockPrewarmManifest,
   prepareRealWater,
-  type MemoryHostScenario,
+  type HostLifecycleAdapter,
   type PreparationRun,
   type RealWaterLease,
 } from "real-water";
 import { DomLoadingPresenter } from "./loading-presenter.js";
 
 export interface StartReferenceExperienceOptions {
-  readonly scenario?: MemoryHostScenario;
-  readonly stepDelayMs?: number;
+  readonly createHost: () => HostLifecycleAdapter;
   readonly revealDelayFrames?: number;
 }
 
@@ -21,7 +19,7 @@ export interface ReferenceExperienceSession {
 
 export function startReferenceExperience(
   mount: Element,
-  options: StartReferenceExperienceOptions = {},
+  options: StartReferenceExperienceOptions,
 ): ReferenceExperienceSession {
   let activeLease: RealWaterLease | null = null;
   let activeRun: PreparationRun | null = null;
@@ -45,10 +43,7 @@ export function startReferenceExperience(
 
   function startAttempt(): void {
     const attemptId = ++attempt;
-    const host = createMemoryHostLifecycleAdapter({
-      scenario: options.scenario ?? { kind: "success" },
-      stepDelayMs: options.stepDelayMs ?? 80,
-    });
+    const host = options.createHost();
     const run = prepareRealWater({
       manifest: createMockPrewarmManifest(),
       host,
@@ -139,13 +134,17 @@ function createPlaceholder(lease: RealWaterLease): HTMLElement {
   stage.className = "reference-placeholder";
   stage.dataset.testid = "reference-placeholder";
   stage.dataset.manifestHash = lease.manifest.manifestHash;
+  stage.dataset.backend = lease.capabilities.rendering.backend;
+  stage.dataset.timestampQuery = String(
+    lease.capabilities.rendering.timestampQuery,
+  );
   stage.id = "reference-placeholder";
   stage.tabIndex = -1;
   stage.setAttribute("aria-labelledby", "reference-placeholder-title");
 
   const eyebrow = document.createElement("p");
   eyebrow.className = "placeholder-eyebrow";
-  eyebrow.textContent = "Mock ready lease resolved";
+  eyebrow.textContent = "Ready lease resolved";
 
   const heading = document.createElement("h1");
   heading.id = "reference-placeholder-title";
@@ -153,7 +152,7 @@ function createPlaceholder(lease: RealWaterLease): HTMLElement {
 
   const description = document.createElement("p");
   description.textContent =
-    "No WebGPU or Native Quality claim is made by this foundation path. The visible stage proves only the startup and reveal contract.";
+    "The visible stage proves the startup, capability, and reveal contract. It makes no visual or Native Quality claim.";
 
   stage.append(eyebrow, heading, description);
   return stage;

@@ -18,7 +18,37 @@ class RecordingLoadingPresenter implements LoadingPresenterAdapter {
   }
 }
 
+const TEST_CAPABILITIES = Object.freeze({
+  rendering: Object.freeze({
+    backend: "core-webgpu" as const,
+    timestampQuery: false,
+  }),
+});
+
 describe("prepareRealWater", () => {
+  it("publishes deeply immutable Core WebGPU capabilities from the Memory Host", async () => {
+    const run = prepareRealWater({
+      manifest: createMockPrewarmManifest(),
+      loading: new RecordingLoadingPresenter(),
+      host: createMemoryHostLifecycleAdapter({
+        scenario: { kind: "success", timestampQuery: true },
+        stepDelayMs: 0,
+      }),
+    });
+
+    const lease = await run.ready;
+
+    expect(lease.capabilities).toEqual({
+      rendering: {
+        backend: "core-webgpu",
+        timestampQuery: true,
+      },
+    });
+    expect(Object.isFrozen(lease.capabilities)).toBe(true);
+    expect(Object.isFrozen(lease.capabilities.rendering)).toBe(true);
+    await lease.dispose();
+  });
+
   it("reports only completed manifest work before resolving a ready lease", async () => {
     const loading = new RecordingLoadingPresenter();
     const manifest = createMockPrewarmManifest();
@@ -81,20 +111,25 @@ describe("prepareRealWater", () => {
     await lease.dispose();
   });
 
-  it("classifies unsupported Hosts without inventing completed work", async () => {
+  it("rejects a Memory WebGL fallback with stable capability diagnostics", async () => {
     const loading = new RecordingLoadingPresenter();
     const run = prepareRealWater({
       manifest: createMockPrewarmManifest(),
       loading,
       host: createMemoryHostLifecycleAdapter({
-        scenario: { kind: "unsupported", reason: "Core WebGPU unavailable." },
+        scenario: { kind: "webgl-fallback" },
         stepDelayMs: 0,
       }),
     });
 
     await expect(run.ready).rejects.toMatchObject({
-      code: "UNSUPPORTED_ENVIRONMENT",
-      message: "Core WebGPU unavailable.",
+      code: "CORE_WEBGPU_REQUIRED",
+      diagnostics: {
+        requiredBackend: "core-webgpu",
+        selectedBackend: "webgl2",
+      },
+      message: "Three initialized a WebGL2 fallback; Core WebGPU is required.",
+      phase: "host-compatibility",
       retryable: false,
     });
 
@@ -104,6 +139,97 @@ describe("prepareRealWater", () => {
         completedWork: 0,
       },
     });
+    expect(
+      loading.snapshots.some((snapshot) => snapshot.status === "ready"),
+    ).toBe(false);
+  });
+
+  it("rejects Memory WebGPU Compatibility Mode before readiness", async () => {
+    const loading = new RecordingLoadingPresenter();
+    const run = prepareRealWater({
+      manifest: createMockPrewarmManifest(),
+      loading,
+      host: createMemoryHostLifecycleAdapter({
+        scenario: { kind: "compatibility-mode" },
+        stepDelayMs: 0,
+      }),
+    });
+
+    await expect(run.ready).rejects.toMatchObject({
+      code: "WEBGPU_COMPATIBILITY_MODE_UNSUPPORTED",
+      diagnostics: {
+        requiredFeatureLevel: "core",
+        selectedFeatureLevel: "compatibility",
+      },
+      message:
+        "WebGPU Compatibility Mode is unsupported; Core WebGPU is required.",
+      phase: "host-compatibility",
+      retryable: false,
+    });
+    expect(loading.snapshots.at(-1)?.status).toBe("unsupported");
+    expect(
+      loading.snapshots.some((snapshot) => snapshot.status === "ready"),
+    ).toBe(false);
+  });
+
+  it("rejects a Memory Core device that misses a required limit", async () => {
+    const loading = new RecordingLoadingPresenter();
+    const run = prepareRealWater({
+      manifest: createMockPrewarmManifest(),
+      loading,
+      host: createMemoryHostLifecycleAdapter({
+        scenario: { kind: "missing-limit" },
+        stepDelayMs: 0,
+      }),
+    });
+
+    await expect(run.ready).rejects.toMatchObject({
+      code: "WEBGPU_LIMIT_UNSUPPORTED",
+      diagnostics: {
+        actualLimit: 67_108_864,
+        limitName: "maxStorageBufferBindingSize",
+        missingLimitCount: 1,
+        requiredLimit: 134_217_728,
+      },
+      message: "The Core WebGPU device does not meet required limits.",
+      phase: "host-compatibility",
+      retryable: false,
+    });
+    expect(loading.snapshots.at(-1)?.status).toBe("unsupported");
+    expect(
+      loading.snapshots.some((snapshot) => snapshot.status === "ready"),
+    ).toBe(false);
+  });
+
+  it("reports Memory WebGPU device loss as a retryable capability failure", async () => {
+    const loading = new RecordingLoadingPresenter();
+    const run = prepareRealWater({
+      manifest: createMockPrewarmManifest(),
+      loading,
+      host: createMemoryHostLifecycleAdapter({
+        scenario: {
+          kind: "device-lost",
+          reason: "unknown",
+          message: "Synthetic device loss.",
+        },
+        stepDelayMs: 0,
+      }),
+    });
+
+    await expect(run.ready).rejects.toMatchObject({
+      code: "WEBGPU_DEVICE_LOST",
+      diagnostics: {
+        deviceLossMessage: "Synthetic device loss.",
+        deviceLossReason: "unknown",
+      },
+      message: "The WebGPU device was lost during renderer initialization.",
+      phase: "host-compatibility",
+      retryable: true,
+    });
+    expect(loading.snapshots.at(-1)?.status).toBe("failed");
+    expect(
+      loading.snapshots.some((snapshot) => snapshot.status === "ready"),
+    ).toBe(false);
   });
 
   it("keeps failed progress at the last actually completed declaration", async () => {
@@ -211,6 +337,7 @@ describe("prepareRealWater", () => {
         async prepare() {
           return {
             status: "ready",
+            capabilities: TEST_CAPABILITIES,
             lease: { dispose() {} },
           };
         },
@@ -247,12 +374,17 @@ describe("prepareRealWater", () => {
 
   it("disposes a ready lease returned after cancellation", async () => {
     let resolveHost:
-      | ((result: { status: "ready"; lease: HostPreparedLease }) => void)
+      | ((result: {
+          status: "ready";
+          capabilities: typeof TEST_CAPABILITIES;
+          lease: HostPreparedLease;
+        }) => void)
       | undefined;
     let hostStarted = false;
     let disposalCalls = 0;
     const hostResult = new Promise<{
       status: "ready";
+      capabilities: typeof TEST_CAPABILITIES;
       lease: HostPreparedLease;
     }>((resolve) => {
       resolveHost = resolve;
@@ -278,6 +410,7 @@ describe("prepareRealWater", () => {
 
     resolveHost?.({
       status: "ready",
+      capabilities: TEST_CAPABILITIES,
       lease: {
         dispose() {
           disposalCalls += 1;
@@ -324,6 +457,7 @@ describe("prepareRealWater", () => {
           }
           return {
             status: "ready",
+            capabilities: TEST_CAPABILITIES,
             lease: { dispose() {} },
           };
         },
@@ -366,6 +500,7 @@ describe("prepareRealWater", () => {
           }
           return {
             status: "ready",
+            capabilities: TEST_CAPABILITIES,
             lease: {
               dispose() {
                 disposalCalls += 1;
@@ -488,6 +623,7 @@ describe("prepareRealWater", () => {
           }
           return {
             status: "ready",
+            capabilities: TEST_CAPABILITIES,
             lease: {
               dispose() {
                 disposalCalls += 1;
@@ -645,6 +781,7 @@ describe("prepareRealWater", () => {
           }
           return {
             status: "ready",
+            capabilities: TEST_CAPABILITIES,
             lease: { dispose() {} },
           };
         },
@@ -704,6 +841,7 @@ function createReadyHost(
 
       return {
         status: "ready",
+        capabilities: TEST_CAPABILITIES,
         lease,
       };
     },

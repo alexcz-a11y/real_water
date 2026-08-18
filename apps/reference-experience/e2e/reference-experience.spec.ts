@@ -7,7 +7,7 @@ test("shows an accessible Loading Experience before an atomic ready reveal", asy
   page,
 }) => {
   await installStartupRecorder(page);
-  await page.goto("/?scenario=success&delay=140");
+  await page.goto("/?qa=1&host=memory&scenario=success&delay=140");
 
   const loading = page.getByTestId("loading-experience");
   await expect(loading).toBeVisible();
@@ -74,7 +74,7 @@ test("shows an accessible Loading Experience before an atomic ready reveal", asy
 test("keeps unsupported and failure paths behind the Loading Experience", async ({
   page,
 }) => {
-  await page.goto("/?scenario=unsupported&delay=0");
+  await page.goto("/?qa=1&host=memory&scenario=unsupported&delay=0");
   await expect(page.getByRole("alert")).toContainText(
     "environment is unsupported",
   );
@@ -83,7 +83,7 @@ test("keeps unsupported and failure paths behind the Loading Experience", async 
     "UNSUPPORTED_ENVIRONMENT",
   );
 
-  await page.goto("/?scenario=failure&delay=0");
+  await page.goto("/?qa=1&host=memory&scenario=failure&delay=0");
   await expect(page.getByRole("alert")).toContainText("Preparation failed");
   await expect(page.getByTestId("loading-progress")).toHaveAttribute(
     "value",
@@ -99,7 +99,7 @@ test("supports keyboard cancellation and a complete retry", async ({
   page,
 }) => {
   await installStartupRecorder(page);
-  await page.goto("/?scenario=success&delay=180");
+  await page.goto("/?qa=1&host=memory&scenario=success&delay=180");
 
   const cancel = page.getByRole("button", { name: "Cancel preparation" });
   await cancel.focus();
@@ -138,7 +138,7 @@ test("removes nonessential motion for reduced-motion users", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/?scenario=success&delay=200");
+  await page.goto("/?qa=1&host=memory&scenario=success&delay=200");
 
   await expect(page.getByTestId("loading-experience")).toBeVisible();
   const animationName = await page
@@ -151,7 +151,9 @@ test("removes nonessential motion for reduced-motion users", async ({
 test("disposes idempotently while a ready lease awaits reveal", async ({
   page,
 }) => {
-  await page.goto("/?qa=1&scenario=success&delay=0&revealFrames=120");
+  await page.goto(
+    "/?host=memory&qa=1&scenario=success&delay=0&revealFrames=120",
+  );
   await expect(page.getByRole("status")).toContainText(
     "Readiness Gate complete",
   );

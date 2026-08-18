@@ -6,11 +6,11 @@
   "type": "module",
   "sideEffects": false,
   "files": [
-    "dist/*.d.ts",
-    "dist/*.d.ts.map",
-    "dist/*.js",
-    "dist/*.js.map",
-    "src/*.ts",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "dist/**/*.js",
+    "dist/**/*.js.map",
+    "src/**/*.ts",
     "LICENSE",
     "README.md"
   ],

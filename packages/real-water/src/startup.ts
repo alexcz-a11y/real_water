@@ -1,5 +1,7 @@
 import {
   RealWaterStartupError,
+  type HostCompatibilityErrorCode,
+  type HostPreparationFailureCode,
   type StartupDiagnostics,
   type StartupPhase,
 } from "./errors.js";
@@ -9,6 +11,7 @@ import {
   type PrewarmManifest,
   type PrewarmManifestIdentity,
 } from "./manifest.js";
+import type { RealWaterCapabilities } from "./capabilities.js";
 
 /**
  * Truthful completed-work accounting for one preparation run.
@@ -140,11 +143,21 @@ export interface HostPreparedLease {
 export type HostPreparationResult =
   | Readonly<{
       readonly status: "ready";
+      readonly capabilities: RealWaterCapabilities;
       readonly lease: HostPreparedLease;
     }>
   | Readonly<{
       readonly status: "unsupported";
+      readonly code?: HostCompatibilityErrorCode;
       readonly reason: string;
+      readonly retryable?: boolean;
+      readonly diagnostics?: StartupDiagnostics;
+    }>
+  | Readonly<{
+      readonly status: "failed";
+      readonly code: HostPreparationFailureCode;
+      readonly reason: string;
+      readonly retryable: boolean;
       readonly diagnostics?: StartupDiagnostics;
     }>;
 
@@ -176,6 +189,7 @@ export interface PrepareRealWaterOptions {
  * @public
  */
 export interface RealWaterLease {
+  readonly capabilities: RealWaterCapabilities;
   readonly manifest: PrewarmManifestIdentity;
 
   /**
@@ -444,12 +458,15 @@ export function prepareRealWater(
         }
       }
 
-      if (result.status === "unsupported") {
+      if (result.status === "unsupported" || result.status === "failed") {
         phase = "host-compatibility";
         throw new RealWaterStartupError({
-          code: "UNSUPPORTED_ENVIRONMENT",
+          code:
+            result.status === "unsupported"
+              ? (result.code ?? "UNSUPPORTED_ENVIRONMENT")
+              : result.code,
           phase,
-          retryable: false,
+          retryable: result.retryable ?? false,
           message: result.reason,
           ...(result.diagnostics === undefined
             ? {}
@@ -479,7 +496,7 @@ export function prepareRealWater(
       });
 
       terminal = true;
-      const lease = createLease(identity, hostLease);
+      const lease = createLease(identity, result.capabilities, hostLease);
       publishedLease = true;
       pendingHostLease = null;
       return lease;
@@ -501,7 +518,7 @@ export function prepareRealWater(
         const status =
           error.code === "PREPARATION_CANCELLED"
             ? "cancelled"
-            : error.code === "UNSUPPORTED_ENVIRONMENT"
+            : isUnsupportedEnvironment(error.code)
               ? "unsupported"
               : "failed";
 
@@ -704,11 +721,13 @@ function makeProgress(
 
 function createLease(
   manifest: PrewarmManifestIdentity,
+  capabilities: RealWaterCapabilities,
   hostLease: HostPreparedLease,
 ): RealWaterLease {
   let disposal: Promise<void> | undefined;
 
   return Object.freeze({
+    capabilities,
     manifest,
     dispose(): Promise<void> {
       disposal ??= Promise.resolve().then(() => hostLease.dispose());
@@ -789,4 +808,13 @@ function protocolError(
     message,
     diagnostics,
   });
+}
+
+function isUnsupportedEnvironment(code: string): boolean {
+  return (
+    code === "UNSUPPORTED_ENVIRONMENT" ||
+    code === "CORE_WEBGPU_REQUIRED" ||
+    code === "WEBGPU_COMPATIBILITY_MODE_UNSUPPORTED" ||
+    code === "WEBGPU_LIMIT_UNSUPPORTED"
+  );
 }

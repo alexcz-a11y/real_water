@@ -1,6 +1,12 @@
 import "./styles.css";
+import { WebGPURenderer } from "three/webgpu";
+import {
+  createMemoryHostLifecycleAdapter,
+  createThreeHostLifecycleAdapter,
+  type HostLifecycleAdapter,
+  type MemoryHostScenario,
+} from "real-water";
 import { startReferenceExperience } from "./start-reference-experience.js";
-import type { MemoryHostScenario } from "real-water";
 
 const mount = document.querySelector("#app");
 
@@ -9,11 +15,8 @@ if (mount === null) {
 }
 
 const parameters = new URLSearchParams(window.location.search);
-const scenario = readScenario(parameters.get("scenario"));
-const stepDelayMs = readDelay(parameters.get("delay"));
 const session = startReferenceExperience(mount, {
-  scenario,
-  stepDelayMs,
+  createHost: createHostFactory(parameters),
   revealDelayFrames: readRevealFrames(parameters),
 });
 
@@ -30,6 +33,27 @@ window.addEventListener(
   },
   { once: true },
 );
+
+function createHostFactory(
+  parameters: URLSearchParams,
+): () => HostLifecycleAdapter {
+  if (parameters.get("qa") === "1" && parameters.get("host") === "memory") {
+    const scenario = readScenario(parameters.get("scenario"));
+    const stepDelayMs = readDelay(parameters.get("delay"));
+
+    return () =>
+      createMemoryHostLifecycleAdapter({
+        scenario,
+        stepDelayMs,
+      });
+  }
+
+  const renderer = new WebGPURenderer({
+    forceWebGL: parameters.get("forceWebGL") === "1",
+  });
+
+  return () => createThreeHostLifecycleAdapter({ renderer });
+}
 
 function readScenario(value: string | null): MemoryHostScenario {
   switch (value) {
