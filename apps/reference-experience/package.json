@@ -1,0 +1,14 @@
+{
+  "name": "@real-water/reference-experience",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit --project tsconfig.json"
+  },
+  "dependencies": {
+    "real-water": "workspace:*"
+  }
+}

@@ -1,0 +1,155 @@
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+
+const temporaryDirectory = mkdtempSync(
+  join(tmpdir(), "real-water-package-smoke-"),
+);
+
+try {
+  const pnpmEntryPoint = process.env.npm_execpath;
+  if (pnpmEntryPoint === undefined) {
+    throw new Error("Package smoke must run from the pinned pnpm command.");
+  }
+
+  execFileSync(
+    process.execPath,
+    [
+      pnpmEntryPoint,
+      "--filter",
+      "real-water",
+      "pack",
+      "--pack-destination",
+      temporaryDirectory,
+    ],
+    { stdio: "inherit" },
+  );
+
+  const archive = readdirSync(temporaryDirectory).find((entry) =>
+    entry.endsWith(".tgz"),
+  );
+  if (archive === undefined) {
+    throw new Error("pnpm pack did not produce a package archive.");
+  }
+
+  execFileSync(
+    "tar",
+    ["-xzf", join(temporaryDirectory, archive), "-C", temporaryDirectory],
+    { stdio: "inherit" },
+  );
+
+  const extractedPackageRoot = join(temporaryDirectory, "package");
+  const consumerRoot = join(temporaryDirectory, "consumer");
+  const packageRoot = join(consumerRoot, "node_modules", "real-water");
+  mkdirSync(join(consumerRoot, "node_modules"), { recursive: true });
+  renameSync(extractedPackageRoot, packageRoot);
+
+  const packedPackage = JSON.parse(
+    readFileSync(join(packageRoot, "package.json"), "utf8"),
+  );
+  const importPath = join(packageRoot, packedPackage.exports["."].import);
+  const typesPath = join(packageRoot, packedPackage.exports["."].types);
+
+  if (!existsSync(importPath) || !existsSync(typesPath)) {
+    throw new Error("The packed root export is missing built code or types.");
+  }
+
+  for (const mapName of ["index.js.map", "index.d.ts.map"]) {
+    const mapPath = join(packageRoot, "dist", mapName);
+    const sourceMap = JSON.parse(readFileSync(mapPath, "utf8"));
+    const inlineSources =
+      Array.isArray(sourceMap.sourcesContent) &&
+      sourceMap.sourcesContent.every((source) => typeof source === "string");
+    const packagedSources =
+      Array.isArray(sourceMap.sources) &&
+      sourceMap.sources.every((source) =>
+        existsSync(resolve(dirname(mapPath), source)),
+      );
+    if (!inlineSources && !packagedSources) {
+      throw new Error("Packed source map is not self-contained: " + mapName);
+    }
+  }
+
+  const requiredExports = [
+    "RealWaterStartupError",
+    "createMemoryHostLifecycleAdapter",
+    "createMockPrewarmManifest",
+    "prepareRealWater",
+  ];
+  const runtimeSmoke = [
+    'const realWater = await import("real-water");',
+    "const requiredExports = " + JSON.stringify(requiredExports) + ";",
+    "for (const name of requiredExports) {",
+    '  if (!(name in realWater)) throw new Error("Missing packed export: " + name);',
+    "}",
+    "const run = realWater.prepareRealWater({",
+    "  manifest: realWater.createMockPrewarmManifest(),",
+    "  loading: { present() {} },",
+    "  host: realWater.createMemoryHostLifecycleAdapter({ stepDelayMs: 0 }),",
+    "});",
+    "const lease = await run.ready;",
+    "await lease.dispose();",
+  ].join("\n");
+  execFileSync(
+    process.execPath,
+    ["--input-type=module", "--eval", runtimeSmoke],
+    {
+      cwd: consumerRoot,
+      stdio: "inherit",
+    },
+  );
+
+  writeFileSync(
+    join(consumerRoot, "index.mts"),
+    [
+      'import { createMemoryHostLifecycleAdapter, createMockPrewarmManifest, prepareRealWater } from "real-water";',
+      "const run = prepareRealWater({",
+      "  manifest: createMockPrewarmManifest(),",
+      "  loading: { present() {} },",
+      "  host: createMemoryHostLifecycleAdapter({ stepDelayMs: 0 }),",
+      "});",
+      "void run.ready;",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(consumerRoot, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        noEmit: true,
+        strict: true,
+        target: "ES2022",
+      },
+      files: ["index.mts"],
+    }),
+  );
+  execFileSync(
+    process.execPath,
+    [
+      join(process.cwd(), "node_modules/typescript/bin/tsc"),
+      "--pretty",
+      "false",
+    ],
+    {
+      cwd: consumerRoot,
+      stdio: "inherit",
+    },
+  );
+
+  console.log(
+    "Packed-package smoke passed using the built real-water root export.",
+  );
+} finally {
+  rmSync(temporaryDirectory, { recursive: true, force: true });
+}

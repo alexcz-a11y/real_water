@@ -1,0 +1,3 @@
+# Publish as an open-source npm package
+
+Real Water will ship as the `real-water` package under the MIT license as an open-source TypeScript ESM package on npm, with Three.js kept as a peer dependency. A workspace separates the published runtime Module, private Reference Experience application, benchmark and test tooling, and future framework or physics Adapters such as `real-water-rapier`. This distribution forces the runtime Interface, lifecycle, capability reporting, and adapters to remain explicit even though only the controlled Reference Experience receives visual-quality and whole-frame performance guarantees; package-name availability is rechecked immediately before publishing.

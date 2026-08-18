@@ -1,0 +1,7 @@
+engineStrict: true
+autoInstallPeers: false
+strictPeerDependencies: true
+
+packages:
+  - packages/*
+  - apps/*

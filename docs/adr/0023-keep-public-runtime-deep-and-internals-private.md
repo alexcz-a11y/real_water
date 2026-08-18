@@ -1,0 +1,3 @@
+# Keep the public runtime deep and internals private
+
+The published `real-water` root exports only preparation and lease/runtime contracts, capabilities, Artistic Control and batched Query/Disturbance data, Host/Body/Environment Adapter contracts and basic Adapters, preset schemas and migrations, and structured errors. Startup, runtime, public Adapter contracts, and presets are top-level source Modules; spectral ocean, interaction field, whitewater, optics, underwater, temporal state, Gameplay Query implementation, and the Three-r185 Adapter remain private internal Modules with no npm subpaths. TSL nodes, materials, render targets, compute kernels, and solver state never cross the public Interface, while heavy Diagnostics remains a separate optional Module.

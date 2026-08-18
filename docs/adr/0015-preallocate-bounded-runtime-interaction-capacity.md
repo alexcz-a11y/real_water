@@ -1,0 +1,3 @@
+# Preallocate bounded runtime interaction capacity
+
+The first runtime preallocates structural capacity during the Loading Experience: provisionally 32 attached bodies, 128 active Disturbances, 2,048 batched Gameplay Query points per 60 Hz tick, eight Hero Breakers, and 131,072 secondary particles, with final ceilings frozen by the Native benchmark. Interaction Shapes are limited to spheres, boxes, capsules, closed convex hulls of at most 64 vertices, and compounds of at most 32 children; arbitrary render triangles remain excluded. Body or query overflow is a structured error, Disturbance overflow drops the lowest visual priority with a receipt, and particle pressure reduces low-contribution density without removing the effect or reallocating buffers.

@@ -1,0 +1,12 @@
+node_modules/
+.pnpm-store/
+.firecrawl/
+dist/
+dist-types/
+.vite/
+coverage/
+playwright-report/
+test-results/
+*.tgz
+*.tsbuildinfo
+packages/real-water/temp/

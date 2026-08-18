@@ -1,0 +1,3 @@
+# Keep core local and preserve user data
+
+The core package performs no network requests, analytics, cookie use, or browser persistence. The Reference Experience may store versioned presets locally and supports import, export, copy, rename, built-in restore, and explicit migrations; invalid or future-version JSON is preserved for recovery rather than silently discarded. Generated Reference Packs retain prompts and provenance, img2threejs outputs remain code-only procedural assets, third-party art packs and unverified branded or textured assets are excluded, and every future dependency or asset enters a checked license inventory under the project's MIT distribution.

@@ -1,0 +1,3 @@
+# Gate public Interfaces and stay on zero-major releases
+
+Every published package runs API Extractor after declaration emit and commits its public Interface report; CI rejects unacknowledged changes. Releases begin at 0.1.0, keep Three in the tested `>=0.185.1 <0.186.0` peer range with exact 0.185.1 development dependency, and remain below 1.0 until startup, runtime, Gameplay Query, and Adapter Interfaces survive real integrations. Generated API documentation is deferred until the Interface stabilizes, while integration READMEs and checked API reports remain authoritative during early development.

@@ -1,0 +1,3 @@
+# Integrate through native Three host contracts
+
+Real Water targets native Three.js and receives the host renderer, scene, camera, and render-pass hooks instead of owning the application's loop or requiring a framework wrapper. Blender assets enter as glTF/GLB `Object3D` hierarchies, while water interaction uses separate closed Interaction Shapes and body adapters; a visual triangle mesh is never assumed to be a usable hydrodynamic body. The host physics engine owns rigid-body integration, while Real Water supplies gameplay-oriented forces, disturbances, and perceptually coherent queries around a movable Interaction Anchor.

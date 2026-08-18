@@ -1,0 +1,3 @@
+# Separate presets and Reference Experience modes
+
+Real Water stores Artist state as Water Presets, sun and weather as Environment Presets, prewarmed structural choices as Quality Profiles, and deterministic camera/event compositions as Showcase Presets; Engineering edits a Quality Profile draft and applies it only through the Loading Experience. The Reference Experience provides a directed approximately 90-second loop, a manual Sandbox, and a test-only QA mode, with Calm Sunrise, Blue Noon Swell, and Storm Front as the initial authored looks. Deterministic exports rather than ordinary recordings are the source for QA replay and capture.

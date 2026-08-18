@@ -1,0 +1,3 @@
+# Use a minimal pinned TypeScript ESM workspace
+
+Real Water uses an exactly pinned Node 24 and pnpm 11 workspace, TypeScript project references and `tsc -b` for unbundled ESM package output, and Vite only for the private Reference Experience. Vitest owns fast in-process tests, Playwright owns real-browser integration, ESLint flat config and separate Prettier checks own source hygiene, and no task orchestrator, CJS build, library bundler, or overlapping browser-test framework is added without a demonstrated need. Three remains an external peer dependency, workspace edges use pnpm's workspace protocol, CI installs from the frozen lockfile, and published tests resolve built package exports rather than source aliases.

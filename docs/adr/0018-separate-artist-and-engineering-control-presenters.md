@@ -1,0 +1,3 @@
+# Separate Artist and Engineering control presenters
+
+The Reference Experience builds an accessible custom semantic DOM Artist presenter and lazy-loads an exactly pinned Tweakpane Engineering presenter; neither UI dependency enters the published runtime. Both consume the same UI-neutral control and diagnostics descriptors, while durable Water Presets use a Real Water-owned versioned schema rather than Tweakpane state. Artist controls are event-driven, Engineering monitors are throttled and bounded, and certification freezes whether the Engineering presenter is closed or open so its DOM work cannot vary between runs.

@@ -1,0 +1,143 @@
+import type {
+  HostLifecycleAdapter,
+  HostPreparedLease,
+  HostPreparationRequest,
+} from "./startup.js";
+
+/**
+ * Deterministic outcomes supported by the Memory Host Adapter.
+ *
+ * @public
+ */
+export type MemoryHostScenario =
+  | Readonly<{
+      readonly kind: "success";
+    }>
+  | Readonly<{
+      readonly kind: "unsupported";
+      readonly reason?: string;
+    }>
+  | Readonly<{
+      readonly kind: "failure";
+      readonly declarationId?: string;
+      readonly message?: string;
+    }>;
+
+/**
+ * Configuration for {@link createMemoryHostLifecycleAdapter}.
+ *
+ * @public
+ */
+export interface MemoryHostLifecycleAdapterOptions {
+  readonly scenario?: MemoryHostScenario;
+  readonly stepDelayMs?: number;
+}
+
+/**
+ * Creates an in-memory Host Lifecycle Adapter for deterministic startup
+ * verification and the placeholder Reference Experience.
+ *
+ * @public
+ */
+export function createMemoryHostLifecycleAdapter(
+  options: MemoryHostLifecycleAdapterOptions = {},
+): HostLifecycleAdapter {
+  const scenario = options.scenario ?? { kind: "success" };
+  const stepDelayMs = normalizeDelay(options.stepDelayMs);
+
+  return Object.freeze({
+    async prepare(request: HostPreparationRequest) {
+      await waitForTurn(stepDelayMs, request.signal);
+
+      if (scenario.kind === "unsupported") {
+        return {
+          status: "unsupported" as const,
+          reason:
+            scenario.reason ??
+            "This mock Host Adapter reports an unsupported environment.",
+          diagnostics: Object.freeze({ adapter: "memory" }),
+        };
+      }
+
+      const failureId =
+        scenario.kind === "failure"
+          ? (scenario.declarationId ??
+            request.manifest.declarations.at(1)?.id ??
+            request.manifest.declarations[0]?.id)
+          : undefined;
+      if (
+        scenario.kind === "failure" &&
+        (failureId === undefined ||
+          !request.manifest.declarations.some(
+            (declaration) => declaration.id === failureId,
+          ))
+      ) {
+        throw new Error(
+          "The configured mock failure declaration is absent from the Prewarm Manifest.",
+        );
+      }
+
+      for (const declaration of request.manifest.declarations) {
+        await waitForTurn(stepDelayMs, request.signal);
+
+        if (scenario.kind === "failure" && declaration.id === failureId) {
+          throw new Error(
+            scenario.message ??
+              "The Memory Host Adapter failed during declared prewarm work.",
+          );
+        }
+
+        await request.progress.complete(declaration.id);
+      }
+
+      return {
+        status: "ready" as const,
+        lease: createMemoryPreparedLease(),
+      };
+    },
+  });
+}
+
+function normalizeDelay(candidate: number | undefined): number {
+  if (candidate === undefined) {
+    return 40;
+  }
+
+  if (!Number.isFinite(candidate) || candidate < 0) {
+    throw new TypeError("stepDelayMs must be a finite, non-negative number.");
+  }
+
+  return candidate;
+}
+
+function createMemoryPreparedLease(): HostPreparedLease {
+  let disposal: Promise<void> | undefined;
+
+  return Object.freeze({
+    dispose(): Promise<void> {
+      disposal ??= Promise.resolve();
+      return disposal;
+    },
+  });
+}
+
+function waitForTurn(delayMs: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new Error("Preparation was cancelled."));
+      return;
+    }
+
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(new Error("Preparation was cancelled."));
+    };
+
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}

@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "scope": "Direct external dependencies declared by workspace package manifests.",
+  "approvedLicenses": ["Apache-2.0", "MIT", "MPL-2.0"],
+  "packages": [
+    {
+      "name": "@eslint/js",
+      "version": "9.39.5",
+      "license": "MIT",
+      "declaredBy": ["package.json#devDependencies (9.39.5)"]
+    },
+    {
+      "name": "@microsoft/api-extractor",
+      "version": "7.58.12",
+      "license": "MIT",
+      "declaredBy": ["package.json#devDependencies (7.58.12)"]
+    },
+    {
+      "name": "@playwright/test",
+      "version": "1.62.1",
+      "license": "Apache-2.0",
+      "declaredBy": ["package.json#devDependencies (1.62.1)"]
+    },
+    {
+      "name": "@types/node",
+      "version": "24.13.3",
+      "license": "MIT",
+      "declaredBy": ["package.json#devDependencies (24.13.3)"]
+    },
+    {
+      "name": "axe-core",
+      "version": "4.13.0",
+      "license": "MPL-2.0",
+      "declaredBy": ["package.json#devDependencies (4.13.0)"]
+    },
+    {
+      "name": "eslint",
+      "version": "9.39.5",
+      "license": "MIT",
+      "declaredBy": ["package.json#devDependencies (9.39.5)"]
+    },
+    {
+      "name": "prettier",
+      "version": "3.9.6",
+      "license": "MIT",
+      "declaredBy": ["package.json#devDependencies (3.9.6)"]
+    },
+    {
+      "name": "three",
+      "version": "0.185.1",
+      "license": "MIT",
+      "declaredBy": [
+        "package.json#devDependencies (0.185.1)",
+        "packages/real-water/package.json#peerDependencies (>=0.185.1 <0.186.0)"
+      ]
+    },
+    {
+      "name": "typescript",
+      "version": "5.9.3",
+      "license": "Apache-2.0",
+      "declaredBy": ["package.json#devDependencies (5.9.3)"]
+    },
+    {
+      "name": "typescript-eslint",
+      "version": "8.67.0",
+      "license": "MIT",
+      "declaredBy": ["package.json#devDependencies (8.67.0)"]
+    },
+    {
+      "name": "vite",
+      "version": "8.2.1",
+      "license": "MIT",
+      "declaredBy": ["package.json#devDependencies (8.2.1)"]
+    },
+    {
+      "name": "vitest",
+      "version": "4.1.10",
+      "license": "MIT",
+      "declaredBy": ["package.json#devDependencies (4.1.10)"]
+    }
+  ],
+  "assets": []
+}
