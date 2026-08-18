@@ -1,7 +1,9 @@
 import {
+  RealWaterRuntimeError,
   RealWaterStartupError,
   type HostCompatibilityErrorCode,
   type HostPreparationFailureCode,
+  type RuntimeDiagnostics,
   type StartupDiagnostics,
   type StartupPhase,
 } from "./errors.js";
@@ -123,11 +125,48 @@ export interface HostPreparationRequest {
 }
 
 /**
+ * The immutable reason a prepared lease can no longer be used.
+ *
+ * @public
+ */
+export interface WebGPUDeviceLoss {
+  readonly code: "WEBGPU_DEVICE_LOST";
+  readonly message: string;
+  readonly reason: string | null;
+  readonly diagnostics: StartupDiagnostics;
+}
+
+/**
+ * The immutable invalidation raised when a ready runtime resumes too late to
+ * preserve coherent temporal state.
+ *
+ * @public
+ */
+export interface LongSuspensionInvalidation {
+  readonly code: "LONG_SUSPENSION";
+  readonly message: string;
+  readonly diagnostics: RuntimeDiagnostics;
+}
+
+/**
+ * The first terminal condition observed by a ready Real Water lease.
+ *
+ * @public
+ */
+export type RealWaterInvalidation =
+  WebGPUDeviceLoss | LongSuspensionInvalidation;
+
+/**
  * Real Water-owned prepared resources returned by a Host Lifecycle Adapter.
  *
  * @public
  */
 export interface HostPreparedLease {
+  /**
+   * Resolves once if the borrowed WebGPU device is lost. It never rejects.
+   */
+  readonly invalidated: Promise<WebGPUDeviceLoss>;
+
   /**
    * Releases only resources created for Real Water. The method may be called
    * more than once and must be safe for the Adapter to observe once.
@@ -184,13 +223,48 @@ export interface PrepareRealWaterOptions {
 }
 
 /**
+ * One exact effect route selected from the active Prewarm Manifest.
+ *
+ * @public
+ */
+export interface EffectVariantSelection {
+  readonly effectId: string;
+  readonly variantId: string;
+}
+
+/**
+ * The immutable outcome of selecting a prepared effect route.
+ *
+ * @public
+ */
+export interface EffectVariantSelectionReceipt {
+  readonly selection: EffectVariantSelection;
+  readonly changed: boolean;
+  readonly revision: number;
+}
+
+/**
  * A ready, disposable Real Water lease.
  *
  * @public
  */
 export interface RealWaterLease {
   readonly capabilities: RealWaterCapabilities;
+  /** Resolves once after the first runtime invalidation. It never rejects. */
+  readonly invalidated: Promise<RealWaterInvalidation>;
   readonly manifest: PrewarmManifestIdentity;
+
+  /**
+   * Invalidates temporal runtime state after a long Host suspension.
+   */
+  invalidateForLongSuspension(): LongSuspensionInvalidation;
+
+  /**
+   * Selects an effect route already prepared by this lease's manifest.
+   */
+  selectEffectVariant(
+    selection: EffectVariantSelection,
+  ): EffectVariantSelectionReceipt;
 
   /**
    * Idempotently releases only Real Water-owned resources.
@@ -225,6 +299,7 @@ export function prepareRealWater(
   options: PrepareRealWaterOptions,
 ): PreparationRun {
   const controller = new AbortController();
+  const hostInvalidationController = new AbortController();
   let sequence = 0;
   let terminal = false;
   let cancellationReason = "Preparation cancelled.";
@@ -232,6 +307,19 @@ export function prepareRealWater(
   let currentProgress: StartupProgress | null = null;
   let pendingHostLease: HostPreparedLease | null = null;
   let publishedLease = false;
+  let preparationDeviceLoss: WebGPUDeviceLoss | undefined;
+
+  const invalidateBeforeReady = (loss: WebGPUDeviceLoss): void => {
+    if (
+      terminal ||
+      publishedLease ||
+      hostInvalidationController.signal.aborted
+    ) {
+      return;
+    }
+    preparationDeviceLoss = freezeDeviceLoss(loss);
+    hostInvalidationController.abort(preparationDeviceLoss);
+  };
 
   const cancel = (reason = "Preparation cancelled."): boolean => {
     if (terminal || controller.signal.aborted) {
@@ -265,6 +353,9 @@ export function prepareRealWater(
     const cancelPresentation = (): void => {
       presentationController.abort(controller.signal.reason);
     };
+    const invalidatePresentation = (): void => {
+      presentationController.abort(hostInvalidationController.signal.reason);
+    };
     if (cancellable) {
       if (controller.signal.aborted) {
         cancelPresentation();
@@ -273,16 +364,31 @@ export function prepareRealWater(
           once: true,
         });
       }
+      if (hostInvalidationController.signal.aborted) {
+        invalidatePresentation();
+      } else {
+        hostInvalidationController.signal.addEventListener(
+          "abort",
+          invalidatePresentation,
+          { once: true },
+        );
+      }
     }
 
     try {
-      const presentation = Promise.resolve().then(() =>
-        options.loading.present(snapshot, presentationController.signal),
-      );
+      const presentation = Promise.resolve().then(() => {
+        if (presentationController.signal.aborted) {
+          throw new Error("Loading presentation cancelled.");
+        }
+        return options.loading.present(snapshot, presentationController.signal);
+      });
       await racePresentation(presentation, presentationController.signal);
     } catch (cause) {
       if (cancellable && controller.signal.aborted) {
         throw cancellationError(cancellationReason, cause);
+      }
+      if (preparationDeviceLoss !== undefined) {
+        throw startupDeviceLossError(preparationDeviceLoss);
       }
       throw new RealWaterStartupError({
         code: "LOADING_PRESENTER_FAILED",
@@ -294,6 +400,10 @@ export function prepareRealWater(
       });
     } finally {
       controller.signal.removeEventListener("abort", cancelPresentation);
+      hostInvalidationController.signal.removeEventListener(
+        "abort",
+        invalidatePresentation,
+      );
     }
   };
 
@@ -440,6 +550,7 @@ export function prepareRealWater(
 
         if (result.status === "ready") {
           pendingHostLease = result.lease;
+          void result.lease.invalidated.then(invalidateBeforeReady, () => {});
         }
 
         await raceReportCompletion(
@@ -496,7 +607,12 @@ export function prepareRealWater(
       });
 
       terminal = true;
-      const lease = createLease(identity, result.capabilities, hostLease);
+      const lease = createLease(
+        manifest,
+        identity,
+        result.capabilities,
+        hostLease,
+      );
       publishedLease = true;
       pendingHostLease = null;
       return lease;
@@ -720,18 +836,159 @@ function makeProgress(
 }
 
 function createLease(
+  preparedManifest: PrewarmManifest,
   manifest: PrewarmManifestIdentity,
   capabilities: RealWaterCapabilities,
   hostLease: HostPreparedLease,
 ): RealWaterLease {
   let disposal: Promise<void> | undefined;
+  let selectionRevision = 0;
+  let terminalState: "active" | "disposed" | RealWaterInvalidation = "active";
+  let resolveInvalidation: (
+    invalidation: RealWaterInvalidation,
+  ) => void = () => {};
+  const selectedVariants = new Map<string, string>();
+  const invalidated = new Promise<RealWaterInvalidation>((resolve) => {
+    resolveInvalidation = resolve;
+  });
+  const latchInvalidation = (invalidation: RealWaterInvalidation): void => {
+    if (terminalState !== "active") {
+      return;
+    }
+    terminalState = invalidation;
+    resolveInvalidation(invalidation);
+  };
+  void hostLease.invalidated.then(
+    (loss) => {
+      latchInvalidation(freezeDeviceLoss(loss));
+    },
+    () => {},
+  );
+  const longSuspensionInvalidation = createLongSuspensionInvalidation();
 
   return Object.freeze({
     capabilities,
+    invalidated,
     manifest,
+    invalidateForLongSuspension(): LongSuspensionInvalidation {
+      if (terminalState === "active") {
+        latchInvalidation(longSuspensionInvalidation);
+        return longSuspensionInvalidation;
+      }
+      if (
+        terminalState !== "disposed" &&
+        terminalState.code === "LONG_SUSPENSION"
+      ) {
+        return terminalState;
+      }
+      throw runtimeInvalidatedError(terminalState);
+    },
+    selectEffectVariant(
+      selection: EffectVariantSelection,
+    ): EffectVariantSelectionReceipt {
+      if (terminalState !== "active") {
+        throw runtimeInvalidatedError(terminalState);
+      }
+
+      const selected = Object.freeze({
+        effectId: selection.effectId,
+        variantId: selection.variantId,
+      });
+      const prepared = preparedManifest.effectVariants.some(
+        (candidate) =>
+          candidate.effectId === selected.effectId &&
+          candidate.variantId === selected.variantId,
+      );
+      if (!prepared) {
+        throw new RealWaterRuntimeError({
+          code: "EFFECT_NOT_PREWARMED",
+          message:
+            "The requested effect variant was not prepared by this lease.",
+          diagnostics: {
+            effectId: selected.effectId,
+            manifestHash: preparedManifest.manifestHash,
+            variantId: selected.variantId,
+          },
+        });
+      }
+
+      const changed =
+        selectedVariants.get(selected.effectId) !== selected.variantId;
+      if (changed) {
+        selectedVariants.set(selected.effectId, selected.variantId);
+        selectionRevision += 1;
+      }
+
+      return Object.freeze({
+        selection: selected,
+        changed,
+        revision: selectionRevision,
+      });
+    },
     dispose(): Promise<void> {
+      if (terminalState === "active") {
+        terminalState = "disposed";
+      }
       disposal ??= Promise.resolve().then(() => hostLease.dispose());
       return disposal;
+    },
+  });
+}
+
+function freezeDeviceLoss(loss: WebGPUDeviceLoss): WebGPUDeviceLoss {
+  return Object.freeze({
+    code: "WEBGPU_DEVICE_LOST",
+    message: loss.message,
+    reason: loss.reason,
+    diagnostics: Object.freeze({ ...loss.diagnostics }),
+  });
+}
+
+function createLongSuspensionInvalidation(): LongSuspensionInvalidation {
+  return Object.freeze({
+    code: "LONG_SUSPENSION",
+    message: "The Real Water runtime was invalidated after a long suspension.",
+    diagnostics: Object.freeze({ runtimeState: "long-suspension" }),
+  });
+}
+
+function runtimeInvalidatedError(
+  terminalState: "disposed" | RealWaterInvalidation,
+): RealWaterRuntimeError {
+  if (terminalState === "disposed") {
+    return new RealWaterRuntimeError({
+      code: "RUNTIME_INVALIDATED",
+      message: "The Real Water runtime has been disposed.",
+      diagnostics: { runtimeState: "disposed" },
+    });
+  }
+  if (terminalState.code === "LONG_SUSPENSION") {
+    return new RealWaterRuntimeError({
+      code: "RUNTIME_INVALIDATED",
+      message: terminalState.message,
+      diagnostics: terminalState.diagnostics,
+    });
+  }
+  return new RealWaterRuntimeError({
+    code: "RUNTIME_INVALIDATED",
+    message: "The Real Water runtime was invalidated by WebGPU device loss.",
+    diagnostics: {
+      deviceLossMessage: terminalState.message,
+      deviceLossReason: terminalState.reason,
+      runtimeState: "device-lost",
+    },
+  });
+}
+
+function startupDeviceLossError(loss: WebGPUDeviceLoss): RealWaterStartupError {
+  return new RealWaterStartupError({
+    code: "WEBGPU_DEVICE_LOST",
+    phase: "readiness-gate",
+    retryable: true,
+    message: "The WebGPU device was lost before readiness completed.",
+    diagnostics: {
+      deviceLossMessage: loss.message,
+      deviceLossReason: loss.reason,
     },
   });
 }

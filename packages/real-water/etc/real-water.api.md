@@ -8,10 +8,31 @@
 export function createMemoryHostLifecycleAdapter(options?: MemoryHostLifecycleAdapterOptions): HostLifecycleAdapter;
 
 // @public
-export function createMinimalWaterPrewarmManifest(): PrewarmManifest;
+export function createMinimalWaterPrewarmManifest(profile?: QualityProfile): PrewarmManifest;
+
+// @public
+export function createMinimalWaterQualityProfile(id?: MinimalWaterQualityProfileId): QualityProfile;
 
 // @public
 export function createThreeHostLifecycleAdapter(options: ThreeHostLifecycleAdapterOptions): HostLifecycleAdapter;
+
+// @public
+export interface EffectVariantSelection {
+    // (undocumented)
+    readonly effectId: string;
+    // (undocumented)
+    readonly variantId: string;
+}
+
+// @public
+export interface EffectVariantSelectionReceipt {
+    // (undocumented)
+    readonly changed: boolean;
+    // (undocumented)
+    readonly revision: number;
+    // (undocumented)
+    readonly selection: EffectVariantSelection;
+}
 
 // @public
 export interface ErrorStartupSnapshot {
@@ -71,6 +92,7 @@ export type HostPreparationResult = Readonly<{
 // @public
 export interface HostPreparedLease {
     dispose(): void | Promise<void>;
+    readonly invalidated: Promise<WebGPUDeviceLoss>;
 }
 
 // @public
@@ -90,6 +112,16 @@ export interface LoadingStartupSnapshot {
     readonly sequence: number;
     // (undocumented)
     readonly status: "loading";
+}
+
+// @public
+export interface LongSuspensionInvalidation {
+    // (undocumented)
+    readonly code: "LONG_SUSPENSION";
+    // (undocumented)
+    readonly diagnostics: RuntimeDiagnostics;
+    // (undocumented)
+    readonly message: string;
 }
 
 // @public
@@ -122,6 +154,17 @@ export type MemoryHostScenario = Readonly<{
     readonly declarationId?: string;
     readonly message?: string;
 }>;
+
+// @public
+export interface MinimalWaterGeometrySegments {
+    // (undocumented)
+    readonly heightSegments: number;
+    // (undocumented)
+    readonly widthSegments: number;
+}
+
+// @public
+export type MinimalWaterQualityProfileId = "minimal" | "minimal-high-detail";
 
 // @public
 export interface PreparationRun {
@@ -178,13 +221,25 @@ export interface PrewarmDeclaration {
 export type PrewarmDeclarationKind = "resource" | "effect-state" | "conditional-route";
 
 // @public
+export interface PrewarmEffectVariant {
+    // (undocumented)
+    readonly effectId: string;
+    // (undocumented)
+    readonly variantId: string;
+}
+
+// @public
 export interface PrewarmManifest {
     // (undocumented)
     readonly declarations: readonly PrewarmDeclaration[];
     // (undocumented)
+    readonly effectVariants: readonly PrewarmEffectVariant[];
+    // (undocumented)
     readonly id: string;
     // (undocumented)
     readonly manifestHash: string;
+    // (undocumented)
+    readonly qualityProfile: QualityProfile;
     // (undocumented)
     readonly schema: typeof PREWARM_MANIFEST_SCHEMA;
     // (undocumented)
@@ -194,13 +249,55 @@ export interface PrewarmManifest {
 // @public
 export interface PrewarmManifestIdentity {
     // (undocumented)
+    readonly effectVariants: readonly PrewarmEffectVariant[];
+    // (undocumented)
     readonly id: string;
     // (undocumented)
     readonly manifestHash: string;
     // (undocumented)
+    readonly qualityProfile: QualityProfileIdentity;
+    // (undocumented)
     readonly schema: typeof PREWARM_MANIFEST_SCHEMA;
     // (undocumented)
     readonly version: typeof PREWARM_MANIFEST_VERSION;
+}
+
+// @public
+export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
+
+// @public
+export const QUALITY_PROFILE_VERSION: 1;
+
+// @public
+export interface QualityProfile {
+    // (undocumented)
+    readonly id: MinimalWaterQualityProfileId;
+    // (undocumented)
+    readonly profileHash: string;
+    // (undocumented)
+    readonly schema: typeof QUALITY_PROFILE_SCHEMA;
+    // (undocumented)
+    readonly surface: QualityProfileSurface;
+    // (undocumented)
+    readonly version: typeof QUALITY_PROFILE_VERSION;
+}
+
+// @public
+export interface QualityProfileIdentity {
+    // (undocumented)
+    readonly id: MinimalWaterQualityProfileId;
+    // (undocumented)
+    readonly profileHash: string;
+    // (undocumented)
+    readonly schema: typeof QUALITY_PROFILE_SCHEMA;
+    // (undocumented)
+    readonly version: typeof QUALITY_PROFILE_VERSION;
+}
+
+// @public
+export interface QualityProfileSurface {
+    // (undocumented)
+    readonly geometry: MinimalWaterGeometrySegments;
 }
 
 // @public
@@ -222,12 +319,41 @@ export interface RealWaterCapabilities {
 }
 
 // @public
+export type RealWaterInvalidation = WebGPUDeviceLoss | LongSuspensionInvalidation;
+
+// @public
 export interface RealWaterLease {
     // (undocumented)
     readonly capabilities: RealWaterCapabilities;
     dispose(): Promise<void>;
+    readonly invalidated: Promise<RealWaterInvalidation>;
+    invalidateForLongSuspension(): LongSuspensionInvalidation;
     // (undocumented)
     readonly manifest: PrewarmManifestIdentity;
+    selectEffectVariant(selection: EffectVariantSelection): EffectVariantSelectionReceipt;
+}
+
+// @public
+export class RealWaterRuntimeError extends Error {
+    constructor(init: RealWaterRuntimeErrorInit);
+    // (undocumented)
+    readonly code: RuntimeErrorCode;
+    // (undocumented)
+    readonly diagnostics: RuntimeDiagnostics;
+    // (undocumented)
+    readonly diagnosticText: string;
+}
+
+// @public
+export interface RealWaterRuntimeErrorInit {
+    // (undocumented)
+    readonly cause?: unknown;
+    // (undocumented)
+    readonly code: RuntimeErrorCode;
+    // (undocumented)
+    readonly diagnostics?: RuntimeDiagnostics;
+    // (undocumented)
+    readonly message: string;
 }
 
 // @public
@@ -268,6 +394,12 @@ export interface RenderingCapabilities {
     // (undocumented)
     readonly timestampQuery: boolean;
 }
+
+// @public
+export type RuntimeDiagnostics = StartupDiagnostics;
+
+// @public
+export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "RUNTIME_INVALIDATED";
 
 // @public
 export type StartupDiagnostics = Readonly<Record<string, string | number | boolean | null>>;
@@ -315,6 +447,18 @@ export interface ThreeHostRenderer {
 // @public
 export interface ThreeHostScene {
     readonly isScene: boolean;
+}
+
+// @public
+export interface WebGPUDeviceLoss {
+    // (undocumented)
+    readonly code: "WEBGPU_DEVICE_LOST";
+    // (undocumented)
+    readonly diagnostics: StartupDiagnostics;
+    // (undocumented)
+    readonly message: string;
+    // (undocumented)
+    readonly reason: string | null;
 }
 
 // (No @packageDocumentation comment for this package)

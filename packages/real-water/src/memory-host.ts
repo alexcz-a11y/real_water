@@ -2,6 +2,7 @@ import type {
   HostLifecycleAdapter,
   HostPreparedLease,
   HostPreparationRequest,
+  WebGPUDeviceLoss,
 } from "./startup.js";
 import {
   coreWebGPULimits,
@@ -161,8 +162,10 @@ function normalizeDelay(candidate: number | undefined): number {
 
 function createMemoryPreparedLease(): HostPreparedLease {
   let disposal: Promise<void> | undefined;
+  const invalidated = new Promise<WebGPUDeviceLoss>(() => {});
 
   return Object.freeze({
+    invalidated,
     dispose(): Promise<void> {
       disposal ??= Promise.resolve();
       return disposal;

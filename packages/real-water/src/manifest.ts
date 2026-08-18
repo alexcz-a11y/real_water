@@ -1,4 +1,13 @@
 import { RealWaterStartupError } from "./errors.js";
+import { hasExactKeys, isRecord } from "./internal/record-validation.js";
+import {
+  createMinimalWaterQualityProfile,
+  normalizeQualityProfile,
+  qualityProfileIdentity,
+  type MinimalWaterQualityProfileId,
+  type QualityProfile,
+  type QualityProfileIdentity,
+} from "./quality-profile.js";
 
 /**
  * The discriminator for supported Prewarm Manifests.
@@ -35,6 +44,16 @@ export interface PrewarmDeclaration {
 }
 
 /**
+ * One exact effect route prepared by a version 1 Prewarm Manifest.
+ *
+ * @public
+ */
+export interface PrewarmEffectVariant {
+  readonly effectId: string;
+  readonly variantId: string;
+}
+
+/**
  * A closed, versioned declaration of structural work required before readiness.
  *
  * @public
@@ -44,6 +63,8 @@ export interface PrewarmManifest {
   readonly version: typeof PREWARM_MANIFEST_VERSION;
   readonly id: string;
   readonly manifestHash: string;
+  readonly qualityProfile: QualityProfile;
+  readonly effectVariants: readonly PrewarmEffectVariant[];
   readonly declarations: readonly PrewarmDeclaration[];
 }
 
@@ -57,6 +78,8 @@ export interface PrewarmManifestIdentity {
   readonly version: typeof PREWARM_MANIFEST_VERSION;
   readonly id: string;
   readonly manifestHash: string;
+  readonly qualityProfile: QualityProfileIdentity;
+  readonly effectVariants: readonly PrewarmEffectVariant[];
 }
 
 const SHA_256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
@@ -65,6 +88,17 @@ const DECLARATION_KINDS: readonly PrewarmDeclarationKind[] = [
   "effect-state",
   "conditional-route",
 ];
+
+/**
+ * The immutable registry of effect variants supported by this release.
+ */
+export const SUPPORTED_EFFECT_VARIANTS: readonly PrewarmEffectVariant[] =
+  Object.freeze([
+    Object.freeze({
+      effectId: "minimal-water-surface",
+      variantId: "basic",
+    }),
+  ]);
 
 export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   texture: "water-texture",
@@ -80,6 +114,8 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
 const MINIMAL_WATER_MANIFEST_ID = "reference-minimal-water";
 const MINIMAL_WATER_MANIFEST_HASH =
   "sha256:cd1f46244381f23881c64cdad5d729ae2a6fd07e4af6a64e08509d2c080fa2f4";
+const MINIMAL_HIGH_DETAIL_WATER_MANIFEST_HASH =
+  "sha256:f213c2f8dc39f1f324a7d1e97494d3a815fb3af64083b78eef768e92bc60d328";
 const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.texture,
@@ -139,18 +175,40 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   },
 ];
 
+const MINIMAL_HIGH_DETAIL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] =
+  MINIMAL_WATER_DECLARATIONS.map((declaration) =>
+    declaration.id === MINIMAL_WATER_PREWARM_DECLARATION_IDS.geometry
+      ? {
+          ...declaration,
+          fingerprint:
+            "sha256:12ae3cedf7ee158660e0393182280f323336e3b7549a791ed9f3eeee731da795",
+        }
+      : declaration,
+  );
+
+interface SupportedManifestPlan {
+  readonly manifestHash: string;
+  readonly declarations: readonly PrewarmDeclaration[];
+}
+
 /**
  * Returns the complete manifest for the first prewarmed water plane.
  *
  * @public
  */
-export function createMinimalWaterPrewarmManifest(): PrewarmManifest {
+export function createMinimalWaterPrewarmManifest(
+  profile: QualityProfile = createMinimalWaterQualityProfile(),
+): PrewarmManifest {
+  const normalizedProfile = normalizeQualityProfile(profile);
+  const plan = supportedManifestPlan(normalizedProfile.id);
   return freezeManifest({
     schema: PREWARM_MANIFEST_SCHEMA,
     version: PREWARM_MANIFEST_VERSION,
     id: MINIMAL_WATER_MANIFEST_ID,
-    manifestHash: MINIMAL_WATER_MANIFEST_HASH,
-    declarations: MINIMAL_WATER_DECLARATIONS,
+    manifestHash: plan.manifestHash,
+    qualityProfile: normalizedProfile,
+    effectVariants: SUPPORTED_EFFECT_VARIANTS,
+    declarations: plan.declarations,
   });
 }
 
@@ -198,6 +256,15 @@ export function normalizePrewarmManifest(
     );
   }
 
+  const qualityProfile = normalizeManifestQualityProfile(
+    value.qualityProfile,
+    value.id,
+  );
+  const effectVariants = normalizeEffectVariants(
+    value.effectVariants,
+    value.id,
+  );
+
   if (!Array.isArray(value.declarations) || value.declarations.length === 0) {
     throw manifestError(
       "The Prewarm Manifest must declare at least one item.",
@@ -221,6 +288,16 @@ export function normalizePrewarmManifest(
         declarationIndex: index,
         manifestId: value.id,
       });
+    }
+
+    if (!hasExactKeys(declaration, ["id", "kind", "label", "fingerprint"])) {
+      throw manifestError(
+        "Every prewarm declaration must use the supported structure.",
+        {
+          declarationIndex: index,
+          manifestId: value.id,
+        },
+      );
     }
 
     if (!isNonEmptyText(declaration.id)) {
@@ -281,6 +358,8 @@ export function normalizePrewarmManifest(
     version: PREWARM_MANIFEST_VERSION,
     id: value.id,
     manifestHash: value.manifestHash,
+    qualityProfile,
+    effectVariants,
     declarations,
   });
 
@@ -297,12 +376,16 @@ export function manifestIdentity(
     version: manifest.version,
     id: manifest.id,
     manifestHash: manifest.manifestHash,
+    qualityProfile: qualityProfileIdentity(manifest.qualityProfile),
+    effectVariants: freezeEffectVariants(manifest.effectVariants),
   });
 }
 
 function freezeManifest(manifest: PrewarmManifest): PrewarmManifest {
   return Object.freeze({
     ...manifest,
+    qualityProfile: normalizeQualityProfile(manifest.qualityProfile),
+    effectVariants: freezeEffectVariants(manifest.effectVariants),
     declarations: Object.freeze(
       manifest.declarations.map((declaration) =>
         Object.freeze({ ...declaration }),
@@ -324,18 +407,26 @@ export function assertMinimalWaterPrewarmManifest(
     );
   }
 
-  if (manifest.manifestHash !== MINIMAL_WATER_MANIFEST_HASH) {
+  const qualityProfile = normalizeManifestQualityProfile(
+    manifest.qualityProfile,
+    manifest.id,
+  );
+  const plan = supportedManifestPlan(qualityProfile.id);
+
+  if (manifest.manifestHash !== plan.manifestHash) {
     throw manifestError(
       "The minimal-water Prewarm Manifest hash does not match its supported work plan.",
       {
-        expectedManifestHash: MINIMAL_WATER_MANIFEST_HASH,
+        expectedManifestHash: plan.manifestHash,
         manifestId: manifest.id,
         receivedManifestHash: manifest.manifestHash,
       },
     );
   }
 
-  for (const required of MINIMAL_WATER_DECLARATIONS) {
+  assertEffectVariants(manifest.effectVariants, manifest.id);
+
+  for (const required of plan.declarations) {
     const candidate = manifest.declarations.find(
       (declaration) => declaration.id === required.id,
     );
@@ -364,12 +455,10 @@ export function assertMinimalWaterPrewarmManifest(
     }
   }
 
-  if (manifest.declarations.length !== MINIMAL_WATER_DECLARATIONS.length) {
+  if (manifest.declarations.length !== plan.declarations.length) {
     const unexpected = manifest.declarations.find(
       (candidate) =>
-        !MINIMAL_WATER_DECLARATIONS.some(
-          (required) => required.id === candidate.id,
-        ),
+        !plan.declarations.some((required) => required.id === candidate.id),
     );
     throw manifestError(
       "The minimal-water Prewarm Manifest contains unsupported work.",
@@ -379,14 +468,151 @@ export function assertMinimalWaterPrewarmManifest(
       },
     );
   }
+
+  for (let index = 0; index < plan.declarations.length; index += 1) {
+    const required = plan.declarations[index];
+    const candidate = manifest.declarations[index];
+    if (required?.id !== candidate?.id) {
+      throw manifestError(
+        "The minimal-water Prewarm Manifest work order does not match the supported plan.",
+        {
+          declarationIndex: index,
+          expectedDeclarationId: required?.id ?? "missing",
+          manifestId: manifest.id,
+          receivedDeclarationId: candidate?.id ?? "missing",
+        },
+      );
+    }
+  }
+}
+
+function supportedManifestPlan(
+  profileId: MinimalWaterQualityProfileId,
+): SupportedManifestPlan {
+  return profileId === "minimal-high-detail"
+    ? {
+        manifestHash: MINIMAL_HIGH_DETAIL_WATER_MANIFEST_HASH,
+        declarations: MINIMAL_HIGH_DETAIL_WATER_DECLARATIONS,
+      }
+    : {
+        manifestHash: MINIMAL_WATER_MANIFEST_HASH,
+        declarations: MINIMAL_WATER_DECLARATIONS,
+      };
+}
+
+function normalizeManifestQualityProfile(
+  value: unknown,
+  manifestId: string,
+): QualityProfile {
+  try {
+    return normalizeQualityProfile(value as QualityProfile);
+  } catch {
+    throw manifestError(
+      "The Prewarm Manifest Quality Profile is not supported.",
+      { manifestId },
+    );
+  }
+}
+
+function normalizeEffectVariants(
+  value: unknown,
+  manifestId: string,
+): readonly PrewarmEffectVariant[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw manifestError(
+      "The Prewarm Manifest must declare its effect variants.",
+      { manifestId },
+    );
+  }
+
+  const variants: PrewarmEffectVariant[] = [];
+  const variantKeys = new Set<string>();
+  for (let index = 0; index < value.length; index += 1) {
+    if (!Object.hasOwn(value, index)) {
+      throw manifestError("Prewarm effect variants must not contain gaps.", {
+        manifestId,
+        variantIndex: index,
+      });
+    }
+
+    const variant: unknown = value[index];
+    if (
+      !isRecord(variant) ||
+      !hasExactKeys(variant, ["effectId", "variantId"]) ||
+      !isNonEmptyText(variant.effectId) ||
+      !isNonEmptyText(variant.variantId)
+    ) {
+      throw manifestError(
+        "Every prewarm effect variant needs exact effect and variant ids.",
+        { manifestId, variantIndex: index },
+      );
+    }
+
+    const key = effectVariantKey(variant.effectId, variant.variantId);
+    if (variantKeys.has(key)) {
+      throw manifestError("Prewarm effect variants must be unique.", {
+        effectId: variant.effectId,
+        manifestId,
+        variantId: variant.variantId,
+      });
+    }
+    variantKeys.add(key);
+    variants.push({
+      effectId: variant.effectId,
+      variantId: variant.variantId,
+    });
+  }
+
+  assertEffectVariants(variants, manifestId);
+  return freezeEffectVariants(variants);
+}
+
+function assertEffectVariants(
+  variants: readonly PrewarmEffectVariant[],
+  manifestId: string,
+): void {
+  if (variants.length !== SUPPORTED_EFFECT_VARIANTS.length) {
+    throw manifestError(
+      "The Prewarm Manifest effect registry does not match this release.",
+      { manifestId },
+    );
+  }
+
+  for (let index = 0; index < SUPPORTED_EFFECT_VARIANTS.length; index += 1) {
+    const supported = SUPPORTED_EFFECT_VARIANTS[index];
+    const candidate = variants[index];
+    if (
+      supported === undefined ||
+      candidate === undefined ||
+      candidate.effectId !== supported.effectId ||
+      candidate.variantId !== supported.variantId
+    ) {
+      throw manifestError(
+        "The Prewarm Manifest effect registry does not match this release.",
+        {
+          effectId: candidate?.effectId ?? "missing",
+          manifestId,
+          variantId: candidate?.variantId ?? "missing",
+        },
+      );
+    }
+  }
+}
+
+function freezeEffectVariants(
+  variants: readonly PrewarmEffectVariant[],
+): readonly PrewarmEffectVariant[] {
+  return Object.freeze(
+    variants.map((variant) => Object.freeze({ ...variant })),
+  );
+}
+
+function effectVariantKey(effectId: string, variantId: string): string {
+  return `${effectId}\u0000${variantId}`;
 }
 
 function isNonEmptyText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function manifestError(

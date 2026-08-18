@@ -1,10 +1,10 @@
 # Real Water
 
 Real Water is an ESM-only TypeScript Module for a reusable native Three.js Open
-Water Domain. The repository now includes the first complete, fail-closed water
-prewarm and reveal path.
+Water Domain. The repository now includes a complete, fail-closed water prewarm,
+reveal, structural reprepare, and bounded recovery path.
 
-Issue #14 adds one minimal water plane to the startup and capability foundation:
+Issue #15 extends the minimal water plane and startup foundation:
 
 - an accessible Loading Experience appears before preparation begins;
 - the canonical minimal-water Prewarm Manifest declares exactly eight work
@@ -18,6 +18,17 @@ Issue #14 adds one minimal water plane to the startup and capability foundation:
   ready lease resolves;
 - the Reference Experience keeps the canvas hidden through preparation and
   reveals it on the next refresh after readiness;
+- immutable `minimal` and `minimal-high-detail` Quality Profiles derive distinct
+  manifest hashes and geometry structures;
+- applying a changed Quality Profile, or resuming after a confirmed long
+  suspension, conceals the stage and repeats the complete Readiness Gate;
+- ready leases expose long-suspension and device-loss invalidation through the
+  public Runtime Interface so Host Integrations can run the same policy;
+- undeclared effect variants fail with `EFFECT_NOT_PREWARMED` before ready
+  runtime state changes;
+- post-ready device loss invalidates the lease while preserving the Host's Three
+  callback; the Reference Experience recreates its owned renderer for one
+  automatic rebuild and leaves any later loss on the accessible error screen;
 - WebGL fallback, Compatibility Mode, missing limits, device loss, failure,
   cancellation, and disposal paths stay behind the Loading Experience with
   structured diagnostics;

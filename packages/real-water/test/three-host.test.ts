@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { PerspectiveCamera, Scene } from "three";
 import {
+  createMinimalWaterQualityProfile,
   createMinimalWaterPrewarmManifest,
   createThreeHostLifecycleAdapter,
   prepareRealWater,
@@ -92,7 +93,9 @@ describe("createThreeHostLifecycleAdapter", () => {
       xr: { enabled: false },
     };
     const loading = new RecordingLoadingPresenter();
-    const manifest = createMinimalWaterPrewarmManifest();
+    const manifest = createMinimalWaterPrewarmManifest(
+      createMinimalWaterQualityProfile("minimal-high-detail"),
+    );
     const run = prepareRealWater({
       manifest,
       loading,
@@ -117,7 +120,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       },
     });
     expect(renderer.init).toHaveBeenCalledTimes(1);
-    expect(renderer.onDeviceLost).toBe(previousOnDeviceLost);
+    expect(renderer.onDeviceLost).not.toBe(previousOnDeviceLost);
     expect(renderer.initTexture).toHaveBeenCalledTimes(1);
     expect(renderer.compileAsync).toHaveBeenCalledWith(scene, camera);
     expect(renderer.render).toHaveBeenCalledTimes(10);
@@ -130,6 +133,18 @@ describe("createThreeHostLifecycleAdapter", () => {
     );
     expect(scene.children).toHaveLength(1);
     expect(
+      (
+        scene.children[0] as unknown as {
+          readonly geometry: {
+            readonly parameters: {
+              readonly widthSegments: number;
+              readonly heightSegments: number;
+            };
+          };
+        }
+      ).geometry.parameters,
+    ).toMatchObject({ widthSegments: 2, heightSegments: 2 });
+    expect(
       loading.snapshots.flatMap((snapshot) =>
         snapshot.status === "preparing" &&
         snapshot.progress.lastCompleted !== undefined
@@ -137,6 +152,22 @@ describe("createThreeHostLifecycleAdapter", () => {
           : [],
       ),
     ).toEqual(manifest.declarations.map((declaration) => declaration.id));
+
+    renderer.onDeviceLost({
+      message: "Synthetic post-ready Three device loss.",
+      reason: "unknown",
+    });
+    await expect(lease.invalidated).resolves.toEqual({
+      code: "WEBGPU_DEVICE_LOST",
+      message: "Synthetic post-ready Three device loss.",
+      reason: "unknown",
+      diagnostics: {
+        deviceLossMessage: "Synthetic post-ready Three device loss.",
+        deviceLossReason: "unknown",
+      },
+    });
+    expect(previousOnDeviceLost).toHaveBeenCalledTimes(1);
+    expect(previousOnDeviceLost.mock.instances[0]).toBe(renderer);
 
     const overlappingRun = prepareRealWater({
       manifest,
@@ -155,6 +186,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     await firstDisposal;
 
     expect(scene.children).toHaveLength(0);
+    expect(renderer.onDeviceLost).toBe(previousOnDeviceLost);
     expect(renderer.dispose).not.toHaveBeenCalled();
 
     const replacementRun = prepareRealWater({
@@ -164,8 +196,11 @@ describe("createThreeHostLifecycleAdapter", () => {
     });
     const replacementLease = await replacementRun.ready;
     expect(scene.children).toHaveLength(1);
+    const hostReplacementOnDeviceLost = vi.fn();
+    renderer.onDeviceLost = hostReplacementOnDeviceLost;
     await replacementLease.dispose();
     expect(scene.children).toHaveLength(0);
+    expect(renderer.onDeviceLost).toBe(hostReplacementOnDeviceLost);
   });
 
   it("cleans partial water resources when progress presentation fails", async () => {
@@ -366,6 +401,124 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(previousOnDeviceLost).toHaveBeenCalledTimes(1);
     expect(previousOnDeviceLost.mock.instances[0]).toBe(renderer);
     expect(renderer.onDeviceLost).toBe(previousOnDeviceLost);
+  });
+
+  it("fails promptly and cleans late resources when the device is lost during prewarm", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera();
+    const initialRenderTarget = Object.freeze({ name: "host-target" });
+    let currentRenderTarget: unknown = initialRenderTarget;
+    let releaseReadback: ((pixels: Uint8Array) => void) | undefined;
+    const pendingReadback = new Promise<Uint8Array>((resolve) => {
+      releaseReadback = resolve;
+    });
+    let readbackCount = 0;
+    const previousOnDeviceLost = vi.fn();
+    const renderer = {
+      autoClear: true,
+      backend: {
+        device: {
+          limits: {
+            maxComputeInvocationsPerWorkgroup: 256,
+            maxComputeWorkgroupSizeX: 256,
+            maxComputeWorkgroupsPerDimension: 65_535,
+            maxStorageBufferBindingSize: 134_217_728,
+            maxTextureDimension2D: 8_192,
+          },
+        },
+      },
+      compileAsync: vi.fn(async () => {}),
+      contextNode: null,
+      coordinateSystem: 2_001,
+      dispose: vi.fn(),
+      getActiveCubeFace: vi.fn(() => 0),
+      getActiveMipmapLevel: vi.fn(() => 0),
+      getMRT: vi.fn(() => null),
+      getRenderTarget: vi.fn(() => currentRenderTarget),
+      hasFeature: vi.fn((name: string) => name === "core-features-and-limits"),
+      init: vi.fn(async () => {}),
+      initTexture: vi.fn(),
+      onDeviceLost: previousOnDeviceLost,
+      opaque: true,
+      outputColorSpace: "srgb",
+      readRenderTargetPixelsAsync: vi.fn(() => {
+        readbackCount += 1;
+        return readbackCount === 1
+          ? pendingReadback
+          : Promise.resolve(new Uint8Array(4));
+      }),
+      render: vi.fn(),
+      setMRT: vi.fn(),
+      setRenderTarget: vi.fn((target: unknown) => {
+        currentRenderTarget = target;
+      }),
+      toneMapping: 0,
+      transparent: false,
+      xr: { enabled: false },
+    };
+    const loading = new RecordingLoadingPresenter();
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading,
+      host: createThreeHostLifecycleAdapter({ renderer, scene, camera }),
+    });
+
+    await vi.waitFor(() => {
+      expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(1);
+    });
+    renderer.onDeviceLost({
+      message: "Synthetic device loss during prewarm.",
+      reason: "unknown",
+    });
+    const promptOutcome = await Promise.race([
+      run.ready.then(
+        () => ({ status: "ready" as const }),
+        (error: unknown) => ({ status: "failed" as const, error }),
+      ),
+      new Promise<Readonly<{ status: "timeout" }>>((resolve) => {
+        setTimeout(() => resolve({ status: "timeout" }), 100);
+      }),
+    ]);
+
+    expect(promptOutcome).toMatchObject({
+      status: "failed",
+      error: {
+        code: "WEBGPU_DEVICE_LOST",
+        diagnostics: {
+          deviceLossMessage: "Synthetic device loss during prewarm.",
+          deviceLossReason: "unknown",
+        },
+      },
+    });
+    expect(scene.children).toHaveLength(0);
+    expect(currentRenderTarget).toBe(initialRenderTarget);
+    expect(previousOnDeviceLost).toHaveBeenCalledTimes(1);
+    expect(previousOnDeviceLost.mock.instances[0]).toBe(renderer);
+    expect(renderer.onDeviceLost).toBe(previousOnDeviceLost);
+    expect(renderer.dispose).not.toHaveBeenCalled();
+    expect(
+      loading.snapshots.some((snapshot) => snapshot.status === "ready"),
+    ).toBe(false);
+
+    const replacementRun = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: new RecordingLoadingPresenter(),
+      host: createThreeHostLifecycleAdapter({ renderer, scene, camera }),
+    });
+    const replacementLease = await replacementRun.ready;
+    expect(scene.children).toHaveLength(1);
+    const restorationCallsBeforeReadbackSettles =
+      renderer.setRenderTarget.mock.calls.length;
+
+    releaseReadback?.(new Uint8Array(4));
+    await pendingReadback;
+    await run.ready.catch(() => {});
+    expect(scene.children).toHaveLength(1);
+    expect(renderer.setRenderTarget).toHaveBeenCalledTimes(
+      restorationCallsBeforeReadbackSettles,
+    );
+    await replacementLease.dispose();
+    expect(scene.children).toHaveLength(0);
   });
 
   it("reports a structured retryable renderer initialization failure", async () => {

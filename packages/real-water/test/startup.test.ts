@@ -8,6 +8,7 @@ import {
   type HostPreparedLease,
   type LoadingPresenterAdapter,
   type StartupSnapshot,
+  type WebGPUDeviceLoss,
 } from "../src/index.js";
 
 class RecordingLoadingPresenter implements LoadingPresenterAdapter {
@@ -24,6 +25,7 @@ const TEST_CAPABILITIES = Object.freeze({
     timestampQuery: false,
   }),
 });
+const NEVER_INVALIDATED = new Promise<never>(() => {});
 
 describe("prepareRealWater", () => {
   it("publishes deeply immutable Core WebGPU capabilities from the Memory Host", async () => {
@@ -47,6 +49,403 @@ describe("prepareRealWater", () => {
     expect(Object.isFrozen(lease.capabilities)).toBe(true);
     expect(Object.isFrozen(lease.capabilities.rendering)).toBe(true);
     await lease.dispose();
+  });
+
+  it("selects a declared effect variant with an immutable revision receipt", async () => {
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: new RecordingLoadingPresenter(),
+      host: createMemoryHostLifecycleAdapter({ stepDelayMs: 0 }),
+    });
+    const lease = await run.ready;
+
+    const receipt = lease.selectEffectVariant({
+      effectId: "minimal-water-surface",
+      variantId: "basic",
+    });
+
+    expect(receipt).toEqual({
+      selection: {
+        effectId: "minimal-water-surface",
+        variantId: "basic",
+      },
+      changed: true,
+      revision: 1,
+    });
+    expect(Object.isFrozen(receipt)).toBe(true);
+    expect(Object.isFrozen(receipt.selection)).toBe(true);
+    await lease.dispose();
+  });
+
+  it("keeps the revision stable when the selected effect variant is unchanged", async () => {
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: new RecordingLoadingPresenter(),
+      host: createMemoryHostLifecycleAdapter({ stepDelayMs: 0 }),
+    });
+    const lease = await run.ready;
+    const selection = {
+      effectId: "minimal-water-surface",
+      variantId: "basic",
+    };
+
+    lease.selectEffectVariant(selection);
+    const receipt = lease.selectEffectVariant(selection);
+
+    expect(receipt).toEqual({
+      selection,
+      changed: false,
+      revision: 1,
+    });
+    await lease.dispose();
+  });
+
+  it("rejects an undeclared effect variant before changing runtime state", async () => {
+    const manifest = createMinimalWaterPrewarmManifest();
+    const run = prepareRealWater({
+      manifest,
+      loading: new RecordingLoadingPresenter(),
+      host: createMemoryHostLifecycleAdapter({ stepDelayMs: 0 }),
+    });
+    const lease = await run.ready;
+    const preparedSelection = {
+      effectId: "minimal-water-surface",
+      variantId: "basic",
+    };
+    lease.selectEffectVariant(preparedSelection);
+
+    let failure: unknown;
+    try {
+      lease.selectEffectVariant({
+        effectId: "minimal-water-surface",
+        variantId: "undeclared",
+      });
+    } catch (cause) {
+      failure = cause;
+    }
+
+    expect(failure).toMatchObject({
+      name: "RealWaterRuntimeError",
+      code: "EFFECT_NOT_PREWARMED",
+      diagnostics: {
+        effectId: "minimal-water-surface",
+        manifestHash: manifest.manifestHash,
+        variantId: "undeclared",
+      },
+      diagnosticText:
+        "EFFECT_NOT_PREWARMED: The requested effect variant was not prepared by this lease.\n" +
+        "effectId: minimal-water-surface\n" +
+        `manifestHash: ${manifest.manifestHash}\n` +
+        "variantId: undeclared",
+    });
+    expect(lease.selectEffectVariant(preparedSelection)).toMatchObject({
+      changed: false,
+      revision: 1,
+    });
+    await lease.dispose();
+  });
+
+  it("resolves one immutable device-loss invalidation after readiness", async () => {
+    let invalidate:
+      | ((loss: {
+          readonly code: "WEBGPU_DEVICE_LOST";
+          readonly message: string;
+          readonly reason: string | null;
+          readonly diagnostics: Readonly<
+            Record<string, string | number | boolean | null>
+          >;
+        }) => void)
+      | undefined;
+    const invalidated = new Promise<{
+      readonly code: "WEBGPU_DEVICE_LOST";
+      readonly message: string;
+      readonly reason: string | null;
+      readonly diagnostics: Readonly<
+        Record<string, string | number | boolean | null>
+      >;
+    }>((resolve) => {
+      invalidate = resolve;
+    });
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: new RecordingLoadingPresenter(),
+      host: createReadyHost(undefined, {
+        invalidated,
+        dispose() {},
+      }),
+    });
+    const lease = await run.ready;
+
+    invalidate?.({
+      code: "WEBGPU_DEVICE_LOST",
+      message: "Synthetic post-ready device loss.",
+      reason: "unknown",
+      diagnostics: {
+        deviceLossMessage: "Synthetic post-ready device loss.",
+        deviceLossReason: "unknown",
+      },
+    });
+
+    const loss = await lease.invalidated;
+    expect(loss).toEqual({
+      code: "WEBGPU_DEVICE_LOST",
+      message: "Synthetic post-ready device loss.",
+      reason: "unknown",
+      diagnostics: {
+        deviceLossMessage: "Synthetic post-ready device loss.",
+        deviceLossReason: "unknown",
+      },
+    });
+    expect(Object.isFrozen(loss)).toBe(true);
+    expect(Object.isFrozen(loss.diagnostics)).toBe(true);
+
+    let commandFailure: unknown;
+    try {
+      lease.selectEffectVariant({
+        effectId: "minimal-water-surface",
+        variantId: "basic",
+      });
+    } catch (cause) {
+      commandFailure = cause;
+    }
+    expect(commandFailure).toMatchObject({
+      name: "RealWaterRuntimeError",
+      code: "RUNTIME_INVALIDATED",
+      diagnostics: {
+        deviceLossMessage: "Synthetic post-ready device loss.",
+        deviceLossReason: "unknown",
+        runtimeState: "device-lost",
+      },
+      diagnosticText:
+        "RUNTIME_INVALIDATED: The Real Water runtime was invalidated by WebGPU device loss.\n" +
+        "deviceLossMessage: Synthetic post-ready device loss.\n" +
+        "deviceLossReason: unknown\n" +
+        "runtimeState: device-lost",
+    });
+    await lease.dispose();
+  });
+
+  it("invalidates once for a long suspension and rejects later effect commands", async () => {
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: new RecordingLoadingPresenter(),
+      host: createMemoryHostLifecycleAdapter({ stepDelayMs: 0 }),
+    });
+    const lease = await run.ready;
+
+    const first = lease.invalidateForLongSuspension();
+    const second = lease.invalidateForLongSuspension();
+
+    expect(second).toBe(first);
+    expect(first).toEqual({
+      code: "LONG_SUSPENSION",
+      message:
+        "The Real Water runtime was invalidated after a long suspension.",
+      diagnostics: { runtimeState: "long-suspension" },
+    });
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(first.diagnostics)).toBe(true);
+    await expect(lease.invalidated).resolves.toBe(first);
+
+    let commandFailure: unknown;
+    try {
+      lease.selectEffectVariant({
+        effectId: "minimal-water-surface",
+        variantId: "basic",
+      });
+    } catch (cause) {
+      commandFailure = cause;
+    }
+    expect(commandFailure).toMatchObject({
+      name: "RealWaterRuntimeError",
+      code: "RUNTIME_INVALIDATED",
+      diagnostics: { runtimeState: "long-suspension" },
+      diagnosticText:
+        "RUNTIME_INVALIDATED: The Real Water runtime was invalidated after a long suspension.\n" +
+        "runtimeState: long-suspension",
+    });
+    await lease.dispose();
+  });
+
+  it("keeps a long-suspension invalidation when the Host reports device loss later", async () => {
+    let loseDevice: ((loss: WebGPUDeviceLoss) => void) | undefined;
+    const hostInvalidated = new Promise<WebGPUDeviceLoss>((resolve) => {
+      loseDevice = resolve;
+    });
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: new RecordingLoadingPresenter(),
+      host: createReadyHost(undefined, {
+        invalidated: hostInvalidated,
+        dispose() {},
+      }),
+    });
+    const lease = await run.ready;
+    const suspension = lease.invalidateForLongSuspension();
+
+    loseDevice?.({
+      code: "WEBGPU_DEVICE_LOST",
+      message: "Synthetic late device loss.",
+      reason: "unknown",
+      diagnostics: {
+        deviceLossMessage: "Synthetic late device loss.",
+        deviceLossReason: "unknown",
+      },
+    });
+    await Promise.resolve();
+
+    await expect(lease.invalidated).resolves.toBe(suspension);
+    expect(() =>
+      lease.selectEffectVariant({
+        effectId: "minimal-water-surface",
+        variantId: "basic",
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "RUNTIME_INVALIDATED",
+        diagnostics: { runtimeState: "long-suspension" },
+      }),
+    );
+    await lease.dispose();
+  });
+
+  it("fails the Readiness Gate when the prepared Host lease is already invalidated", async () => {
+    const loading = new RecordingLoadingPresenter();
+    const dispose = vi.fn();
+    const loss = Object.freeze({
+      code: "WEBGPU_DEVICE_LOST" as const,
+      message: "Synthetic loss before readiness.",
+      reason: "destroyed",
+      diagnostics: Object.freeze({
+        deviceLossMessage: "Synthetic loss before readiness.",
+        deviceLossReason: "destroyed",
+      }),
+    });
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading,
+      host: createReadyHost(undefined, {
+        invalidated: Promise.resolve(loss),
+        dispose,
+      }),
+    });
+
+    await expect(run.ready).rejects.toMatchObject({
+      name: "RealWaterStartupError",
+      code: "WEBGPU_DEVICE_LOST",
+      phase: "readiness-gate",
+      retryable: true,
+      diagnostics: {
+        deviceLossMessage: "Synthetic loss before readiness.",
+        deviceLossReason: "destroyed",
+      },
+      message: "The WebGPU device was lost before readiness completed.",
+    });
+    expect(loading.snapshots.at(-1)?.status).toBe("failed");
+    expect(
+      loading.snapshots.some((snapshot) => snapshot.status === "ready"),
+    ).toBe(false);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts pending progress and fails promptly when a ready Host lease invalidates", async () => {
+    const manifest = createMinimalWaterPrewarmManifest();
+    let finalProgressStarted = false;
+    const committedStates: string[] = [];
+    const loading: LoadingPresenterAdapter = {
+      present(snapshot, signal) {
+        if (
+          snapshot.status === "preparing" &&
+          snapshot.progress.completedWork === manifest.declarations.length
+        ) {
+          finalProgressStarted = true;
+          return new Promise((_, reject) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                reject(new Error("Progress presentation aborted."));
+              },
+              { once: true },
+            );
+          });
+        }
+        committedStates.push(snapshot.status);
+      },
+    };
+    let invalidate:
+      | ((loss: {
+          readonly code: "WEBGPU_DEVICE_LOST";
+          readonly message: string;
+          readonly reason: string | null;
+          readonly diagnostics: Readonly<
+            Record<string, string | number | boolean | null>
+          >;
+        }) => void)
+      | undefined;
+    const invalidated = new Promise<{
+      readonly code: "WEBGPU_DEVICE_LOST";
+      readonly message: string;
+      readonly reason: string | null;
+      readonly diagnostics: Readonly<
+        Record<string, string | number | boolean | null>
+      >;
+    }>((resolve) => {
+      invalidate = resolve;
+    });
+    const dispose = vi.fn();
+    const run = prepareRealWater({
+      manifest,
+      loading,
+      host: {
+        async prepare(request) {
+          for (const declaration of request.manifest.declarations.slice(
+            0,
+            -1,
+          )) {
+            await request.progress.complete(declaration.id);
+          }
+          const finalDeclaration = request.manifest.declarations.at(-1);
+          if (finalDeclaration !== undefined) {
+            void request.progress.complete(finalDeclaration.id);
+          }
+          return {
+            status: "ready",
+            capabilities: TEST_CAPABILITIES,
+            lease: { invalidated, dispose },
+          };
+        },
+      },
+    });
+    let outcome: unknown;
+    void run.ready.catch((error: unknown) => {
+      outcome = error;
+    });
+
+    await vi.waitFor(() => {
+      expect(finalProgressStarted).toBe(true);
+    });
+    invalidate?.({
+      code: "WEBGPU_DEVICE_LOST",
+      message: "Synthetic loss during final progress.",
+      reason: null,
+      diagnostics: {
+        deviceLossMessage: "Synthetic loss during final progress.",
+        deviceLossReason: null,
+      },
+    });
+
+    await vi.waitFor(
+      () => {
+        expect(outcome).toMatchObject({
+          code: "WEBGPU_DEVICE_LOST",
+          phase: "readiness-gate",
+        });
+      },
+      { timeout: 200 },
+    );
+    expect(committedStates.at(-1)).toBe("failed");
+    expect(committedStates).not.toContain("ready");
+    expect(dispose).toHaveBeenCalledTimes(1);
   });
 
   it("reports only completed manifest work before resolving a ready lease", async () => {
@@ -82,6 +481,18 @@ describe("prepareRealWater", () => {
       version: 1,
       id: manifest.id,
       manifestHash: manifest.manifestHash,
+      qualityProfile: {
+        schema: "real-water/quality-profile",
+        version: 1,
+        id: "minimal",
+        profileHash: manifest.qualityProfile.profileHash,
+      },
+      effectVariants: [
+        {
+          effectId: "minimal-water-surface",
+          variantId: "basic",
+        },
+      ],
     });
 
     await lease.dispose();
@@ -295,6 +706,7 @@ describe("prepareRealWater", () => {
   it("returns one idempotent lease-disposal transaction", async () => {
     let disposalCalls = 0;
     const host = createReadyHost(undefined, {
+      invalidated: NEVER_INVALIDATED,
       dispose() {
         disposalCalls += 1;
       },
@@ -309,7 +721,25 @@ describe("prepareRealWater", () => {
     const first = lease.dispose();
     const second = lease.dispose();
 
+    let commandFailure: unknown;
+    try {
+      lease.selectEffectVariant({
+        effectId: "minimal-water-surface",
+        variantId: "basic",
+      });
+    } catch (cause) {
+      commandFailure = cause;
+    }
+
     expect(first).toBe(second);
+    expect(commandFailure).toMatchObject({
+      name: "RealWaterRuntimeError",
+      code: "RUNTIME_INVALIDATED",
+      diagnostics: { runtimeState: "disposed" },
+      diagnosticText:
+        "RUNTIME_INVALIDATED: The Real Water runtime has been disposed.\n" +
+        "runtimeState: disposed",
+    });
     await first;
     expect(disposalCalls).toBe(1);
   });
@@ -393,7 +823,7 @@ describe("prepareRealWater", () => {
           return {
             status: "ready",
             capabilities: TEST_CAPABILITIES,
-            lease: { dispose() {} },
+            lease: { invalidated: NEVER_INVALIDATED, dispose() {} },
           };
         },
       },
@@ -467,6 +897,7 @@ describe("prepareRealWater", () => {
       status: "ready",
       capabilities: TEST_CAPABILITIES,
       lease: {
+        invalidated: NEVER_INVALIDATED,
         dispose() {
           disposalCalls += 1;
         },
@@ -513,7 +944,7 @@ describe("prepareRealWater", () => {
           return {
             status: "ready",
             capabilities: TEST_CAPABILITIES,
-            lease: { dispose() {} },
+            lease: { invalidated: NEVER_INVALIDATED, dispose() {} },
           };
         },
       },
@@ -557,6 +988,7 @@ describe("prepareRealWater", () => {
             status: "ready",
             capabilities: TEST_CAPABILITIES,
             lease: {
+              invalidated: NEVER_INVALIDATED,
               dispose() {
                 disposalCalls += 1;
               },
@@ -681,6 +1113,7 @@ describe("prepareRealWater", () => {
             status: "ready",
             capabilities: TEST_CAPABILITIES,
             lease: {
+              invalidated: NEVER_INVALIDATED,
               dispose() {
                 disposalCalls += 1;
               },
@@ -752,7 +1185,10 @@ describe("prepareRealWater", () => {
     const run = prepareRealWater({
       manifest: createMinimalWaterPrewarmManifest(),
       loading,
-      host: createReadyHost(undefined, { dispose: disposeHostLease }),
+      host: createReadyHost(undefined, {
+        invalidated: NEVER_INVALIDATED,
+        dispose: disposeHostLease,
+      }),
     });
 
     await vi.waitFor(() => {
@@ -840,7 +1276,7 @@ describe("prepareRealWater", () => {
           return {
             status: "ready",
             capabilities: TEST_CAPABILITIES,
-            lease: { dispose() {} },
+            lease: { invalidated: NEVER_INVALIDATED, dispose() {} },
           };
         },
       },
@@ -898,7 +1334,10 @@ describe("prepareRealWater", () => {
 
 function createReadyHost(
   onStart?: () => void,
-  lease: HostPreparedLease = { dispose() {} },
+  lease: HostPreparedLease = {
+    invalidated: NEVER_INVALIDATED,
+    dispose() {},
+  },
 ): HostLifecycleAdapter {
   return {
     async prepare(request) {

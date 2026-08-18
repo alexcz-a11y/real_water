@@ -54,6 +54,54 @@ export type StartupDiagnostics = Readonly<
 >;
 
 /**
+ * Stable ready-runtime error identifiers suitable for command control flow.
+ *
+ * @public
+ */
+export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "RUNTIME_INVALIDATED";
+
+/**
+ * JSON-safe diagnostic values exposed by ready-runtime failures.
+ *
+ * @public
+ */
+export type RuntimeDiagnostics = StartupDiagnostics;
+
+/**
+ * Constructor values for {@link RealWaterRuntimeError}.
+ *
+ * @public
+ */
+export interface RealWaterRuntimeErrorInit {
+  readonly code: RuntimeErrorCode;
+  readonly message: string;
+  readonly diagnostics?: RuntimeDiagnostics;
+  readonly cause?: unknown;
+}
+
+/**
+ * A structured, copyable failure from a ready Runtime command.
+ *
+ * @public
+ */
+export class RealWaterRuntimeError extends Error {
+  public readonly code: RuntimeErrorCode;
+  public readonly diagnosticText: string;
+  public readonly diagnostics: RuntimeDiagnostics;
+
+  public constructor(init: RealWaterRuntimeErrorInit) {
+    super(
+      init.message,
+      init.cause === undefined ? undefined : { cause: init.cause },
+    );
+    this.name = "RealWaterRuntimeError";
+    this.code = init.code;
+    this.diagnostics = Object.freeze({ ...init.diagnostics });
+    this.diagnosticText = formatDiagnosticText(this);
+  }
+}
+
+/**
  * Constructor values for {@link RealWaterStartupError}.
  *
  * @public
@@ -93,7 +141,13 @@ export class RealWaterStartupError extends Error {
   }
 }
 
-function formatDiagnosticText(error: RealWaterStartupError): string {
+function formatDiagnosticText(
+  error: Readonly<{
+    readonly code: string;
+    readonly message: string;
+    readonly diagnostics: StartupDiagnostics;
+  }>,
+): string {
   const entries = Object.entries(error.diagnostics).sort(([left], [right]) =>
     left.localeCompare(right),
   );

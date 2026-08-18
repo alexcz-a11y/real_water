@@ -14,7 +14,12 @@ import {
   MINIMAL_WATER_PREWARM_DECLARATION_IDS,
   assertMinimalWaterPrewarmManifest,
 } from "../manifest.js";
-import type { HostPreparedLease, HostPreparationRequest } from "../startup.js";
+import { getMinimalWaterGeometrySegments } from "../quality-profile.js";
+import type {
+  HostPreparedLease,
+  HostPreparationRequest,
+  WebGPUDeviceLoss,
+} from "../startup.js";
 import type {
   ThreeHostCamera,
   ThreeHostRenderer,
@@ -28,6 +33,7 @@ interface MinimalWaterPrewarmOptions {
   readonly scene: ThreeHostScene;
   readonly camera: ThreeHostCamera;
   readonly request: HostPreparationRequest;
+  readonly invalidated: Promise<WebGPUDeviceLoss>;
 }
 
 interface PreparedResources {
@@ -47,12 +53,46 @@ export async function prepareMinimalWaterPlane(
   options: MinimalWaterPrewarmOptions,
 ): Promise<HostPreparedLease> {
   assertMinimalWaterPrewarmManifest(options.request.manifest);
+  const geometrySegments = getMinimalWaterGeometrySegments(
+    options.request.manifest.qualityProfile,
+  );
 
   const renderer = options.renderer as unknown as Renderer;
   const scene = options.scene as unknown as Scene;
   const camera = options.camera as unknown as Camera;
   const state = captureHostState(renderer, scene, camera);
   const partial: PartialPreparedResources = {};
+  let resourcesDisposed = false;
+  let hostStateRestored = false;
+
+  const restoreCapturedHostState = (): void => {
+    if (hostStateRestored) {
+      return;
+    }
+    restoreHostState(renderer, scene, camera, state);
+    hostStateRestored = true;
+  };
+  const cleanupPreparation = (): void => {
+    if (!resourcesDisposed) {
+      resourcesDisposed = true;
+      disposePartialResourcesSilently(scene, partial);
+    }
+    try {
+      restoreCapturedHostState();
+    } catch {
+      // Preserve the authoritative preparation or abort failure.
+    }
+  };
+  const cleanupAfterAbort = (): void => {
+    cleanupPreparation();
+  };
+  if (options.request.signal.aborted) {
+    cleanupAfterAbort();
+  } else {
+    options.request.signal.addEventListener("abort", cleanupAfterAbort, {
+      once: true,
+    });
+  }
 
   try {
     throwIfAborted(options.request.signal);
@@ -65,7 +105,12 @@ export async function prepareMinimalWaterPlane(
     scenePass.renderTarget.texture.name = "Real Water minimal scene color";
 
     throwIfAborted(options.request.signal);
-    const geometry = new PlaneGeometry(48, 48);
+    const geometry = new PlaneGeometry(
+      48,
+      48,
+      geometrySegments.widthSegments,
+      geometrySegments.heightSegments,
+    );
     partial.geometry = geometry;
     geometry.rotateX(-Math.PI / 2);
     const material = new MeshBasicNodeMaterial();
@@ -126,23 +171,25 @@ export async function prepareMinimalWaterPlane(
       MINIMAL_WATER_PREWARM_DECLARATION_IDS.mainCameraGuard,
     );
 
-    restoreHostState(renderer, scene, camera, state);
-    return createPreparedLease(scene, {
-      plane,
-      geometry,
-      material,
-      waterTexture,
-      pipeline,
-      scenePass,
-    });
+    throwIfAborted(options.request.signal);
+    restoreCapturedHostState();
+    return createPreparedLease(
+      scene,
+      {
+        plane,
+        geometry,
+        material,
+        waterTexture,
+        pipeline,
+        scenePass,
+      },
+      options.invalidated,
+    );
   } catch (cause) {
-    disposePartialResourcesSilently(scene, partial);
-    try {
-      restoreHostState(renderer, scene, camera, state);
-    } catch {
-      // Preserve the authoritative preparation or restoration failure.
-    }
+    cleanupPreparation();
     throw cause;
+  } finally {
+    options.request.signal.removeEventListener("abort", cleanupAfterAbort);
   }
 }
 
@@ -181,9 +228,11 @@ async function probeCompletedFrame(
 function createPreparedLease(
   scene: Scene,
   resources: PreparedResources,
+  invalidated: Promise<WebGPUDeviceLoss>,
 ): HostPreparedLease {
   let disposal: Promise<void> | undefined;
   return Object.freeze({
+    invalidated,
     dispose(): Promise<void> {
       disposal ??= Promise.resolve().then(() => {
         disposePreparedResources(scene, resources);

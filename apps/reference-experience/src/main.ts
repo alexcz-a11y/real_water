@@ -3,12 +3,19 @@ import { Color, PerspectiveCamera, Scene } from "three";
 import { WebGPURenderer } from "three/webgpu";
 import {
   createMemoryHostLifecycleAdapter,
+  createMinimalWaterQualityProfile,
   createThreeHostLifecycleAdapter,
   type HostLifecycleAdapter,
+  type HostPreparationRequest,
   type MemoryHostScenario,
   type RealWaterLease,
+  type WebGPUDeviceLoss,
 } from "real-water";
-import { startReferenceExperience } from "./start-reference-experience.js";
+import {
+  startReferenceExperience,
+  type ReferenceExperienceSnapshot,
+  type ReferenceHostAttempt,
+} from "./start-reference-experience.js";
 
 const mount = document.querySelector("#app");
 
@@ -19,57 +26,180 @@ if (mount === null) {
 const parameters = new URLSearchParams(window.location.search);
 const hostSetup = createHostSetup(parameters);
 const referenceSession = startReferenceExperience(mount, {
-  createHost: hostSetup.createHost,
-  ...(hostSetup.createReadyStage === undefined
-    ? {}
-    : { createReadyStage: hostSetup.createReadyStage }),
+  createHostAttempt: hostSetup.createHostAttempt,
   revealDelayFrames: readRevealFrames(parameters),
 });
+let lifecycleRecoveryHandled = true;
 let disposal: Promise<void> | undefined;
+
+const markLifecycleSuspension = (): void => {
+  lifecycleRecoveryHandled = false;
+};
+const recoverFromLifecycleSuspension = (): void => {
+  if (lifecycleRecoveryHandled) {
+    return;
+  }
+  lifecycleRecoveryHandled = true;
+  void referenceSession.signalLongSuspension().catch(() => {});
+};
+const handlePageHide = (event: PageTransitionEvent): void => {
+  if (event.persisted) {
+    markLifecycleSuspension();
+    return;
+  }
+  void session.dispose().catch(() => {});
+};
+const handlePageShow = (event: PageTransitionEvent): void => {
+  if (event.persisted) {
+    recoverFromLifecycleSuspension();
+  }
+};
 const session = Object.freeze({
   dispose(): Promise<void> {
     disposal ??= (async () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", handlePageShow);
+      document.removeEventListener("freeze", markLifecycleSuspension);
+      document.removeEventListener("resume", recoverFromLifecycleSuspension);
       await referenceSession.dispose();
-      await hostSetup.dispose?.();
     })();
     return disposal;
   },
 });
 
+window.addEventListener("pagehide", handlePageHide);
+window.addEventListener("pageshow", handlePageShow);
+document.addEventListener("freeze", markLifecycleSuspension);
+document.addEventListener("resume", recoverFromLifecycleSuspension);
+
 if (parameters.get("qa") === "1") {
   window.__REAL_WATER_QA__ = Object.freeze({
+    applySecondQualityProfile: () =>
+      referenceSession.applyQualityProfile(
+        createMinimalWaterQualityProfile("minimal-high-detail"),
+      ),
+    signalLongSuspension: () => referenceSession.signalLongSuspension(),
+    synthesizeDeviceLoss: () => {
+      if (hostSetup.synthesizeDeviceLoss === undefined) {
+        throw new Error("Synthetic device loss requires the QA Memory host.");
+      }
+      hostSetup.synthesizeDeviceLoss();
+    },
+    snapshot: () => referenceSession.snapshot(),
     dispose: () => session.dispose(),
   });
 }
 
-window.addEventListener(
-  "pagehide",
-  () => {
-    void session.dispose();
-  },
-  { once: true },
-);
-
 interface ReferenceHostSetup {
-  readonly createHost: () => HostLifecycleAdapter;
-  readonly createReadyStage?: (lease: RealWaterLease) => HTMLElement;
-  readonly dispose?: () => void | Promise<void>;
+  readonly createHostAttempt: () => ReferenceHostAttempt;
+  readonly synthesizeDeviceLoss?: () => void;
 }
 
 function createHostSetup(parameters: URLSearchParams): ReferenceHostSetup {
   if (parameters.get("qa") === "1" && parameters.get("host") === "memory") {
     const scenario = readScenario(parameters.get("scenario"));
     const stepDelayMs = readDelay(parameters.get("delay"));
+    const firstPreparationLosesDevice =
+      parameters.get("scenario") === "first-device-loss";
+    let preparationAttempt = 0;
+    let activeControl: MemoryDeviceLossControl | null = null;
 
     return {
-      createHost: () =>
-        createMemoryHostLifecycleAdapter({
-          scenario,
+      createHostAttempt: () => {
+        const attemptScenario: MemoryHostScenario =
+          firstPreparationLosesDevice && preparationAttempt === 0
+            ? {
+                kind: "device-lost",
+                message:
+                  "The first QA Memory host lost its device during preparation.",
+                reason: "qa-first-preparation",
+              }
+            : scenario;
+        preparationAttempt += 1;
+        const control = createControllableMemoryHost(
+          attemptScenario,
           stepDelayMs,
-        }),
+        );
+        activeControl = control;
+        return {
+          host: control.host,
+          dispose: () => {
+            if (activeControl === control) {
+              activeControl = null;
+            }
+          },
+        };
+      },
+      synthesizeDeviceLoss: () => {
+        if (activeControl === null) {
+          throw new Error("The QA Memory host is not ready for device loss.");
+        }
+        activeControl.loseDevice();
+      },
     };
   }
 
+  return {
+    createHostAttempt: () => createThreeReferenceHostAttempt(parameters),
+  };
+}
+
+interface MemoryDeviceLossControl {
+  readonly host: HostLifecycleAdapter;
+  loseDevice(): void;
+}
+
+function createControllableMemoryHost(
+  scenario: MemoryHostScenario,
+  stepDelayMs: number,
+): MemoryDeviceLossControl {
+  const base = createMemoryHostLifecycleAdapter({ scenario, stepDelayMs });
+  let resolveLoss: (loss: WebGPUDeviceLoss) => void = () => {};
+  let lost = false;
+  const invalidated = new Promise<WebGPUDeviceLoss>((resolve) => {
+    resolveLoss = resolve;
+  });
+  const host: HostLifecycleAdapter = Object.freeze({
+    async prepare(request: HostPreparationRequest) {
+      const result = await base.prepare(request);
+      if (result.status !== "ready") {
+        return result;
+      }
+      return Object.freeze({
+        ...result,
+        lease: Object.freeze({
+          invalidated,
+          dispose: () => result.lease.dispose(),
+        }),
+      });
+    },
+  });
+
+  return Object.freeze({
+    host,
+    loseDevice(): void {
+      if (lost) {
+        return;
+      }
+      lost = true;
+      resolveLoss(
+        Object.freeze({
+          code: "WEBGPU_DEVICE_LOST",
+          message: "The QA Memory host synthesized post-ready device loss.",
+          reason: "qa-synthetic-loss",
+          diagnostics: Object.freeze({
+            adapter: "memory",
+            trigger: "qa",
+          }),
+        }),
+      );
+    },
+  });
+}
+
+function createThreeReferenceHostAttempt(
+  parameters: URLSearchParams,
+): ReferenceHostAttempt {
   const renderer = new WebGPURenderer({
     forceWebGL: parameters.get("forceWebGL") === "1",
   });
@@ -86,12 +216,17 @@ function createHostSetup(parameters: URLSearchParams): ReferenceHostSetup {
 
   renderer.setPixelRatio(1);
   renderer.setSize(width, height, false);
+  let disposed = false;
 
   return {
-    createHost: () =>
-      createThreeHostLifecycleAdapter({ renderer, scene, camera }),
+    host: createThreeHostLifecycleAdapter({ renderer, scene, camera }),
     createReadyStage: (lease) => createCanvasStage(renderer, lease),
-    dispose: () => renderer.dispose(),
+    dispose: () => {
+      if (!disposed) {
+        disposed = true;
+        renderer.dispose();
+      }
+    },
   };
 }
 
@@ -103,6 +238,7 @@ function createCanvasStage(
   stage.className = "reference-stage";
   stage.dataset.testid = "reference-stage";
   stage.dataset.manifestHash = lease.manifest.manifestHash;
+  stage.dataset.qualityProfile = lease.manifest.qualityProfile.id;
   stage.dataset.backend = lease.capabilities.rendering.backend;
   stage.dataset.timestampQuery = String(
     lease.capabilities.rendering.timestampQuery,
@@ -159,7 +295,11 @@ function readRevealFrames(parameters: URLSearchParams): number {
 declare global {
   interface Window {
     __REAL_WATER_QA__?: Readonly<{
+      applySecondQualityProfile(): Promise<void>;
       dispose(): Promise<void>;
+      signalLongSuspension(): Promise<void>;
+      snapshot(): ReferenceExperienceSnapshot;
+      synthesizeDeviceLoss(): void;
     }>;
   }
 }

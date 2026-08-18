@@ -87,9 +87,12 @@ try {
   }
 
   const requiredExports = [
+    "QUALITY_PROFILE_SCHEMA",
+    "RealWaterRuntimeError",
     "RealWaterStartupError",
     "createMemoryHostLifecycleAdapter",
     "createMinimalWaterPrewarmManifest",
+    "createMinimalWaterQualityProfile",
     "createThreeHostLifecycleAdapter",
     "prepareRealWater",
   ];
@@ -99,12 +102,30 @@ try {
     "for (const name of requiredExports) {",
     '  if (!(name in realWater)) throw new Error("Missing packed export: " + name);',
     "}",
+    'const profile = realWater.createMinimalWaterQualityProfile("minimal-high-detail");',
+    "const manifest = realWater.createMinimalWaterPrewarmManifest(profile);",
     "const run = realWater.prepareRealWater({",
-    "  manifest: realWater.createMinimalWaterPrewarmManifest(),",
+    "  manifest,",
     "  loading: { present() {} },",
     "  host: realWater.createMemoryHostLifecycleAdapter({ stepDelayMs: 0 }),",
     "});",
     "const lease = await run.ready;",
+    'const receipt = lease.selectEffectVariant({ effectId: "minimal-water-surface", variantId: "basic" });',
+    'if (!receipt.changed || receipt.revision !== 1) throw new Error("Prepared variant selection failed.");',
+    "try {",
+    '  lease.selectEffectVariant({ effectId: "minimal-water-surface", variantId: "undeclared" });',
+    '  throw new Error("Undeclared effect variant was accepted.");',
+    "} catch (error) {",
+    '  if (!(error instanceof realWater.RealWaterRuntimeError) || error.code !== "EFFECT_NOT_PREWARMED") throw error;',
+    "}",
+    "const suspension = lease.invalidateForLongSuspension();",
+    'if (lease.invalidateForLongSuspension() !== suspension || (await lease.invalidated) !== suspension) throw new Error("Long-suspension invalidation was not idempotent.");',
+    "try {",
+    '  lease.selectEffectVariant({ effectId: "minimal-water-surface", variantId: "basic" });',
+    '  throw new Error("Invalidated runtime accepted an effect command.");',
+    "} catch (error) {",
+    '  if (!(error instanceof realWater.RealWaterRuntimeError) || error.code !== "RUNTIME_INVALIDATED") throw error;',
+    "}",
     "await lease.dispose();",
   ].join("\n");
   execFileSync(
@@ -119,13 +140,14 @@ try {
   writeFileSync(
     join(consumerRoot, "index.mts"),
     [
-      'import { createMemoryHostLifecycleAdapter, createMinimalWaterPrewarmManifest, prepareRealWater } from "real-water";',
+      'import { createMemoryHostLifecycleAdapter, createMinimalWaterPrewarmManifest, createMinimalWaterQualityProfile, prepareRealWater, type QualityProfile } from "real-water";',
+      "const profile: QualityProfile = createMinimalWaterQualityProfile();",
       "const run = prepareRealWater({",
-      "  manifest: createMinimalWaterPrewarmManifest(),",
+      "  manifest: createMinimalWaterPrewarmManifest(profile),",
       "  loading: { present() {} },",
       "  host: createMemoryHostLifecycleAdapter({ stepDelayMs: 0 }),",
       "});",
-      "void run.ready;",
+      'void run.ready.then((lease) => { lease.selectEffectVariant({ effectId: "minimal-water-surface", variantId: "basic" }); return lease.invalidateForLongSuspension(); });',
     ].join("\n"),
   );
   writeFileSync(

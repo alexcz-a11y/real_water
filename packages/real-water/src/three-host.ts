@@ -8,6 +8,7 @@ import type {
   HostLifecycleAdapter,
   HostPreparedLease,
   HostPreparationRequest,
+  WebGPUDeviceLoss,
 } from "./startup.js";
 
 const activeRenderers = new WeakSet<object>();
@@ -70,12 +71,16 @@ export function createThreeHostLifecycleAdapter(
       assertNativeHostObjects(options);
       reserveRenderer(options.renderer);
       let leaseOwnsReservation = false;
+      let capabilityInspection:
+        | Awaited<ReturnType<typeof inspectThreeR185RenderingCapability>>
+        | undefined;
       try {
         let observation: RenderingCapabilityObservation;
         try {
-          observation = await inspectThreeR185RenderingCapability(
+          capabilityInspection = await inspectThreeR185RenderingCapability(
             options.renderer,
           );
+          observation = capabilityInspection.observation;
         } catch (cause) {
           if (request.signal.aborted) {
             throw cause;
@@ -99,13 +104,53 @@ export function createThreeHostLifecycleAdapter(
           return capability;
         }
 
-        const lease = await prepareMinimalWaterPlane({
+        const prewarmController = new AbortController();
+        const abortPrewarm = (): void => {
+          prewarmController.abort(request.signal.reason);
+        };
+        if (request.signal.aborted) {
+          abortPrewarm();
+        } else {
+          request.signal.addEventListener("abort", abortPrewarm, {
+            once: true,
+          });
+        }
+        const preparation = prepareMinimalWaterPlane({
           renderer: options.renderer,
           scene: options.scene,
           camera: options.camera,
-          request,
+          request: {
+            ...request,
+            signal: prewarmController.signal,
+          },
+          invalidated: capabilityInspection.invalidated,
         });
-        const exclusiveLease = createExclusiveLease(options.renderer, lease);
+        let prewarm: PrewarmOutcome;
+        try {
+          prewarm = await racePrewarmAgainstDeviceLoss(
+            preparation,
+            capabilityInspection.invalidated,
+          );
+        } finally {
+          request.signal.removeEventListener("abort", abortPrewarm);
+        }
+        if (prewarm.status === "device-lost") {
+          prewarmController.abort(prewarm.loss);
+          return {
+            status: "failed" as const,
+            code: "WEBGPU_DEVICE_LOST" as const,
+            reason: "The WebGPU device was lost during water preparation.",
+            retryable: true,
+            diagnostics: prewarm.loss.diagnostics,
+          };
+        }
+
+        const lease = prewarm.lease;
+        const exclusiveLease = createExclusiveLease(
+          options.renderer,
+          lease,
+          capabilityInspection.release,
+        );
         leaseOwnsReservation = true;
 
         return {
@@ -115,11 +160,26 @@ export function createThreeHostLifecycleAdapter(
         };
       } finally {
         if (!leaseOwnsReservation) {
+          capabilityInspection?.release();
           activeRenderers.delete(options.renderer);
         }
       }
     },
   });
+}
+
+type PrewarmOutcome =
+  | Readonly<{ status: "ready"; lease: HostPreparedLease }>
+  | Readonly<{ status: "device-lost"; loss: WebGPUDeviceLoss }>;
+
+function racePrewarmAgainstDeviceLoss(
+  preparation: Promise<HostPreparedLease>,
+  invalidated: Promise<WebGPUDeviceLoss>,
+): Promise<PrewarmOutcome> {
+  return Promise.race([
+    preparation.then((lease) => ({ status: "ready" as const, lease })),
+    invalidated.then((loss) => ({ status: "device-lost" as const, loss })),
+  ]);
 }
 
 function reserveRenderer(renderer: ThreeHostRenderer): void {
@@ -134,13 +194,16 @@ function reserveRenderer(renderer: ThreeHostRenderer): void {
 function createExclusiveLease(
   renderer: ThreeHostRenderer,
   lease: HostPreparedLease,
+  releaseCapabilityInspection: () => void,
 ): HostPreparedLease {
   let disposal: Promise<void> | undefined;
   return Object.freeze({
+    invalidated: lease.invalidated,
     dispose(): Promise<void> {
       disposal ??= Promise.resolve()
         .then(() => lease.dispose())
         .finally(() => {
+          releaseCapabilityInspection();
           activeRenderers.delete(renderer);
         });
       return disposal;

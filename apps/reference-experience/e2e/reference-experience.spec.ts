@@ -175,6 +175,266 @@ test("disposes idempotently while a ready lease awaits reveal", async ({
   await expect(page.getByTestId("loading-experience")).toHaveCount(0);
 });
 
+test("applies a changed Quality Profile through a complete hidden preparation", async ({
+  page,
+}) => {
+  await installStartupRecorder(page);
+  await page.goto("/?qa=1&host=memory&scenario=success&delay=25");
+
+  const placeholder = page.getByTestId("reference-placeholder");
+  await expect(placeholder).toBeVisible();
+  const before = await readQaSnapshot(page);
+
+  const transitionStart = await page.evaluate(() => {
+    const qa = window.__REAL_WATER_QA__ as
+      (typeof window.__REAL_WATER_QA__ & QaSession) | undefined;
+    if (qa === undefined) {
+      throw new Error("QA session is unavailable.");
+    }
+    void qa.applySecondQualityProfile();
+    const recorder = globalThis as typeof globalThis & StartupRecorderState;
+    return {
+      frame: recorder.startupFrames.at(-1)?.frame ?? 0,
+      loadingVisible:
+        document.querySelector('[data-testid="loading-experience"]') !== null,
+      stageVisible:
+        document.querySelector('[data-testid="reference-placeholder"]') !==
+        null,
+    };
+  });
+
+  expect(transitionStart.loadingVisible).toBe(true);
+  expect(transitionStart.stageVisible).toBe(false);
+  await expect(page.getByTestId("loading-experience")).toBeVisible();
+  await expect(placeholder).toBeVisible();
+
+  const after = await readQaSnapshot(page);
+  expect(after.generation).toBe(before.generation + 1);
+  expect(after.manifestHash).not.toBe(before.manifestHash);
+
+  const evidence = await page.evaluate((startFrame) => {
+    const state = globalThis as typeof globalThis & StartupRecorderState;
+    return {
+      announcements: state.loadingAnnouncements,
+      frames: state.startupFrames.filter((frame) => frame.frame > startFrame),
+    };
+  }, transitionStart.frame);
+  const retryStart = evidence.announcements.lastIndexOf(
+    "Loading Experience visible. Preparation has not started.",
+  );
+  const progress = evidence.announcements
+    .slice(retryStart + 1)
+    .flatMap((announcement) => {
+      const match = /^Completed ([0-9]+) of ([0-9]+)/u.exec(announcement);
+      return match === null
+        ? []
+        : [{ completed: Number(match[1]), total: Number(match[2]) }];
+    });
+  const total = progress.at(-1)?.total;
+  expect(total).toBeGreaterThan(0);
+  expect(progress.map(({ completed }) => completed)).toEqual(
+    Array.from({ length: (total ?? 0) + 1 }, (_, index) => index),
+  );
+  const readyFrame = evidence.frames.find(
+    (frame) => frame.loadingState === "ready" && !frame.placeholderVisible,
+  );
+  const revealFrame = evidence.frames.find((frame) => frame.placeholderVisible);
+  expect(readyFrame).toBeDefined();
+  expect(revealFrame).toBeDefined();
+  expect(readyFrame?.frame).toBeLessThan(revealFrame?.frame ?? 0);
+});
+
+test("reprepares after long suspension without spending device recovery", async ({
+  page,
+}) => {
+  await page.goto("/?qa=1&host=memory&scenario=success&delay=25");
+
+  const placeholder = page.getByTestId("reference-placeholder");
+  await expect(placeholder).toBeVisible();
+  const before = await readQaSnapshot(page);
+
+  const concealedSynchronously = await page.evaluate(() => {
+    const qa = window.__REAL_WATER_QA__;
+    if (qa === undefined) {
+      throw new Error("QA session is unavailable.");
+    }
+    void qa.signalLongSuspension();
+    return (
+      document.querySelector('[data-testid="loading-experience"]') !== null &&
+      document.querySelector('[data-testid="reference-placeholder"]') === null
+    );
+  });
+
+  expect(concealedSynchronously).toBe(true);
+  await expect(page.getByTestId("loading-experience")).toBeVisible();
+  await expect(placeholder).toBeVisible();
+  const after = await readQaSnapshot(page);
+  expect(after.generation).toBe(before.generation + 1);
+  expect(after.manifestHash).toBe(before.manifestHash);
+
+  await synthesizeDeviceLoss(page);
+  await expect
+    .poll(() => readQaSnapshot(page))
+    .toMatchObject({ generation: before.generation + 2, state: "ready" });
+  await expect(placeholder).toBeVisible();
+});
+
+test("reprepares on bfcache resume and disposes on ordinary pagehide", async ({
+  page,
+}) => {
+  await page.goto("/?qa=1&host=memory&scenario=success&delay=20");
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+  const before = await readQaSnapshot(page);
+
+  const lifecycleResult = await page.evaluate(() => {
+    window.dispatchEvent(
+      new PageTransitionEvent("pagehide", { persisted: true }),
+    );
+    const stageRemainedDuringSuspension =
+      document.querySelector('[data-testid="reference-placeholder"]') !== null;
+    window.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: true }),
+    );
+    return {
+      loadingVisibleOnResume:
+        document.querySelector('[data-testid="loading-experience"]') !== null,
+      stageRemainedDuringSuspension,
+    };
+  });
+
+  expect(lifecycleResult).toEqual({
+    loadingVisibleOnResume: true,
+    stageRemainedDuringSuspension: true,
+  });
+  await expect
+    .poll(() => readQaSnapshot(page))
+    .toMatchObject({ generation: before.generation + 1, state: "ready" });
+  const after = await readQaSnapshot(page);
+  expect(after.manifestHash).toBe(before.manifestHash);
+
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new PageTransitionEvent("pagehide", { persisted: false }),
+    );
+  });
+  await expect
+    .poll(() => readQaSnapshot(page))
+    .toMatchObject({ state: "disposed" });
+  await expect(page.locator("#app")).toBeEmpty();
+});
+
+test("automatically rebuilds once with a fresh host after device loss", async ({
+  page,
+}) => {
+  await page.goto("/?qa=1&host=memory&scenario=success&delay=25");
+
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+  const before = await readQaSnapshot(page);
+  await page.evaluate(() => {
+    const qa = window.__REAL_WATER_QA__;
+    if (qa === undefined) {
+      throw new Error("QA session is unavailable.");
+    }
+    qa.synthesizeDeviceLoss();
+  });
+
+  await expect(page.getByTestId("loading-experience")).toBeVisible();
+  await expect
+    .poll(() => readQaSnapshot(page))
+    .toMatchObject({ generation: before.generation + 1, state: "ready" });
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+  const after = await readQaSnapshot(page);
+  expect(after.manifestHash).toBe(before.manifestHash);
+});
+
+test("automatically rebuilds when the first host loses its device during preparation", async ({
+  page,
+}) => {
+  await installStartupRecorder(page);
+  await page.goto("/?qa=1&host=memory&scenario=first-device-loss&delay=25");
+
+  await expect(page.getByTestId("loading-experience")).toBeVisible();
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect
+    .poll(() => readQaSnapshot(page))
+    .toMatchObject({ generation: 2, state: "ready" });
+
+  const loadingStarts = await page.evaluate(() => {
+    const state = globalThis as typeof globalThis & StartupRecorderState;
+    return state.loadingAnnouncements.filter(
+      (announcement) =>
+        announcement ===
+        "Loading Experience visible. Preparation has not started.",
+    ).length;
+  });
+  expect(loadingStarts).toBe(2);
+});
+
+test("keeps a second device loss terminal without resetting recovery on Retry", async ({
+  page,
+}) => {
+  await page.goto("/?qa=1&host=memory&scenario=success&delay=20");
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+
+  await synthesizeDeviceLoss(page);
+  await expect
+    .poll(() => readQaSnapshot(page))
+    .toMatchObject({ generation: 2, state: "ready" });
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+
+  await synthesizeDeviceLoss(page);
+  await expect(page.getByRole("alert")).toContainText("Preparation failed");
+  await expect(page.getByTestId("loading-diagnostics")).toContainText(
+    "WEBGPU_DEVICE_LOST",
+  );
+  await expect(page.getByTestId("reference-placeholder")).toHaveCount(0);
+  await expectNoA11yViolations(page);
+  await expect
+    .poll(() => readQaSnapshot(page))
+    .toMatchObject({ generation: 2, state: "failed" });
+
+  await page.getByRole("button", { name: "Retry from the beginning" }).click();
+  await expect
+    .poll(() => readQaSnapshot(page))
+    .toMatchObject({ generation: 3, state: "ready" });
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+
+  await synthesizeDeviceLoss(page);
+  await expect(page.getByRole("alert")).toContainText("Preparation failed");
+  await expect
+    .poll(() => readQaSnapshot(page))
+    .toMatchObject({ generation: 3, state: "failed" });
+  await expect(page.getByTestId("reference-placeholder")).toHaveCount(0);
+});
+
+test("serializes racing transitions and disposes every attempt idempotently", async ({
+  page,
+}) => {
+  await page.goto("/?qa=1&host=memory&scenario=success&delay=80");
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+
+  const result = await page.evaluate(async () => {
+    const qa = window.__REAL_WATER_QA__;
+    if (qa === undefined) {
+      throw new Error("QA session is unavailable.");
+    }
+    qa.synthesizeDeviceLoss();
+    const profileTransition = qa.applySecondQualityProfile();
+    const suspensionTransition = qa.signalLongSuspension();
+    const firstDisposal = qa.dispose();
+    const secondDisposal = qa.dispose();
+    const samePromise = firstDisposal === secondDisposal;
+    await firstDisposal;
+    await Promise.allSettled([profileTransition, suspensionTransition]);
+    return { samePromise, snapshot: qa.snapshot() };
+  });
+
+  expect(result.samePromise).toBe(true);
+  expect(result.snapshot.state).toBe("disposed");
+  await expect(page.locator("#app")).toBeEmpty();
+});
+
 async function expectNoA11yViolations(page: Page): Promise<void> {
   await page.addScriptTag({
     path: require.resolve("axe-core/axe.min.js"),
@@ -199,6 +459,39 @@ interface StartupRecorderState {
     loadingState: string | null;
     placeholderVisible: boolean;
   }>;
+}
+
+interface QaSnapshot {
+  readonly generation: number;
+  readonly manifestHash: string | null;
+  readonly state: "loading" | "ready" | "failed" | "disposed";
+}
+
+interface QaSession {
+  applySecondQualityProfile(): Promise<void>;
+  signalLongSuspension(): Promise<void>;
+  snapshot(): QaSnapshot;
+}
+
+async function readQaSnapshot(page: Page): Promise<QaSnapshot> {
+  return page.evaluate(() => {
+    const qa = window.__REAL_WATER_QA__ as
+      (typeof window.__REAL_WATER_QA__ & QaSession) | undefined;
+    if (qa === undefined) {
+      throw new Error("QA session is unavailable.");
+    }
+    return qa.snapshot();
+  });
+}
+
+async function synthesizeDeviceLoss(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const qa = window.__REAL_WATER_QA__;
+    if (qa === undefined) {
+      throw new Error("QA session is unavailable.");
+    }
+    qa.synthesizeDeviceLoss();
+  });
 }
 
 async function installStartupRecorder(page: Page): Promise<void> {
