@@ -2,7 +2,6 @@ import "./styles.css";
 import { Color, PerspectiveCamera, Scene } from "three";
 import { WebGPURenderer } from "three/webgpu";
 import {
-  createMemoryHostLifecycleAdapter,
   createMinimalWaterQualityProfile,
   createThreeHostLifecycleAdapter,
   type HostLifecycleAdapter,
@@ -11,9 +10,10 @@ import {
   type RealWaterLease,
   type WebGPUDeviceLoss,
 } from "real-water";
+import type { QaFrameSource, QaHarnessV1 } from "./qa-harness.js";
+import type * as QaHarnessModuleContract from "./qa-harness.js";
 import {
   startReferenceExperience,
-  type ReferenceExperienceSnapshot,
   type ReferenceHostAttempt,
 } from "./start-reference-experience.js";
 
@@ -24,10 +24,12 @@ if (mount === null) {
 }
 
 const parameters = new URLSearchParams(window.location.search);
-const hostSetup = createHostSetup(parameters);
+const qaHarnessModule =
+  import.meta.env.MODE === "test" ? await import("./qa-harness.js") : null;
+const hostSetup = createHostSetup(parameters, qaHarnessModule);
 const referenceSession = startReferenceExperience(mount, {
   createHostAttempt: hostSetup.createHostAttempt,
-  revealDelayFrames: readRevealFrames(parameters),
+  revealDelayFrames: readRevealFrames(parameters, qaHarnessModule !== null),
 });
 let lifecycleRecoveryHandled = true;
 let disposal: Promise<void> | undefined;
@@ -72,12 +74,13 @@ window.addEventListener("pageshow", handlePageShow);
 document.addEventListener("freeze", markLifecycleSuspension);
 document.addEventListener("resume", recoverFromLifecycleSuspension);
 
-if (parameters.get("qa") === "1") {
-  window.__REAL_WATER_QA__ = Object.freeze({
+if (qaHarnessModule !== null && parameters.get("qa") === "1") {
+  window.__REAL_WATER_QA__ = qaHarnessModule.createQaHarness({
     applySecondQualityProfile: () =>
       referenceSession.applyQualityProfile(
         createMinimalWaterQualityProfile("minimal-high-detail"),
       ),
+    frameSource: hostSetup.frameSource,
     signalLongSuspension: () => referenceSession.signalLongSuspension(),
     synthesizeDeviceLoss: () => {
       if (hostSetup.synthesizeDeviceLoss === undefined) {
@@ -90,13 +93,23 @@ if (parameters.get("qa") === "1") {
   });
 }
 
+type QaHarnessModule = typeof QaHarnessModuleContract;
+
 interface ReferenceHostSetup {
   readonly createHostAttempt: () => ReferenceHostAttempt;
+  readonly frameSource: () => QaFrameSource | null;
   readonly synthesizeDeviceLoss?: () => void;
 }
 
-function createHostSetup(parameters: URLSearchParams): ReferenceHostSetup {
-  if (parameters.get("qa") === "1" && parameters.get("host") === "memory") {
+function createHostSetup(
+  parameters: URLSearchParams,
+  qaModule: QaHarnessModule | null,
+): ReferenceHostSetup {
+  if (
+    qaModule !== null &&
+    parameters.get("qa") === "1" &&
+    parameters.get("host") === "memory"
+  ) {
     const scenario = readScenario(parameters.get("scenario"));
     const stepDelayMs = readDelay(parameters.get("delay"));
     const firstPreparationLosesDevice =
@@ -117,6 +130,7 @@ function createHostSetup(parameters: URLSearchParams): ReferenceHostSetup {
             : scenario;
         preparationAttempt += 1;
         const control = createControllableMemoryHost(
+          qaModule,
           attemptScenario,
           stepDelayMs,
         );
@@ -130,6 +144,7 @@ function createHostSetup(parameters: URLSearchParams): ReferenceHostSetup {
           },
         };
       },
+      frameSource: () => null,
       synthesizeDeviceLoss: () => {
         if (activeControl === null) {
           throw new Error("The QA Memory host is not ready for device loss.");
@@ -139,8 +154,28 @@ function createHostSetup(parameters: URLSearchParams): ReferenceHostSetup {
     };
   }
 
+  let activeFrameSource: QaFrameSource | null = null;
   return {
-    createHostAttempt: () => createThreeReferenceHostAttempt(parameters),
+    createHostAttempt: () => {
+      const created = createThreeReferenceHostAttempt(
+        parameters,
+        parameters.get("qa") === "1" ? qaModule : null,
+      );
+      activeFrameSource = created.frameSource;
+      return {
+        ...created.attempt,
+        async dispose() {
+          try {
+            await created.attempt.dispose();
+          } finally {
+            if (activeFrameSource === created.frameSource) {
+              activeFrameSource = null;
+            }
+          }
+        },
+      };
+    },
+    frameSource: () => activeFrameSource,
   };
 }
 
@@ -150,10 +185,14 @@ interface MemoryDeviceLossControl {
 }
 
 function createControllableMemoryHost(
+  qaModule: QaHarnessModule,
   scenario: MemoryHostScenario,
   stepDelayMs: number,
 ): MemoryDeviceLossControl {
-  const base = createMemoryHostLifecycleAdapter({ scenario, stepDelayMs });
+  const base = qaModule.createQaMemoryHostLifecycleAdapter({
+    scenario,
+    stepDelayMs,
+  });
   let resolveLoss: (loss: WebGPUDeviceLoss) => void = () => {};
   let lost = false;
   const invalidated = new Promise<WebGPUDeviceLoss>((resolve) => {
@@ -197,9 +236,15 @@ function createControllableMemoryHost(
   });
 }
 
+interface CreatedThreeReferenceHostAttempt {
+  readonly attempt: ReferenceHostAttempt;
+  readonly frameSource: QaFrameSource | null;
+}
+
 function createThreeReferenceHostAttempt(
   parameters: URLSearchParams,
-): ReferenceHostAttempt {
+  qaModule: QaHarnessModule | null,
+): CreatedThreeReferenceHostAttempt {
   const renderer = new WebGPURenderer({
     forceWebGL: parameters.get("forceWebGL") === "1",
   });
@@ -217,17 +262,25 @@ function createThreeReferenceHostAttempt(
   renderer.setPixelRatio(1);
   renderer.setSize(width, height, false);
   let disposed = false;
+  const baseHost = createThreeHostLifecycleAdapter({ renderer, scene, camera });
+  const frameSource =
+    qaModule?.createQaThreeFrameSource(baseHost, renderer, scene, camera) ??
+    null;
 
-  return {
-    host: createThreeHostLifecycleAdapter({ renderer, scene, camera }),
-    createReadyStage: (lease) => createCanvasStage(renderer, lease),
-    dispose: () => {
-      if (!disposed) {
-        disposed = true;
-        renderer.dispose();
-      }
+  return Object.freeze({
+    frameSource,
+    attempt: {
+      host: frameSource?.host ?? baseHost,
+      createReadyStage: (lease: RealWaterLease) =>
+        createCanvasStage(renderer, lease),
+      dispose: () => {
+        if (!disposed) {
+          disposed = true;
+          renderer.dispose();
+        }
+      },
     },
-  };
+  });
 }
 
 function createCanvasStage(
@@ -281,8 +334,11 @@ function readDelay(value: string | null): number {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 2_000) : 80;
 }
 
-function readRevealFrames(parameters: URLSearchParams): number {
-  if (parameters.get("qa") !== "1") {
+function readRevealFrames(
+  parameters: URLSearchParams,
+  qaBuild: boolean,
+): number {
+  if (!qaBuild || parameters.get("qa") !== "1") {
     return 1;
   }
 
@@ -294,12 +350,6 @@ function readRevealFrames(parameters: URLSearchParams): number {
 
 declare global {
   interface Window {
-    __REAL_WATER_QA__?: Readonly<{
-      applySecondQualityProfile(): Promise<void>;
-      dispose(): Promise<void>;
-      signalLongSuspension(): Promise<void>;
-      snapshot(): ReferenceExperienceSnapshot;
-      synthesizeDeviceLoss(): void;
-    }>;
+    __REAL_WATER_QA__?: QaHarnessV1;
   }
 }

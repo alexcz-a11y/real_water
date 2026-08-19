@@ -4,7 +4,7 @@ Real Water is an ESM-only TypeScript Module for a reusable native Three.js Open
 Water Domain. The repository now includes a complete, fail-closed water prewarm,
 reveal, structural reprepare, and bounded recovery path.
 
-Issue #15 extends the minimal water plane and startup foundation:
+Issue #16 extends the minimal water plane and startup foundation:
 
 - an accessible Loading Experience appears before preparation begins;
 - the canonical minimal-water Prewarm Manifest declares exactly eight work
@@ -16,6 +16,13 @@ Issue #15 extends the minimal water plane and startup foundation:
 - progress advances monotonically only when declared manifest work completes;
 - the prepared route and guard frame receive GPU completion readbacks before the
   ready lease resolves;
+- test builds prewarm a private, versioned QA presentation route before reveal;
+  production builds contain neither that route nor the QA Harness global;
+- the QA route resets a fixed seed, advances explicit 60 Hz ticks, applies a
+  fixed camera, presents once, and addresses final color, linear depth, and
+  view-space normal captures by name;
+- seed and tick feed hot prepared presentation state, and Playwright verifies
+  repeatability directly without wall-clock sleeps or animation-frame polling;
 - the Reference Experience keeps the canvas hidden through preparation and
   reveals it on the next refresh after readiness;
 - immutable `minimal` and `minimal-high-detail` Quality Profiles derive distinct

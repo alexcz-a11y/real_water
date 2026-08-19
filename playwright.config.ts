@@ -12,6 +12,8 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         channel: "chrome",
+        deviceScaleFactor: 1,
+        viewport: { width: 1280, height: 720 },
       },
     },
   ],
@@ -24,7 +26,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "vite preview apps/reference-experience --host 127.0.0.1 --port 4173",
+      "vite build apps/reference-experience --mode test --outDir ../../test-results/qa-build --emptyOutDir && vite preview apps/reference-experience --outDir ../../test-results/qa-build --host 127.0.0.1 --port 4173",
     port: 4173,
     reuseExistingServer: false,
     timeout: 30_000,
