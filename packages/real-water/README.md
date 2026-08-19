@@ -1,16 +1,17 @@
 # real-water
 
 This alpha package exposes versioned minimal-water Quality Profiles, their
-canonical nine-unit Prewarm Manifests, the Startup and ready Runtime Interfaces,
-normalized Core WebGPU and Gameplay Query capabilities, structured errors, and
-Memory and Three r185 Host Adapters.
+canonical twelve-unit Prewarm Manifests, versioned Calm, Swell, and Storm Water
+Presets, the Startup and ready Runtime Interfaces, normalized Core WebGPU and
+Gameplay Query capabilities, structured errors, and Memory and Three r185 Host
+Adapters.
 
 The Three Adapter borrows the Host renderer, scene, and main camera to prepare a
-TSL NodeMaterial, one coherent spectral wave band, and RenderPipeline. Before
-readiness it renders eight hidden stabilization frames, performs completion
-readbacks for the prepared route and main-camera guard frame, and reports
-progress only as manifest work completes. The Reference Experience reveals the
-prepared canvas on the next refresh.
+TSL NodeMaterial, four coherent spectral wave bands, a camera-relative clipmap,
+and RenderPipeline. Before readiness it renders eight hidden stabilization
+frames, performs completion readbacks for the prepared route and main-camera
+guard frame, and reports progress only as manifest work completes. The Reference
+Experience reveals the prepared canvas on the next refresh.
 
 `minimal` and `minimal-high-detail` are immutable structural Quality Profiles.
 Changing between them produces a different manifest hash and requires a full new
@@ -28,9 +29,10 @@ and repeats preparation after a confirmed long suspension.
 
 Every Host explicitly supplies a Host Simulation Adapter as the authoritative
 source of seed, tick, simulation time, and pause state. The same state drives
-the prepared TSL vertex displacement and the CPU spectral evaluator.
-`waveStrength` is a hot Artistic Control: changing it updates existing uniforms
-without replacing geometry, nodes, materials, or pipelines.
+the prepared TSL vertex displacement and the CPU spectral evaluator. Calm,
+Swell, and Storm Water Presets are versioned Artistic Control snapshots;
+applying one updates existing uniforms without replacing geometry, nodes,
+materials, or pipelines.
 
 `queryGameplay(...)` is synchronous and performs no GPU readback. It writes up
 to 2,048 points per simulation tick into caller-owned typed arrays for height,
@@ -38,6 +40,6 @@ normal, three-dimensional surface velocity, a zero foam placeholder, tick,
 Artistic Control revision, and zero-tick local snapshot age. Capacity and input
 failures are detected before output buffers are changed.
 
-Disposal releases the plane and other Real Water-owned resources without
-disposing Host-owned objects. This single-band tracer makes no four-band or
-Native Quality claim.
+Disposal releases the clipmap and other Real Water-owned resources without
+disposing Host-owned objects. This four-band Open Water Domain makes no Native
+Quality claim.

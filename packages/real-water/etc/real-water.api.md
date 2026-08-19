@@ -6,6 +6,12 @@
 
 // @public
 export interface ArtisticControls {
+    readonly choppiness: number;
+    readonly crestSharpness: number;
+    readonly directionality: number;
+    readonly microDetail: number;
+    readonly swellDrama: number;
+    readonly timeScale: number;
     readonly waveStrength: number;
 }
 
@@ -33,6 +39,9 @@ export function createStaticHostSimulationAdapter(): HostSimulationAdapter;
 
 // @public
 export function createThreeHostLifecycleAdapter(options: ThreeHostLifecycleAdapterOptions): HostLifecycleAdapter;
+
+// @public
+export function createWaterPreset(id?: WaterPresetId): WaterPreset;
 
 // @public
 export interface EffectVariantSelection {
@@ -544,6 +553,41 @@ export interface ThreeHostRenderer {
 // @public
 export interface ThreeHostScene {
     readonly isScene: boolean;
+}
+
+// @public
+export const WATER_PRESET_SCHEMA: "real-water/water-preset";
+
+// @public
+export const WATER_PRESET_VERSION: 1;
+
+// @public
+export interface WaterPreset {
+    // (undocumented)
+    readonly artisticControls: ArtisticControls;
+    // (undocumented)
+    readonly id: WaterPresetId;
+    // (undocumented)
+    readonly presetHash: string;
+    // (undocumented)
+    readonly schema: typeof WATER_PRESET_SCHEMA;
+    // (undocumented)
+    readonly version: typeof WATER_PRESET_VERSION;
+}
+
+// @public
+export type WaterPresetId = "calm" | "swell" | "storm";
+
+// @public
+export interface WaterPresetIdentity {
+    // (undocumented)
+    readonly id: WaterPresetId;
+    // (undocumented)
+    readonly presetHash: string;
+    // (undocumented)
+    readonly schema: typeof WATER_PRESET_SCHEMA;
+    // (undocumented)
+    readonly version: typeof WATER_PRESET_VERSION;
 }
 
 // @public

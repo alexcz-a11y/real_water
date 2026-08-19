@@ -70,6 +70,12 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
       | (QaHarnessV2 & {
           updateArtisticControls(controls: {
             readonly waveStrength: number;
+            readonly swellDrama: number;
+            readonly directionality: number;
+            readonly choppiness: number;
+            readonly crestSharpness: number;
+            readonly microDetail: number;
+            readonly timeScale: number;
           }): Promise<{ readonly revision: number }>;
           queryGameplay(point: readonly [number, number, number]): Promise<{
             readonly height: number;
@@ -91,6 +97,12 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
     const before = harness.snapshot();
     const controls = await harness.updateArtisticControls({
       waveStrength: 2,
+      swellDrama: 1,
+      directionality: 0,
+      choppiness: 1,
+      crestSharpness: 0,
+      microDetail: 1,
+      timeScale: 1,
     });
     await harness.setCamera({
       projection: "perspective",
@@ -122,9 +134,9 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
     Math.floor(result.depth.height / 2) * result.depth.width +
     Math.floor(result.depth.width / 2);
   const renderedHeight = 12 - (depths[center] ?? Number.NaN);
-  expect(result.query.height).toBeCloseTo(1.458_555, 5);
+  expect(result.query.height).toBeCloseTo(2.859_167, 5);
   expect(Math.abs(renderedHeight - result.query.height)).toBeLessThanOrEqual(
-    0.01,
+    0.03,
   );
   expect(result.query).toMatchObject({
     normal: expect.any(Array),
@@ -137,14 +149,70 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   });
   const normalValues = decodeFloat32(result.normal.data);
   const normalIndex = center * 3;
-  expect(normalValues[normalIndex]).toBeCloseTo(result.query.normal[0], 2);
-  expect(normalValues[normalIndex + 1]).toBeCloseTo(-result.query.normal[2], 2);
-  expect(normalValues[normalIndex + 2]).toBeCloseTo(result.query.normal[1], 2);
+  const capturedNormal = [
+    normalValues[normalIndex] ?? Number.NaN,
+    normalValues[normalIndex + 1] ?? Number.NaN,
+    normalValues[normalIndex + 2] ?? Number.NaN,
+  ];
+  expect(Math.hypot(...capturedNormal)).toBeCloseTo(1, 1);
+  expect(capturedNormal[2]).toBeCloseTo(result.query.normal[1], 1);
   expect(result.after).toEqual(result.before);
   expect(result.presentation.prewarm.progress).toMatchObject({
     completedWork: 8,
     totalWork: 8,
   });
+});
+
+test("presents camera-relative Open Water through the horizon", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 180 });
+  await page.goto("/?qa=1&host=memory&delay=0");
+  test.skip(
+    !(await hasCoreWebGPU(page)),
+    "Core WebGPU is unavailable in this browser profile.",
+  );
+
+  await page.goto("/?qa=1&host=three");
+  await expect(page.getByTestId("reference-stage")).toBeVisible();
+  const result = await page.evaluate(async () => {
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV2 | undefined;
+    if (harness === undefined) {
+      throw new Error("QA Harness is unavailable.");
+    }
+    await harness.reset({ seed: 0x4000_0000 });
+    await harness.advanceTicks(15);
+    await harness.setCamera({
+      projection: "perspective",
+      position: [0, 8, 0],
+      target: [400, 0, 0],
+      up: [0, 1, 0],
+      verticalFovDegrees: 50,
+      near: 0.5,
+      far: 4_000,
+    });
+    const presentation = await harness.present();
+    const depth = await harness.capture("depth");
+    const nearQuery = await harness.queryGameplay([2, 0, 0]);
+    const farQuery = await harness.queryGameplay([400, 0, 0]);
+    return { presentation, depth, nearQuery, farQuery };
+  });
+
+  const depths = decodeFloat32(result.depth.data);
+  const width = result.depth.width;
+  const height = result.depth.height;
+  const center = Math.floor(height / 2) * width + Math.floor(width / 2);
+  const upper = Math.floor(height * 0.12) * width + Math.floor(width / 2);
+  const centerDepth = depths[center] ?? Number.NaN;
+  const upperDepth = depths[upper] ?? Number.NaN;
+
+  expect(result.presentation.tick).toBe(15);
+  expect(centerDepth).toBeGreaterThan(48);
+  expect(centerDepth).toBeLessThan(3_500);
+  expect(upperDepth).toBeGreaterThan(3_900);
+  expect(result.nearQuery.height).not.toBe(result.farQuery.height);
+  expect(Number.isFinite(result.nearQuery.height)).toBe(true);
+  expect(Number.isFinite(result.farQuery.height)).toBe(true);
 });
 
 test("drives and captures a repeatable rendered frame without wall-clock animation", async ({

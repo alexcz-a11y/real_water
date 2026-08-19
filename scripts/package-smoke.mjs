@@ -94,6 +94,7 @@ try {
     "createMemoryHostLifecycleAdapter",
     "createMinimalWaterPrewarmManifest",
     "createMinimalWaterQualityProfile",
+    "createWaterPreset",
     "createThreeHostLifecycleAdapter",
     "prepareRealWater",
   ];
@@ -113,7 +114,7 @@ try {
     "const lease = await run.ready;",
     'if (lease.capabilities.gameplay.maxQueryPointsPerTick !== 2048) throw new Error("Packed Gameplay Query capacity is incorrect.");',
     "const queryResults = { heights: new Float32Array(1), normals: new Float32Array(3), velocities: new Float32Array(3), foam: new Float32Array(1), ticks: new Float64Array(1), controlRevisions: new Float64Array(1), snapshotAges: new Uint8Array(1) };",
-    "lease.updateArtisticControls({ waveStrength: 2 });",
+    "lease.updateArtisticControls({ ...lease.inspectRuntime().artisticControls, waveStrength: 2 });",
     "const returnedResults = lease.queryGameplay({ count: 1, positions: new Float32Array(3), results: queryResults });",
     'if (returnedResults !== queryResults || queryResults.controlRevisions[0] !== 1 || queryResults.snapshotAges[0] !== 0) throw new Error("Packed Gameplay Query failed.");',
     'const receipt = lease.selectEffectVariant({ effectId: "minimal-water-surface", variantId: "basic" });',

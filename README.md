@@ -1,29 +1,30 @@
 # Real Water
 
 Real Water is an ESM-only TypeScript Module for a reusable native Three.js Open
-Water Domain. The repository now includes a coherent single-band spectral
-runtime across rendering, hot Artistic Controls, and synchronous Gameplay
-Queries, built on the complete prewarm, reveal, reprepare, and recovery path.
+Water Domain. The repository now includes a four-band, camera-relative Open
+Water Domain with versioned Calm, Swell, and Storm Water Presets, built on the
+complete prewarm, reveal, reprepare, and recovery path.
 
-Issue #17 extends the prewarmed water plane and deterministic QA foundation:
+Issue #18 extends the coherent spectral runtime and deterministic QA foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly nine work units:
-  a texture, render target, plane geometry, single spectral band, TSL
-  NodeMaterial, RenderPipeline route, eight hidden stabilization frames,
+- the canonical minimal-water Prewarm Manifest declares exactly twelve work
+  units: a texture, render target, camera-relative clipmap, four spectral bands,
+  TSL NodeMaterial, RenderPipeline route, eight hidden stabilization frames,
   completion readback, and main-camera guard frame;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
   restores their state after preparation, and never disposes them;
 - progress advances monotonically only when declared manifest work completes;
 - the prepared route and guard frame receive GPU completion readbacks before the
   ready lease resolves;
-- the prepared TSL material displaces a 128×128 or 256×256 surface with one
-  deterministic spectral wave band;
+- the prepared TSL material displaces a camera-relative clipmap with four
+  deterministic spectral wave bands;
 - every Host explicitly supplies a Host Simulation Adapter whose seed, tick,
   time, and pause state drive both rendering and the CPU evaluator without any
   wall-clock read;
-- the ready Runtime Interface applies the hot perceptual `waveStrength` Artistic
-  Control and revisions it only when the value changes;
+- the ready Runtime Interface applies complete hot Artistic Controls, including
+  versioned Calm, Swell, and Storm Water Presets, and revisions them only when
+  the snapshot changes;
 - synchronous Gameplay Queries fill caller-owned height, normal, velocity, foam,
   tick, control-revision, and snapshot-age buffers with no GPU readback;
 - query capacity is fixed at 2,048 points per simulation tick and fails with a
@@ -34,9 +35,9 @@ Issue #17 extends the prewarmed water plane and deterministic QA foundation:
   fixed camera, presents once, and addresses final color, linear depth, and
   view-space normal captures by name;
 - seed, tick, time, and Artistic Control revision feed the prepared surface;
-  Playwright verifies repeatability and bounds fixed-point render/query height
-  disagreement to 0.01 metre without wall-clock sleeps or animation-frame
-  polling;
+  Playwright verifies repeatability, ocean-scale horizon coverage, and bounds
+  fixed-point render/query height disagreement without wall-clock sleeps or
+  animation-frame polling;
 - the Reference Experience keeps the canvas hidden through preparation and
   reveals it on the next refresh after readiness;
 - immutable `minimal` and `minimal-high-detail` Quality Profiles derive distinct
@@ -55,9 +56,8 @@ Issue #17 extends the prewarmed water plane and deterministic QA foundation:
   structured diagnostics;
 - lease disposal is idempotent and releases only Real Water-owned resources.
 
-This milestone renders and queries one deliberately narrow spectral tracer. It
-does not yet claim a four-band ocean, Native Quality, or production water
-behavior.
+This milestone presents a four-band, camera-relative Open Water Domain. It does
+not yet claim Native Quality or production water behavior.
 
 ## Required toolchain
 

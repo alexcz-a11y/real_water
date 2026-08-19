@@ -256,7 +256,7 @@ function createThreeReferenceHostAttempt(
 
   const width = Math.max(1, window.innerWidth);
   const height = Math.max(1, window.innerHeight);
-  const camera = new PerspectiveCamera(50, width / height, 0.1, 100);
+  const camera = new PerspectiveCamera(50, width / height, 0.1, 4_000);
   camera.position.set(8, 6, 10);
   camera.lookAt(0, 0, 0);
   camera.updateProjectionMatrix();

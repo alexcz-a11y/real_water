@@ -59,29 +59,41 @@ describe("ready Open Water runtime", () => {
     });
 
     expect(returned).toBe(results);
-    expect([...results.heights]).toEqual([0.75, 0]);
-    expect(results.normals[0]).toBeCloseTo(0, 6);
-    expect(results.normals[1]).toBeCloseTo(1, 6);
-    expect(results.normals[2]).toBe(0);
-    expect(results.normals[3]).toBeCloseTo(-0.507_541, 5);
-    expect(results.normals[4]).toBeCloseTo(0.861_628, 5);
-    expect(results.normals[5]).toBe(0);
+    expect(results.heights[0]).toBeCloseTo(0.941_342, 5);
+    expect(results.heights[1]).toBeCloseTo(0, 5);
+    expect(results.normals[0]).toBeCloseTo(-0.086_679, 5);
+    expect(results.normals[1]).toBeCloseTo(0.955_649, 5);
+    expect(results.normals[2]).toBeCloseTo(-0.281_462, 5);
+    expect(results.normals[3]).toBeCloseTo(-0.550_392, 5);
+    expect(results.normals[4]).toBeCloseTo(0.800_892, 5);
+    expect(results.normals[5]).toBeCloseTo(-0.235_882, 5);
     expect(results.velocities[0]).toBe(0);
-    expect(results.velocities[1]).toBeCloseTo(0, 6);
+    expect(results.velocities[1]).toBeCloseTo(-1.017_305, 5);
     expect(results.velocities[2]).toBe(0);
     expect(results.velocities[3]).toBe(0);
-    expect(results.velocities[4]).toBeCloseTo(-1.178_097, 5);
+    expect(results.velocities[4]).toBeCloseTo(-2.225_295, 5);
     expect(results.velocities[5]).toBe(0);
     expect([...results.foam]).toEqual([0, 0]);
     expect([...results.ticks]).toEqual([0, 0]);
     expect([...results.controlRevisions]).toEqual([0, 0]);
     expect([...results.snapshotAges]).toEqual([0, 0]);
 
-    expect(lease.updateArtisticControls({ waveStrength: 2 })).toMatchObject({
+    lease.queryGameplay({
+      count: 1,
+      positions: Float32Array.of(0, 0, 2),
+      results,
+    });
+    expect(results.heights[0]).toBeCloseTo(0.176_777, 5);
+
+    const doubled = {
+      ...lease.inspectRuntime().artisticControls,
+      waveStrength: 2,
+    };
+    expect(lease.updateArtisticControls(doubled)).toMatchObject({
       changed: true,
       revision: 1,
     });
-    expect(lease.updateArtisticControls({ waveStrength: 2 })).toMatchObject({
+    expect(lease.updateArtisticControls(doubled)).toMatchObject({
       changed: false,
       revision: 1,
     });
@@ -90,7 +102,8 @@ describe("ready Open Water runtime", () => {
       positions: Float32Array.of(2, 0, 0, 0, 0, 0),
       results,
     });
-    expect([...results.heights]).toEqual([1.5, 0]);
+    expect(results.heights[0]).toBeCloseTo(1.882_683, 5);
+    expect(results.heights[1]).toBeCloseTo(0, 5);
     expect([...results.controlRevisions]).toEqual([1, 1]);
 
     simulation = Object.freeze({
@@ -104,7 +117,7 @@ describe("ready Open Water runtime", () => {
       positions: Float32Array.of(0, 0, 0),
       results,
     });
-    expect(results.heights[0]).toBe(-1.5);
+    expect(results.heights[0]).toBeCloseTo(-2.640_119, 5);
     expect(results.ticks[0]).toBe(60);
 
     await lease.dispose();
@@ -234,7 +247,10 @@ describe("ready Open Water runtime", () => {
       }),
     ).toThrowError(expect.objectContaining({ code: "RUNTIME_INVALIDATED" }));
     expect(() =>
-      lease.updateArtisticControls({ waveStrength: 2 }),
+      lease.updateArtisticControls({
+        ...lease.inspectRuntime().artisticControls,
+        waveStrength: 2,
+      }),
     ).toThrowError(expect.objectContaining({ code: "RUNTIME_INVALIDATED" }));
     expect([...results.heights]).toEqual([42]);
     expect([...results.ticks]).toEqual([42]);

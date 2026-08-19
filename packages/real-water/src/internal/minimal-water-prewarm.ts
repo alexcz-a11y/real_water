@@ -1,8 +1,8 @@
 import {
+  type BufferGeometry,
   DataTexture,
   Mesh,
   MeshStandardNodeMaterial,
-  PlaneGeometry,
   RenderPipeline,
   SRGBColorSpace,
   type Camera,
@@ -26,8 +26,13 @@ import type {
   ThreeHostScene,
 } from "../three-host.js";
 import type { HostSimulationAdapter } from "../runtime.js";
+import {
+  clipmapInnerCellMetres,
+  createCameraRelativeClipmapGeometry,
+  snapClipmapToCamera,
+} from "./camera-relative-clipmap.js";
 import { HOST_RUNTIME_STATE_BRIDGE } from "./runtime-state-bridge.js";
-import { createSingleSpectralBandRendering } from "./single-spectral-band-rendering.js";
+import { createSpectralBandRendering } from "./spectral-bands-rendering.js";
 
 const HIDDEN_STABILIZATION_FRAME_COUNT = 8;
 
@@ -42,12 +47,12 @@ interface MinimalWaterPrewarmOptions {
 
 interface PreparedResources {
   readonly plane: Mesh;
-  readonly geometry: PlaneGeometry;
+  readonly geometry: BufferGeometry;
   readonly material: MeshStandardNodeMaterial;
   readonly waterTexture: DataTexture;
   readonly pipeline: RenderPipeline;
   readonly scenePass: ReturnType<typeof pass>;
-  readonly spectralBand: ReturnType<typeof createSingleSpectralBandRendering>;
+  readonly spectralBand: ReturnType<typeof createSpectralBandRendering>;
 }
 
 type PartialPreparedResources = {
@@ -110,18 +115,14 @@ export async function prepareMinimalWaterPlane(
     scenePass.renderTarget.texture.name = "Real Water minimal scene color";
 
     throwIfAborted(options.request.signal);
-    const geometry = new PlaneGeometry(
-      48,
-      48,
+    const geometry = createCameraRelativeClipmapGeometry(
       geometrySegments.widthSegments,
-      geometrySegments.heightSegments,
     );
     partial.geometry = geometry;
-    geometry.rotateX(-Math.PI / 2);
     const material = new MeshStandardNodeMaterial();
     partial.material = material;
     material.name = "Real Water minimal material";
-    const spectralBand = createSingleSpectralBandRendering(options.simulation);
+    const spectralBand = createSpectralBandRendering(options.simulation);
     partial.spectralBand = spectralBand;
     material.positionNode = spectralBand.positionNode;
     material.normalNode = spectralBand.normalNode;
@@ -132,8 +133,20 @@ export async function prepareMinimalWaterPlane(
     material.emissiveNode = surfaceColor.rgb;
     const plane = new Mesh(geometry, material);
     partial.plane = plane;
-    plane.name = "Real Water minimal plane";
-    plane.onBeforeRender = spectralBand.synchronizeHostState;
+    plane.name = "Real Water clipmap";
+    plane.frustumCulled = false;
+    const innerCellMetres = clipmapInnerCellMetres(
+      geometrySegments.widthSegments,
+    );
+    plane.onBeforeRender = (_renderer, _scene, renderCamera) => {
+      snapClipmapToCamera(
+        renderCamera,
+        spectralBand.originX,
+        spectralBand.originZ,
+        innerCellMetres,
+      );
+      spectralBand.synchronizeHostState();
+    };
     scene.add(plane);
 
     throwIfAborted(options.request.signal);
@@ -153,10 +166,19 @@ export async function prepareMinimalWaterPlane(
       MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderTarget,
     );
     await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.geometry,
+      MINIMAL_WATER_PREWARM_DECLARATION_IDS.clipmap,
     );
     await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBand,
+      MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandSwell,
+    );
+    await options.request.progress.complete(
+      MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandWind,
+    );
+    await options.request.progress.complete(
+      MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandChop,
+    );
+    await options.request.progress.complete(
+      MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandRipple,
     );
     await options.request.progress.complete(
       MINIMAL_WATER_PREWARM_DECLARATION_IDS.material,

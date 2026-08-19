@@ -687,7 +687,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 1,
-        totalWork: 9,
+        totalWork: 12,
       },
     });
   });
@@ -1028,7 +1028,9 @@ describe("prepareRealWater", () => {
     await expect(run.ready).rejects.toMatchObject({
       code: "HOST_PROTOCOL_VIOLATION",
     });
-    expect(disposalCalls).toBe(1);
+    await vi.waitFor(() => {
+      expect(disposalCalls).toBe(1);
+    });
   });
 
   it("surfaces a swallowed reporter failure even when the Host never settles", async () => {
@@ -1349,8 +1351,11 @@ describe("prepareRealWater", () => {
     expect(manifest.declarations.map((declaration) => declaration.id)).toEqual([
       "water-texture",
       "water-render-target",
-      "water-geometry",
-      "water-spectral-band",
+      "water-clipmap",
+      "water-spectral-band-swell",
+      "water-spectral-band-wind",
+      "water-spectral-band-chop",
+      "water-spectral-band-ripple",
       "water-material",
       "water-render-route",
       "water-hidden-stabilization",

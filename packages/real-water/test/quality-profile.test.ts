@@ -139,11 +139,11 @@ describe("Quality Profile manifests", () => {
     const highDetail = createMinimalWaterPrewarmManifest(highDetailProfile);
 
     expect(minimal.manifestHash).toBe(
-      "sha256:48af0d22099244d6cc6b547450e1b79a916375df0fa5d4eb294601a20388e2b1",
+      "sha256:220c87cdc637f64b7d390f13be36001ac9f746a3c85efd8edf7d131c49a010de",
     );
     expect(repeated.manifestHash).toBe(minimal.manifestHash);
     expect(highDetail.manifestHash).toBe(
-      "sha256:16a9310a96ab00ac7b44cd8ce2a77026f67057d7c534d785ba37ec1112f32c04",
+      "sha256:c50fe4d1456c056fdf00f242d50fcc18143afc8b9953ed1246331830912aec95",
     );
     expect(highDetail.manifestHash).not.toBe(minimal.manifestHash);
     expect(minimal.qualityProfile).toEqual(minimalProfile);
@@ -155,8 +155,11 @@ describe("Quality Profile manifests", () => {
     expect(minimal.declarations.map(({ id }) => id)).toEqual([
       "water-texture",
       "water-render-target",
-      "water-geometry",
-      "water-spectral-band",
+      "water-clipmap",
+      "water-spectral-band-swell",
+      "water-spectral-band-wind",
+      "water-spectral-band-chop",
+      "water-spectral-band-ripple",
       "water-material",
       "water-render-route",
       "water-hidden-stabilization",
@@ -167,7 +170,7 @@ describe("Quality Profile manifests", () => {
       minimal.declarations.map(({ id }) => id),
     );
     expect(highDetail.declarations[2]?.fingerprint).toBe(
-      "sha256:27b789113e72349d7a65e871dfd7362acfa987e41709beb45c3d9ca64b8f2356",
+      "sha256:ac0f415a7ca925b92112e332ed39c7cebef51fcec3ffc07216a0484181be6930",
     );
     expect(highDetail.declarations[2]?.fingerprint).not.toBe(
       minimal.declarations[2]?.fingerprint,

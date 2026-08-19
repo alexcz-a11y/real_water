@@ -1,16 +1,43 @@
 import { RealWaterRuntimeError } from "./errors.js";
 import { MAX_GAMEPLAY_QUERY_POINTS } from "./capabilities.js";
-import { writeSingleSpectralBandQueries } from "./internal/single-spectral-band.js";
+import { hasExactKeys, isRecord } from "./internal/record-validation.js";
+import { writeSpectralBandQueries } from "./internal/spectral-bands.js";
+import { createWaterPreset } from "./water-preset.js";
 
 /**
- * Hot, perceptual controls for the first Open Water spectral tracer.
+ * Hot, perceptual controls for the prepared four-band Open Water Domain.
  *
  * @public
  */
 export interface ArtisticControls {
-  /** Relative visual strength of the prepared wave band, from still to bold. */
+  /** Overall visual strength of the prepared sea, from still to bold. */
   readonly waveStrength: number;
+  /** Relative drama of the longest swell band. */
+  readonly swellDrama: number;
+  /** How strongly secondary bands align with the swell direction. */
+  readonly directionality: number;
+  /** Relative strength of the mid-scale chop band. */
+  readonly choppiness: number;
+  /** Art-directed crest peaking applied to every prepared band. */
+  readonly crestSharpness: number;
+  /** Relative strength of the shortest ripple band. */
+  readonly microDetail: number;
+  /** Multiplier applied to every band's temporal frequency. */
+  readonly timeScale: number;
 }
+
+const ARTISTIC_CONTROL_KEYS = [
+  "waveStrength",
+  "swellDrama",
+  "directionality",
+  "choppiness",
+  "crestSharpness",
+  "microDetail",
+  "timeScale",
+] as const;
+
+const DEFAULT_ARTISTIC_CONTROLS: ArtisticControls =
+  createWaterPreset("swell").artisticControls;
 
 /**
  * Host-authored deterministic state for the Open Water Domain.
@@ -108,7 +135,7 @@ export function createRealWaterRuntime(
   simulation: HostSimulationAdapter,
   sink?: RuntimeStateSink,
 ): RealWaterRuntime {
-  let artisticControls = freezeArtisticControls({ waveStrength: 1 });
+  let artisticControls = DEFAULT_ARTISTIC_CONTROLS;
   let controlRevision = 0;
   let queryTick = -1;
   let queriesUsedThisTick = 0;
@@ -119,8 +146,7 @@ export function createRealWaterRuntime(
     ): ArtisticControlUpdateReceipt {
       assertActive();
       const nextControls = freezeArtisticControls(controls);
-      const changed =
-        nextControls.waveStrength !== artisticControls.waveStrength;
+      const changed = artisticControlsChanged(artisticControls, nextControls);
       if (changed) {
         const nextRevision = controlRevision + 1;
         const nextSnapshot = readSnapshot(
@@ -146,7 +172,7 @@ export function createRealWaterRuntime(
       if (usedThisTick + batch.count > MAX_GAMEPLAY_QUERY_POINTS) {
         throw queryCapacityError(batch.count, usedThisTick);
       }
-      writeSingleSpectralBandQueries(batch, state, artisticControls);
+      writeSpectralBandQueries(batch, state, artisticControls);
       for (let point = 0; point < batch.count; point += 1) {
         batch.results.ticks[point] = state.tick;
         batch.results.controlRevisions[point] = controlRevision;
@@ -206,14 +232,53 @@ export function readHostSimulationState(
 }
 
 function freezeArtisticControls(controls: ArtisticControls): ArtisticControls {
-  if (
-    !Number.isFinite(controls.waveStrength) ||
-    controls.waveStrength < 0 ||
-    controls.waveStrength > 2
-  ) {
-    throw new RangeError("waveStrength must be between 0 and 2.");
+  const value: unknown = controls;
+  if (!isRecord(value) || !hasExactKeys(value, ARTISTIC_CONTROL_KEYS)) {
+    throw new TypeError(
+      "Artistic Controls must use the complete supported control set.",
+    );
   }
-  return Object.freeze({ waveStrength: controls.waveStrength });
+
+  assertControlRange(value.waveStrength, 0, 2, "waveStrength");
+  assertControlRange(value.swellDrama, 0, 2, "swellDrama");
+  assertControlRange(value.directionality, 0, 1, "directionality");
+  assertControlRange(value.choppiness, 0, 2, "choppiness");
+  assertControlRange(value.crestSharpness, 0, 2, "crestSharpness");
+  assertControlRange(value.microDetail, 0, 2, "microDetail");
+  assertControlRange(value.timeScale, 0, 2, "timeScale");
+
+  return Object.freeze({
+    waveStrength: value.waveStrength,
+    swellDrama: value.swellDrama,
+    directionality: value.directionality,
+    choppiness: value.choppiness,
+    crestSharpness: value.crestSharpness,
+    microDetail: value.microDetail,
+    timeScale: value.timeScale,
+  });
+}
+
+function artisticControlsChanged(
+  current: ArtisticControls,
+  next: ArtisticControls,
+): boolean {
+  return ARTISTIC_CONTROL_KEYS.some((key) => current[key] !== next[key]);
+}
+
+function assertControlRange(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+  label: string,
+): asserts value is number {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < minimum ||
+    value > maximum
+  ) {
+    throw new RangeError(`${label} must be between ${minimum} and ${maximum}.`);
+  }
 }
 
 function freezeSnapshot(

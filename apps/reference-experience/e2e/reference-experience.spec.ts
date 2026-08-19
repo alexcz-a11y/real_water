@@ -18,7 +18,7 @@ test("shows an accessible Loading Experience before an atomic ready reveal", asy
     }),
   ).toBeVisible();
   await expect(page.getByRole("status")).toContainText(
-    /Preparation has not started|Completed [0-8] of 9/,
+    /Preparation has not started|Completed ([0-9]|1[01]) of 12/,
   );
   await expect(page.getByRole("progressbar")).toHaveAccessibleName(
     "Preparation progress",
@@ -32,7 +32,7 @@ test("shows an accessible Loading Experience before an atomic ready reveal", asy
   );
   expect(
     announcements.findIndex((announcement) =>
-      announcement.startsWith("Completed 0 of 9"),
+      announcement.startsWith("Completed 0 of 12"),
     ),
   ).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Cancel preparation" }).focus();
@@ -128,10 +128,10 @@ test("supports keyboard cancellation and a complete retry", async ({
   const retryProgress = announcements
     .slice(retryStart + 1)
     .flatMap((announcement) => {
-      const match = /^Completed ([0-9]+) of 9/u.exec(announcement);
+      const match = /^Completed ([0-9]+) of 12/u.exec(announcement);
       return match?.[1] === undefined ? [] : [Number(match[1])];
     });
-  expect(retryProgress).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  expect(retryProgress).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 });
 
 test("removes nonessential motion for reduced-motion users", async ({

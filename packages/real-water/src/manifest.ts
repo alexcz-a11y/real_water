@@ -103,8 +103,11 @@ export const SUPPORTED_EFFECT_VARIANTS: readonly PrewarmEffectVariant[] =
 export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   texture: "water-texture",
   renderTarget: "water-render-target",
-  geometry: "water-geometry",
-  spectralBand: "water-spectral-band",
+  clipmap: "water-clipmap",
+  spectralBandSwell: "water-spectral-band-swell",
+  spectralBandWind: "water-spectral-band-wind",
+  spectralBandChop: "water-spectral-band-chop",
+  spectralBandRipple: "water-spectral-band-ripple",
   material: "water-material",
   renderRoute: "water-render-route",
   hiddenStabilization: "water-hidden-stabilization",
@@ -113,10 +116,12 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
 } as const);
 
 const MINIMAL_WATER_MANIFEST_ID = "reference-minimal-water";
+// Each static hash is the SHA-256 digest of the manifest's canonical JSON,
+// excluding manifestHash and preserving the public field order.
 const MINIMAL_WATER_MANIFEST_HASH =
-  "sha256:48af0d22099244d6cc6b547450e1b79a916375df0fa5d4eb294601a20388e2b1";
+  "sha256:220c87cdc637f64b7d390f13be36001ac9f746a3c85efd8edf7d131c49a010de";
 const MINIMAL_HIGH_DETAIL_WATER_MANIFEST_HASH =
-  "sha256:16a9310a96ab00ac7b44cd8ce2a77026f67057d7c534d785ba37ec1112f32c04";
+  "sha256:c50fe4d1456c056fdf00f242d50fcc18143afc8b9953ed1246331830912aec95";
 const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.texture,
@@ -133,18 +138,39 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
       "sha256:65d1be5b0a29b0f3c321446487931e44cfe098e96943d4bed09c77f82e4815f0",
   },
   {
-    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.geometry,
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.clipmap,
     kind: "resource",
-    label: "Minimal water plane geometry",
+    label: "Camera-relative Open Water clipmap",
     fingerprint:
-      "sha256:14bc8848f560c11d223eb40ebcb936d86cacc19263ac5b1c4152a77bcfa84313",
+      "sha256:61fcb210b4d47847c615ceaec5c83d943ab09fbd993708771ba19d63cf8189e9",
   },
   {
-    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBand,
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandSwell,
     kind: "effect-state",
-    label: "Single coherent spectral wave band",
+    label: "Swell spectral wave band",
     fingerprint:
-      "sha256:d80f9ba83f878f62e9bb3f2d5c67d516ea5395606165edf548b8e653de9ac80a",
+      "sha256:b709b5a7bd700e839813432079e70edde4a842ec73fdf4210ae1d37573b9ec3b",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandWind,
+    kind: "effect-state",
+    label: "Wind spectral wave band",
+    fingerprint:
+      "sha256:d214280fa8ae2939a9b001fced931d4261f801b7b7f2175015726bbd6952fc3c",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandChop,
+    kind: "effect-state",
+    label: "Chop spectral wave band",
+    fingerprint:
+      "sha256:1391b6df834fd361e6caeebea074f47a3edae589715f6edf4bc75c13dea807a8",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandRipple,
+    kind: "effect-state",
+    label: "Ripple spectral wave band",
+    fingerprint:
+      "sha256:f45d0459b6c83de101d0b860c7173104c9602a29f6e5f57d1c2fd64f35e9fb8e",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.material,
@@ -185,11 +211,11 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
 
 const MINIMAL_HIGH_DETAIL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] =
   MINIMAL_WATER_DECLARATIONS.map((declaration) =>
-    declaration.id === MINIMAL_WATER_PREWARM_DECLARATION_IDS.geometry
+    declaration.id === MINIMAL_WATER_PREWARM_DECLARATION_IDS.clipmap
       ? {
           ...declaration,
           fingerprint:
-            "sha256:27b789113e72349d7a65e871dfd7362acfa987e41709beb45c3d9ca64b8f2356",
+            "sha256:ac0f415a7ca925b92112e332ed39c7cebef51fcec3ffc07216a0484181be6930",
         }
       : declaration,
   );

@@ -56,6 +56,17 @@ export type {
   RealWaterRuntime,
 } from "./runtime.js";
 
+export {
+  WATER_PRESET_SCHEMA,
+  WATER_PRESET_VERSION,
+  createWaterPreset,
+} from "./water-preset.js";
+export type {
+  WaterPreset,
+  WaterPresetId,
+  WaterPresetIdentity,
+} from "./water-preset.js";
+
 export { createMemoryHostLifecycleAdapter } from "./memory-host.js";
 export type {
   MemoryHostLifecycleAdapterOptions,
