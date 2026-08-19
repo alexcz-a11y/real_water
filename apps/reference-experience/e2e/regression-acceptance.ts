@@ -1,7 +1,13 @@
-import { Buffer } from "node:buffer";
+import { mkdir, writeFile } from "node:fs/promises";
 import { cpus } from "node:os";
+import { join, resolve } from "node:path";
 import type { Page, TestInfo } from "@playwright/test";
 import type { QaCameraV1 } from "../src/qa-harness.js";
+
+export const REGRESSION_ACCEPTANCE_DIRECTORY = join(
+  "test-results",
+  "regression-acceptance",
+);
 
 export async function attachRegressionAcceptance(
   testInfo: TestInfo,
@@ -28,31 +34,52 @@ export async function attachRegressionAcceptance(
         : { width: canvas.width, height: canvas.height };
     }),
   ]);
+  const manifest = {
+    evidenceClass: "Regression acceptance",
+    chromeVersion: chromeVersionFromUserAgent(userAgent),
+    userAgent,
+    os: process.platform,
+    arch: process.arch,
+    hardwareConcurrency: hardwareConcurrency || cpus().length,
+    headed: testInfo.project.use.headless === false,
+    devicePixelRatio: testInfo.project.use.deviceScaleFactor ?? 1,
+    drawingBuffer,
+    powerState: "uncontrolled",
+    seed: details.seed,
+    tick: details.tick,
+    camera: details.camera,
+    qaPrewarmManifest: details.qaPrewarm,
+  };
+  const filePath = resolve(
+    process.cwd(),
+    REGRESSION_ACCEPTANCE_DIRECTORY,
+    regressionAcceptanceFileName(testInfo),
+  );
+  await mkdir(resolve(process.cwd(), REGRESSION_ACCEPTANCE_DIRECTORY), {
+    recursive: true,
+  });
+  await writeFile(filePath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   await testInfo.attach("regression-acceptance.json", {
-    body: Buffer.from(
-      JSON.stringify(
-        {
-          evidenceClass: "Regression acceptance",
-          chromeVersion: chromeVersionFromUserAgent(userAgent),
-          userAgent,
-          os: process.platform,
-          arch: process.arch,
-          hardwareConcurrency: hardwareConcurrency || cpus().length,
-          headed: testInfo.project.use.headless === false,
-          devicePixelRatio: testInfo.project.use.deviceScaleFactor ?? 1,
-          drawingBuffer,
-          powerState: "uncontrolled",
-          seed: details.seed,
-          tick: details.tick,
-          camera: details.camera,
-          qaPrewarmManifest: details.qaPrewarm,
-        },
-        null,
-        2,
-      ),
-    ),
+    path: filePath,
     contentType: "application/json",
   });
+}
+
+function regressionAcceptanceFileName(testInfo: TestInfo): string {
+  const unique = [
+    testInfo.project.name,
+    testInfo.testId,
+    `worker-${String(testInfo.workerIndex)}`,
+    `retry-${String(testInfo.retry)}`,
+  ]
+    .join("--")
+    .replace(/[^A-Za-z0-9._-]+/gu, "-");
+  const title = testInfo.titlePath
+    .join("--")
+    .replace(/[^A-Za-z0-9._-]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 80);
+  return `${unique}${title === "" ? "" : `--${title}`}.json`;
 }
 
 function chromeVersionFromUserAgent(userAgent: string): string {

@@ -6,6 +6,7 @@ dist-types/
 .vite/
 coverage/
 playwright-report/
+# Playwright output, including retained regression-acceptance JSON.
 test-results/
 *.tgz
 *.tsbuildinfo

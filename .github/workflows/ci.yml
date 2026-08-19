@@ -28,7 +28,16 @@ jobs:
       - run: pnpm format:check
       - run: pnpm typecheck
       - run: pnpm build
-      - run: pnpm test
+      - id: test
+        run: pnpm test
+      - name: Upload regression-acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-acceptance
+          path: test-results/regression-acceptance/
+          if-no-files-found: error
+          retention-days: 14
       - run: pnpm test:package
       - run: pnpm api:check
       - run: pnpm check:licenses
