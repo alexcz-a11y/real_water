@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { expect, test } from "@playwright/test";
-import type { QaCameraV1, QaHarnessV1 } from "../src/qa-harness.js";
+import type { QaCameraV1, QaHarnessV2 } from "../src/qa-harness.js";
+import { hasCoreWebGPU } from "./core-webgpu-support.js";
 
 const FIXED_CAMERA = {
   projection: "perspective" as const,
@@ -43,7 +44,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
 
   expect(contract).toEqual({
     schema: "real-water/qa-harness",
-    version: 1,
+    version: 2,
     fixedTickHz: 60,
     captureNames: ["final-color", "depth", "normal"],
     prewarmSchema: "real-water/qa-frame-prewarm",
@@ -52,26 +53,107 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
   });
 });
 
+test("bounds rendered and queried height at one fixed Open Water point", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 321, height: 181 });
+  await page.goto("/?qa=1&host=memory&delay=0");
+  test.skip(
+    !(await hasCoreWebGPU(page)),
+    "Core WebGPU is unavailable in this browser profile.",
+  );
+
+  await page.goto("/?qa=1&host=three");
+  await expect(page.getByTestId("reference-stage")).toBeVisible();
+  const result = await page.evaluate(async () => {
+    const harness = window.__REAL_WATER_QA__ as
+      | (QaHarnessV2 & {
+          updateArtisticControls(controls: {
+            readonly waveStrength: number;
+          }): Promise<{ readonly revision: number }>;
+          queryGameplay(point: readonly [number, number, number]): Promise<{
+            readonly height: number;
+            readonly normal: readonly [number, number, number];
+            readonly velocity: readonly [number, number, number];
+            readonly foam: number;
+            readonly tick: number;
+            readonly controlRevision: number;
+            readonly snapshotAge: number;
+            readonly presentationId: number;
+          }>;
+        })
+      | undefined;
+    if (harness === undefined) {
+      throw new Error("QA Harness is unavailable.");
+    }
+    await harness.reset({ seed: 0x4000_0000 });
+    await harness.advanceTicks(30);
+    const before = harness.snapshot();
+    const controls = await harness.updateArtisticControls({
+      waveStrength: 2,
+    });
+    await harness.setCamera({
+      projection: "perspective",
+      position: [0.7, 12, 0],
+      target: [0.7, 0, 0],
+      up: [0, 0, -1],
+      verticalFovDegrees: 40,
+      near: 0.1,
+      far: 100,
+    });
+    const presentation = await harness.present();
+    const depth = await harness.capture("depth");
+    const normal = await harness.capture("normal");
+    const query = await harness.queryGameplay([0.7, 0, 0]);
+    const after = harness.snapshot();
+    return {
+      before,
+      controls,
+      presentation,
+      depth,
+      normal,
+      query,
+      after,
+    };
+  });
+
+  const depths = decodeFloat32(result.depth.data);
+  const center =
+    Math.floor(result.depth.height / 2) * result.depth.width +
+    Math.floor(result.depth.width / 2);
+  const renderedHeight = 12 - (depths[center] ?? Number.NaN);
+  expect(result.query.height).toBeCloseTo(1.458_555, 5);
+  expect(Math.abs(renderedHeight - result.query.height)).toBeLessThanOrEqual(
+    0.01,
+  );
+  expect(result.query).toMatchObject({
+    normal: expect.any(Array),
+    velocity: expect.any(Array),
+    foam: 0,
+    tick: 30,
+    controlRevision: result.controls.revision,
+    snapshotAge: 0,
+    presentationId: result.presentation.presentationId,
+  });
+  const normalValues = decodeFloat32(result.normal.data);
+  const normalIndex = center * 3;
+  expect(normalValues[normalIndex]).toBeCloseTo(result.query.normal[0], 2);
+  expect(normalValues[normalIndex + 1]).toBeCloseTo(-result.query.normal[2], 2);
+  expect(normalValues[normalIndex + 2]).toBeCloseTo(result.query.normal[1], 2);
+  expect(result.after).toEqual(result.before);
+  expect(result.presentation.prewarm.progress).toMatchObject({
+    completedWork: 8,
+    totalWork: 8,
+  });
+});
+
 test("drives and captures a repeatable rendered frame without wall-clock animation", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 180 });
   await page.goto("/?qa=1&host=memory&delay=0");
-  const coreWebGPUAvailable = await page.evaluate(async () => {
-    const gpu = (
-      navigator as Navigator & {
-        gpu?: {
-          requestAdapter(): Promise<{
-            features: { has(name: string): boolean };
-          } | null>;
-        };
-      }
-    ).gpu;
-    const adapter = await gpu?.requestAdapter();
-    return adapter?.features.has("core-features-and-limits") === true;
-  });
   test.skip(
-    !coreWebGPUAvailable,
+    !(await hasCoreWebGPU(page)),
     "Core WebGPU is unavailable in this browser profile.",
   );
 
@@ -79,7 +161,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV1 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV2 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }

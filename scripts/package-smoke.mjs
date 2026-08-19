@@ -88,6 +88,7 @@ try {
 
   const requiredExports = [
     "QUALITY_PROFILE_SCHEMA",
+    "MAX_GAMEPLAY_QUERY_POINTS",
     "RealWaterRuntimeError",
     "RealWaterStartupError",
     "createMemoryHostLifecycleAdapter",
@@ -107,9 +108,14 @@ try {
     "const run = realWater.prepareRealWater({",
     "  manifest,",
     "  loading: { present() {} },",
-    "  host: realWater.createMemoryHostLifecycleAdapter({ stepDelayMs: 0 }),",
+    "  host: realWater.createMemoryHostLifecycleAdapter({ simulation: realWater.createStaticHostSimulationAdapter(), stepDelayMs: 0 }),",
     "});",
     "const lease = await run.ready;",
+    'if (lease.capabilities.gameplay.maxQueryPointsPerTick !== 2048) throw new Error("Packed Gameplay Query capacity is incorrect.");',
+    "const queryResults = { heights: new Float32Array(1), normals: new Float32Array(3), velocities: new Float32Array(3), foam: new Float32Array(1), ticks: new Float64Array(1), controlRevisions: new Float64Array(1), snapshotAges: new Uint8Array(1) };",
+    "lease.updateArtisticControls({ waveStrength: 2 });",
+    "const returnedResults = lease.queryGameplay({ count: 1, positions: new Float32Array(3), results: queryResults });",
+    'if (returnedResults !== queryResults || queryResults.controlRevisions[0] !== 1 || queryResults.snapshotAges[0] !== 0) throw new Error("Packed Gameplay Query failed.");',
     'const receipt = lease.selectEffectVariant({ effectId: "minimal-water-surface", variantId: "basic" });',
     'if (!receipt.changed || receipt.revision !== 1) throw new Error("Prepared variant selection failed.");',
     "try {",
@@ -140,14 +146,14 @@ try {
   writeFileSync(
     join(consumerRoot, "index.mts"),
     [
-      'import { createMemoryHostLifecycleAdapter, createMinimalWaterPrewarmManifest, createMinimalWaterQualityProfile, prepareRealWater, type QualityProfile } from "real-water";',
+      'import { createMemoryHostLifecycleAdapter, createMinimalWaterPrewarmManifest, createMinimalWaterQualityProfile, createStaticHostSimulationAdapter, prepareRealWater, type GameplayQueryResults, type QualityProfile } from "real-water";',
       "const profile: QualityProfile = createMinimalWaterQualityProfile();",
       "const run = prepareRealWater({",
       "  manifest: createMinimalWaterPrewarmManifest(profile),",
       "  loading: { present() {} },",
-      "  host: createMemoryHostLifecycleAdapter({ stepDelayMs: 0 }),",
+      "  host: createMemoryHostLifecycleAdapter({ simulation: createStaticHostSimulationAdapter(), stepDelayMs: 0 }),",
       "});",
-      'void run.ready.then((lease) => { lease.selectEffectVariant({ effectId: "minimal-water-surface", variantId: "basic" }); return lease.invalidateForLongSuspension(); });',
+      "void run.ready.then((lease) => { const results: GameplayQueryResults = { heights: new Float32Array(1), normals: new Float32Array(3), velocities: new Float32Array(3), foam: new Float32Array(1), ticks: new Float64Array(1), controlRevisions: new Float64Array(1), snapshotAges: new Uint8Array(1) }; lease.queryGameplay({ count: 1, positions: new Float32Array(3), results }); return lease.invalidateForLongSuspension(); });",
     ].join("\n"),
   );
   writeFileSync(

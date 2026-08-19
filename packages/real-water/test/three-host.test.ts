@@ -3,12 +3,25 @@ import { PerspectiveCamera, Scene } from "three";
 import {
   createMinimalWaterQualityProfile,
   createMinimalWaterPrewarmManifest,
-  createThreeHostLifecycleAdapter,
+  createStaticHostSimulationAdapter,
+  createThreeHostLifecycleAdapter as createBaseThreeHostLifecycleAdapter,
   prepareRealWater,
   type LoadingPresenterAdapter,
   type StartupSnapshot,
+  type ThreeHostLifecycleAdapterOptions,
   type ThreeHostRenderer,
 } from "../src/index.js";
+
+const STATIC_SIMULATION = createStaticHostSimulationAdapter();
+
+function createThreeHostLifecycleAdapter(
+  options: Omit<ThreeHostLifecycleAdapterOptions, "simulation">,
+) {
+  return createBaseThreeHostLifecycleAdapter({
+    ...options,
+    simulation: STATIC_SIMULATION,
+  });
+}
 
 class RecordingLoadingPresenter implements LoadingPresenterAdapter {
   public readonly snapshots: StartupSnapshot[] = [];
@@ -114,6 +127,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     const lease = await run.ready;
 
     expect(lease.capabilities).toEqual({
+      gameplay: { maxQueryPointsPerTick: 2_048 },
       rendering: {
         backend: "core-webgpu",
         timestampQuery: true,
@@ -143,7 +157,7 @@ describe("createThreeHostLifecycleAdapter", () => {
           };
         }
       ).geometry.parameters,
-    ).toMatchObject({ widthSegments: 2, heightSegments: 2 });
+    ).toMatchObject({ widthSegments: 256, heightSegments: 256 });
     expect(
       loading.snapshots.flatMap((snapshot) =>
         snapshot.status === "preparing" &&
@@ -152,6 +166,30 @@ describe("createThreeHostLifecycleAdapter", () => {
           : [],
       ),
     ).toEqual(manifest.declarations.map((declaration) => declaration.id));
+    const preparedPlane = scene.children[0];
+    expect(lease.updateArtisticControls({ waveStrength: 1.5 })).toMatchObject({
+      changed: true,
+      revision: 1,
+    });
+    const queryResults = {
+      heights: new Float32Array(1),
+      normals: new Float32Array(3),
+      velocities: new Float32Array(3),
+      foam: new Float32Array(1),
+      ticks: new Float64Array(1),
+      controlRevisions: new Float64Array(1),
+      snapshotAges: new Uint8Array(1),
+    };
+    expect(
+      lease.queryGameplay({
+        count: 1,
+        positions: new Float32Array(3),
+        results: queryResults,
+      }),
+    ).toBe(queryResults);
+    expect(renderer.compileAsync).toHaveBeenCalledTimes(1);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(3);
+    expect(scene.children[0]).toBe(preparedPlane);
 
     renderer.onDeviceLost({
       message: "Synthetic post-ready Three device loss.",

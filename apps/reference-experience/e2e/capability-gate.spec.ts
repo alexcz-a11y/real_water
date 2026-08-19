@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { hasCoreWebGPU } from "./core-webgpu-support.js";
 
 test("does not expose the Memory Host outside the QA route", async ({
   page,
@@ -57,21 +58,8 @@ test("accepts a real Core WebGPU renderer when the browser profile provides it",
   page,
 }) => {
   await page.goto("/?qa=1&host=memory&delay=0");
-  const coreWebGPUAvailable = await page.evaluate(async () => {
-    const gpu = (
-      navigator as Navigator & {
-        gpu?: {
-          requestAdapter(): Promise<{
-            features: { has(name: string): boolean };
-          } | null>;
-        };
-      }
-    ).gpu;
-    const adapter = await gpu?.requestAdapter();
-    return adapter?.features.has("core-features-and-limits") === true;
-  });
   test.skip(
-    !coreWebGPUAvailable,
+    !(await hasCoreWebGPU(page)),
     "Core WebGPU is unavailable in this browser profile.",
   );
 

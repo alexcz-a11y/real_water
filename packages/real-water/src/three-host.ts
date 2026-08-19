@@ -10,6 +10,7 @@ import type {
   HostPreparationRequest,
   WebGPUDeviceLoss,
 } from "./startup.js";
+import type { HostSimulationAdapter } from "./runtime.js";
 
 const activeRenderers = new WeakSet<object>();
 
@@ -55,6 +56,8 @@ export interface ThreeHostLifecycleAdapterOptions {
   readonly scene: ThreeHostScene;
   /** The borrowed main camera used for prewarm and the guard frame. */
   readonly camera: ThreeHostCamera;
+  /** Host-owned deterministic simulation state read by rendering and queries. */
+  readonly simulation: HostSimulationAdapter;
 }
 
 /**
@@ -65,6 +68,7 @@ export interface ThreeHostLifecycleAdapterOptions {
 export function createThreeHostLifecycleAdapter(
   options: ThreeHostLifecycleAdapterOptions,
 ): HostLifecycleAdapter {
+  const simulation = options.simulation;
   return Object.freeze({
     async prepare(request: HostPreparationRequest) {
       throwIfAborted(request.signal);
@@ -124,6 +128,7 @@ export function createThreeHostLifecycleAdapter(
             signal: prewarmController.signal,
           },
           invalidated: capabilityInspection.invalidated,
+          simulation,
         });
         let prewarm: PrewarmOutcome;
         try {
@@ -198,6 +203,7 @@ function createExclusiveLease(
 ): HostPreparedLease {
   let disposal: Promise<void> | undefined;
   return Object.freeze({
+    ...lease,
     invalidated: lease.invalidated,
     dispose(): Promise<void> {
       disposal ??= Promise.resolve()

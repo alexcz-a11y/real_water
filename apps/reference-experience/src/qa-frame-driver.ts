@@ -11,16 +11,7 @@ import {
   type Renderer,
   type WebGPURenderer,
 } from "three/webgpu";
-import {
-  linearDepth,
-  mrt,
-  normalView,
-  output,
-  pass,
-  texture,
-  uniform,
-  vec4,
-} from "three/tsl";
+import { linearDepth, mrt, normalView, output, pass, texture } from "three/tsl";
 import {
   QA_FRAME_CAPTURE_SHAPES,
   QA_FRAME_FIXED_TICK_HZ,
@@ -29,6 +20,7 @@ import {
   isQaFrameTickCount,
   type QaFrameCaptureName,
 } from "./qa-frame-contract.js";
+import type { QaHostSimulationController } from "./qa-simulation-controller.js";
 
 const QA_FRAME_PREWARM_DECLARATIONS = Object.freeze([
   Object.freeze({
@@ -126,6 +118,7 @@ export type QaFrameDriverCapture =
 export interface QaFrameDriverStateReceipt {
   readonly seed: number;
   readonly tick: number;
+  readonly timeSeconds: number;
 }
 
 export interface QaFramePrewarmReceipt {
@@ -163,6 +156,7 @@ export interface CreateQaFrameDriverOptions {
   readonly camera: PerspectiveCamera;
   readonly manifestHash: string;
   readonly signal: AbortSignal;
+  readonly simulation: QaHostSimulationController;
 }
 
 interface PreparedQaResources {
@@ -172,7 +166,6 @@ interface PreparedQaResources {
   readonly scenePass: ReturnType<typeof pass>;
   readonly inverseLinearDepthTextureIndex: number;
   readonly viewNormalTextureIndex: number;
-  readonly presentationSignal: ReturnType<typeof uniform>;
   readonly width: number;
   readonly height: number;
 }
@@ -215,8 +208,6 @@ export async function createQaFrameDriver(
     const viewNormalTexture = scenePass.getTexture(VIEW_NORMAL_ATTACHMENT);
     viewNormalTexture.type = HalfFloatType;
     const sceneColor = scenePass.getTextureNode("output");
-    const presentationSignal = uniform(0);
-
     const finalColorTarget = new RenderTarget(size.width, size.height, {
       depthBuffer: false,
       stencilBuffer: false,
@@ -224,10 +215,7 @@ export async function createQaFrameDriver(
     });
     partialDisposals.push(() => finalColorTarget.dispose());
     finalColorTarget.texture.name = "Real Water QA final color";
-    const compositionPipeline = new RenderPipeline(
-      renderer,
-      sceneColor.add(vec4(presentationSignal, 0, 0, 0)),
-    );
+    const compositionPipeline = new RenderPipeline(renderer, sceneColor);
     partialDisposals.push(() => compositionPipeline.dispose());
     const presentationPipeline = new RenderPipeline(
       renderer,
@@ -248,7 +236,6 @@ export async function createQaFrameDriver(
         scenePass.renderTarget,
         VIEW_NORMAL_ATTACHMENT,
       ),
-      presentationSignal,
       width: size.width,
       height: size.height,
     };
@@ -322,8 +309,7 @@ function createPreparedDriver(
   let disposal: Promise<void> | undefined;
   let presentationId = 0;
   let queue = Promise.resolve();
-  let seed: number | null = null;
-  let tick = 0;
+  let reset = false;
 
   const enqueue = <Result>(
     operation: () => Promise<Result>,
@@ -348,24 +334,27 @@ function createPreparedDriver(
       const nextSeed = request.seed;
       assertSeed(nextSeed);
       return enqueue(async () => {
-        seed = nextSeed;
-        tick = 0;
-        resources.presentationSignal.value = presentationSignal(nextSeed, 0);
-        return Object.freeze({ seed: nextSeed, tick });
+        reset = true;
+        const state = options.simulation.reset(nextSeed);
+        return Object.freeze({
+          seed: state.seed,
+          tick: state.tick,
+          timeSeconds: state.timeSeconds,
+        });
       });
     },
     present(request) {
       const advance = request.advanceFixedTicks;
       const requestedCaptures = [...request.captures];
       return enqueue(async () => {
-        if (seed === null) {
+        if (!reset) {
           throw new Error("Reset the QA frame driver before presentation.");
         }
-        assertTickAdvance(advance, tick);
+        const current = options.simulation.snapshot();
+        assertTickAdvance(advance, current.tick);
         assertCaptureNames(requestedCaptures);
         assertPreparedDrawingBufferSize(renderer, resources);
-        const nextTick = tick + advance;
-        resources.presentationSignal.value = presentationSignal(seed, nextTick);
+        const nextState = options.simulation.advance(advance);
         const state = captureHostState(renderer, options.scene, options.camera);
         let captures: QaFrameDriverCapture[];
         try {
@@ -379,11 +368,11 @@ function createPreparedDriver(
         } finally {
           restoreHostState(renderer, options.scene, options.camera, state);
         }
-        tick = nextTick;
         presentationId += 1;
         return Object.freeze({
-          seed,
-          tick,
+          seed: nextState.seed,
+          tick: nextState.tick,
+          timeSeconds: nextState.timeSeconds,
           presentationId,
           manifestHash: options.manifestHash,
           prewarm,
@@ -400,10 +389,6 @@ function createPreparedDriver(
     },
   };
   return Object.freeze(driver);
-}
-
-function presentationSignal(seed: number, tick: number): number {
-  return ((seed + tick) & 0x0f) / 127.5;
 }
 
 function renderPreparedFrame(

@@ -4,6 +4,7 @@ import type {
   HostPreparationRequest,
   WebGPUDeviceLoss,
 } from "./startup.js";
+import type { HostSimulationAdapter } from "./runtime.js";
 import {
   coreWebGPULimits,
   evaluateRenderingCapability,
@@ -50,6 +51,7 @@ export type MemoryHostScenario =
  */
 export interface MemoryHostLifecycleAdapterOptions {
   readonly scenario?: MemoryHostScenario;
+  readonly simulation: HostSimulationAdapter;
   readonly stepDelayMs?: number;
 }
 
@@ -60,7 +62,7 @@ export interface MemoryHostLifecycleAdapterOptions {
  * @public
  */
 export function createMemoryHostLifecycleAdapter(
-  options: MemoryHostLifecycleAdapterOptions = {},
+  options: MemoryHostLifecycleAdapterOptions,
 ): HostLifecycleAdapter {
   const scenario = options.scenario ?? { kind: "success" };
   const stepDelayMs = normalizeDelay(options.stepDelayMs);
@@ -142,7 +144,7 @@ export function createMemoryHostLifecycleAdapter(
       return {
         status: "ready" as const,
         capabilities: capability.capabilities,
-        lease: createMemoryPreparedLease(),
+        lease: createMemoryPreparedLease(options.simulation),
       };
     },
   });
@@ -160,12 +162,15 @@ function normalizeDelay(candidate: number | undefined): number {
   return candidate;
 }
 
-function createMemoryPreparedLease(): HostPreparedLease {
+function createMemoryPreparedLease(
+  simulation: HostSimulationAdapter,
+): HostPreparedLease {
   let disposal: Promise<void> | undefined;
   const invalidated = new Promise<WebGPUDeviceLoss>(() => {});
 
   return Object.freeze({
     invalidated,
+    simulation,
     dispose(): Promise<void> {
       disposal ??= Promise.resolve();
       return disposal;

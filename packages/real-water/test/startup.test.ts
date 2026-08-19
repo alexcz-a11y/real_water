@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   RealWaterStartupError,
-  createMemoryHostLifecycleAdapter,
+  createMemoryHostLifecycleAdapter as createBaseMemoryHostLifecycleAdapter,
   createMinimalWaterPrewarmManifest,
+  createStaticHostSimulationAdapter,
   prepareRealWater,
   type HostLifecycleAdapter,
   type HostPreparedLease,
   type LoadingPresenterAdapter,
+  type MemoryHostLifecycleAdapterOptions,
   type StartupSnapshot,
   type WebGPUDeviceLoss,
 } from "../src/index.js";
@@ -20,12 +22,23 @@ class RecordingLoadingPresenter implements LoadingPresenterAdapter {
 }
 
 const TEST_CAPABILITIES = Object.freeze({
+  gameplay: Object.freeze({ maxQueryPointsPerTick: 2_048 as const }),
   rendering: Object.freeze({
     backend: "core-webgpu" as const,
     timestampQuery: false,
   }),
 });
 const NEVER_INVALIDATED = new Promise<never>(() => {});
+const STATIC_SIMULATION = createStaticHostSimulationAdapter();
+
+function createMemoryHostLifecycleAdapter(
+  options: Omit<MemoryHostLifecycleAdapterOptions, "simulation">,
+): HostLifecycleAdapter {
+  return createBaseMemoryHostLifecycleAdapter({
+    ...options,
+    simulation: STATIC_SIMULATION,
+  });
+}
 
 describe("prepareRealWater", () => {
   it("publishes deeply immutable Core WebGPU capabilities from the Memory Host", async () => {
@@ -41,6 +54,7 @@ describe("prepareRealWater", () => {
     const lease = await run.ready;
 
     expect(lease.capabilities).toEqual({
+      gameplay: { maxQueryPointsPerTick: 2_048 },
       rendering: {
         backend: "core-webgpu",
         timestampQuery: true,
@@ -277,6 +291,7 @@ describe("prepareRealWater", () => {
       loading: new RecordingLoadingPresenter(),
       host: createReadyHost(undefined, {
         invalidated: hostInvalidated,
+        simulation: STATIC_SIMULATION,
         dispose() {},
       }),
     });
@@ -326,6 +341,7 @@ describe("prepareRealWater", () => {
       loading,
       host: createReadyHost(undefined, {
         invalidated: Promise.resolve(loss),
+        simulation: STATIC_SIMULATION,
         dispose,
       }),
     });
@@ -411,7 +427,7 @@ describe("prepareRealWater", () => {
           return {
             status: "ready",
             capabilities: TEST_CAPABILITIES,
-            lease: { invalidated, dispose },
+            lease: { invalidated, simulation: STATIC_SIMULATION, dispose },
           };
         },
       },
@@ -671,7 +687,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 1,
-        totalWork: 8,
+        totalWork: 9,
       },
     });
   });
@@ -707,6 +723,7 @@ describe("prepareRealWater", () => {
     let disposalCalls = 0;
     const host = createReadyHost(undefined, {
       invalidated: NEVER_INVALIDATED,
+      simulation: STATIC_SIMULATION,
       dispose() {
         disposalCalls += 1;
       },
@@ -823,7 +840,11 @@ describe("prepareRealWater", () => {
           return {
             status: "ready",
             capabilities: TEST_CAPABILITIES,
-            lease: { invalidated: NEVER_INVALIDATED, dispose() {} },
+            lease: {
+              invalidated: NEVER_INVALIDATED,
+              simulation: STATIC_SIMULATION,
+              dispose() {},
+            },
           };
         },
       },
@@ -898,6 +919,7 @@ describe("prepareRealWater", () => {
       capabilities: TEST_CAPABILITIES,
       lease: {
         invalidated: NEVER_INVALIDATED,
+        simulation: STATIC_SIMULATION,
         dispose() {
           disposalCalls += 1;
         },
@@ -944,7 +966,11 @@ describe("prepareRealWater", () => {
           return {
             status: "ready",
             capabilities: TEST_CAPABILITIES,
-            lease: { invalidated: NEVER_INVALIDATED, dispose() {} },
+            lease: {
+              invalidated: NEVER_INVALIDATED,
+              simulation: STATIC_SIMULATION,
+              dispose() {},
+            },
           };
         },
       },
@@ -989,6 +1015,7 @@ describe("prepareRealWater", () => {
             capabilities: TEST_CAPABILITIES,
             lease: {
               invalidated: NEVER_INVALIDATED,
+              simulation: STATIC_SIMULATION,
               dispose() {
                 disposalCalls += 1;
               },
@@ -1114,6 +1141,7 @@ describe("prepareRealWater", () => {
             capabilities: TEST_CAPABILITIES,
             lease: {
               invalidated: NEVER_INVALIDATED,
+              simulation: STATIC_SIMULATION,
               dispose() {
                 disposalCalls += 1;
               },
@@ -1187,6 +1215,7 @@ describe("prepareRealWater", () => {
       loading,
       host: createReadyHost(undefined, {
         invalidated: NEVER_INVALIDATED,
+        simulation: STATIC_SIMULATION,
         dispose: disposeHostLease,
       }),
     });
@@ -1276,7 +1305,11 @@ describe("prepareRealWater", () => {
           return {
             status: "ready",
             capabilities: TEST_CAPABILITIES,
-            lease: { invalidated: NEVER_INVALIDATED, dispose() {} },
+            lease: {
+              invalidated: NEVER_INVALIDATED,
+              simulation: STATIC_SIMULATION,
+              dispose() {},
+            },
           };
         },
       },
@@ -1317,6 +1350,7 @@ describe("prepareRealWater", () => {
       "water-texture",
       "water-render-target",
       "water-geometry",
+      "water-spectral-band",
       "water-material",
       "water-render-route",
       "water-hidden-stabilization",
@@ -1336,6 +1370,7 @@ function createReadyHost(
   onStart?: () => void,
   lease: HostPreparedLease = {
     invalidated: NEVER_INVALIDATED,
+    simulation: STATIC_SIMULATION,
     dispose() {},
   },
 ): HostLifecycleAdapter {

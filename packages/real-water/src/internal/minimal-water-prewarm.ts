@@ -1,7 +1,7 @@
 import {
   DataTexture,
   Mesh,
-  MeshBasicNodeMaterial,
+  MeshStandardNodeMaterial,
   PlaneGeometry,
   RenderPipeline,
   SRGBColorSpace,
@@ -25,6 +25,9 @@ import type {
   ThreeHostRenderer,
   ThreeHostScene,
 } from "../three-host.js";
+import type { HostSimulationAdapter } from "../runtime.js";
+import { HOST_RUNTIME_STATE_BRIDGE } from "./runtime-state-bridge.js";
+import { createSingleSpectralBandRendering } from "./single-spectral-band-rendering.js";
 
 const HIDDEN_STABILIZATION_FRAME_COUNT = 8;
 
@@ -34,15 +37,17 @@ interface MinimalWaterPrewarmOptions {
   readonly camera: ThreeHostCamera;
   readonly request: HostPreparationRequest;
   readonly invalidated: Promise<WebGPUDeviceLoss>;
+  readonly simulation: HostSimulationAdapter;
 }
 
 interface PreparedResources {
   readonly plane: Mesh;
   readonly geometry: PlaneGeometry;
-  readonly material: MeshBasicNodeMaterial;
+  readonly material: MeshStandardNodeMaterial;
   readonly waterTexture: DataTexture;
   readonly pipeline: RenderPipeline;
   readonly scenePass: ReturnType<typeof pass>;
+  readonly spectralBand: ReturnType<typeof createSingleSpectralBandRendering>;
 }
 
 type PartialPreparedResources = {
@@ -113,13 +118,22 @@ export async function prepareMinimalWaterPlane(
     );
     partial.geometry = geometry;
     geometry.rotateX(-Math.PI / 2);
-    const material = new MeshBasicNodeMaterial();
+    const material = new MeshStandardNodeMaterial();
     partial.material = material;
     material.name = "Real Water minimal material";
-    material.colorNode = texture(waterTexture);
+    const spectralBand = createSingleSpectralBandRendering(options.simulation);
+    partial.spectralBand = spectralBand;
+    material.positionNode = spectralBand.positionNode;
+    material.normalNode = spectralBand.normalNode;
+    const surfaceColor = texture(waterTexture).mul(
+      spectralBand.heightNode.mul(0.12).add(1),
+    );
+    material.colorNode = surfaceColor;
+    material.emissiveNode = surfaceColor.rgb;
     const plane = new Mesh(geometry, material);
     partial.plane = plane;
     plane.name = "Real Water minimal plane";
+    plane.onBeforeRender = spectralBand.synchronizeHostState;
     scene.add(plane);
 
     throwIfAborted(options.request.signal);
@@ -140,6 +154,9 @@ export async function prepareMinimalWaterPlane(
     );
     await options.request.progress.complete(
       MINIMAL_WATER_PREWARM_DECLARATION_IDS.geometry,
+    );
+    await options.request.progress.complete(
+      MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBand,
     );
     await options.request.progress.complete(
       MINIMAL_WATER_PREWARM_DECLARATION_IDS.material,
@@ -182,8 +199,10 @@ export async function prepareMinimalWaterPlane(
         waterTexture,
         pipeline,
         scenePass,
+        spectralBand,
       },
       options.invalidated,
+      options.simulation,
     );
   } catch (cause) {
     cleanupPreparation();
@@ -229,10 +248,13 @@ function createPreparedLease(
   scene: Scene,
   resources: PreparedResources,
   invalidated: Promise<WebGPUDeviceLoss>,
+  simulation: HostSimulationAdapter,
 ): HostPreparedLease {
   let disposal: Promise<void> | undefined;
   return Object.freeze({
+    [HOST_RUNTIME_STATE_BRIDGE]: resources.spectralBand.sink,
     invalidated,
+    simulation,
     dispose(): Promise<void> {
       disposal ??= Promise.resolve().then(() => {
         disposePreparedResources(scene, resources);

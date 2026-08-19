@@ -5,13 +5,31 @@
 ```ts
 
 // @public
-export function createMemoryHostLifecycleAdapter(options?: MemoryHostLifecycleAdapterOptions): HostLifecycleAdapter;
+export interface ArtisticControls {
+    readonly waveStrength: number;
+}
+
+// @public
+export interface ArtisticControlUpdateReceipt {
+    // (undocumented)
+    readonly artisticControls: ArtisticControls;
+    // (undocumented)
+    readonly changed: boolean;
+    // (undocumented)
+    readonly revision: number;
+}
+
+// @public
+export function createMemoryHostLifecycleAdapter(options: MemoryHostLifecycleAdapterOptions): HostLifecycleAdapter;
 
 // @public
 export function createMinimalWaterPrewarmManifest(profile?: QualityProfile): PrewarmManifest;
 
 // @public
 export function createMinimalWaterQualityProfile(id?: MinimalWaterQualityProfileId): QualityProfile;
+
+// @public
+export function createStaticHostSimulationAdapter(): HostSimulationAdapter;
 
 // @public
 export function createThreeHostLifecycleAdapter(options: ThreeHostLifecycleAdapterOptions): HostLifecycleAdapter;
@@ -46,6 +64,40 @@ export interface ErrorStartupSnapshot {
     readonly sequence: number;
     // (undocumented)
     readonly status: "unsupported" | "failed" | "cancelled";
+}
+
+// @public
+export interface GameplayCapabilities {
+    // (undocumented)
+    readonly maxQueryPointsPerTick: 2_048;
+}
+
+// @public
+export interface GameplayQueryBatch {
+    // (undocumented)
+    readonly count: number;
+    // (undocumented)
+    readonly positions: Float32Array;
+    // (undocumented)
+    readonly results: GameplayQueryResults;
+}
+
+// @public
+export interface GameplayQueryResults {
+    // (undocumented)
+    readonly controlRevisions: Float64Array;
+    // (undocumented)
+    readonly foam: Float32Array;
+    // (undocumented)
+    readonly heights: Float32Array;
+    // (undocumented)
+    readonly normals: Float32Array;
+    // (undocumented)
+    readonly snapshotAges: Uint8Array;
+    // (undocumented)
+    readonly ticks: Float64Array;
+    // (undocumented)
+    readonly velocities: Float32Array;
 }
 
 // @public
@@ -93,11 +145,30 @@ export type HostPreparationResult = Readonly<{
 export interface HostPreparedLease {
     dispose(): void | Promise<void>;
     readonly invalidated: Promise<WebGPUDeviceLoss>;
+    readonly simulation: HostSimulationAdapter;
 }
 
 // @public
 export interface HostProgressReporter {
     complete(declarationId: string): Promise<void>;
+}
+
+// @public
+export interface HostSimulationAdapter {
+    // (undocumented)
+    snapshot(): HostSimulationState;
+}
+
+// @public
+export interface HostSimulationState {
+    // (undocumented)
+    readonly paused: boolean;
+    // (undocumented)
+    readonly seed: number;
+    // (undocumented)
+    readonly tick: number;
+    // (undocumented)
+    readonly timeSeconds: number;
 }
 
 // @public
@@ -125,9 +196,14 @@ export interface LongSuspensionInvalidation {
 }
 
 // @public
+export const MAX_GAMEPLAY_QUERY_POINTS: 2048;
+
+// @public
 export interface MemoryHostLifecycleAdapterOptions {
     // (undocumented)
     readonly scenario?: MemoryHostScenario;
+    // (undocumented)
+    readonly simulation: HostSimulationAdapter;
     // (undocumented)
     readonly stepDelayMs?: number;
 }
@@ -165,6 +241,14 @@ export interface MinimalWaterGeometrySegments {
 
 // @public
 export type MinimalWaterQualityProfileId = "minimal" | "minimal-high-detail";
+
+// @public
+export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
+    // (undocumented)
+    readonly artisticControls: ArtisticControls;
+    // (undocumented)
+    readonly controlRevision: number;
+}
 
 // @public
 export interface PreparationRun {
@@ -315,6 +399,8 @@ export interface ReadyStartupSnapshot {
 // @public
 export interface RealWaterCapabilities {
     // (undocumented)
+    readonly gameplay: GameplayCapabilities;
+    // (undocumented)
     readonly rendering: RenderingCapabilities;
 }
 
@@ -322,7 +408,7 @@ export interface RealWaterCapabilities {
 export type RealWaterInvalidation = WebGPUDeviceLoss | LongSuspensionInvalidation;
 
 // @public
-export interface RealWaterLease {
+export interface RealWaterLease extends RealWaterRuntime {
     // (undocumented)
     readonly capabilities: RealWaterCapabilities;
     dispose(): Promise<void>;
@@ -331,6 +417,16 @@ export interface RealWaterLease {
     // (undocumented)
     readonly manifest: PrewarmManifestIdentity;
     selectEffectVariant(selection: EffectVariantSelection): EffectVariantSelectionReceipt;
+}
+
+// @public
+export interface RealWaterRuntime {
+    // (undocumented)
+    inspectRuntime(): OpenWaterRuntimeSnapshot;
+    // (undocumented)
+    queryGameplay(batch: GameplayQueryBatch): GameplayQueryResults;
+    // (undocumented)
+    updateArtisticControls(controls: ArtisticControls): ArtisticControlUpdateReceipt;
 }
 
 // @public
@@ -399,7 +495,7 @@ export interface RenderingCapabilities {
 export type RuntimeDiagnostics = StartupDiagnostics;
 
 // @public
-export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "RUNTIME_INVALIDATED";
+export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "GAMEPLAY_QUERY_CAPACITY_EXCEEDED" | "RUNTIME_INVALIDATED";
 
 // @public
 export type StartupDiagnostics = Readonly<Record<string, string | number | boolean | null>>;
@@ -436,6 +532,7 @@ export interface ThreeHostLifecycleAdapterOptions {
     readonly camera: ThreeHostCamera;
     readonly renderer: ThreeHostRenderer;
     readonly scene: ThreeHostScene;
+    readonly simulation: HostSimulationAdapter;
 }
 
 // @public

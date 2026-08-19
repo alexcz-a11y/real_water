@@ -25,9 +25,11 @@ export type {
 } from "./manifest.js";
 
 export type {
+  GameplayCapabilities,
   RealWaterCapabilities,
   RenderingCapabilities,
 } from "./capabilities.js";
+export { MAX_GAMEPLAY_QUERY_POINTS } from "./capabilities.js";
 
 export { RealWaterRuntimeError, RealWaterStartupError } from "./errors.js";
 export type {
@@ -41,6 +43,18 @@ export type {
   StartupErrorCode,
   StartupPhase,
 } from "./errors.js";
+
+export { createStaticHostSimulationAdapter } from "./runtime.js";
+export type {
+  ArtisticControls,
+  ArtisticControlUpdateReceipt,
+  GameplayQueryBatch,
+  GameplayQueryResults,
+  HostSimulationAdapter,
+  HostSimulationState,
+  OpenWaterRuntimeSnapshot,
+  RealWaterRuntime,
+} from "./runtime.js";
 
 export { createMemoryHostLifecycleAdapter } from "./memory-host.js";
 export type {

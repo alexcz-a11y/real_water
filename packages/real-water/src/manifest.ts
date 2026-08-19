@@ -104,6 +104,7 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   texture: "water-texture",
   renderTarget: "water-render-target",
   geometry: "water-geometry",
+  spectralBand: "water-spectral-band",
   material: "water-material",
   renderRoute: "water-render-route",
   hiddenStabilization: "water-hidden-stabilization",
@@ -113,9 +114,9 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
 
 const MINIMAL_WATER_MANIFEST_ID = "reference-minimal-water";
 const MINIMAL_WATER_MANIFEST_HASH =
-  "sha256:cd1f46244381f23881c64cdad5d729ae2a6fd07e4af6a64e08509d2c080fa2f4";
+  "sha256:48af0d22099244d6cc6b547450e1b79a916375df0fa5d4eb294601a20388e2b1";
 const MINIMAL_HIGH_DETAIL_WATER_MANIFEST_HASH =
-  "sha256:f213c2f8dc39f1f324a7d1e97494d3a815fb3af64083b78eef768e92bc60d328";
+  "sha256:16a9310a96ab00ac7b44cd8ce2a77026f67057d7c534d785ba37ec1112f32c04";
 const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.texture,
@@ -136,14 +137,21 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     kind: "resource",
     label: "Minimal water plane geometry",
     fingerprint:
-      "sha256:591743214c490dd4ebbe364ce7bbcc92854d0664e90f1e117b28f3fe115fa313",
+      "sha256:14bc8848f560c11d223eb40ebcb936d86cacc19263ac5b1c4152a77bcfa84313",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBand,
+    kind: "effect-state",
+    label: "Single coherent spectral wave band",
+    fingerprint:
+      "sha256:d80f9ba83f878f62e9bb3f2d5c67d516ea5395606165edf548b8e653de9ac80a",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.material,
     kind: "effect-state",
     label: "Minimal water material",
     fingerprint:
-      "sha256:95764a91129a768c4751b33e8d51a3d281218e210d74798f05d9bad47d5d580b",
+      "sha256:cb92e44849230c27f6fc9ba15d36b173413aae6084afbf08c06c6a7bbe492f75",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
@@ -181,7 +189,7 @@ const MINIMAL_HIGH_DETAIL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] =
       ? {
           ...declaration,
           fingerprint:
-            "sha256:12ae3cedf7ee158660e0393182280f323336e3b7549a791ed9f3eeee731da795",
+            "sha256:27b789113e72349d7a65e871dfd7362acfa987e41709beb45c3d9ca64b8f2356",
         }
       : declaration,
   );

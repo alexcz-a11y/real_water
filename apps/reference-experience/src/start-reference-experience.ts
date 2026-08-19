@@ -518,6 +518,7 @@ function trackHost(host: HostLifecycleAdapter): TrackedHost {
 function trackPreparedLease(lease: HostPreparedLease): HostPreparedLease {
   let disposal: Promise<void> | undefined;
   return Object.freeze({
+    ...lease,
     invalidated: lease.invalidated,
     dispose(): Promise<void> {
       disposal ??= Promise.resolve().then(() => lease.dispose());

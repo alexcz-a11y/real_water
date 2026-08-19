@@ -14,6 +14,12 @@ import {
   type PrewarmManifestIdentity,
 } from "./manifest.js";
 import type { RealWaterCapabilities } from "./capabilities.js";
+import {
+  createRealWaterRuntime,
+  type HostSimulationAdapter,
+  type RealWaterRuntime,
+} from "./runtime.js";
+import { runtimeStateSink } from "./internal/runtime-state-bridge.js";
 
 /**
  * Truthful completed-work accounting for one preparation run.
@@ -167,6 +173,9 @@ export interface HostPreparedLease {
    */
   readonly invalidated: Promise<WebGPUDeviceLoss>;
 
+  /** Host-owned authoritative time and seed source for the ready runtime. */
+  readonly simulation: HostSimulationAdapter;
+
   /**
    * Releases only resources created for Real Water. The method may be called
    * more than once and must be safe for the Adapter to observe once.
@@ -248,7 +257,7 @@ export interface EffectVariantSelectionReceipt {
  *
  * @public
  */
-export interface RealWaterLease {
+export interface RealWaterLease extends RealWaterRuntime {
   readonly capabilities: RealWaterCapabilities;
   /** Resolves once after the first runtime invalidation. It never rejects. */
   readonly invalidated: Promise<RealWaterInvalidation>;
@@ -865,8 +874,18 @@ function createLease(
     () => {},
   );
   const longSuspensionInvalidation = createLongSuspensionInvalidation();
+  const runtime = createRealWaterRuntime(
+    () => {
+      if (terminalState !== "active") {
+        throw runtimeInvalidatedError(terminalState);
+      }
+    },
+    hostLease.simulation,
+    runtimeStateSink(hostLease),
+  );
 
   return Object.freeze({
+    ...runtime,
     capabilities,
     invalidated,
     manifest,

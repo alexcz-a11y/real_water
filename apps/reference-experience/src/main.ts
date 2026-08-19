@@ -3,6 +3,7 @@ import { Color, PerspectiveCamera, Scene } from "three";
 import { WebGPURenderer } from "three/webgpu";
 import {
   createMinimalWaterQualityProfile,
+  createStaticHostSimulationAdapter,
   createThreeHostLifecycleAdapter,
   type HostLifecycleAdapter,
   type HostPreparationRequest,
@@ -10,7 +11,7 @@ import {
   type RealWaterLease,
   type WebGPUDeviceLoss,
 } from "real-water";
-import type { QaFrameSource, QaHarnessV1 } from "./qa-harness.js";
+import type { QaFrameSource, QaHarnessV2 } from "./qa-harness.js";
 import type * as QaHarnessModuleContract from "./qa-harness.js";
 import {
   startReferenceExperience,
@@ -191,6 +192,7 @@ function createControllableMemoryHost(
 ): MemoryDeviceLossControl {
   const base = qaModule.createQaMemoryHostLifecycleAdapter({
     scenario,
+    simulation: createStaticHostSimulationAdapter(),
     stepDelayMs,
   });
   let resolveLoss: (loss: WebGPUDeviceLoss) => void = () => {};
@@ -207,6 +209,7 @@ function createControllableMemoryHost(
       return Object.freeze({
         ...result,
         lease: Object.freeze({
+          ...result.lease,
           invalidated,
           dispose: () => result.lease.dispose(),
         }),
@@ -262,17 +265,33 @@ function createThreeReferenceHostAttempt(
   renderer.setPixelRatio(1);
   renderer.setSize(width, height, false);
   let disposed = false;
-  const baseHost = createThreeHostLifecycleAdapter({ renderer, scene, camera });
+  const qaSimulation = qaModule?.createQaHostSimulationController();
+  const simulation = qaSimulation ?? createStaticHostSimulationAdapter();
+  const baseHost = createThreeHostLifecycleAdapter({
+    renderer,
+    scene,
+    camera,
+    simulation,
+  });
   const frameSource =
-    qaModule?.createQaThreeFrameSource(baseHost, renderer, scene, camera) ??
-    null;
+    (qaSimulation === undefined
+      ? null
+      : qaModule?.createQaThreeFrameSource(
+          baseHost,
+          renderer,
+          scene,
+          camera,
+          qaSimulation,
+        )) ?? null;
 
   return Object.freeze({
     frameSource,
     attempt: {
       host: frameSource?.host ?? baseHost,
-      createReadyStage: (lease: RealWaterLease) =>
-        createCanvasStage(renderer, lease),
+      createReadyStage: (lease: RealWaterLease) => {
+        frameSource?.bindLease(lease);
+        return createCanvasStage(renderer, lease);
+      },
       dispose: () => {
         if (!disposed) {
           disposed = true;
@@ -350,6 +369,6 @@ function readRevealFrames(
 
 declare global {
   interface Window {
-    __REAL_WATER_QA__?: QaHarnessV1;
+    __REAL_WATER_QA__?: QaHarnessV2;
   }
 }

@@ -58,7 +58,10 @@ export type StartupDiagnostics = Readonly<
  *
  * @public
  */
-export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "RUNTIME_INVALIDATED";
+export type RuntimeErrorCode =
+  | "EFFECT_NOT_PREWARMED"
+  | "GAMEPLAY_QUERY_CAPACITY_EXCEEDED"
+  | "RUNTIME_INVALIDATED";
 
 /**
  * JSON-safe diagnostic values exposed by ready-runtime failures.
