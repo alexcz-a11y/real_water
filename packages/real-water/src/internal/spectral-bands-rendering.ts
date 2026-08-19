@@ -1,7 +1,7 @@
 import {
   cos,
   highpModelNormalViewMatrix,
-  positionLocal,
+  positionGeometry,
   sin,
   uniform,
   vec3,
@@ -30,8 +30,11 @@ export function createSpectralBandRendering(simulation: HostSimulationAdapter) {
   const timeSeconds = uniform(0);
   const timeScale = uniform(1);
   const crestSharpness = uniform(0);
-  const worldX = positionLocal.x.add(originX);
-  const worldZ = positionLocal.z.add(originZ);
+  // positionLocal includes this offset after positionNode assignment, so
+  // fragment re-evaluation of the spectral field must use the geometry
+  // attribute or origin is applied twice and the slope sign flips.
+  const worldX = positionGeometry.x.add(originX);
+  const worldZ = positionGeometry.z.add(originZ);
   const initialBands = prepareSpectralBands(INITIAL_ARTISTIC_CONTROLS);
   const bandUniforms = SPECTRAL_BANDS.map((band, index) => {
     const initial = initialBands[index];

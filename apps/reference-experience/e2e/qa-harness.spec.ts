@@ -149,13 +149,9 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   });
   const normalValues = decodeFloat32(result.normal.data);
   const normalIndex = center * 3;
-  const capturedNormal = [
-    normalValues[normalIndex] ?? Number.NaN,
-    normalValues[normalIndex + 1] ?? Number.NaN,
-    normalValues[normalIndex + 2] ?? Number.NaN,
-  ];
-  expect(Math.hypot(...capturedNormal)).toBeCloseTo(1, 1);
-  expect(capturedNormal[2]).toBeCloseTo(result.query.normal[1], 1);
+  expect(normalValues[normalIndex]).toBeCloseTo(result.query.normal[0], 2);
+  expect(normalValues[normalIndex + 1]).toBeCloseTo(-result.query.normal[2], 2);
+  expect(normalValues[normalIndex + 2]).toBeCloseTo(result.query.normal[1], 2);
   expect(result.after).toEqual(result.before);
   expect(result.presentation.prewarm.progress).toMatchObject({
     completedWork: 8,
