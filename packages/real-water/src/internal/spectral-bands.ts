@@ -89,33 +89,6 @@ export const BAND_GEOMETRY_FADE_END_FACTOR = 18;
 export const SLOPE_DETAIL_FADE_START_METRES = 140;
 export const SLOPE_DETAIL_FADE_END_METRES = 320;
 
-export function spectralDistanceLodWeights(
-  viewDistanceMetres: number,
-  wavelengthMetres: number,
-): Readonly<{
-  readonly geometryWeight: number;
-  readonly normalWeight: number;
-  readonly slopeWeight: number;
-}> {
-  const geometryWeight =
-    1 -
-    hermiteStep(
-      wavelengthMetres * BAND_GEOMETRY_FADE_START_FACTOR,
-      wavelengthMetres * BAND_GEOMETRY_FADE_END_FACTOR,
-      viewDistanceMetres,
-    );
-  const slopeFade = hermiteStep(
-    SLOPE_DETAIL_FADE_START_METRES,
-    SLOPE_DETAIL_FADE_END_METRES,
-    viewDistanceMetres,
-  );
-  return {
-    geometryWeight,
-    normalWeight: (1 - geometryWeight) * (1 - slopeFade),
-    slopeWeight: (1 - geometryWeight) * slopeFade,
-  };
-}
-
 export interface SpectralSurfaceSample {
   readonly height: number;
   readonly slopeX: number;
@@ -280,11 +253,6 @@ function mixSurfaceSamples(
       heightDelta * blend.dWeightDz,
     velocityY: primary.velocityY * inverse + secondary.velocityY * blend.weight,
   };
-}
-
-function hermiteStep(edge0: number, edge1: number, value: number): number {
-  const t = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
 }
 
 export function writeSpectralBandQueries(

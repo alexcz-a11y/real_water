@@ -6,7 +6,6 @@ import {
   prepareRealWater,
   type GameplayQueryResults,
 } from "../src/index.js";
-import { spectralDistanceLodWeights } from "../src/internal/spectral-bands.js";
 
 const STATIC_SIMULATION = createStaticHostSimulationAdapter();
 
@@ -431,24 +430,6 @@ describe("ready Open Water runtime", () => {
       3,
     );
     await lease.dispose();
-  });
-
-  it("fades short-wave geometry before middle normals and far slope energy", () => {
-    const rippleNear = spectralDistanceLodWeights(10, 4);
-    const rippleMiddle = spectralDistanceLodWeights(80, 4);
-    const rippleFar = spectralDistanceLodWeights(400, 4);
-    const swellMiddle = spectralDistanceLodWeights(80, 32);
-
-    expect(rippleNear.geometryWeight).toBeGreaterThan(0.99);
-    expect(rippleNear.normalWeight).toBeLessThan(0.01);
-    expect(rippleNear.slopeWeight).toBeLessThan(0.01);
-    expect(rippleMiddle.geometryWeight).toBeLessThan(0.01);
-    expect(rippleMiddle.normalWeight).toBeGreaterThan(0.99);
-    expect(rippleMiddle.slopeWeight).toBeLessThan(0.01);
-    expect(rippleFar.geometryWeight).toBeLessThan(0.01);
-    expect(rippleFar.normalWeight).toBeLessThan(0.01);
-    expect(rippleFar.slopeWeight).toBeGreaterThan(0.99);
-    expect(swellMiddle.geometryWeight).toBeGreaterThan(0.99);
   });
 
   it("rejects a non-finite host origin before writing Gameplay Query results", async () => {

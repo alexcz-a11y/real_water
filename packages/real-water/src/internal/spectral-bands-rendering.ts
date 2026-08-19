@@ -112,9 +112,9 @@ export function createSpectralBandRendering(simulation: HostSimulationAdapter) {
       const derivative = cosine.sub(
         secondHarmonic.mul(2).mul(cos(phase.mul(2))),
       );
-      // Distance weights match spectralDistanceLodWeights: short-wave geometry
-      // exits first, middle distances keep analytic normals, and far distances
-      // convert remaining slope into filtered BRDF energy.
+      // Short-wave geometry exits first, middle distances keep analytic
+      // normals, and far distances convert remaining slope into filtered
+      // BRDF energy.
       const geometryWeight = float(1).sub(
         smoothstep(
           band.wavelengthMetres * BAND_GEOMETRY_FADE_START_FACTOR,
