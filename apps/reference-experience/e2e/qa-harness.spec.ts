@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { expect, test } from "@playwright/test";
-import type { QaCameraV1, QaHarnessV2 } from "../src/qa-harness.js";
+import type { QaCameraV1, QaHarnessV3 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 
 const FIXED_CAMERA = {
@@ -67,7 +67,7 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
     const harness = window.__REAL_WATER_QA__ as
-      | (QaHarnessV2 & {
+      | (QaHarnessV3 & {
           updateArtisticControls(controls: {
             readonly waveStrength: number;
             readonly swellDrama: number;
@@ -172,7 +172,7 @@ test("presents camera-relative Open Water through the horizon", async ({
   await page.goto("/?qa=1&host=three");
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV2 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV3 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -225,7 +225,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV2 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV3 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -255,6 +255,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
   expect(result.first.presentation).toMatchObject({
     seed: 0x5eed_0016,
     tick: 120,
+    originRevision: 0,
     captureNames: ["final-color", "depth", "normal"],
     prewarm: {
       width: 320,
@@ -269,6 +270,9 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "final-color",
     "depth",
     "normal",
+  ]);
+  expect(result.first.captures.map(({ version }) => version)).toEqual([
+    3, 3, 3,
   ]);
   expect(result.first.captures.map(({ format }) => format)).toEqual([
     "rgba8unorm-srgb",

@@ -262,7 +262,7 @@ export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
     // (undocumented)
     readonly controlRevision: number;
     // (undocumented)
-    readonly temporalHistoryValid: boolean;
+    readonly originRevision: number;
 }
 
 // @public

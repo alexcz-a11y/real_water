@@ -192,6 +192,9 @@ export async function createQaFrameDriver(
     const progress = createPrewarmProgress(size.width, size.height);
     const scenePass = pass(options.scene, options.camera);
     partialDisposals.push(() => scenePass.dispose());
+    // PassNode defaults to one scene render per rAF. QA presents are explicit
+    // command/query ticks, so the scene pass must run on every present.
+    scenePass.updateBeforeType = "render";
     scenePass.setSize(size.width, size.height);
     scenePass.setMRT(
       mrt({

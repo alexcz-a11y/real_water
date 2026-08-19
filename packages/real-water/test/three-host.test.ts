@@ -153,20 +153,11 @@ describe("createThreeHostLifecycleAdapter", () => {
         } | null;
       };
       readonly position: { readonly x: number; readonly z: number };
-      onBeforeRender(
-        renderer: unknown,
-        scene: unknown,
-        camera: {
-          updateMatrixWorld(): void;
-          readonly matrixWorld: { readonly elements: number[] };
-        },
-      ): void;
     };
     expect(preparedMesh.geometry.boundingBox?.max.x).toBeGreaterThan(3_000);
     expect(preparedMesh.geometry.boundingBox?.max.z).toBeGreaterThan(3_000);
     camera.position.set(12.4, 8, -7.1);
     camera.updateMatrixWorld();
-    preparedMesh.onBeforeRender(renderer, scene, camera);
     expect(preparedMesh.position.x).toBe(0);
     expect(preparedMesh.position.z).toBe(0);
     expect(

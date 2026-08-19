@@ -185,6 +185,7 @@ describe("prepareRealWater", () => {
       loading: new RecordingLoadingPresenter(),
       host: createReadyHost(undefined, {
         invalidated,
+        simulation: STATIC_SIMULATION,
         dispose() {},
       }),
     });

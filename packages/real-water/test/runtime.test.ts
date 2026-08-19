@@ -306,8 +306,9 @@ describe("ready Open Water runtime", () => {
       originX: 0,
       originZ: 0,
       controlRevision: 0,
-      temporalHistoryValid: true,
+      originRevision: 0,
     });
+    expect(lease.inspectRuntime().originRevision).toBe(0);
 
     simulation = Object.freeze({
       seed: 0,
@@ -332,8 +333,9 @@ describe("ready Open Water runtime", () => {
       originX: 40,
       originZ: -12,
       controlRevision: 0,
-      temporalHistoryValid: false,
+      originRevision: 1,
     });
+    expect(lease.inspectRuntime().originRevision).toBe(1);
     expect(shifted.artisticControls).toEqual(before.artisticControls);
     expect(results.heights[0]).toBeCloseTo(height, 5);
     expect(results.normals[0]).toBeCloseTo(normal[0] ?? Number.NaN, 5);
@@ -357,8 +359,107 @@ describe("ready Open Water runtime", () => {
       originX: 40,
       originZ: -12,
       tick: 13,
-      temporalHistoryValid: true,
+      originRevision: 1,
     });
+    await lease.dispose();
+  });
+
+  it("counts an origin shift that happens before the first inspect", async () => {
+    let simulation = Object.freeze({
+      seed: 0,
+      tick: 3,
+      timeSeconds: 0.05,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+    });
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        stepDelayMs: 0,
+        simulation: { snapshot: () => simulation },
+      }),
+    }).ready;
+
+    simulation = Object.freeze({
+      seed: 0,
+      tick: 3,
+      timeSeconds: 0.05,
+      paused: false,
+      originX: 96,
+      originZ: -24,
+    });
+    const firstInspect = lease.inspectRuntime();
+
+    expect(firstInspect).toMatchObject({
+      originX: 96,
+      originZ: -24,
+      tick: 3,
+      originRevision: 1,
+    });
+    simulation = Object.freeze({
+      seed: 0,
+      tick: 3,
+      timeSeconds: 0.05,
+      paused: false,
+      originX: 96,
+      originZ: -24,
+    });
+    expect(lease.inspectRuntime().originRevision).toBe(1);
+    await lease.dispose();
+  });
+
+  it("keeps Gameplay Queries continuous across a billion-metre origin rebase", async () => {
+    const baselineOrigin = 1_000_000_000;
+    let simulation = Object.freeze({
+      seed: 0,
+      tick: 12,
+      timeSeconds: 0.2,
+      paused: false,
+      originX: baselineOrigin,
+      originZ: 0,
+    });
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        stepDelayMs: 0,
+        simulation: { snapshot: () => simulation },
+      }),
+    }).ready;
+    const results = createResults(1, 0);
+    lease.queryGameplay({
+      count: 1,
+      positions: Float32Array.of(96, 1, 0),
+      results,
+    });
+    const height = results.heights[0] ?? Number.NaN;
+    const normal = Float32Array.from(results.normals);
+    expect(lease.inspectRuntime().originRevision).toBe(0);
+    expect(lease.inspectRuntime().originRevision).toBe(0);
+
+    simulation = Object.freeze({
+      seed: 0,
+      tick: 12,
+      timeSeconds: 0.2,
+      paused: false,
+      originX: baselineOrigin + 96,
+      originZ: 0,
+    });
+    const shifted = lease.inspectRuntime();
+    lease.queryGameplay({
+      count: 1,
+      positions: Float32Array.of(0, 4, 0),
+      results,
+    });
+
+    expect(shifted.originRevision).toBe(1);
+    expect(height).not.toBe(0);
+    expect(results.heights[0]).toBeCloseTo(height, 5);
+    expect(results.normals[0]).toBeCloseTo(normal[0] ?? Number.NaN, 5);
+    expect(results.normals[1]).toBeCloseTo(normal[1] ?? Number.NaN, 5);
+    expect(results.normals[2]).toBeCloseTo(normal[2] ?? Number.NaN, 5);
     await lease.dispose();
   });
 

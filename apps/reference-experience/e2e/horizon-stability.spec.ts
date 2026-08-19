@@ -1,7 +1,8 @@
 import { Buffer } from "node:buffer";
-import { expect, test } from "@playwright/test";
-import type { QaCameraV1, QaHarnessV2 } from "../src/qa-harness.js";
+import { expect, test, type Page } from "@playwright/test";
+import type { QaCameraV1, QaHarnessV3 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
+import { attachRegressionAcceptance } from "./regression-acceptance.js";
 
 test.describe.configure({ mode: "serial" });
 
@@ -26,26 +27,34 @@ const HORIZON_CAMERA = {
 } satisfies QaCameraV1;
 
 const ORIGIN_SHIFT_METRES = 96;
+const LARGE_ORIGIN_METRES = 1_000_000_000;
+const LOCAL_COORDINATE_BOUND_METRES = 200;
+const ORIGIN_COLOR_MEAN_ABS = 4;
+const ORIGIN_DEPTH_MEAN_ABS_METRES = 0.05;
+const ORIGIN_NORMAL_MEAN_ABS = 0.03;
 const NON_PERIODIC_SHIFT_METRES = 288;
 const NEAR_DEPTH_METRES = { min: 8, max: 40 } as const;
 const MID_DEPTH_METRES = { min: 70, max: 180 } as const;
 const FAR_DEPTH_METRES = { min: 400, max: 1_200 } as const;
 const FAR_HIGHLIGHT_DEPTH_METRES = { min: 400, max: 1_500 } as const;
 
-test("breaks repeating Open Water patches on the deterministic horizon route", async ({
-  page,
-}) => {
+async function openQaStage(page: Page): Promise<void> {
   await page.setViewportSize({ width: 320, height: 180 });
   await page.goto("/?qa=1&host=memory&delay=0");
   test.skip(
     !(await hasCoreWebGPU(page)),
     "Core WebGPU is unavailable in this browser profile.",
   );
-
   await page.goto("/?qa=1&host=three");
   await expect(page.getByTestId("reference-stage")).toBeVisible();
+}
+
+test("breaks repeating Open Water patches on the deterministic horizon route", async ({
+  page,
+}, testInfo) => {
+  await openQaStage(page);
   const result = await page.evaluate(async (shiftMetres) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV2 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV3 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -57,6 +66,12 @@ test("breaks repeating Open Water patches on the deterministic horizon route", a
       readonly normal: string;
       readonly cameraRevision: number;
       readonly presentationId: number;
+      readonly seed: number;
+      readonly tick: number;
+      readonly manifestHash: string;
+      readonly prewarmSchema: string;
+      readonly prewarmVersion: number;
+      readonly prewarmId: string;
     }> => {
       const camera = await harness.setCamera({
         projection: "perspective",
@@ -67,7 +82,6 @@ test("breaks repeating Open Water patches on the deterministic horizon route", a
         near: 0.5,
         far: 4_000,
       });
-      await harness.present();
       const presentation = await harness.present();
       const depth = await harness.capture("depth");
       const normal = await harness.capture("normal");
@@ -76,6 +90,12 @@ test("breaks repeating Open Water patches on the deterministic horizon route", a
         normal: normal.data,
         cameraRevision: camera.cameraRevision,
         presentationId: presentation.presentationId,
+        seed: presentation.seed,
+        tick: presentation.tick,
+        manifestHash: presentation.manifestHash,
+        prewarmSchema: harness.prewarmManifest.schema,
+        prewarmVersion: harness.prewarmManifest.version,
+        prewarmId: harness.prewarmManifest.id,
       };
     };
 
@@ -111,79 +131,109 @@ test("breaks repeating Open Water patches on the deterministic horizon route", a
       decodeFloat32(result.shifted.depth),
     ),
   ).toBeGreaterThan(0.05);
+  await attachRegressionAcceptance(testInfo, page, {
+    seed: result.first.seed,
+    tick: result.first.tick,
+    camera: HORIZON_CAMERA,
+    qaPrewarm: {
+      schema: result.first.prewarmSchema,
+      version: result.first.prewarmVersion,
+      id: result.first.prewarmId,
+      hash: result.first.manifestHash,
+    },
+  });
 });
 
 test("preserves queried and rendered Open Water across a host origin shift", async ({
   page,
-}) => {
-  await page.setViewportSize({ width: 320, height: 180 });
-  await page.goto("/?qa=1&host=memory&delay=0");
-  test.skip(
-    !(await hasCoreWebGPU(page)),
-    "Core WebGPU is unavailable in this browser profile.",
-  );
+}, testInfo) => {
+  await openQaStage(page);
+  const result = await page.evaluate(async (periodMetres) => {
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV3 | undefined;
+    if (harness === undefined) {
+      throw new Error("QA Harness is unavailable.");
+    }
 
-  await page.goto("/?qa=1&host=three");
-  await expect(page.getByTestId("reference-stage")).toBeVisible();
-  const result = await page.evaluate(
-    async ({ periodMetres, camera }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV2 | undefined;
-      if (harness === undefined) {
-        throw new Error("QA Harness is unavailable.");
-      }
-
-      await harness.reset({ seed: 0x4000_0000 });
-      await harness.advanceTicks(18);
-      await harness.setCamera({
-        ...camera,
-        position: [
-          camera.position[0] + periodMetres,
-          camera.position[1],
-          camera.position[2],
-        ],
-        target: [
-          camera.target[0] + periodMetres,
-          camera.target[1],
-          camera.target[2],
-        ],
-      });
-      const beforePresentation = await harness.present();
-      const beforeQuery = await harness.queryGameplay([periodMetres, 0, 0]);
-      const beforeColor = await harness.capture("final-color");
-      const origin = await harness.setOrigin({ x: periodMetres, z: 0 });
-      await harness.setCamera(camera);
-      const afterPresentation = await harness.present();
-      const afterQuery = await harness.queryGameplay([0, 0, 0]);
-      const afterColor = await harness.capture("final-color");
-      return {
-        beforePresentation,
-        afterPresentation,
-        beforeQuery,
-        afterQuery,
-        origin,
-        beforeColor: beforeColor.data,
-        afterColor: afterColor.data,
-      };
-    },
-    { periodMetres: ORIGIN_SHIFT_METRES, camera: DOWN_CAMERA },
-  );
+    await harness.reset({ seed: 0x4000_0000 });
+    await harness.advanceTicks(18);
+    await harness.setCamera({
+      projection: "perspective",
+      position: [periodMetres, 12, 0],
+      target: [periodMetres, 0, 0],
+      up: [0, 0, -1],
+      verticalFovDegrees: 40,
+      near: 0.1,
+      far: 100,
+    });
+    const beforePresentation = await harness.present();
+    const beforeQuery = await harness.queryGameplay([periodMetres, 0, 0]);
+    const beforeColor = await harness.capture("final-color");
+    const beforeDepth = await harness.capture("depth");
+    const beforeNormal = await harness.capture("normal");
+    const origin = await harness.setOrigin({ x: periodMetres, z: 0 });
+    const repeatedOrigin = await harness.setOrigin({
+      x: periodMetres,
+      z: 0,
+    });
+    await harness.setCamera({
+      projection: "perspective",
+      position: [0, 12, 0],
+      target: [0, 0, 0],
+      up: [0, 0, -1],
+      verticalFovDegrees: 40,
+      near: 0.1,
+      far: 100,
+    });
+    const afterPresentation = await harness.present();
+    const afterQuery = await harness.queryGameplay([0, 0, 0]);
+    const afterColor = await harness.capture("final-color");
+    const afterDepth = await harness.capture("depth");
+    const afterNormal = await harness.capture("normal");
+    const resetAfterShift = await harness.reset({ seed: 0x4000_0000 });
+    return {
+      beforePresentation,
+      afterPresentation,
+      beforeQuery,
+      afterQuery,
+      origin,
+      repeatedOrigin,
+      resetAfterShift,
+      beforeColor: beforeColor.data,
+      afterColor: afterColor.data,
+      beforeDepth: beforeDepth.data,
+      afterDepth: afterDepth.data,
+      beforeNormal: beforeNormal.data,
+      afterNormal: afterNormal.data,
+      prewarmSchema: harness.prewarmManifest.schema,
+      prewarmVersion: harness.prewarmManifest.version,
+      prewarmId: harness.prewarmManifest.id,
+    };
+  }, ORIGIN_SHIFT_METRES);
 
   expect(result.origin).toMatchObject({
     originX: ORIGIN_SHIFT_METRES,
     originZ: 0,
-    temporalHistoryValid: false,
+    originRevision: result.beforePresentation.originRevision + 1,
   });
+  expect(result.repeatedOrigin.originRevision).toBe(
+    result.origin.originRevision,
+  );
   expect(result.beforePresentation).toMatchObject({
     tick: 18,
     originX: 0,
     originZ: 0,
-    temporalHistoryValid: true,
+    originRevision: 0,
   });
   expect(result.afterPresentation).toMatchObject({
     tick: 18,
     originX: ORIGIN_SHIFT_METRES,
     originZ: 0,
-    temporalHistoryValid: false,
+    originRevision: result.origin.originRevision,
+  });
+  expect(result.resetAfterShift).toMatchObject({
+    originX: 0,
+    originZ: 0,
+    originRevision: result.origin.originRevision + 1,
   });
   expect(result.afterQuery.height).toBeCloseTo(result.beforeQuery.height, 4);
   expect(result.afterQuery.normal[0]).toBeCloseTo(
@@ -198,30 +248,149 @@ test("preserves queried and rendered Open Water across a host origin shift", asy
     result.beforeQuery.normal[2],
     4,
   );
-  expect(result.afterColor).toBe(result.beforeColor);
+  expectOriginShiftContinuous(result);
+  await attachRegressionAcceptance(testInfo, page, {
+    seed: result.afterPresentation.seed,
+    tick: result.afterPresentation.tick,
+    camera: DOWN_CAMERA,
+    qaPrewarm: {
+      schema: result.prewarmSchema,
+      version: result.prewarmVersion,
+      id: result.prewarmId,
+      hash: result.afterPresentation.manifestHash,
+    },
+  });
+});
+
+test("preserves queried and rendered Open Water across a billion-metre origin shift", async ({
+  page,
+}, testInfo) => {
+  await openQaStage(page);
+  const result = await page.evaluate(
+    async ({ baselineOrigin, periodMetres }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV3 | undefined;
+      if (harness === undefined) {
+        throw new Error("QA Harness is unavailable.");
+      }
+
+      await harness.reset({ seed: 0x4000_0000 });
+      await harness.advanceTicks(18);
+      await harness.setOrigin({ x: baselineOrigin, z: 0 });
+      await harness.setCamera({
+        projection: "perspective",
+        position: [periodMetres, 12, 0],
+        target: [periodMetres, 0, 0],
+        up: [0, 0, -1],
+        verticalFovDegrees: 40,
+        near: 0.1,
+        far: 100,
+      });
+      const beforePresentation = await harness.present();
+      const beforeQuery = await harness.queryGameplay([periodMetres, 0, 0]);
+      const beforeColor = await harness.capture("final-color");
+      const beforeDepth = await harness.capture("depth");
+      const beforeNormal = await harness.capture("normal");
+      const origin = await harness.setOrigin({
+        x: baselineOrigin + periodMetres,
+        z: 0,
+      });
+      await harness.setCamera({
+        projection: "perspective",
+        position: [0, 12, 0],
+        target: [0, 0, 0],
+        up: [0, 0, -1],
+        verticalFovDegrees: 40,
+        near: 0.1,
+        far: 100,
+      });
+      const afterPresentation = await harness.present();
+      const afterQuery = await harness.queryGameplay([0, 0, 0]);
+      const afterColor = await harness.capture("final-color");
+      const afterDepth = await harness.capture("depth");
+      const afterNormal = await harness.capture("normal");
+      const center =
+        Math.floor(afterDepth.height / 2) * afterDepth.width +
+        Math.floor(afterDepth.width / 2);
+      return {
+        beforePresentation,
+        afterPresentation,
+        beforeQuery,
+        afterQuery,
+        origin,
+        beforeCamera: [periodMetres, 12, 0] as const,
+        afterCamera: [0, 12, 0] as const,
+        beforeColor: beforeColor.data,
+        afterColor: afterColor.data,
+        beforeDepth: beforeDepth.data,
+        afterDepth: afterDepth.data,
+        beforeNormal: beforeNormal.data,
+        afterNormal: afterNormal.data,
+        center,
+        width: afterDepth.width,
+        height: afterDepth.height,
+        prewarmSchema: harness.prewarmManifest.schema,
+        prewarmVersion: harness.prewarmManifest.version,
+        prewarmId: harness.prewarmManifest.id,
+      };
+    },
+    {
+      baselineOrigin: LARGE_ORIGIN_METRES,
+      periodMetres: ORIGIN_SHIFT_METRES,
+    },
+  );
+
+  const depths = decodeFloat32(result.afterDepth);
+  const renderedHeight = 12 - (depths[result.center] ?? Number.NaN);
+  expect(result.origin.originRevision).toBe(
+    result.beforePresentation.originRevision + 1,
+  );
+  expect(result.beforePresentation.originX).toBe(LARGE_ORIGIN_METRES);
+  expect(result.afterPresentation.originX).toBe(
+    LARGE_ORIGIN_METRES + ORIGIN_SHIFT_METRES,
+  );
+  expectLocalCoordinates(result.beforeCamera);
+  expectLocalCoordinates(result.afterCamera);
+  expectLocalCoordinates(result.beforeQuery.point);
+  expectLocalCoordinates(result.afterQuery.point);
+  expect(result.afterQuery.height).toBeCloseTo(result.beforeQuery.height, 4);
+  expectOriginShiftContinuous(result);
+  expect(
+    Math.abs(renderedHeight - result.afterQuery.height),
+  ).toBeLessThanOrEqual(0.03);
+  await attachRegressionAcceptance(testInfo, page, {
+    seed: result.afterPresentation.seed,
+    tick: result.afterPresentation.tick,
+    camera: DOWN_CAMERA,
+    qaPrewarm: {
+      schema: result.prewarmSchema,
+      version: result.prewarmVersion,
+      id: result.prewarmId,
+      hash: result.afterPresentation.manifestHash,
+    },
+  });
 });
 
 test("transitions near geometry, middle normals, and far slope detail without a seam", async ({
   page,
-}) => {
-  await page.setViewportSize({ width: 320, height: 180 });
-  await page.goto("/?qa=1&host=memory&delay=0");
-  test.skip(
-    !(await hasCoreWebGPU(page)),
-    "Core WebGPU is unavailable in this browser profile.",
-  );
-
-  await page.goto("/?qa=1&host=three");
-  await expect(page.getByTestId("reference-stage")).toBeVisible();
-  const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV2 | undefined;
+}, testInfo) => {
+  await openQaStage(page);
+  const result = await page.evaluate(async () => {
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV3 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
     await harness.reset({ seed: 0x4000_0000 });
     await harness.advanceTicks(24);
-    await harness.setCamera(camera);
-    await harness.present();
+    await harness.setCamera({
+      projection: "perspective",
+      position: [0, 8, 0],
+      target: [400, 0, 0],
+      up: [0, 1, 0],
+      verticalFovDegrees: 50,
+      near: 0.5,
+      far: 4_000,
+    });
+    const presentation = await harness.present();
     const depth = await harness.capture("depth");
     const normal = await harness.capture("normal");
     const color = await harness.capture("final-color");
@@ -231,8 +400,14 @@ test("transitions near geometry, middle normals, and far slope detail without a 
       depth: depth.data,
       normal: normal.data,
       color: color.data,
+      seed: presentation.seed,
+      tick: presentation.tick,
+      manifestHash: presentation.manifestHash,
+      prewarmSchema: harness.prewarmManifest.schema,
+      prewarmVersion: harness.prewarmManifest.version,
+      prewarmId: harness.prewarmManifest.id,
     };
-  }, HORIZON_CAMERA);
+  });
 
   const depths = decodeFloat32(result.depth);
   const normals = decodeFloat32(result.normal);
@@ -284,40 +459,51 @@ test("transitions near geometry, middle normals, and far slope detail without a 
   expect(far.slopeEnergy).toBeGreaterThan(10);
   expect(adjacent.count).toBeGreaterThan(10);
   expect(adjacent.max).toBeLessThan(adjacent.p95 * 4 + 0.08);
+  await attachRegressionAcceptance(testInfo, page, {
+    seed: result.seed,
+    tick: result.tick,
+    camera: HORIZON_CAMERA,
+    qaPrewarm: {
+      schema: result.prewarmSchema,
+      version: result.prewarmVersion,
+      id: result.prewarmId,
+      hash: result.manifestHash,
+    },
+  });
 });
 
 test("keeps distant highlights and white-detail placeholders stable under camera motion", async ({
   page,
-}) => {
-  await page.setViewportSize({ width: 320, height: 180 });
-  await page.goto("/?qa=1&host=memory&delay=0");
-  test.skip(
-    !(await hasCoreWebGPU(page)),
-    "Core WebGPU is unavailable in this browser profile.",
-  );
-
-  await page.goto("/?qa=1&host=three");
-  await expect(page.getByTestId("reference-stage")).toBeVisible();
-  const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV2 | undefined;
+}, testInfo) => {
+  await openQaStage(page);
+  const result = await page.evaluate(async () => {
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV3 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
     await harness.reset({ seed: 0x4000_0000 });
     await harness.advanceTicks(24);
-    await harness.setCamera(camera);
-    await harness.present();
+    await harness.setCamera({
+      projection: "perspective",
+      position: [0, 8, 0],
+      target: [400, 0, 0],
+      up: [0, 1, 0],
+      verticalFovDegrees: 50,
+      near: 0.5,
+      far: 4_000,
+    });
+    const presentation = await harness.present();
     const firstColor = await harness.capture("final-color");
     const firstDepth = await harness.capture("depth");
     const firstNormal = await harness.capture("normal");
     await harness.setCamera({
-      ...camera,
-      position: [
-        camera.position[0],
-        camera.position[1],
-        camera.position[2] + 1,
-      ],
-      target: [camera.target[0], camera.target[1], camera.target[2] + 1],
+      projection: "perspective",
+      position: [0, 8, 1],
+      target: [400, 0, 1],
+      up: [0, 1, 0],
+      verticalFovDegrees: 50,
+      near: 0.5,
+      far: 4_000,
     });
     await harness.present();
     const secondColor = await harness.capture("final-color");
@@ -330,8 +516,14 @@ test("keeps distant highlights and white-detail placeholders stable under camera
       firstDepth: firstDepth.data,
       firstNormal: firstNormal.data,
       secondNormal: secondNormal.data,
+      seed: presentation.seed,
+      tick: presentation.tick,
+      manifestHash: presentation.manifestHash,
+      prewarmSchema: harness.prewarmManifest.schema,
+      prewarmVersion: harness.prewarmManifest.version,
+      prewarmId: harness.prewarmManifest.id,
     };
-  }, HORIZON_CAMERA);
+  });
 
   const depths = decodeFloat32(result.firstDepth);
   const firstColor = decodeUint8(result.firstColor);
@@ -358,6 +550,17 @@ test("keeps distant highlights and white-detail placeholders stable under camera
   );
   expect(far.colorMeanAbs).toBeLessThan(8);
   expect(far.normalMeanAbs).toBeLessThan(0.12);
+  await attachRegressionAcceptance(testInfo, page, {
+    seed: result.seed,
+    tick: result.tick,
+    camera: HORIZON_CAMERA,
+    qaPrewarm: {
+      schema: result.prewarmSchema,
+      version: result.prewarmVersion,
+      id: result.prewarmId,
+      hash: result.manifestHash,
+    },
+  });
 });
 
 function decodeFloat32(encoded: string): number[] {
@@ -529,9 +732,44 @@ function standardDeviation(values: readonly number[]): number {
   );
 }
 
+function expectOriginShiftContinuous(result: {
+  readonly beforeColor: string;
+  readonly afterColor: string;
+  readonly beforeDepth: string;
+  readonly afterDepth: string;
+  readonly beforeNormal: string;
+  readonly afterNormal: string;
+}): void {
+  expect(
+    meanAbsDifference(
+      decodeUint8(result.beforeColor),
+      decodeUint8(result.afterColor),
+    ),
+  ).toBeLessThan(ORIGIN_COLOR_MEAN_ABS);
+  expect(
+    meanAbsDifference(
+      decodeFloat32(result.beforeDepth),
+      decodeFloat32(result.afterDepth),
+    ),
+  ).toBeLessThan(ORIGIN_DEPTH_MEAN_ABS_METRES);
+  expect(
+    meanAbsDifference(
+      decodeFloat32(result.beforeNormal),
+      decodeFloat32(result.afterNormal),
+    ),
+  ).toBeLessThan(ORIGIN_NORMAL_MEAN_ABS);
+}
+
+function expectLocalCoordinates(values: readonly number[]): void {
+  expect(values.length).toBeGreaterThan(0);
+  for (const value of values) {
+    expect(Math.abs(value)).toBeLessThan(LOCAL_COORDINATE_BOUND_METRES);
+  }
+}
+
 function meanAbsDifference(
-  left: readonly number[],
-  right: readonly number[],
+  left: ArrayLike<number>,
+  right: ArrayLike<number>,
 ): number {
   const count = Math.min(left.length, right.length);
   if (count === 0) {

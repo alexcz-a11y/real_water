@@ -30,14 +30,15 @@ and repeats preparation after a confirmed long suspension.
 Every Host explicitly supplies a Host Simulation Adapter as the authoritative
 source of seed, tick, simulation time, pause state, and Host-owned floating
 origin. Gameplay Query positions are in the current Host frame; the runtime
-evaluates the Open Water Domain at `(x + originX, z + originZ)` so queries stay
-continuous across origin shifts. An origin change invalidates only temporal
-history (`temporalHistoryValid` becomes false until the next tick at the same
-origin); spectral wave state, seed, tick, time, and Artistic Controls are
-retained. The same Host state drives the prepared TSL vertex displacement and
-the CPU spectral evaluator. Calm, Swell, and Storm Water Presets are versioned
-Artistic Control snapshots; applying one updates existing uniforms without
-replacing geometry, nodes, materials, or pipelines.
+samples Host-local coordinates plus wrapped origin phase so queries stay
+continuous across origin shifts, including large cumulative origins. The
+lightweight snapshot exposes a monotonic `originRevision` that starts at 0 from
+the verified Host origin at runtime creation and increments only when the Host
+origin actually changes. Spectral wave state, seed, tick, time, and Artistic
+Controls are retained. The same Host state drives the prepared TSL vertex
+displacement and the CPU spectral evaluator. Calm, Swell, and Storm Water
+Presets are versioned Artistic Control snapshots; applying one updates existing
+uniforms without replacing geometry, nodes, materials, or pipelines.
 
 The prepared surface uses non-periodic spectral blending, camera-distance
 transitions from near geometry through middle normal detail into far slope and

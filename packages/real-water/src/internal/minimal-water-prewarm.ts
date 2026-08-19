@@ -29,7 +29,6 @@ import type { HostSimulationAdapter } from "../runtime.js";
 import {
   clipmapInnerCellMetres,
   createCameraRelativeClipmapGeometry,
-  snapClipmapToCamera,
 } from "./camera-relative-clipmap.js";
 import { HOST_RUNTIME_STATE_BRIDGE } from "./runtime-state-bridge.js";
 import { createSpectralBandRendering } from "./spectral-bands-rendering.js";
@@ -122,7 +121,13 @@ export async function prepareMinimalWaterPlane(
     const material = new MeshStandardNodeMaterial();
     partial.material = material;
     material.name = "Real Water minimal material";
-    const spectralBand = createSpectralBandRendering(options.simulation);
+    const innerCellMetres = clipmapInnerCellMetres(
+      geometrySegments.widthSegments,
+    );
+    const spectralBand = createSpectralBandRendering(
+      options.simulation,
+      innerCellMetres,
+    );
     partial.spectralBand = spectralBand;
     material.positionNode = spectralBand.positionNode;
     material.normalNode = spectralBand.normalNode;
@@ -142,18 +147,6 @@ export async function prepareMinimalWaterPlane(
     partial.plane = plane;
     plane.name = "Real Water clipmap";
     plane.frustumCulled = false;
-    const innerCellMetres = clipmapInnerCellMetres(
-      geometrySegments.widthSegments,
-    );
-    plane.onBeforeRender = (_renderer, _scene, renderCamera) => {
-      snapClipmapToCamera(
-        renderCamera,
-        spectralBand.originX,
-        spectralBand.originZ,
-        innerCellMetres,
-      );
-      spectralBand.synchronizeHostState();
-    };
     scene.add(plane);
 
     throwIfAborted(options.request.signal);

@@ -11,7 +11,7 @@ import {
   type RealWaterLease,
   type WebGPUDeviceLoss,
 } from "real-water";
-import type { QaFrameSource, QaHarnessV2 } from "./qa-harness.js";
+import type { QaFrameSource, QaHarnessV3 } from "./qa-harness.js";
 import type * as QaHarnessModuleContract from "./qa-harness.js";
 import {
   startReferenceExperience,
@@ -369,6 +369,6 @@ function readRevealFrames(
 
 declare global {
   interface Window {
-    __REAL_WATER_QA__?: QaHarnessV2;
+    __REAL_WATER_QA__?: QaHarnessV3;
   }
 }

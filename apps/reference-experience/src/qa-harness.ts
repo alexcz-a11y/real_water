@@ -37,7 +37,7 @@ export const QA_HARNESS_VERSION = 3 as const;
 export const QA_HARNESS_FIXED_TICK_HZ = QA_FRAME_FIXED_TICK_HZ;
 export const QA_HARNESS_CAPTURE_NAMES = QA_FRAME_CAPTURE_NAMES;
 export const QA_CAPTURE_SCHEMA = "real-water/qa-capture" as const;
-export const QA_CAPTURE_VERSION = 2 as const;
+export const QA_CAPTURE_VERSION = 3 as const;
 
 export type QaCaptureName = QaFrameCaptureName;
 
@@ -51,36 +51,36 @@ export interface QaCameraV1 {
   readonly far: number;
 }
 
-export interface QaFrameStateReceiptV2 {
+export interface QaFrameStateReceiptV3 {
   readonly seed: number;
   readonly tick: number;
   readonly timeSeconds: number;
   readonly originX: number;
   readonly originZ: number;
+  readonly originRevision: number;
 }
 
 export interface QaCameraReceiptV1 {
   readonly cameraRevision: number;
 }
 
-export interface QaOriginReceiptV1 {
+export interface QaOriginReceiptV3 {
   readonly originX: number;
   readonly originZ: number;
-  readonly temporalHistoryValid: boolean;
+  readonly originRevision: number;
 }
 
-export interface QaPresentationReceiptV2 extends QaFrameStateReceiptV2 {
+export interface QaPresentationReceiptV3 extends QaFrameStateReceiptV3 {
   readonly generation: number;
   readonly presentationId: number;
   readonly manifestHash: string;
   readonly cameraRevision: number;
   readonly controlRevision: number;
-  readonly temporalHistoryValid: boolean;
   readonly captureNames: typeof QA_HARNESS_CAPTURE_NAMES;
   readonly prewarm: QaFramePrewarmReceipt;
 }
 
-export interface QaCaptureV2 extends QaPresentationReceiptV2 {
+export interface QaCaptureV3 extends QaPresentationReceiptV3 {
   readonly schema: typeof QA_CAPTURE_SCHEMA;
   readonly version: typeof QA_CAPTURE_VERSION;
   readonly name: QaCaptureName;
@@ -105,7 +105,7 @@ export interface QaFrameSource {
   setOrigin(originX: number, originZ: number): void;
 }
 
-export interface QaGameplayQueryV2 {
+export interface QaGameplayQueryV3 {
   readonly point: readonly [number, number, number];
   readonly height: number;
   readonly normal: readonly [number, number, number];
@@ -126,27 +126,27 @@ export interface QaHarnessOptions {
   synthesizeDeviceLoss(): void;
 }
 
-export interface QaHarnessV2 {
+export interface QaHarnessV3 {
   readonly schema: typeof QA_HARNESS_SCHEMA;
   readonly version: typeof QA_HARNESS_VERSION;
   readonly fixedTickHz: typeof QA_HARNESS_FIXED_TICK_HZ;
   readonly captureNames: typeof QA_HARNESS_CAPTURE_NAMES;
   readonly prewarmManifest: typeof QA_FRAME_PREWARM_MANIFEST;
-  reset(request: { readonly seed: number }): Promise<QaFrameStateReceiptV2>;
-  advanceTicks(count: number): Promise<QaFrameStateReceiptV2>;
+  reset(request: { readonly seed: number }): Promise<QaFrameStateReceiptV3>;
+  advanceTicks(count: number): Promise<QaFrameStateReceiptV3>;
   setCamera(camera: QaCameraV1): Promise<QaCameraReceiptV1>;
   setOrigin(origin: {
     readonly x: number;
     readonly z: number;
-  }): Promise<QaOriginReceiptV1>;
-  present(): Promise<QaPresentationReceiptV2>;
-  capture(name: QaCaptureName): Promise<QaCaptureV2>;
+  }): Promise<QaOriginReceiptV3>;
+  present(): Promise<QaPresentationReceiptV3>;
+  capture(name: QaCaptureName): Promise<QaCaptureV3>;
   updateArtisticControls(
     controls: ArtisticControls,
   ): Promise<ArtisticControlUpdateReceipt>;
   queryGameplay(
     point: readonly [number, number, number],
-  ): Promise<QaGameplayQueryV2>;
+  ): Promise<QaGameplayQueryV3>;
   applySecondQualityProfile(): Promise<void>;
   dispose(): Promise<void>;
   signalLongSuspension(): Promise<void>;
@@ -165,11 +165,11 @@ interface ActiveRecipe {
   pendingTicks: number;
   cameraRevision: number;
   cameraSet: boolean;
-  captures: ReadonlyMap<QaCaptureName, QaCaptureV2> | null;
-  presentation: QaPresentationReceiptV2 | null;
+  captures: ReadonlyMap<QaCaptureName, QaCaptureV3> | null;
+  presentation: QaPresentationReceiptV3 | null;
 }
 
-export function createQaHarness(options: QaHarnessOptions): QaHarnessV2 {
+export function createQaHarness(options: QaHarnessOptions): QaHarnessV3 {
   let active: ActiveRecipe | null = null;
   let queue = Promise.resolve();
 
@@ -188,7 +188,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV2 {
     active = null;
   };
 
-  const harness: QaHarnessV2 = {
+  const harness: QaHarnessV3 = {
     schema: QA_HARNESS_SCHEMA,
     version: QA_HARNESS_VERSION,
     fixedTickHz: QA_HARNESS_FIXED_TICK_HZ,
@@ -222,12 +222,14 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV2 {
           captures: null,
           presentation: null,
         };
+        const runtime = lease.inspectRuntime();
         return Object.freeze({
           seed: receipt.seed,
           tick: receipt.tick,
           timeSeconds: receipt.timeSeconds,
           originX: 0,
           originZ: 0,
+          originRevision: runtime.originRevision,
         });
       });
     },
@@ -245,12 +247,14 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV2 {
         recipe.pendingTicks += count;
         recipe.captures = null;
         recipe.presentation = null;
+        const runtime = recipe.lease.inspectRuntime();
         return Object.freeze({
           seed: recipe.seed,
           tick: recipe.tick,
           timeSeconds: recipe.tick / QA_HARNESS_FIXED_TICK_HZ,
           originX: recipe.originX,
           originZ: recipe.originZ,
+          originRevision: runtime.originRevision,
         });
       });
     },
@@ -273,7 +277,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV2 {
         return Object.freeze({
           originX: runtime.originX,
           originZ: runtime.originZ,
-          temporalHistoryValid: runtime.temporalHistoryValid,
+          originRevision: runtime.originRevision,
         });
       });
     },
@@ -333,7 +337,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV2 {
           manifestHash: frame.manifestHash,
           cameraRevision: recipe.cameraRevision,
           controlRevision: runtime.controlRevision,
-          temporalHistoryValid: runtime.temporalHistoryValid,
+          originRevision: runtime.originRevision,
           captureNames: QA_HARNESS_CAPTURE_NAMES,
           prewarm: frame.prewarm,
         });
@@ -597,9 +601,9 @@ function requireActiveRecipe(
 
 function cacheCaptures(
   captures: readonly QaFrameDriverCapture[],
-  receipt: QaPresentationReceiptV2,
-): ReadonlyMap<QaCaptureName, QaCaptureV2> {
-  const byName = new Map<QaCaptureName, QaCaptureV2>();
+  receipt: QaPresentationReceiptV3,
+): ReadonlyMap<QaCaptureName, QaCaptureV3> {
+  const byName = new Map<QaCaptureName, QaCaptureV3>();
   for (const name of QA_HARNESS_CAPTURE_NAMES) {
     const capture = captures.find((candidate) => candidate.name === name);
     if (capture === undefined) {
@@ -621,8 +625,8 @@ function cacheCaptures(
 
 function encodeCapture(
   capture: QaFrameDriverCapture,
-  receipt: QaPresentationReceiptV2,
-): QaCaptureV2 {
+  receipt: QaPresentationReceiptV3,
+): QaCaptureV3 {
   const shape = QA_FRAME_CAPTURE_SHAPES[capture.name];
   return Object.freeze({
     schema: QA_CAPTURE_SCHEMA,

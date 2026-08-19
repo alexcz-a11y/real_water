@@ -88,6 +88,36 @@ export const BAND_GEOMETRY_FADE_START_FACTOR = 6;
 export const BAND_GEOMETRY_FADE_END_FACTOR = 18;
 export const SLOPE_DETAIL_FADE_START_METRES = 140;
 export const SLOPE_DETAIL_FADE_END_METRES = 320;
+export const FAR_WHITE_PRIMARY_X = 0.018;
+export const FAR_WHITE_PRIMARY_Z = 0.011;
+export const FAR_WHITE_SECONDARY_X = 0.007;
+export const FAR_WHITE_SECONDARY_Z = 0.016;
+const TAU = Math.PI * 2;
+
+export function wrapPhase(radians: number): number {
+  return radians - TAU * Math.round(radians / TAU);
+}
+
+export function originSamplePhase(
+  originX: number,
+  originZ: number,
+  coefficientX: number,
+  coefficientZ: number,
+): number {
+  return wrapPhase(originX * coefficientX + originZ * coefficientZ);
+}
+
+export function rotateOrigin(
+  originX: number,
+  originZ: number,
+): Readonly<{ readonly x: number; readonly z: number }> {
+  return {
+    x:
+      NON_PERIODIC_ROTATION_COS * originX - NON_PERIODIC_ROTATION_SIN * originZ,
+    z:
+      NON_PERIODIC_ROTATION_SIN * originX + NON_PERIODIC_ROTATION_COS * originZ,
+  };
+}
 
 export interface SpectralSurfaceSample {
   readonly height: number;
@@ -100,17 +130,33 @@ export function nonPeriodicBlend(
   x: number,
   z: number,
   phaseOffset: number,
+  originX = 0,
+  originZ = 0,
 ): Readonly<{
   readonly weight: number;
   readonly dWeightDx: number;
   readonly dWeightDz: number;
 }> {
   const argumentA =
-    x * NON_PERIODIC_BLEND_K1 + z * NON_PERIODIC_BLEND_K2 + phaseOffset;
+    x * NON_PERIODIC_BLEND_K1 +
+    z * NON_PERIODIC_BLEND_K2 +
+    phaseOffset +
+    originSamplePhase(
+      originX,
+      originZ,
+      NON_PERIODIC_BLEND_K1,
+      NON_PERIODIC_BLEND_K2,
+    );
   const argumentB =
     x * NON_PERIODIC_BLEND_K2 -
     z * NON_PERIODIC_BLEND_K1 * 0.7 +
-    phaseOffset * 1.3;
+    phaseOffset * 1.3 +
+    originSamplePhase(
+      originX,
+      originZ,
+      NON_PERIODIC_BLEND_K2,
+      -NON_PERIODIC_BLEND_K1 * 0.7,
+    );
   const sineA = Math.sin(argumentA);
   const sineB = Math.sin(argumentB);
   const cosineA = Math.cos(argumentA);
@@ -150,15 +196,20 @@ export function rotateNonPeriodicDomain(
 export function evaluateSpectralSurface(
   x: number,
   z: number,
+  originX: number,
+  originZ: number,
   phaseOffset: number,
   timeSeconds: number,
   bands: readonly PreparedSpectralBand[],
   crestSharpness: number,
   timeScale: number,
 ): SpectralSurfaceSample {
+  const rotatedOrigin = rotateOrigin(originX, originZ);
   const primary = evaluatePeriodicSurface(
     x,
     z,
+    originX,
+    originZ,
     phaseOffset,
     timeSeconds,
     bands,
@@ -169,6 +220,8 @@ export function evaluateSpectralSurface(
   const secondary = evaluatePeriodicSurface(
     rotated.x,
     rotated.z,
+    rotatedOrigin.x,
+    rotatedOrigin.z,
     phaseOffset,
     timeSeconds,
     bands,
@@ -176,13 +229,15 @@ export function evaluateSpectralSurface(
     timeScale,
   );
   const secondaryWorld = worldSlopesFromRotatedDomain(secondary);
-  const blend = nonPeriodicBlend(x, z, phaseOffset);
+  const blend = nonPeriodicBlend(x, z, phaseOffset, originX, originZ);
   return mixSurfaceSamples(primary, secondaryWorld, blend);
 }
 
 function evaluatePeriodicSurface(
   x: number,
   z: number,
+  originX: number,
+  originZ: number,
   phaseOffset: number,
   timeSeconds: number,
   bands: readonly PreparedSpectralBand[],
@@ -199,7 +254,13 @@ function evaluatePeriodicSurface(
     const phase =
       x * band.waveNumber * band.directionX +
       z * band.waveNumber * band.directionZ +
-      phaseOffset -
+      phaseOffset +
+      originSamplePhase(
+        originX,
+        originZ,
+        band.waveNumber * band.directionX,
+        band.waveNumber * band.directionZ,
+      ) -
       timeSeconds * band.angularFrequency * timeScale;
     const sine = Math.sin(phase);
     const cosine = Math.cos(phase);
@@ -265,11 +326,13 @@ export function writeSpectralBandQueries(
 
   for (let point = 0; point < batch.count; point += 1) {
     const vectorIndex = point * 3;
-    const x = (batch.positions[vectorIndex] ?? 0) + state.originX;
-    const z = (batch.positions[vectorIndex + 2] ?? 0) + state.originZ;
+    const x = batch.positions[vectorIndex] ?? 0;
+    const z = batch.positions[vectorIndex + 2] ?? 0;
     const surface = evaluateSpectralSurface(
       x,
       z,
+      state.originX,
+      state.originZ,
       phaseOffset,
       state.timeSeconds,
       bands,

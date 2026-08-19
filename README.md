@@ -9,8 +9,9 @@ Issue #19 keeps the four-band Open Water Domain stable across distance and host
 floating-origin shifts:
 
 - Host Simulation state includes `originX` and `originZ`; Gameplay Queries
-  remain continuous after an origin rebase and reset only invalid temporal
-  history;
+  remain continuous after an origin rebase, including large cumulative origins,
+  and the lightweight snapshot counts `originRevision` from runtime creation,
+  incrementing only when the origin actually changes;
 - non-periodic spectral blending prevents obvious repeating patches;
 - near geometry, middle normal detail, and far slope or BRDF detail transition
   without a visible seam;

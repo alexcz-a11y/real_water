@@ -1,5 +1,4 @@
 import { BufferGeometry, Float32BufferAttribute } from "three/webgpu";
-import type { Camera } from "three/webgpu";
 
 interface NumericUniform {
   value: number;
@@ -55,17 +54,20 @@ export function clipmapInnerCellMetres(innerSegments: number): number {
 }
 
 export function snapClipmapToCamera(
-  camera: Camera,
+  camera: {
+    updateMatrixWorld(): void;
+    readonly matrixWorld: { readonly elements: ArrayLike<number> };
+  },
   originX: NumericUniform,
   originZ: NumericUniform,
   innerCellMetres: number,
 ): void {
   camera.updateMatrixWorld();
   originX.value =
-    Math.round(camera.matrixWorld.elements[12] / innerCellMetres) *
+    Math.round((camera.matrixWorld.elements[12] ?? 0) / innerCellMetres) *
     innerCellMetres;
   originZ.value =
-    Math.round(camera.matrixWorld.elements[14] / innerCellMetres) *
+    Math.round((camera.matrixWorld.elements[14] ?? 0) / innerCellMetres) *
     innerCellMetres;
 }
 

@@ -1,6 +1,10 @@
 import { RealWaterRuntimeError } from "./errors.js";
 import { MAX_GAMEPLAY_QUERY_POINTS } from "./capabilities.js";
 import { hasExactKeys, isRecord } from "./internal/record-validation.js";
+import {
+  createOriginRevisionTracker,
+  type OriginRevisionTracker,
+} from "./internal/origin-revision-tracker.js";
 import { writeSpectralBandQueries } from "./internal/spectral-bands.js";
 import { createWaterPreset } from "./water-preset.js";
 
@@ -69,16 +73,18 @@ export interface HostSimulationAdapter {
 /**
  * Lightweight coherent state shared by rendering and Gameplay Queries.
  *
- * `temporalHistoryValid` is false only after a host floating-origin shift,
- * until the next simulation tick at the same origin. Spectral wave state,
- * seed, tick, time, and Artistic Controls are retained across that reset.
+ * `originRevision` is a monotonic discontinuity hook. It starts at 0 from the
+ * verified Host origin at runtime creation, increments only when that origin
+ * actually changes, and is unchanged by later ticks at the same origin.
+ * Spectral wave state, seed, tick, time, and Artistic Controls are retained
+ * across origin shifts.
  *
  * @public
  */
 export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
   readonly artisticControls: ArtisticControls;
   readonly controlRevision: number;
-  readonly temporalHistoryValid: boolean;
+  readonly originRevision: number;
 }
 
 /**
@@ -150,7 +156,9 @@ export function createRealWaterRuntime(
   let controlRevision = 0;
   let queryTick = -1;
   let queriesUsedThisTick = 0;
-  const temporalHistory = createTemporalHistoryTracker();
+  const originRevisions = createOriginRevisionTracker(
+    readHostSimulationState(simulation),
+  );
 
   return Object.freeze({
     updateArtisticControls(
@@ -165,7 +173,7 @@ export function createRealWaterRuntime(
           simulation,
           nextControls,
           nextRevision,
-          temporalHistory,
+          originRevisions,
         );
         sink?.synchronize(nextSnapshot);
         artisticControls = nextControls;
@@ -181,7 +189,7 @@ export function createRealWaterRuntime(
       assertActive();
       validateGameplayQueryBatch(batch);
       const state = readHostSimulationState(simulation);
-      temporalHistory.observe(state);
+      originRevisions.observe(state);
       const usedThisTick = state.tick === queryTick ? queriesUsedThisTick : 0;
       if (usedThisTick + batch.count > MAX_GAMEPLAY_QUERY_POINTS) {
         throw queryCapacityError(batch.count, usedThisTick);
@@ -202,7 +210,7 @@ export function createRealWaterRuntime(
         simulation,
         artisticControls,
         controlRevision,
-        temporalHistory,
+        originRevisions,
       );
     },
   });
@@ -311,38 +319,11 @@ function freezeSnapshot(
   return Object.freeze({ ...snapshot });
 }
 
-interface TemporalHistoryTracker {
-  observe(state: HostSimulationState): boolean;
-}
-
-function createTemporalHistoryTracker(): TemporalHistoryTracker {
-  let originX: number | undefined;
-  let originZ: number | undefined;
-  let tick = -1;
-  let temporalHistoryValid = true;
-
-  return Object.freeze({
-    observe(state: HostSimulationState): boolean {
-      if (originX !== undefined && originZ !== undefined) {
-        if (state.originX !== originX || state.originZ !== originZ) {
-          temporalHistoryValid = false;
-        } else if (state.tick !== tick) {
-          temporalHistoryValid = true;
-        }
-      }
-      originX = state.originX;
-      originZ = state.originZ;
-      tick = state.tick;
-      return temporalHistoryValid;
-    },
-  });
-}
-
 function readSnapshot(
   simulation: HostSimulationAdapter,
   artisticControls: ArtisticControls,
   controlRevision: number,
-  temporalHistory: TemporalHistoryTracker,
+  originRevisions: OriginRevisionTracker,
 ): OpenWaterRuntimeSnapshot {
   const state = readHostSimulationState(simulation);
   return freezeSnapshot({
@@ -354,7 +335,7 @@ function readSnapshot(
     originZ: state.originZ,
     artisticControls,
     controlRevision,
-    temporalHistoryValid: temporalHistory.observe(state),
+    originRevision: originRevisions.observe(state),
   });
 }
 
