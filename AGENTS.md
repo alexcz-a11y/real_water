@@ -11,3 +11,7 @@ Use the five canonical triage labels: `needs-triage`, `needs-info`, `ready-for-a
 ### Domain docs
 
 This is a single-context repo: read the root `CONTEXT.md` and relevant ADRs under `docs/adr/`. See `docs/agents/domain.md`.
+
+### Browser work
+
+Browser tests, agent QA, screenshots, page data, Chrome diagnostics, and Native certification use distinct evidence classes. Route each task with `docs/agents/browser-tooling.md`.
