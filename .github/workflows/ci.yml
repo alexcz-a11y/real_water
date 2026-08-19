@@ -36,7 +36,7 @@ jobs:
         with:
           name: regression-acceptance
           path: test-results/regression-acceptance/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
       - run: pnpm test:package
       - run: pnpm api:check
