@@ -33,7 +33,7 @@ export { createQaHostSimulationController } from "./qa-simulation-controller.js"
 export type { QaHostSimulationController } from "./qa-simulation-controller.js";
 
 export const QA_HARNESS_SCHEMA = "real-water/qa-harness" as const;
-export const QA_HARNESS_VERSION = 2 as const;
+export const QA_HARNESS_VERSION = 3 as const;
 export const QA_HARNESS_FIXED_TICK_HZ = QA_FRAME_FIXED_TICK_HZ;
 export const QA_HARNESS_CAPTURE_NAMES = QA_FRAME_CAPTURE_NAMES;
 export const QA_CAPTURE_SCHEMA = "real-water/qa-capture" as const;
@@ -55,10 +55,18 @@ export interface QaFrameStateReceiptV2 {
   readonly seed: number;
   readonly tick: number;
   readonly timeSeconds: number;
+  readonly originX: number;
+  readonly originZ: number;
 }
 
 export interface QaCameraReceiptV1 {
   readonly cameraRevision: number;
+}
+
+export interface QaOriginReceiptV1 {
+  readonly originX: number;
+  readonly originZ: number;
+  readonly temporalHistoryValid: boolean;
 }
 
 export interface QaPresentationReceiptV2 extends QaFrameStateReceiptV2 {
@@ -67,6 +75,7 @@ export interface QaPresentationReceiptV2 extends QaFrameStateReceiptV2 {
   readonly manifestHash: string;
   readonly cameraRevision: number;
   readonly controlRevision: number;
+  readonly temporalHistoryValid: boolean;
   readonly captureNames: typeof QA_HARNESS_CAPTURE_NAMES;
   readonly prewarm: QaFramePrewarmReceipt;
 }
@@ -93,6 +102,7 @@ export interface QaFrameSource {
   lease(): RealWaterLease | null;
   bindLease(lease: RealWaterLease): void;
   setCamera(camera: QaCameraV1): void;
+  setOrigin(originX: number, originZ: number): void;
 }
 
 export interface QaGameplayQueryV2 {
@@ -125,6 +135,10 @@ export interface QaHarnessV2 {
   reset(request: { readonly seed: number }): Promise<QaFrameStateReceiptV2>;
   advanceTicks(count: number): Promise<QaFrameStateReceiptV2>;
   setCamera(camera: QaCameraV1): Promise<QaCameraReceiptV1>;
+  setOrigin(origin: {
+    readonly x: number;
+    readonly z: number;
+  }): Promise<QaOriginReceiptV1>;
   present(): Promise<QaPresentationReceiptV2>;
   capture(name: QaCaptureName): Promise<QaCaptureV2>;
   updateArtisticControls(
@@ -146,6 +160,8 @@ interface ActiveRecipe {
   readonly seed: number;
   readonly lease: RealWaterLease;
   tick: number;
+  originX: number;
+  originZ: number;
   pendingTicks: number;
   cameraRevision: number;
   cameraSet: boolean;
@@ -198,6 +214,8 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV2 {
           lease,
           seed: receipt.seed,
           tick: receipt.tick,
+          originX: 0,
+          originZ: 0,
           pendingTicks: 0,
           cameraRevision: 0,
           cameraSet: false,
@@ -208,6 +226,8 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV2 {
           seed: receipt.seed,
           tick: receipt.tick,
           timeSeconds: receipt.timeSeconds,
+          originX: 0,
+          originZ: 0,
         });
       });
     },
@@ -229,6 +249,31 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV2 {
           seed: recipe.seed,
           tick: recipe.tick,
           timeSeconds: recipe.tick / QA_HARNESS_FIXED_TICK_HZ,
+          originX: recipe.originX,
+          originZ: recipe.originZ,
+        });
+      });
+    },
+    setOrigin(origin) {
+      const originX = origin.x;
+      const originZ = origin.z;
+      if (!Number.isFinite(originX) || !Number.isFinite(originZ)) {
+        return Promise.reject(
+          qaError("QA_INVALID_ARGUMENT", "The QA origin must be finite."),
+        );
+      }
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        recipe.source.setOrigin(originX, originZ);
+        recipe.originX = originX;
+        recipe.originZ = originZ;
+        recipe.captures = null;
+        recipe.presentation = null;
+        const runtime = recipe.lease.inspectRuntime();
+        return Object.freeze({
+          originX: runtime.originX,
+          originZ: runtime.originZ,
+          temporalHistoryValid: runtime.temporalHistoryValid,
         });
       });
     },
@@ -267,7 +312,9 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV2 {
         if (
           runtime.seed !== frame.seed ||
           runtime.tick !== frame.tick ||
-          runtime.timeSeconds !== frame.timeSeconds
+          runtime.timeSeconds !== frame.timeSeconds ||
+          runtime.originX !== recipe.originX ||
+          runtime.originZ !== recipe.originZ
         ) {
           throw qaError(
             "QA_INVALIDATED",
@@ -279,11 +326,14 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV2 {
           seed: frame.seed,
           tick: frame.tick,
           timeSeconds: frame.timeSeconds,
+          originX: runtime.originX,
+          originZ: runtime.originZ,
           generation,
           presentationId: frame.presentationId,
           manifestHash: frame.manifestHash,
           cameraRevision: recipe.cameraRevision,
           controlRevision: runtime.controlRevision,
+          temporalHistoryValid: runtime.temporalHistoryValid,
           captureNames: QA_HARNESS_CAPTURE_NAMES,
           prewarm: frame.prewarm,
         });
@@ -454,6 +504,9 @@ export function createQaThreeFrameSource(
       camera.lookAt(...normalized.target);
       camera.updateProjectionMatrix();
       camera.updateMatrixWorld(true);
+    },
+    setOrigin(originX: number, originZ: number) {
+      simulation.setOrigin(originX, originZ);
     },
   });
 }

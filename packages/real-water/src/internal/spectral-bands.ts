@@ -78,6 +78,102 @@ export function prepareSpectralBands(
   });
 }
 
+export const NON_PERIODIC_ROTATION_COS = 0.5;
+export const NON_PERIODIC_ROTATION_SIN = Math.sqrt(3) / 2;
+export const NON_PERIODIC_OFFSET_X = 137;
+export const NON_PERIODIC_OFFSET_Z = 271;
+export const NON_PERIODIC_BLEND_K1 = 0.073;
+export const NON_PERIODIC_BLEND_K2 = 0.051;
+export const BAND_GEOMETRY_FADE_START_FACTOR = 6;
+export const BAND_GEOMETRY_FADE_END_FACTOR = 18;
+export const SLOPE_DETAIL_FADE_START_METRES = 140;
+export const SLOPE_DETAIL_FADE_END_METRES = 320;
+
+export function spectralDistanceLodWeights(
+  viewDistanceMetres: number,
+  wavelengthMetres: number,
+): Readonly<{
+  readonly geometryWeight: number;
+  readonly normalWeight: number;
+  readonly slopeWeight: number;
+}> {
+  const geometryWeight =
+    1 -
+    hermiteStep(
+      wavelengthMetres * BAND_GEOMETRY_FADE_START_FACTOR,
+      wavelengthMetres * BAND_GEOMETRY_FADE_END_FACTOR,
+      viewDistanceMetres,
+    );
+  const slopeFade = hermiteStep(
+    SLOPE_DETAIL_FADE_START_METRES,
+    SLOPE_DETAIL_FADE_END_METRES,
+    viewDistanceMetres,
+  );
+  return {
+    geometryWeight,
+    normalWeight: (1 - geometryWeight) * (1 - slopeFade),
+    slopeWeight: (1 - geometryWeight) * slopeFade,
+  };
+}
+
+export interface SpectralSurfaceSample {
+  readonly height: number;
+  readonly slopeX: number;
+  readonly slopeZ: number;
+  readonly velocityY: number;
+}
+
+export function nonPeriodicBlend(
+  x: number,
+  z: number,
+  phaseOffset: number,
+): Readonly<{
+  readonly weight: number;
+  readonly dWeightDx: number;
+  readonly dWeightDz: number;
+}> {
+  const argumentA =
+    x * NON_PERIODIC_BLEND_K1 + z * NON_PERIODIC_BLEND_K2 + phaseOffset;
+  const argumentB =
+    x * NON_PERIODIC_BLEND_K2 -
+    z * NON_PERIODIC_BLEND_K1 * 0.7 +
+    phaseOffset * 1.3;
+  const sineA = Math.sin(argumentA);
+  const sineB = Math.sin(argumentB);
+  const cosineA = Math.cos(argumentA);
+  const cosineB = Math.cos(argumentB);
+  const field = sineA * sineB;
+  const dFieldDx =
+    cosineA * NON_PERIODIC_BLEND_K1 * sineB +
+    sineA * cosineB * NON_PERIODIC_BLEND_K2;
+  const dFieldDz =
+    cosineA * NON_PERIODIC_BLEND_K2 * sineB +
+    sineA * cosineB * (-NON_PERIODIC_BLEND_K1 * 0.7);
+  const unit = field * 0.5 + 0.5;
+  const hermiteT = Math.min(1, Math.max(0, (unit - 0.2) / 0.6));
+  return {
+    weight: hermiteT * hermiteT * (3 - 2 * hermiteT),
+    dWeightDx: 5 * hermiteT * (1 - hermiteT) * dFieldDx,
+    dWeightDz: 5 * hermiteT * (1 - hermiteT) * dFieldDz,
+  };
+}
+
+export function rotateNonPeriodicDomain(
+  x: number,
+  z: number,
+): Readonly<{ readonly x: number; readonly z: number }> {
+  return {
+    x:
+      NON_PERIODIC_ROTATION_COS * x -
+      NON_PERIODIC_ROTATION_SIN * z +
+      NON_PERIODIC_OFFSET_X,
+    z:
+      NON_PERIODIC_ROTATION_SIN * x +
+      NON_PERIODIC_ROTATION_COS * z +
+      NON_PERIODIC_OFFSET_Z,
+  };
+}
+
 export function evaluateSpectralSurface(
   x: number,
   z: number,
@@ -86,12 +182,40 @@ export function evaluateSpectralSurface(
   bands: readonly PreparedSpectralBand[],
   crestSharpness: number,
   timeScale: number,
-): Readonly<{
-  readonly height: number;
-  readonly slopeX: number;
-  readonly slopeZ: number;
-  readonly velocityY: number;
-}> {
+): SpectralSurfaceSample {
+  const primary = evaluatePeriodicSurface(
+    x,
+    z,
+    phaseOffset,
+    timeSeconds,
+    bands,
+    crestSharpness,
+    timeScale,
+  );
+  const rotated = rotateNonPeriodicDomain(x, z);
+  const secondary = evaluatePeriodicSurface(
+    rotated.x,
+    rotated.z,
+    phaseOffset,
+    timeSeconds,
+    bands,
+    crestSharpness,
+    timeScale,
+  );
+  const secondaryWorld = worldSlopesFromRotatedDomain(secondary);
+  const blend = nonPeriodicBlend(x, z, phaseOffset);
+  return mixSurfaceSamples(primary, secondaryWorld, blend);
+}
+
+function evaluatePeriodicSurface(
+  x: number,
+  z: number,
+  phaseOffset: number,
+  timeSeconds: number,
+  bands: readonly PreparedSpectralBand[],
+  crestSharpness: number,
+  timeScale: number,
+): SpectralSurfaceSample {
   let height = 0;
   let slopeX = 0;
   let slopeZ = 0;
@@ -118,6 +242,51 @@ export function evaluateSpectralSurface(
   return { height, slopeX, slopeZ, velocityY };
 }
 
+function worldSlopesFromRotatedDomain(
+  sample: SpectralSurfaceSample,
+): SpectralSurfaceSample {
+  return {
+    height: sample.height,
+    slopeX:
+      sample.slopeX * NON_PERIODIC_ROTATION_COS +
+      sample.slopeZ * NON_PERIODIC_ROTATION_SIN,
+    slopeZ:
+      -sample.slopeX * NON_PERIODIC_ROTATION_SIN +
+      sample.slopeZ * NON_PERIODIC_ROTATION_COS,
+    velocityY: sample.velocityY,
+  };
+}
+
+function mixSurfaceSamples(
+  primary: SpectralSurfaceSample,
+  secondary: SpectralSurfaceSample,
+  blend: Readonly<{
+    readonly weight: number;
+    readonly dWeightDx: number;
+    readonly dWeightDz: number;
+  }>,
+): SpectralSurfaceSample {
+  const inverse = 1 - blend.weight;
+  const heightDelta = secondary.height - primary.height;
+  return {
+    height: primary.height * inverse + secondary.height * blend.weight,
+    slopeX:
+      primary.slopeX * inverse +
+      secondary.slopeX * blend.weight +
+      heightDelta * blend.dWeightDx,
+    slopeZ:
+      primary.slopeZ * inverse +
+      secondary.slopeZ * blend.weight +
+      heightDelta * blend.dWeightDz,
+    velocityY: primary.velocityY * inverse + secondary.velocityY * blend.weight,
+  };
+}
+
+function hermiteStep(edge0: number, edge1: number, value: number): number {
+  const t = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
 export function writeSpectralBandQueries(
   batch: GameplayQueryBatch,
   state: HostSimulationState,
@@ -128,8 +297,8 @@ export function writeSpectralBandQueries(
 
   for (let point = 0; point < batch.count; point += 1) {
     const vectorIndex = point * 3;
-    const x = batch.positions[vectorIndex] ?? 0;
-    const z = batch.positions[vectorIndex + 2] ?? 0;
+    const x = (batch.positions[vectorIndex] ?? 0) + state.originX;
+    const z = (batch.positions[vectorIndex + 2] ?? 0) + state.originZ;
     const surface = evaluateSpectralSurface(
       x,
       z,

@@ -42,6 +42,10 @@ const DEFAULT_ARTISTIC_CONTROLS: ArtisticControls =
 /**
  * Host-authored deterministic state for the Open Water Domain.
  *
+ * `originX` and `originZ` are the Host-owned floating-origin offset in metres.
+ * Gameplay Query positions are in the current Host frame; the runtime evaluates
+ * the Open Water Domain at `(x + originX, z + originZ)`.
+ *
  * @public
  */
 export interface HostSimulationState {
@@ -49,6 +53,8 @@ export interface HostSimulationState {
   readonly tick: number;
   readonly timeSeconds: number;
   readonly paused: boolean;
+  readonly originX: number;
+  readonly originZ: number;
 }
 
 /**
@@ -63,11 +69,16 @@ export interface HostSimulationAdapter {
 /**
  * Lightweight coherent state shared by rendering and Gameplay Queries.
  *
+ * `temporalHistoryValid` is false only after a host floating-origin shift,
+ * until the next simulation tick at the same origin. Spectral wave state,
+ * seed, tick, time, and Artistic Controls are retained across that reset.
+ *
  * @public
  */
 export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
   readonly artisticControls: ArtisticControls;
   readonly controlRevision: number;
+  readonly temporalHistoryValid: boolean;
 }
 
 /**
@@ -139,6 +150,7 @@ export function createRealWaterRuntime(
   let controlRevision = 0;
   let queryTick = -1;
   let queriesUsedThisTick = 0;
+  const temporalHistory = createTemporalHistoryTracker();
 
   return Object.freeze({
     updateArtisticControls(
@@ -153,6 +165,7 @@ export function createRealWaterRuntime(
           simulation,
           nextControls,
           nextRevision,
+          temporalHistory,
         );
         sink?.synchronize(nextSnapshot);
         artisticControls = nextControls;
@@ -168,6 +181,7 @@ export function createRealWaterRuntime(
       assertActive();
       validateGameplayQueryBatch(batch);
       const state = readHostSimulationState(simulation);
+      temporalHistory.observe(state);
       const usedThisTick = state.tick === queryTick ? queriesUsedThisTick : 0;
       if (usedThisTick + batch.count > MAX_GAMEPLAY_QUERY_POINTS) {
         throw queryCapacityError(batch.count, usedThisTick);
@@ -184,7 +198,12 @@ export function createRealWaterRuntime(
     },
     inspectRuntime(): OpenWaterRuntimeSnapshot {
       assertActive();
-      return readSnapshot(simulation, artisticControls, controlRevision);
+      return readSnapshot(
+        simulation,
+        artisticControls,
+        controlRevision,
+        temporalHistory,
+      );
     },
   });
 }
@@ -200,6 +219,8 @@ export function createStaticHostSimulationAdapter(): HostSimulationAdapter {
     tick: 0,
     timeSeconds: 0,
     paused: true,
+    originX: 0,
+    originZ: 0,
   });
   return Object.freeze({ snapshot: () => snapshot });
 }
@@ -227,6 +248,9 @@ export function readHostSimulationState(
   }
   if (typeof state.paused !== "boolean") {
     throw new TypeError("Open Water pause state must be boolean.");
+  }
+  if (!Number.isFinite(state.originX) || !Number.isFinite(state.originZ)) {
+    throw new RangeError("Open Water origin must be finite.");
   }
   return state;
 }
@@ -287,10 +311,38 @@ function freezeSnapshot(
   return Object.freeze({ ...snapshot });
 }
 
+interface TemporalHistoryTracker {
+  observe(state: HostSimulationState): boolean;
+}
+
+function createTemporalHistoryTracker(): TemporalHistoryTracker {
+  let originX: number | undefined;
+  let originZ: number | undefined;
+  let tick = -1;
+  let temporalHistoryValid = true;
+
+  return Object.freeze({
+    observe(state: HostSimulationState): boolean {
+      if (originX !== undefined && originZ !== undefined) {
+        if (state.originX !== originX || state.originZ !== originZ) {
+          temporalHistoryValid = false;
+        } else if (state.tick !== tick) {
+          temporalHistoryValid = true;
+        }
+      }
+      originX = state.originX;
+      originZ = state.originZ;
+      tick = state.tick;
+      return temporalHistoryValid;
+    },
+  });
+}
+
 function readSnapshot(
   simulation: HostSimulationAdapter,
   artisticControls: ArtisticControls,
   controlRevision: number,
+  temporalHistory: TemporalHistoryTracker,
 ): OpenWaterRuntimeSnapshot {
   const state = readHostSimulationState(simulation);
   return freezeSnapshot({
@@ -298,8 +350,11 @@ function readSnapshot(
     tick: state.tick,
     timeSeconds: state.timeSeconds,
     paused: state.paused,
+    originX: state.originX,
+    originZ: state.originZ,
     artisticControls,
     controlRevision,
+    temporalHistoryValid: temporalHistory.observe(state),
   });
 }
 

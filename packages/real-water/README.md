@@ -28,11 +28,22 @@ again. The Reference Experience performs one bounded automatic device rebuild
 and repeats preparation after a confirmed long suspension.
 
 Every Host explicitly supplies a Host Simulation Adapter as the authoritative
-source of seed, tick, simulation time, and pause state. The same state drives
-the prepared TSL vertex displacement and the CPU spectral evaluator. Calm,
-Swell, and Storm Water Presets are versioned Artistic Control snapshots;
-applying one updates existing uniforms without replacing geometry, nodes,
-materials, or pipelines.
+source of seed, tick, simulation time, pause state, and Host-owned floating
+origin. Gameplay Query positions are in the current Host frame; the runtime
+evaluates the Open Water Domain at `(x + originX, z + originZ)` so queries stay
+continuous across origin shifts. An origin change invalidates only temporal
+history (`temporalHistoryValid` becomes false until the next tick at the same
+origin); spectral wave state, seed, tick, time, and Artistic Controls are
+retained. The same Host state drives the prepared TSL vertex displacement and
+the CPU spectral evaluator. Calm, Swell, and Storm Water Presets are versioned
+Artistic Control snapshots; applying one updates existing uniforms without
+replacing geometry, nodes, materials, or pipelines.
+
+The prepared surface uses non-periodic spectral blending, camera-distance
+transitions from near geometry through middle normal detail into far slope and
+BRDF placeholders, and world-locked distant highlight and white-detail
+placeholders. Distant detail is filtered so it remains stable under camera
+motion. This four-band Open Water Domain still makes no Native Quality claim.
 
 `queryGameplay(...)` is synchronous and performs no GPU readback. It writes up
 to 2,048 points per simulation tick into caller-owned typed arrays for height,
@@ -41,5 +52,4 @@ Artistic Control revision, and zero-tick local snapshot age. Capacity and input
 failures are detected before output buffers are changed.
 
 Disposal releases the clipmap and other Real Water-owned resources without
-disposing Host-owned objects. This four-band Open Water Domain makes no Native
-Quality claim.
+disposing Host-owned objects.

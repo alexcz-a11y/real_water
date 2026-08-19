@@ -4,10 +4,11 @@ import { QA_FRAME_FIXED_TICK_HZ, isQaFrameSeed } from "./qa-frame-contract.js";
 export interface QaHostSimulationController extends HostSimulationAdapter {
   reset(seed: number): HostSimulationState;
   advance(ticks: number): HostSimulationState;
+  setOrigin(originX: number, originZ: number): HostSimulationState;
 }
 
 export function createQaHostSimulationController(): QaHostSimulationController {
-  let state = freezeState(0, 0);
+  let state = freezeState(0, 0, 0, 0);
   return Object.freeze({
     snapshot: () => state,
     reset(seed: number): HostSimulationState {
@@ -16,7 +17,7 @@ export function createQaHostSimulationController(): QaHostSimulationController {
           "QA simulation seeds must be unsigned 32-bit integers.",
         );
       }
-      state = freezeState(seed, 0);
+      state = freezeState(seed, 0, 0, 0);
       return state;
     },
     advance(ticks: number): HostSimulationState {
@@ -29,17 +30,36 @@ export function createQaHostSimulationController(): QaHostSimulationController {
           "QA simulation tick advances must be non-negative safe integers.",
         );
       }
-      state = freezeState(state.seed, state.tick + ticks);
+      state = freezeState(
+        state.seed,
+        state.tick + ticks,
+        state.originX,
+        state.originZ,
+      );
+      return state;
+    },
+    setOrigin(originX: number, originZ: number): HostSimulationState {
+      if (!Number.isFinite(originX) || !Number.isFinite(originZ)) {
+        throw new RangeError("QA origin must be finite.");
+      }
+      state = freezeState(state.seed, state.tick, originX, originZ);
       return state;
     },
   });
 }
 
-function freezeState(seed: number, tick: number): HostSimulationState {
+function freezeState(
+  seed: number,
+  tick: number,
+  originX: number,
+  originZ: number,
+): HostSimulationState {
   return Object.freeze({
     seed,
     tick,
     timeSeconds: tick / QA_FRAME_FIXED_TICK_HZ,
     paused: false,
+    originX,
+    originZ,
   });
 }

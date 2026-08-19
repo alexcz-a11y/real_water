@@ -5,7 +5,21 @@ Water Domain. The repository now includes a four-band, camera-relative Open
 Water Domain with versioned Calm, Swell, and Storm Water Presets, built on the
 complete prewarm, reveal, reprepare, and recovery path.
 
-Issue #18 extends the coherent spectral runtime and deterministic QA foundation:
+Issue #19 keeps the four-band Open Water Domain stable across distance and host
+floating-origin shifts:
+
+- Host Simulation state includes `originX` and `originZ`; Gameplay Queries
+  remain continuous after an origin rebase and reset only invalid temporal
+  history;
+- non-periodic spectral blending prevents obvious repeating patches;
+- near geometry, middle normal detail, and far slope or BRDF detail transition
+  without a visible seam;
+- distant highlights and white-detail placeholders stay stable under camera
+  motion;
+- the test-only QA Harness exposes `setOrigin` and origin-tagged receipts.
+
+Issue #18 extended the coherent spectral runtime and deterministic QA
+foundation:
 
 - an accessible Loading Experience appears before preparation begins;
 - the canonical minimal-water Prewarm Manifest declares exactly twelve work
@@ -20,8 +34,8 @@ Issue #18 extends the coherent spectral runtime and deterministic QA foundation:
 - the prepared TSL material displaces a camera-relative clipmap with four
   deterministic spectral wave bands;
 - every Host explicitly supplies a Host Simulation Adapter whose seed, tick,
-  time, and pause state drive both rendering and the CPU evaluator without any
-  wall-clock read;
+  time, pause state, and floating origin drive both rendering and the CPU
+  evaluator without any wall-clock read;
 - the ready Runtime Interface applies complete hot Artistic Controls, including
   versioned Calm, Swell, and Storm Water Presets, and revisions them only when
   the snapshot changes;
@@ -34,10 +48,11 @@ Issue #18 extends the coherent spectral runtime and deterministic QA foundation:
 - the QA route resets a fixed seed, advances explicit 60 Hz ticks, applies a
   fixed camera, presents once, and addresses final color, linear depth, and
   view-space normal captures by name;
-- seed, tick, time, and Artistic Control revision feed the prepared surface;
-  Playwright verifies repeatability, ocean-scale horizon coverage, and bounds
-  fixed-point render/query height disagreement without wall-clock sleeps or
-  animation-frame polling;
+- seed, tick, time, origin, and Artistic Control revision feed the prepared
+  surface; Playwright verifies repeatability, ocean-scale horizon coverage,
+  non-periodic blending, distance LOD, distant-detail stability, origin-shift
+  continuity, and bounds fixed-point render/query height disagreement without
+  wall-clock sleeps or animation-frame polling;
 - the Reference Experience keeps the canvas hidden through preparation and
   reveals it on the next refresh after readiness;
 - immutable `minimal` and `minimal-high-detail` Quality Profiles derive distinct
@@ -56,8 +71,9 @@ Issue #18 extends the coherent spectral runtime and deterministic QA foundation:
   structured diagnostics;
 - lease disposal is idempotent and releases only Real Water-owned resources.
 
-This milestone presents a four-band, camera-relative Open Water Domain. It does
-not yet claim Native Quality or production water behavior.
+This milestone keeps the four-band Open Water Domain stable across distance and
+origin shifts. It does not yet claim Native Quality or production water
+behavior.
 
 ## Required toolchain
 

@@ -44,7 +44,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
 
   expect(contract).toEqual({
     schema: "real-water/qa-harness",
-    version: 2,
+    version: 3,
     fixedTickHz: 60,
     captureNames: ["final-color", "depth", "normal"],
     prewarmSchema: "real-water/qa-frame-prewarm",
@@ -134,7 +134,7 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
     Math.floor(result.depth.height / 2) * result.depth.width +
     Math.floor(result.depth.width / 2);
   const renderedHeight = 12 - (depths[center] ?? Number.NaN);
-  expect(result.query.height).toBeCloseTo(2.859_167, 5);
+  expect(result.query.height).toBeCloseTo(1.815_34, 5);
   expect(Math.abs(renderedHeight - result.query.height)).toBeLessThanOrEqual(
     0.03,
   );

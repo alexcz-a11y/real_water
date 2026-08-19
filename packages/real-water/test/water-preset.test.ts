@@ -142,13 +142,13 @@ describe("Water Preset runtime switching", () => {
     expect(lease.inspectRuntime().artisticControls).toEqual(
       createWaterPreset("swell").artisticControls,
     );
-    expect(query()).toBeCloseTo(0.941_342, 5);
+    expect(query()).toBeCloseTo(1.177_562, 5);
 
     const storm = lease.updateArtisticControls(
       createWaterPreset("storm").artisticControls,
     );
     expect(storm).toMatchObject({ changed: true, revision: 1 });
-    expect(query()).toBeCloseTo(2.468_177, 5);
+    expect(query()).toBeCloseTo(2.941_599, 5);
     expect(
       lease.updateArtisticControls(createWaterPreset("storm").artisticControls),
     ).toMatchObject({ changed: false, revision: 1 });
@@ -157,7 +157,7 @@ describe("Water Preset runtime switching", () => {
       createWaterPreset("calm").artisticControls,
     );
     expect(calm).toMatchObject({ changed: true, revision: 2 });
-    expect(query()).toBeCloseTo(0.165_602, 5);
+    expect(query()).toBeCloseTo(0.200_01, 5);
     expect(lease.inspectRuntime().artisticControls).toEqual(
       createWaterPreset("calm").artisticControls,
     );

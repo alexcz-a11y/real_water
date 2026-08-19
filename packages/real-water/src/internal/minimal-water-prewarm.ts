@@ -9,7 +9,7 @@ import {
   type Renderer,
   type Scene,
 } from "three/webgpu";
-import { pass, texture } from "three/tsl";
+import { mix, pass, texture, vec3 } from "three/tsl";
 import {
   MINIMAL_WATER_PREWARM_DECLARATION_IDS,
   assertMinimalWaterPrewarmManifest,
@@ -126,11 +126,18 @@ export async function prepareMinimalWaterPlane(
     partial.spectralBand = spectralBand;
     material.positionNode = spectralBand.positionNode;
     material.normalNode = spectralBand.normalNode;
-    const surfaceColor = texture(waterTexture).mul(
-      spectralBand.heightNode.mul(0.12).add(1),
+    const waterColor = texture(waterTexture).mul(
+      spectralBand.heightNode.mul(0.08).add(1),
     );
+    const whiteDetail = vec3(0.93, 0.96, 0.98);
+    const surfaceColor = mix(
+      waterColor,
+      whiteDetail,
+      spectralBand.whiteDetailNode.mul(0.55),
+    ).add(vec3(spectralBand.highlightNode).mul(vec3(1, 0.96, 0.82)));
     material.colorNode = surfaceColor;
     material.emissiveNode = surfaceColor.rgb;
+    material.roughnessNode = spectralBand.roughnessNode;
     const plane = new Mesh(geometry, material);
     partial.plane = plane;
     plane.name = "Real Water clipmap";

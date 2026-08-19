@@ -171,6 +171,10 @@ export interface HostSimulationAdapter {
 // @public
 export interface HostSimulationState {
     // (undocumented)
+    readonly originX: number;
+    // (undocumented)
+    readonly originZ: number;
+    // (undocumented)
     readonly paused: boolean;
     // (undocumented)
     readonly seed: number;
@@ -257,6 +261,8 @@ export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
     readonly artisticControls: ArtisticControls;
     // (undocumented)
     readonly controlRevision: number;
+    // (undocumented)
+    readonly temporalHistoryValid: boolean;
 }
 
 // @public
