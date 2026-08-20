@@ -1,7 +1,14 @@
 import { Buffer } from "node:buffer";
 import { expect, test } from "@playwright/test";
-import type { QaCameraV1, QaHarnessV3 } from "../src/qa-harness.js";
+import {
+  CORE_WEBGPU_MAX_COLOR_ATTACHMENT_BYTES_PER_SAMPLE,
+  QA_FRAME_CAPTURE_SHAPES,
+  QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS,
+  calculateColorAttachmentBytesPerSample,
+} from "../src/qa-frame-contract.js";
+import type { QaCameraV1, QaHarnessV4 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
+import { decodeFloat32 } from "./qa-capture-bytes.js";
 
 const FIXED_CAMERA = {
   projection: "perspective" as const,
@@ -38,17 +45,96 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       captureNames: harness.captureNames,
       prewarmSchema: harness.prewarmManifest.schema,
       prewarmVersion: harness.prewarmManifest.version,
+      prewarmDeclarations: harness.prewarmManifest.declarations.map(
+        ({ id, format }) => ({ id, format }),
+      ),
+      prewarmCaptures: harness.prewarmManifest.captures.map(
+        ({ name, preparedFormat }) => ({ name, preparedFormat }),
+      ),
       frozen: Object.isFrozen(harness),
     };
   });
 
+  expect(
+    calculateColorAttachmentBytesPerSample([
+      "rgba16float",
+      "r32float",
+      "rgba16float",
+      "rgba16float",
+      "rgba8unorm",
+    ]),
+  ).toBe(36);
+  expect(
+    calculateColorAttachmentBytesPerSample(
+      QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS,
+    ),
+  ).toBe(28);
+  expect(
+    calculateColorAttachmentBytesPerSample(
+      QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS,
+    ),
+  ).toBeLessThanOrEqual(CORE_WEBGPU_MAX_COLOR_ATTACHMENT_BYTES_PER_SAMPLE);
   expect(contract).toEqual({
     schema: "real-water/qa-harness",
-    version: 3,
+    version: 4,
     fixedTickHz: 60,
-    captureNames: ["final-color", "depth", "normal"],
+    captureNames: [
+      "final-color",
+      "depth",
+      "normal",
+      "optical-fresnel",
+      "optical-thickness",
+      "optical-scattering",
+      "optical-environment-reflection",
+      "optical-crest-transmission",
+      "optical-transmittance",
+      "optical-glint",
+    ],
     prewarmSchema: "real-water/qa-frame-prewarm",
-    prewarmVersion: 1,
+    prewarmVersion: 2,
+    prewarmDeclarations: [
+      { id: "qa-final-color-target", format: "rgba8unorm-srgb" },
+      { id: "qa-inverse-linear-depth-target", format: "r32float" },
+      { id: "qa-view-normal-target", format: "rg16float" },
+      { id: "qa-optical-factors-target", format: "rgba16float" },
+      { id: "qa-optical-diagnostics-a-target", format: "rg8unorm" },
+      { id: "qa-optical-diagnostics-b-target", format: "rg8unorm" },
+      { id: "qa-single-mrt-composition" },
+      { id: "qa-transform-free-canvas-blit" },
+      { id: "qa-eight-hidden-stabilization-frames" },
+      { id: "qa-named-buffer-completion-probes" },
+      { id: "qa-main-camera-guard" },
+    ],
+    prewarmCaptures: [
+      { name: "final-color", preparedFormat: "rgba8unorm-srgb" },
+      { name: "depth", preparedFormat: "r32float-inverse-linear-view" },
+      { name: "normal", preparedFormat: "rg16float-view-normal" },
+      {
+        name: "optical-fresnel",
+        preparedFormat: "rgba16float-optical-factors",
+      },
+      {
+        name: "optical-thickness",
+        preparedFormat: "rgba16float-optical-factors",
+      },
+      {
+        name: "optical-scattering",
+        preparedFormat: "rg8unorm-optical-diagnostics-b",
+      },
+      {
+        name: "optical-environment-reflection",
+        preparedFormat: "rg8unorm-optical-diagnostics-b",
+      },
+      {
+        name: "optical-crest-transmission",
+        preparedFormat: "rg8unorm-optical-diagnostics-a",
+      },
+      {
+        name: "optical-transmittance",
+        preparedFormat: "rg8unorm-optical-diagnostics-a",
+      },
+      { name: "optical-glint", preparedFormat: "rgba16float-optical-factors" },
+    ],
     frozen: true,
   });
 });
@@ -67,7 +153,7 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
     const harness = window.__REAL_WATER_QA__ as
-      | (QaHarnessV3 & {
+      | (QaHarnessV4 & {
           updateArtisticControls(controls: {
             readonly waveStrength: number;
             readonly swellDrama: number;
@@ -76,6 +162,12 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
             readonly crestSharpness: number;
             readonly microDetail: number;
             readonly timeScale: number;
+            readonly grazingReflection: number;
+            readonly environmentReflection: number;
+            readonly depthSeeThrough: number;
+            readonly depthColoring: number;
+            readonly inWaterGlow: number;
+            readonly crestGlow: number;
           }): Promise<{ readonly revision: number }>;
           queryGameplay(point: readonly [number, number, number]): Promise<{
             readonly height: number;
@@ -103,6 +195,12 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
       crestSharpness: 0,
       microDetail: 1,
       timeScale: 1,
+      grazingReflection: 1,
+      environmentReflection: 1,
+      depthSeeThrough: 1,
+      depthColoring: 1,
+      inWaterGlow: 1,
+      crestGlow: 1,
     });
     await harness.setCamera({
       projection: "perspective",
@@ -116,6 +214,12 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
     const presentation = await harness.present();
     const depth = await harness.capture("depth");
     const normal = await harness.capture("normal");
+    const scattering = await harness.capture("optical-scattering");
+    const environmentReflection = await harness.capture(
+      "optical-environment-reflection",
+    );
+    const crest = await harness.capture("optical-crest-transmission");
+    const transmittance = await harness.capture("optical-transmittance");
     const query = await harness.queryGameplay([0.7, 0, 0]);
     const after = harness.snapshot();
     return {
@@ -124,6 +228,10 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
       presentation,
       depth,
       normal,
+      scattering,
+      environmentReflection,
+      crest,
+      transmittance,
       query,
       after,
     };
@@ -154,9 +262,29 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   expect(normalValues[normalIndex + 2]).toBeCloseTo(result.query.normal[1], 2);
   expect(result.after).toEqual(result.before);
   expect(result.presentation.prewarm.progress).toMatchObject({
-    completedWork: 8,
-    totalWork: 8,
+    completedWork: 11,
+    totalWork: 11,
   });
+  const encodedRg8ByteLength = result.depth.width * result.depth.height * 4;
+  for (const capture of [
+    result.scattering,
+    result.environmentReflection,
+    result.crest,
+    result.transmittance,
+  ]) {
+    expect(capture.width).toBe(321);
+    expect(capture.height).toBe(181);
+    expect(Buffer.from(capture.data, "base64")).toHaveLength(
+      encodedRg8ByteLength,
+    );
+    const values = decodeFloat32(capture.data);
+    expect(values).toHaveLength(result.depth.width * result.depth.height);
+    expect(
+      values.every(
+        (value) => Number.isFinite(value) && value >= 0 && value <= 1,
+      ),
+    ).toBe(true);
+  }
 });
 
 test("presents camera-relative Open Water through the horizon", async ({
@@ -172,7 +300,7 @@ test("presents camera-relative Open Water through the horizon", async ({
   await page.goto("/?qa=1&host=three");
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV3 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV4 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -225,7 +353,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV3 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV4 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -256,71 +384,189 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     seed: 0x5eed_0016,
     tick: 120,
     originRevision: 0,
-    captureNames: ["final-color", "depth", "normal"],
+    captureNames: [
+      "final-color",
+      "depth",
+      "normal",
+      "optical-fresnel",
+      "optical-thickness",
+      "optical-scattering",
+      "optical-environment-reflection",
+      "optical-crest-transmission",
+      "optical-transmittance",
+      "optical-glint",
+    ],
     prewarm: {
       width: 320,
       height: 180,
       progress: {
-        completedWork: 8,
-        totalWork: 8,
+        completedWork: 11,
+        totalWork: 11,
       },
     },
+  });
+  expect(result.first.presentation.prewarm.rendererDevice).toEqual({
+    features: expect.any(Array),
+    limits: expect.objectContaining({
+      maxTextureDimension2D: expect.any(Number),
+      maxColorAttachmentBytesPerSample: expect.any(Number),
+      maxColorAttachments: expect.any(Number),
+    }),
   });
   expect(result.first.captures.map(({ name }) => name)).toEqual([
     "final-color",
     "depth",
     "normal",
+    "optical-fresnel",
+    "optical-thickness",
+    "optical-scattering",
+    "optical-environment-reflection",
+    "optical-crest-transmission",
+    "optical-transmittance",
+    "optical-glint",
   ]);
   expect(result.first.captures.map(({ version }) => version)).toEqual([
-    3, 3, 3,
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
   ]);
   expect(result.first.captures.map(({ format }) => format)).toEqual([
     "rgba8unorm-srgb",
     "r32float-linear-view",
     "rgb32float-view-normal",
+    "r32float-optical",
+    "r32float-optical",
+    "r32float-optical",
+    "r32float-optical",
+    "r32float-optical",
+    "r32float-optical",
+    "r32float-optical",
   ]);
   expect(result.first.captures.every(({ data }) => data.length > 0)).toBe(true);
-  expect(result.repeated.captures[0]?.data).toBe(
-    result.first.captures[0]?.data,
+  expect(
+    result.repeated.captures.map(
+      ({
+        name,
+        version,
+        width,
+        height,
+        origin,
+        format,
+        components,
+        elementType,
+        dataEncoding,
+        byteOrder,
+        data,
+      }) => ({
+        name,
+        version,
+        width,
+        height,
+        origin,
+        format,
+        components,
+        elementType,
+        dataEncoding,
+        byteOrder,
+        data,
+      }),
+    ),
+  ).toEqual(
+    result.first.captures.map(
+      ({
+        name,
+        version,
+        width,
+        height,
+        origin,
+        format,
+        components,
+        elementType,
+        dataEncoding,
+        byteOrder,
+        data,
+      }) => ({
+        name,
+        version,
+        width,
+        height,
+        origin,
+        format,
+        components,
+        elementType,
+        dataEncoding,
+        byteOrder,
+        data,
+      }),
+    ),
+  );
+  expect(result.first.captures.every((capture) => capture.version === 4)).toBe(
+    true,
   );
   expect(result.changedTick.captures[0]?.data).not.toBe(
     result.first.captures[0]?.data,
   );
 
-  const [finalColor, depth, normal] = result.first.captures;
-  expect(finalColor).toMatchObject({ width: 320, height: 180, components: 4 });
-  expect(depth).toMatchObject({ width: 320, height: 180, components: 1 });
-  expect(normal).toMatchObject({ width: 320, height: 180, components: 3 });
-  expect(Buffer.from(finalColor?.data ?? "", "base64")).toHaveLength(
-    320 * 180 * 4,
-  );
+  const pixelCount = 320 * 180;
+  for (const capture of result.first.captures) {
+    const shape = QA_FRAME_CAPTURE_SHAPES[capture.name];
+    const elementBytes = shape.elementType === "uint8" ? 1 : 4;
+    expect(capture).toMatchObject({
+      width: 320,
+      height: 180,
+      origin: "top-left",
+      components: shape.components,
+      format: shape.format,
+      elementType: shape.elementType,
+      dataEncoding: "base64",
+      byteOrder:
+        shape.elementType === "float32" ? "little-endian" : "not-applicable",
+    });
+    expect(Buffer.from(capture.data, "base64")).toHaveLength(
+      pixelCount * shape.components * elementBytes,
+    );
+    if (shape.elementType === "float32") {
+      const values = decodeFloat32(capture.data);
+      expect(values).toHaveLength(pixelCount * shape.components);
+      expect(
+        values.every(
+          (value) =>
+            Number.isFinite(value) &&
+            value >= opticalScalarMin(capture.name) &&
+            value <= opticalScalarMax(capture.name),
+        ),
+      ).toBe(true);
+    }
+  }
 
+  const depth = result.first.captures.find(
+    (capture) => capture.name === "depth",
+  );
+  const normal = result.first.captures.find(
+    (capture) => capture.name === "normal",
+  );
   const depthValues = decodeFloat32(depth?.data ?? "");
-  expect(depthValues).toHaveLength(320 * 180);
-  expect(
-    depthValues.every(
-      (value) => Number.isFinite(value) && value >= 0.1 && value <= 100.001,
-    ),
-  ).toBe(true);
   expect(depthValues.some((value) => value < 99)).toBe(true);
   expect(depthValues.some((value) => Math.abs(value - 100) < 0.001)).toBe(true);
-
-  const normalValues = decodeFloat32(normal?.data ?? "");
-  expect(normalValues).toHaveLength(320 * 180 * 3);
-  expect(
-    normalValues.every(
-      (value) => Number.isFinite(value) && value >= -1.001 && value <= 1.001,
-    ),
-  ).toBe(true);
-  expect(hasUnitNormal(normalValues)).toBe(true);
+  expect(hasUnitNormal(decodeFloat32(normal?.data ?? ""))).toBe(true);
 });
 
-function decodeFloat32(encoded: string): number[] {
-  const bytes = Buffer.from(encoded, "base64");
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  return Array.from({ length: bytes.byteLength / 4 }, (_, index) =>
-    view.getFloat32(index * 4, true),
-  );
+function opticalScalarMin(name: string): number {
+  if (name === "normal") {
+    return -1.001;
+  }
+  if (name === "depth") {
+    return 0.1;
+  }
+  return 0;
+}
+
+function opticalScalarMax(name: string): number {
+  if (name === "normal") {
+    return 1.001;
+  }
+  if (name === "depth" || name === "optical-thickness") {
+    return 100.001;
+  }
+  return 2;
 }
 
 function hasUnitNormal(values: readonly number[]): boolean {

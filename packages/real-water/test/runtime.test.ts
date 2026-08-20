@@ -1,13 +1,34 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
-  createMemoryHostLifecycleAdapter,
+  createMemoryHostLifecycleAdapter as createBaseMemoryHostLifecycleAdapter,
   createMinimalWaterPrewarmManifest,
   createStaticHostSimulationAdapter,
   prepareRealWater,
   type GameplayQueryResults,
 } from "../src/index.js";
+import { createRealWaterRuntime } from "../src/runtime.js";
+import { createTestEnvironmentAdapter } from "./test-host-environment.js";
 
 const STATIC_SIMULATION = createStaticHostSimulationAdapter();
+
+function createMemoryHostLifecycleAdapter(
+  options: Omit<
+    Parameters<typeof createBaseMemoryHostLifecycleAdapter>[0],
+    "simulation" | "environment"
+  > &
+    Partial<
+      Pick<
+        Parameters<typeof createBaseMemoryHostLifecycleAdapter>[0],
+        "simulation"
+      >
+    >,
+) {
+  return createBaseMemoryHostLifecycleAdapter({
+    ...options,
+    simulation: options.simulation ?? STATIC_SIMULATION,
+    environment: createTestEnvironmentAdapter(),
+  });
+}
 
 describe("ready Open Water runtime", () => {
   it("publishes the prepared per-tick Gameplay Query capacity", async () => {
@@ -99,6 +120,18 @@ describe("ready Open Water runtime", () => {
       changed: false,
       revision: 1,
     });
+    expect(lease.inspectRuntime().artisticControls).toEqual(doubled);
+    expect(() => {
+      const { grazingReflection: _omitted, ...incomplete } = doubled;
+      void _omitted;
+      lease.updateArtisticControls(incomplete);
+    }).toThrow(/complete supported control set/);
+    expect(() =>
+      lease.updateArtisticControls({
+        ...lease.inspectRuntime().artisticControls,
+        grazingReflection: 3,
+      }),
+    ).toThrow(/grazingReflection must be between 0 and 2/);
     lease.queryGameplay({
       count: 2,
       positions: Float32Array.of(2, 0, 0, 0, 0, 0),
@@ -125,6 +158,21 @@ describe("ready Open Water runtime", () => {
     expect(results.ticks[0]).toBe(60);
 
     await lease.dispose();
+  });
+
+  it("synchronizes the render sink only when Artistic Controls change", () => {
+    const sink = { synchronize: vi.fn() };
+    const runtime = createRealWaterRuntime(() => {}, STATIC_SIMULATION, sink);
+    const controls = runtime.inspectRuntime().artisticControls;
+
+    runtime.updateArtisticControls(controls);
+    expect(sink.synchronize).not.toHaveBeenCalled();
+
+    runtime.updateArtisticControls({ ...controls, waveStrength: 2 });
+    expect(sink.synchronize).toHaveBeenCalledTimes(1);
+
+    runtime.updateArtisticControls({ ...controls, waveStrength: 2 });
+    expect(sink.synchronize).toHaveBeenCalledTimes(1);
   });
 
   it("fails before writes when a tick exceeds its prepared query capacity", async () => {

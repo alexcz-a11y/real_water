@@ -5,6 +5,8 @@ import type {
   WebGPUDeviceLoss,
 } from "./startup.js";
 import type { HostSimulationAdapter } from "./runtime.js";
+import type { HostEnvironmentAdapter } from "./environment.js";
+import { assertHostEnvironmentMatchesManifest } from "./environment.js";
 import {
   coreWebGPULimits,
   evaluateRenderingCapability,
@@ -52,6 +54,7 @@ export type MemoryHostScenario =
 export interface MemoryHostLifecycleAdapterOptions {
   readonly scenario?: MemoryHostScenario;
   readonly simulation: HostSimulationAdapter;
+  readonly environment: HostEnvironmentAdapter;
   readonly stepDelayMs?: number;
 }
 
@@ -64,11 +67,20 @@ export interface MemoryHostLifecycleAdapterOptions {
 export function createMemoryHostLifecycleAdapter(
   options: MemoryHostLifecycleAdapterOptions,
 ): HostLifecycleAdapter {
+  if (options.environment === undefined) {
+    throw new TypeError(
+      "The Memory Host Adapter requires a Host Environment Adapter.",
+    );
+  }
   const scenario = options.scenario ?? { kind: "success" };
   const stepDelayMs = normalizeDelay(options.stepDelayMs);
 
   return Object.freeze({
     async prepare(request: HostPreparationRequest) {
+      assertHostEnvironmentMatchesManifest(
+        options.environment,
+        request.manifest,
+      );
       await waitForTurn(stepDelayMs, request.signal);
 
       if (scenario.kind === "unsupported") {

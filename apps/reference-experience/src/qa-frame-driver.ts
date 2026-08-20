@@ -3,6 +3,9 @@ import {
   DataUtils,
   FloatType,
   HalfFloatType,
+  LinearSRGBColorSpace,
+  RGBAFormat,
+  RGFormat,
   RedFormat,
   RenderPipeline,
   RenderTarget,
@@ -11,14 +14,26 @@ import {
   type Renderer,
   type WebGPURenderer,
 } from "three/webgpu";
-import { linearDepth, mrt, normalView, output, pass, texture } from "three/tsl";
 import {
+  linearDepth,
+  mrt,
+  normalView,
+  output,
+  pass,
+  texture,
+  vec4,
+} from "three/tsl";
+import {
+  calculateColorAttachmentBytesPerSample,
+  CORE_WEBGPU_MAX_COLOR_ATTACHMENT_BYTES_PER_SAMPLE,
   QA_FRAME_CAPTURE_SHAPES,
   QA_FRAME_FIXED_TICK_HZ,
+  QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS,
   isQaFrameCaptureName,
   isQaFrameSeed,
   isQaFrameTickCount,
   type QaFrameCaptureName,
+  type QaScenePassColorAttachmentFormat,
 } from "./qa-frame-contract.js";
 import type { QaHostSimulationController } from "./qa-simulation-controller.js";
 
@@ -38,7 +53,25 @@ const QA_FRAME_PREWARM_DECLARATIONS = Object.freeze([
   Object.freeze({
     id: "qa-view-normal-target" as const,
     kind: "resource" as const,
+    format: "rg16float" as const,
+    size: "drawing-buffer-exact" as const,
+  }),
+  Object.freeze({
+    id: "qa-optical-factors-target" as const,
+    kind: "resource" as const,
     format: "rgba16float" as const,
+    size: "drawing-buffer-exact" as const,
+  }),
+  Object.freeze({
+    id: "qa-optical-diagnostics-a-target" as const,
+    kind: "resource" as const,
+    format: "rg8unorm" as const,
+    size: "drawing-buffer-exact" as const,
+  }),
+  Object.freeze({
+    id: "qa-optical-diagnostics-b-target" as const,
+    kind: "resource" as const,
+    format: "rg8unorm" as const,
     size: "drawing-buffer-exact" as const,
   }),
   Object.freeze({
@@ -65,7 +98,7 @@ const QA_FRAME_PREWARM_DECLARATIONS = Object.freeze([
 
 export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
   schema: "real-water/qa-frame-prewarm" as const,
-  version: 1 as const,
+  version: 2 as const,
   id: "reference-qa-frame" as const,
   declarations: QA_FRAME_PREWARM_DECLARATIONS,
   captures: Object.freeze([
@@ -79,7 +112,35 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       name: "normal" as const,
-      preparedFormat: "rgba16float-view-normal" as const,
+      preparedFormat: "rg16float-view-normal" as const,
+    }),
+    Object.freeze({
+      name: "optical-fresnel" as const,
+      preparedFormat: "rgba16float-optical-factors" as const,
+    }),
+    Object.freeze({
+      name: "optical-thickness" as const,
+      preparedFormat: "rgba16float-optical-factors" as const,
+    }),
+    Object.freeze({
+      name: "optical-scattering" as const,
+      preparedFormat: "rg8unorm-optical-diagnostics-b" as const,
+    }),
+    Object.freeze({
+      name: "optical-environment-reflection" as const,
+      preparedFormat: "rg8unorm-optical-diagnostics-b" as const,
+    }),
+    Object.freeze({
+      name: "optical-crest-transmission" as const,
+      preparedFormat: "rg8unorm-optical-diagnostics-a" as const,
+    }),
+    Object.freeze({
+      name: "optical-transmittance" as const,
+      preparedFormat: "rg8unorm-optical-diagnostics-a" as const,
+    }),
+    Object.freeze({
+      name: "optical-glint" as const,
+      preparedFormat: "rgba16float-optical-factors" as const,
     }),
   ]),
 });
@@ -110,10 +171,24 @@ export interface QaFrameDriverNormalCapture extends QaFrameDriverCaptureBase {
   readonly data: Float32Array;
 }
 
+export interface QaFrameDriverOpticalScalarCapture extends QaFrameDriverCaptureBase {
+  readonly name:
+    | "optical-fresnel"
+    | "optical-thickness"
+    | "optical-scattering"
+    | "optical-environment-reflection"
+    | "optical-crest-transmission"
+    | "optical-transmittance"
+    | "optical-glint";
+  readonly format: "r32float-optical";
+  readonly data: Float32Array;
+}
+
 export type QaFrameDriverCapture =
   | QaFrameDriverFinalColorCapture
   | QaFrameDriverDepthCapture
-  | QaFrameDriverNormalCapture;
+  | QaFrameDriverNormalCapture
+  | QaFrameDriverOpticalScalarCapture;
 
 export interface QaFrameDriverStateReceipt {
   readonly seed: number;
@@ -121,10 +196,16 @@ export interface QaFrameDriverStateReceipt {
   readonly timeSeconds: number;
 }
 
+export interface QaRendererDeviceInventory {
+  readonly features: readonly string[];
+  readonly limits: Readonly<Record<string, number>>;
+}
+
 export interface QaFramePrewarmReceipt {
   readonly manifest: typeof QA_FRAME_PREWARM_MANIFEST;
   readonly width: number;
   readonly height: number;
+  readonly rendererDevice: QaRendererDeviceInventory | null;
   readonly progress: Readonly<{
     readonly completedWork: number;
     readonly totalWork: number;
@@ -135,6 +216,8 @@ export interface QaFramePrewarmReceipt {
 export interface QaFrameDriverPresentedFrame extends QaFrameDriverStateReceipt {
   readonly presentationId: number;
   readonly manifestHash: string;
+  readonly compileCount: number;
+  readonly probeCount: number;
   readonly prewarm: QaFramePrewarmReceipt;
   readonly captures: readonly QaFrameDriverCapture[];
 }
@@ -166,18 +249,25 @@ interface PreparedQaResources {
   readonly scenePass: ReturnType<typeof pass>;
   readonly inverseLinearDepthTextureIndex: number;
   readonly viewNormalTextureIndex: number;
+  readonly opticalFactorsTextureIndex: number;
+  readonly opticalDiagnosticsATextureIndex: number;
+  readonly opticalDiagnosticsBTextureIndex: number;
   readonly width: number;
   readonly height: number;
 }
 
 const INVERSE_LINEAR_DEPTH_ATTACHMENT = "Real Water QA inverse linear depth";
 const VIEW_NORMAL_ATTACHMENT = "Real Water QA view normal";
+const OPTICAL_FACTORS_ATTACHMENT = "Real Water optical factors";
+const OPTICAL_DIAGNOSTICS_A_ATTACHMENT = "Real Water optical diagnostics A";
+const OPTICAL_DIAGNOSTICS_B_ATTACHMENT = "Real Water optical diagnostics B";
 const HIDDEN_STABILIZATION_FRAME_COUNT = 8;
 
 export async function createQaFrameDriver(
   options: CreateQaFrameDriverOptions,
 ): Promise<QaFrameDriver> {
   const renderer = options.renderer as unknown as Renderer;
+  const hostCounters = installRendererCounters(renderer);
   const initialHostState = captureHostState(
     renderer,
     options.scene,
@@ -200,7 +290,10 @@ export async function createQaFrameDriver(
       mrt({
         output,
         [INVERSE_LINEAR_DEPTH_ATTACHMENT]: linearDepth().oneMinus(),
-        [VIEW_NORMAL_ATTACHMENT]: normalView,
+        [VIEW_NORMAL_ATTACHMENT]: vec4(normalView.x, normalView.y, 0, 1),
+        [OPTICAL_FACTORS_ATTACHMENT]: vec4(0, 0, 0, 1),
+        [OPTICAL_DIAGNOSTICS_A_ATTACHMENT]: vec4(0, 0, 0, 1),
+        [OPTICAL_DIAGNOSTICS_B_ATTACHMENT]: vec4(0, 0, 0, 1),
       }),
     );
     const inverseLinearDepthTexture = scenePass.getTexture(
@@ -208,8 +301,30 @@ export async function createQaFrameDriver(
     );
     inverseLinearDepthTexture.format = RedFormat;
     inverseLinearDepthTexture.type = FloatType;
+    const outputTexture = scenePass.getTexture("output");
+    outputTexture.format = RGBAFormat;
+    outputTexture.type = HalfFloatType;
     const viewNormalTexture = scenePass.getTexture(VIEW_NORMAL_ATTACHMENT);
+    viewNormalTexture.format = RGFormat;
     viewNormalTexture.type = HalfFloatType;
+    const opticalFactorsTexture = scenePass.getTexture(
+      OPTICAL_FACTORS_ATTACHMENT,
+    );
+    opticalFactorsTexture.format = RGBAFormat;
+    opticalFactorsTexture.type = HalfFloatType;
+    const opticalDiagnosticsATexture = scenePass.getTexture(
+      OPTICAL_DIAGNOSTICS_A_ATTACHMENT,
+    );
+    opticalDiagnosticsATexture.format = RGFormat;
+    opticalDiagnosticsATexture.type = UnsignedByteType;
+    opticalDiagnosticsATexture.colorSpace = LinearSRGBColorSpace;
+    const opticalDiagnosticsBTexture = scenePass.getTexture(
+      OPTICAL_DIAGNOSTICS_B_ATTACHMENT,
+    );
+    opticalDiagnosticsBTexture.format = RGFormat;
+    opticalDiagnosticsBTexture.type = UnsignedByteType;
+    opticalDiagnosticsBTexture.colorSpace = LinearSRGBColorSpace;
+    assertQaScenePassColorByteBudget(scenePass.renderTarget.textures);
     const sceneColor = scenePass.getTextureNode("output");
     const finalColorTarget = new RenderTarget(size.width, size.height, {
       depthBuffer: false,
@@ -239,6 +354,18 @@ export async function createQaFrameDriver(
         scenePass.renderTarget,
         VIEW_NORMAL_ATTACHMENT,
       ),
+      opticalFactorsTextureIndex: textureIndex(
+        scenePass.renderTarget,
+        OPTICAL_FACTORS_ATTACHMENT,
+      ),
+      opticalDiagnosticsATextureIndex: textureIndex(
+        scenePass.renderTarget,
+        OPTICAL_DIAGNOSTICS_A_ATTACHMENT,
+      ),
+      opticalDiagnosticsBTextureIndex: textureIndex(
+        scenePass.renderTarget,
+        OPTICAL_DIAGNOSTICS_B_ATTACHMENT,
+      ),
       width: size.width,
       height: size.height,
     };
@@ -251,6 +378,9 @@ export async function createQaFrameDriver(
     progress.complete("qa-final-color-target");
     progress.complete("qa-inverse-linear-depth-target");
     progress.complete("qa-view-normal-target");
+    progress.complete("qa-optical-factors-target");
+    progress.complete("qa-optical-diagnostics-a-target");
+    progress.complete("qa-optical-diagnostics-b-target");
     progress.complete("qa-single-mrt-composition");
     progress.complete("qa-transform-free-canvas-blit");
 
@@ -268,10 +398,12 @@ export async function createQaFrameDriver(
     await probeCompletedFrame(renderer, resources.finalColorTarget);
     throwIfAborted(options.signal);
     progress.complete("qa-main-camera-guard");
-    const prewarm = progress.finish();
+    const prewarm = progress.finish(
+      readRendererDeviceInventory(options.renderer),
+    );
 
     restoreHostState(renderer, options.scene, options.camera, initialHostState);
-    return createPreparedDriver(options, resources, prewarm);
+    return createPreparedDriver(options, resources, prewarm, hostCounters);
   } catch (cause) {
     if (resources !== null) {
       try {
@@ -306,6 +438,7 @@ function createPreparedDriver(
   options: CreateQaFrameDriverOptions,
   resources: PreparedQaResources,
   prewarm: QaFramePrewarmReceipt,
+  hostCounters: RendererHostCounters,
 ): QaFrameDriver {
   const renderer = options.renderer as unknown as Renderer;
   let accepting = true;
@@ -378,6 +511,8 @@ function createPreparedDriver(
           timeSeconds: nextState.timeSeconds,
           presentationId,
           manifestHash: options.manifestHash,
+          compileCount: hostCounters.compileCount,
+          probeCount: hostCounters.probeCount,
           prewarm,
           captures: Object.freeze(captures),
         });
@@ -406,7 +541,9 @@ function renderPreparedFrame(
 
 interface PrewarmProgressRecorder {
   complete(declarationId: string): void;
-  finish(): QaFramePrewarmReceipt;
+  finish(
+    rendererDevice: QaRendererDeviceInventory | null,
+  ): QaFramePrewarmReceipt;
 }
 
 function createPrewarmProgress(
@@ -428,7 +565,9 @@ function createPrewarmProgress(
       }
       completedIds.push(declarationId);
     },
-    finish(): QaFramePrewarmReceipt {
+    finish(
+      rendererDevice: QaRendererDeviceInventory | null,
+    ): QaFramePrewarmReceipt {
       if (completedIds.length !== expectedIds.length) {
         throw new Error("The QA frame Prewarm Manifest is incomplete.");
       }
@@ -436,6 +575,7 @@ function createPrewarmProgress(
         manifest: QA_FRAME_PREWARM_MANIFEST,
         width,
         height,
+        rendererDevice,
         progress: Object.freeze({
           completedWork: completedIds.length,
           totalWork: expectedIds.length,
@@ -461,6 +601,21 @@ async function probePreparedCaptures(
     resources.scenePass.renderTarget,
     resources.viewNormalTextureIndex,
   );
+  await probeCompletedFrame(
+    renderer,
+    resources.scenePass.renderTarget,
+    resources.opticalFactorsTextureIndex,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources.scenePass.renderTarget,
+    resources.opticalDiagnosticsATextureIndex,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources.scenePass.renderTarget,
+    resources.opticalDiagnosticsBTextureIndex,
+  );
 }
 
 async function probeCompletedFrame(
@@ -468,11 +623,12 @@ async function probeCompletedFrame(
   renderTarget: RenderTarget,
   textureIndex = 0,
 ): Promise<void> {
+  const probeWidth = Math.min(2, Math.max(1, renderTarget.width));
   const pixels = await renderer.readRenderTargetPixelsAsync(
     renderTarget,
-    Math.max(0, Math.floor(renderTarget.width / 2)),
+    Math.max(0, Math.floor(renderTarget.width / 2) - (probeWidth - 1)),
     Math.max(0, Math.floor(renderTarget.height / 2)),
-    1,
+    probeWidth,
     1,
     textureIndex,
   );
@@ -552,18 +708,32 @@ async function readCapture(
       if (!(raw instanceof Uint16Array)) {
         throw new TypeError("Normal readback did not return Float16 data.");
       }
-      const rgba = compactRows(raw, resources.width, resources.height, 4);
+      const channels = inferReadbackChannels(
+        raw.length,
+        resources.width,
+        resources.height,
+      );
+      const packed = compactRows(
+        raw,
+        resources.width,
+        resources.height,
+        channels,
+      );
       const data = new Float32Array(resources.width * resources.height * 3);
       for (
         let pixel = 0;
         pixel < resources.width * resources.height;
         pixel += 1
       ) {
-        const source = pixel * 4;
+        const source = pixel * channels;
         const destination = pixel * 3;
-        data[destination] = DataUtils.fromHalfFloat(rgba[source] ?? 0);
-        data[destination + 1] = DataUtils.fromHalfFloat(rgba[source + 1] ?? 0);
-        data[destination + 2] = DataUtils.fromHalfFloat(rgba[source + 2] ?? 0);
+        const reconstructed = reconstructFrontFacingViewNormal(
+          DataUtils.fromHalfFloat(packed[source] ?? 0),
+          DataUtils.fromHalfFloat(packed[source + 1] ?? 0),
+        );
+        data[destination] = reconstructed[0];
+        data[destination + 1] = reconstructed[1];
+        data[destination + 2] = reconstructed[2];
       }
       return Object.freeze({
         name,
@@ -574,7 +744,209 @@ async function readCapture(
         data,
       });
     }
+    case "optical-fresnel":
+      return readOpticalScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.opticalFactorsTextureIndex,
+        0,
+      );
+    case "optical-thickness":
+      return readOpticalScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.opticalFactorsTextureIndex,
+        1,
+      );
+    case "optical-scattering":
+      return readOpticalScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.opticalDiagnosticsBTextureIndex,
+        0,
+      );
+    case "optical-environment-reflection":
+      return readOpticalScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.opticalDiagnosticsBTextureIndex,
+        1,
+      );
+    case "optical-crest-transmission":
+      return readOpticalScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.opticalDiagnosticsATextureIndex,
+        0,
+      );
+    case "optical-transmittance":
+      return readOpticalScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.opticalDiagnosticsATextureIndex,
+        1,
+      );
+    case "optical-glint":
+      return readOpticalScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.opticalFactorsTextureIndex,
+        2,
+      );
   }
+}
+
+async function readAttachmentPixels(
+  renderer: Renderer,
+  resources: PreparedQaResources,
+  textureIndex: number,
+): Promise<QaReadbackArray> {
+  const isRg8 =
+    textureIndex === resources.opticalDiagnosticsATextureIndex ||
+    textureIndex === resources.opticalDiagnosticsBTextureIndex;
+  if (isRg8 && resources.width % 2 !== 0) {
+    return readOddWidthRg8Attachment(
+      renderer,
+      resources.scenePass.renderTarget,
+      resources.width,
+      resources.height,
+      textureIndex,
+    );
+  }
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.scenePass.renderTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+    textureIndex,
+  );
+  if (
+    raw instanceof Uint8Array ||
+    raw instanceof Uint16Array ||
+    raw instanceof Float32Array
+  ) {
+    return raw;
+  }
+  throw new TypeError(
+    "Optical attachment readback used an unsupported array type.",
+  );
+}
+
+async function readOddWidthRg8Attachment(
+  renderer: Renderer,
+  renderTarget: RenderTarget,
+  width: number,
+  height: number,
+  textureIndex: number,
+): Promise<Uint8Array> {
+  if (width < 3) {
+    throw new RangeError(
+      "Odd-width RG8 optical diagnostics require at least three pixels for a 4-byte-aligned readback.",
+    );
+  }
+  const evenWidth = width - 1;
+  const left = await renderer.readRenderTargetPixelsAsync(
+    renderTarget,
+    0,
+    0,
+    evenWidth,
+    height,
+    textureIndex,
+  );
+  const right = await renderer.readRenderTargetPixelsAsync(
+    renderTarget,
+    evenWidth - 1,
+    0,
+    2,
+    height,
+    textureIndex,
+  );
+  if (!(left instanceof Uint8Array) || !(right instanceof Uint8Array)) {
+    throw new TypeError("RG8 readback did not return 8-bit data.");
+  }
+  const leftChannels = inferReadbackChannels(left.length, evenWidth, height);
+  const rightChannels = inferReadbackChannels(right.length, 2, height);
+  const leftPacked = compactRows(left, evenWidth, height, leftChannels);
+  const rightPacked = compactRows(right, 2, height, rightChannels);
+  const channels = leftChannels;
+  const packed = new Uint8Array(width * height * channels);
+  for (let row = 0; row < height; row += 1) {
+    packed.set(
+      leftPacked.subarray(
+        row * evenWidth * leftChannels,
+        (row + 1) * evenWidth * leftChannels,
+      ),
+      row * width * channels,
+    );
+    const destination = row * width * channels + evenWidth * channels;
+    const source = row * 2 * rightChannels + rightChannels;
+    for (let channel = 0; channel < channels; channel += 1) {
+      packed[destination + channel] = rightPacked[source + channel] ?? 0;
+    }
+  }
+  return packed;
+}
+
+async function readOpticalScalarCapture(
+  renderer: Renderer,
+  resources: PreparedQaResources,
+  name: QaFrameDriverOpticalScalarCapture["name"],
+  textureIndex: number,
+  channel: number,
+): Promise<QaFrameDriverOpticalScalarCapture> {
+  if (channel > 2) {
+    throw new RangeError(
+      "Optical scalar evidence must use an RGB channel; transparent MRT alpha is coverage.",
+    );
+  }
+  const data = new Float32Array(resources.width * resources.height);
+  const raw = await readAttachmentPixels(renderer, resources, textureIndex);
+  if (raw instanceof Uint16Array) {
+    const rgba = compactRows(raw, resources.width, resources.height, 4);
+    for (let pixel = 0; pixel < data.length; pixel += 1) {
+      data[pixel] = DataUtils.fromHalfFloat(rgba[pixel * 4 + channel] ?? 0);
+    }
+  } else if (raw instanceof Uint8Array) {
+    const channels = inferReadbackChannels(
+      raw.length,
+      resources.width,
+      resources.height,
+    );
+    if (channel >= channels) {
+      throw new RangeError(
+        "Optical scalar evidence requested a channel outside the packed attachment.",
+      );
+    }
+    const packed = compactRows(
+      raw,
+      resources.width,
+      resources.height,
+      channels,
+    );
+    for (let pixel = 0; pixel < data.length; pixel += 1) {
+      data[pixel] = (packed[pixel * channels + channel] ?? 0) / 255;
+    }
+  } else {
+    throw new TypeError(
+      "Optical factor readback did not return Float16 or 8-bit data.",
+    );
+  }
+  return Object.freeze({
+    name,
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: QA_FRAME_CAPTURE_SHAPES[name].format,
+    data,
+  });
 }
 
 type QaReadbackArray = Uint8Array | Uint16Array | Float32Array;
@@ -621,6 +993,170 @@ function resolvePaddedRowLength(
     throw new RangeError("The QA frame readback row layout is invalid.");
   }
   return rowLength;
+}
+
+function assertQaScenePassColorByteBudget(
+  textures: readonly { readonly format: number; readonly type: number }[],
+): void {
+  const formats = textures.map(colorAttachmentFormat);
+  if (
+    formats.length !== QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS.length ||
+    formats.some(
+      (format, index) =>
+        format !== QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS[index],
+    )
+  ) {
+    throw new TypeError(
+      `QA scene-pass MRT formats were ${formats.join(", ")}; expected ${QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS.join(", ")}.`,
+    );
+  }
+  const bytesPerSample = calculateColorAttachmentBytesPerSample(formats);
+  if (bytesPerSample > CORE_WEBGPU_MAX_COLOR_ATTACHMENT_BYTES_PER_SAMPLE) {
+    throw new RangeError(
+      `QA scene-pass MRT uses ${String(bytesPerSample)} bytes/sample; Core WebGPU maxColorAttachmentBytesPerSample is ${String(CORE_WEBGPU_MAX_COLOR_ATTACHMENT_BYTES_PER_SAMPLE)}.`,
+    );
+  }
+}
+
+function colorAttachmentFormat(texture: {
+  readonly format: number;
+  readonly type: number;
+}): QaScenePassColorAttachmentFormat {
+  if (texture.format === RedFormat && texture.type === FloatType) {
+    return "r32float";
+  }
+  if (texture.format === RGFormat && texture.type === HalfFloatType) {
+    return "rg16float";
+  }
+  if (texture.format === RGFormat && texture.type === UnsignedByteType) {
+    return "rg8unorm";
+  }
+  if (texture.format === RGBAFormat && texture.type === HalfFloatType) {
+    return "rgba16float";
+  }
+  if (texture.format === RGBAFormat && texture.type === UnsignedByteType) {
+    return "rgba8unorm";
+  }
+  throw new TypeError(
+    "QA scene-pass color attachment uses an unsupported format for the Core WebGPU byte budget.",
+  );
+}
+
+function inferReadbackChannels(
+  dataLength: number,
+  width: number,
+  height: number,
+): 2 | 4 {
+  for (const channels of [2, 4] as const) {
+    try {
+      resolvePaddedRowLength(dataLength, width, height, channels);
+      return channels;
+    } catch {
+      // Try the next packed layout.
+    }
+  }
+  throw new RangeError(
+    "Packed attachment readback did not match an RG or RGBA row layout.",
+  );
+}
+
+function reconstructFrontFacingViewNormal(
+  x: number,
+  y: number,
+): readonly [number, number, number] {
+  const z = Math.sqrt(Math.max(0, 1 - x * x - y * y));
+  const length = Math.hypot(x, y, z);
+  if (length === 0) {
+    return [0, 0, 1];
+  }
+  return [x / length, y / length, z / length];
+}
+
+interface RendererHostCounters {
+  compileCount: number;
+  probeCount: number;
+}
+
+const RENDERER_DEVICE_LIMIT_NAMES = [
+  "maxTextureDimension1D",
+  "maxTextureDimension2D",
+  "maxTextureDimension3D",
+  "maxTextureArrayLayers",
+  "maxBindGroups",
+  "maxBindingsPerBindGroup",
+  "maxDynamicUniformBuffersPerPipelineLayout",
+  "maxDynamicStorageBuffersPerPipelineLayout",
+  "maxSampledTexturesPerShaderStage",
+  "maxSamplersPerShaderStage",
+  "maxStorageBuffersPerShaderStage",
+  "maxStorageTexturesPerShaderStage",
+  "maxUniformBuffersPerShaderStage",
+  "maxUniformBufferBindingSize",
+  "maxStorageBufferBindingSize",
+  "minUniformBufferOffsetAlignment",
+  "minStorageBufferOffsetAlignment",
+  "maxVertexBuffers",
+  "maxBufferSize",
+  "maxVertexAttributes",
+  "maxVertexBufferArrayStride",
+  "maxInterStageShaderVariables",
+  "maxColorAttachments",
+  "maxColorAttachmentBytesPerSample",
+  "maxComputeWorkgroupStorageSize",
+  "maxComputeInvocationsPerWorkgroup",
+  "maxComputeWorkgroupSizeX",
+  "maxComputeWorkgroupSizeY",
+  "maxComputeWorkgroupSizeZ",
+  "maxComputeWorkgroupsPerDimension",
+] as const;
+
+function installRendererCounters(renderer: Renderer): RendererHostCounters {
+  const counters: RendererHostCounters = {
+    compileCount: 0,
+    probeCount: 0,
+  };
+  const compileAsync = renderer.compileAsync.bind(renderer);
+  const readPixels = renderer.readRenderTargetPixelsAsync.bind(renderer);
+  renderer.compileAsync = ((...args: Parameters<Renderer["compileAsync"]>) => {
+    counters.compileCount += 1;
+    return compileAsync(...args);
+  }) as Renderer["compileAsync"];
+  renderer.readRenderTargetPixelsAsync = ((
+    ...args: Parameters<Renderer["readRenderTargetPixelsAsync"]>
+  ) => {
+    counters.probeCount += 1;
+    return readPixels(...args);
+  }) as Renderer["readRenderTargetPixelsAsync"];
+  return counters;
+}
+
+function readRendererDeviceInventory(
+  renderer: WebGPURenderer,
+): QaRendererDeviceInventory | null {
+  const internals = renderer as unknown as {
+    readonly backend?: {
+      readonly device?: {
+        readonly features?: Iterable<string>;
+        readonly limits?: Readonly<Record<string, number | undefined>>;
+      };
+    };
+  };
+  const device = internals.backend?.device;
+  if (device === undefined) {
+    return null;
+  }
+  const features = [...(device.features ?? [])].sort();
+  const limits: Record<string, number> = {};
+  for (const name of RENDERER_DEVICE_LIMIT_NAMES) {
+    const value = device.limits?.[name];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      limits[name] = value;
+    }
+  }
+  return Object.freeze({
+    features: Object.freeze(features),
+    limits: Object.freeze(limits),
+  });
 }
 
 function textureIndex(renderTarget: RenderTarget, name: string): number {

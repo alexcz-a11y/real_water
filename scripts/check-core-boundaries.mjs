@@ -40,6 +40,19 @@ const bannedSource = [
   ],
 ];
 
+const leakedNodeBridge = [
+  [/\.userData\b/u, "Object3D.userData bridge"],
+  [/Real Water optical outputs/u, "TSL optical-output userData leak"],
+  [/\breadPreparedOpticalOutputs\b/u, "optical-output package seam"],
+  [/\bopticalOutputNode\b/u, "optical-output package seam"],
+];
+const publicTslImport =
+  /\bfrom\s+["']three\/tsl["']|\bimport\s*(?:\(\s*)?["']three\/tsl["']/u;
+const internalTestImport =
+  /\bfrom\s+["'](?:\.\.\/)+src\/internal\/|\bimport\s*(?:\(\s*)?["'](?:\.\.\/)+src\/internal\//u;
+const sourceGrepTest =
+  /\breadFileSync\s*\(|\breadFile\s*\(|from\s+["']node:fs(?:\/promises)?["']/u;
+
 const failures = [];
 for (const path of await sourceFiles(sourceRoot)) {
   const source = await readFile(path, "utf8");
@@ -47,6 +60,30 @@ for (const path of await sourceFiles(sourceRoot)) {
     if (pattern.test(source)) {
       failures.push(path + ": forbidden " + label);
     }
+  }
+  for (const [pattern, label] of leakedNodeBridge) {
+    if (pattern.test(source)) {
+      failures.push(path + ": forbidden " + label);
+    }
+  }
+  if (!path.includes("/internal/") && publicTslImport.test(source)) {
+    failures.push(path + ": public surface must not import three/tsl");
+  }
+}
+
+const testRoot = resolve(root, "test");
+for (const path of await sourceFiles(testRoot)) {
+  const source = await readFile(path, "utf8");
+  if (internalTestImport.test(source)) {
+    failures.push(path + ": tests must not import private internal helpers");
+  }
+  if (
+    sourceGrepTest.test(source) &&
+    /SOURCE_ROOT|internal\/|water-optics-rendering|minimal-water-prewarm/u.test(
+      source,
+    )
+  ) {
+    failures.push(path + ": tests must not grep package source text");
   }
 }
 
@@ -84,7 +121,7 @@ if (failures.length > 0) {
 }
 
 console.log(
-  "Core boundary check passed: no UI, network, persistence, framework, physics-engine, or hidden Three ownership.",
+  "Core boundary check passed: no UI, network, persistence, framework, physics-engine, hidden Three ownership, or TSL node package seam.",
 );
 
 async function sourceFiles(directory) {

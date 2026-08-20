@@ -6,6 +6,7 @@ import {
   createWaterPreset,
   prepareRealWater,
 } from "../src/index.js";
+import { createTestEnvironmentAdapter } from "./test-host-environment.js";
 import {
   WATER_PRESET_SCHEMA,
   WATER_PRESET_VERSION,
@@ -25,7 +26,7 @@ describe("Water Presets", () => {
       version: WATER_PRESET_VERSION,
       id: "swell",
       presetHash:
-        "sha256:88703f2f6e7efb3ccba841230d4ac58dfe9c18bc57ea8969c1a7426cf3c3dc48",
+        "sha256:667f6dd3b383cc3909b98829ba6979aa99fe31b47996f7e806e4768feccad37b",
       artisticControls: {
         waveStrength: 1,
         swellDrama: 1,
@@ -34,16 +35,39 @@ describe("Water Presets", () => {
         crestSharpness: 0,
         microDetail: 1,
         timeScale: 1,
+        grazingReflection: 1,
+        environmentReflection: 1,
+        depthSeeThrough: 1,
+        depthColoring: 1,
+        inWaterGlow: 1,
+        crestGlow: 1,
       },
     });
     expect(calm.id).toBe("calm");
+    expect(WATER_PRESET_VERSION).toBe(2);
     expect(calm.presetHash).toBe(
-      "sha256:46e77abd2ff1bc2db00440dab4634c935e56e36d624a0e5fc932c06c9c203069",
+      "sha256:7823cba17b46a26315541babfde3d3b7fda6a937794df7a32cbc3bf3d28df047",
     );
+    expect(calm.artisticControls).toMatchObject({
+      grazingReflection: 0.7,
+      environmentReflection: 0.85,
+      depthSeeThrough: 0.95,
+      depthColoring: 0.4,
+      inWaterGlow: 0.35,
+      crestGlow: 0.25,
+    });
     expect(storm.id).toBe("storm");
     expect(storm.presetHash).toBe(
-      "sha256:07ef1822a50063f707e4a723e15f1eb0e0cb7310b4563a598d7225f7066fe956",
+      "sha256:85ff6bf8c652aaecb3d7aa3e3bf35c693264365c19cec1683c42fe2fb1164f9e",
     );
+    expect(storm.artisticControls).toMatchObject({
+      grazingReflection: 1.15,
+      environmentReflection: 0.7,
+      depthSeeThrough: 0.4,
+      depthColoring: 1.55,
+      inWaterGlow: 1.45,
+      crestGlow: 1.6,
+    });
     expect(createWaterPreset("swell")).toEqual(swell);
     expect(Object.isFrozen(calm)).toBe(true);
     expect(Object.isFrozen(calm.artisticControls)).toBe(true);
@@ -63,7 +87,7 @@ describe("Water Presets", () => {
       version: WATER_PRESET_VERSION,
       id: "storm",
       presetHash:
-        "sha256:07ef1822a50063f707e4a723e15f1eb0e0cb7310b4563a598d7225f7066fe956",
+        "sha256:85ff6bf8c652aaecb3d7aa3e3bf35c693264365c19cec1683c42fe2fb1164f9e",
     });
     expect(Object.isFrozen(normalized)).toBe(true);
     expect(Object.isFrozen(identity)).toBe(true);
@@ -104,10 +128,36 @@ describe("Water Presets", () => {
         },
       },
     ],
+    [
+      "version 1 optical reshape",
+      {
+        schema: WATER_PRESET_SCHEMA,
+        version: 1,
+        id: "swell",
+        presetHash:
+          "sha256:97e5225b435c40141672e31c3282584c246ef07b763351689c84f69ac3ca7b88",
+        artisticControls: createWaterPreset().artisticControls,
+      },
+    ],
   ])("fails closed on %s", (_name, candidate) => {
     expect(() =>
       normalizeWaterPreset(candidate as unknown as WaterPreset),
     ).toThrow();
+  });
+
+  it("rejects version 1 instead of silently reshaping optical controls", () => {
+    expect(() =>
+      normalizeWaterPreset({
+        schema: WATER_PRESET_SCHEMA,
+        version: 1,
+        id: "swell",
+        presetHash:
+          "sha256:97e5225b435c40141672e31c3282584c246ef07b763351689c84f69ac3ca7b88",
+        artisticControls: createWaterPreset().artisticControls,
+      } as unknown as WaterPreset),
+    ).toThrow(
+      "Water Preset version 1 does not include the required optical Artistic Controls.",
+    );
   });
 });
 
@@ -118,6 +168,7 @@ describe("Water Preset runtime switching", () => {
       loading: { present() {} },
       host: createMemoryHostLifecycleAdapter({
         simulation: createStaticHostSimulationAdapter(),
+        environment: createTestEnvironmentAdapter(),
         stepDelayMs: 0,
       }),
     }).ready;

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   RealWaterStartupError,
+  SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
   createMemoryHostLifecycleAdapter as createBaseMemoryHostLifecycleAdapter,
   createMinimalWaterPrewarmManifest,
   createStaticHostSimulationAdapter,
@@ -12,6 +13,7 @@ import {
   type StartupSnapshot,
   type WebGPUDeviceLoss,
 } from "../src/index.js";
+import { createTestEnvironmentAdapter } from "./test-host-environment.js";
 
 class RecordingLoadingPresenter implements LoadingPresenterAdapter {
   public readonly snapshots: StartupSnapshot[] = [];
@@ -32,11 +34,15 @@ const NEVER_INVALIDATED = new Promise<never>(() => {});
 const STATIC_SIMULATION = createStaticHostSimulationAdapter();
 
 function createMemoryHostLifecycleAdapter(
-  options: Omit<MemoryHostLifecycleAdapterOptions, "simulation">,
+  options: Omit<
+    MemoryHostLifecycleAdapterOptions,
+    "simulation" | "environment"
+  >,
 ): HostLifecycleAdapter {
   return createBaseMemoryHostLifecycleAdapter({
     ...options,
     simulation: STATIC_SIMULATION,
+    environment: createTestEnvironmentAdapter(),
   });
 }
 
@@ -495,7 +501,7 @@ describe("prepareRealWater", () => {
     );
     expect(lease.manifest).toEqual({
       schema: "real-water/prewarm",
-      version: 1,
+      version: 2,
       id: manifest.id,
       manifestHash: manifest.manifestHash,
       qualityProfile: {
@@ -504,6 +510,7 @@ describe("prepareRealWater", () => {
         id: "minimal",
         profileHash: manifest.qualityProfile.profileHash,
       },
+      environmentReflection: SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
       effectVariants: [
         {
           effectId: "minimal-water-surface",
@@ -687,8 +694,8 @@ describe("prepareRealWater", () => {
     expect(loading.snapshots.at(-1)).toMatchObject({
       status: "failed",
       progress: {
-        completedWork: 1,
-        totalWork: 12,
+        completedWork: 4,
+        totalWork: 16,
       },
     });
   });
@@ -766,7 +773,7 @@ describe("prepareRealWater", () => {
     let hostStarted = false;
     const manifest = {
       ...createMinimalWaterPrewarmManifest(),
-      version: 2,
+      version: 1,
     } as unknown as ReturnType<typeof createMinimalWaterPrewarmManifest>;
     const run = prepareRealWater({
       manifest,
@@ -1351,6 +1358,9 @@ describe("prepareRealWater", () => {
     expect(Object.isFrozen(first)).toBe(true);
     expect(manifest.declarations.map((declaration) => declaration.id)).toEqual([
       "water-texture",
+      "water-environment-radiance",
+      "water-scene-color",
+      "water-scene-depth",
       "water-render-target",
       "water-clipmap",
       "water-spectral-band-swell",
@@ -1358,6 +1368,7 @@ describe("prepareRealWater", () => {
       "water-spectral-band-chop",
       "water-spectral-band-ripple",
       "water-material",
+      "water-optical-route",
       "water-render-route",
       "water-hidden-stabilization",
       "water-completion-probe",

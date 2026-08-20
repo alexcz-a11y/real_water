@@ -1,5 +1,12 @@
 import "./styles.css";
-import { Color, PerspectiveCamera, Scene } from "three";
+import {
+  Color,
+  Mesh,
+  MeshBasicMaterial,
+  PerspectiveCamera,
+  PlaneGeometry,
+  Scene,
+} from "three";
 import { WebGPURenderer } from "three/webgpu";
 import {
   createMinimalWaterQualityProfile,
@@ -11,8 +18,9 @@ import {
   type RealWaterLease,
   type WebGPUDeviceLoss,
 } from "real-water";
-import type { QaFrameSource, QaHarnessV3 } from "./qa-harness.js";
+import type { QaFrameSource, QaHarnessV4 } from "./qa-harness.js";
 import type * as QaHarnessModuleContract from "./qa-harness.js";
+import { createReferenceEnvironmentAdapter } from "./reference-optical-inputs.js";
 import {
   startReferenceExperience,
   type ReferenceHostAttempt,
@@ -193,6 +201,7 @@ function createControllableMemoryHost(
   const base = qaModule.createQaMemoryHostLifecycleAdapter({
     scenario,
     simulation: createStaticHostSimulationAdapter(),
+    environment: createReferenceEnvironmentAdapter(),
     stepDelayMs,
   });
   let resolveLoss: (loss: WebGPUDeviceLoss) => void = () => {};
@@ -253,6 +262,7 @@ function createThreeReferenceHostAttempt(
   });
   const scene = new Scene();
   scene.background = new Color(0x031019);
+  const seabed = addReferenceSeabed(scene);
 
   const width = Math.max(1, window.innerWidth);
   const height = Math.max(1, window.innerHeight);
@@ -267,11 +277,13 @@ function createThreeReferenceHostAttempt(
   let disposed = false;
   const qaSimulation = qaModule?.createQaHostSimulationController();
   const simulation = qaSimulation ?? createStaticHostSimulationAdapter();
+  const environment = createReferenceEnvironmentAdapter();
   const baseHost = createThreeHostLifecycleAdapter({
     renderer,
     scene,
     camera,
     simulation,
+    environment,
   });
   const frameSource =
     (qaSimulation === undefined
@@ -282,6 +294,7 @@ function createThreeReferenceHostAttempt(
           scene,
           camera,
           qaSimulation,
+          environment,
         )) ?? null;
 
   return Object.freeze({
@@ -296,6 +309,10 @@ function createThreeReferenceHostAttempt(
         if (!disposed) {
           disposed = true;
           renderer.dispose();
+          seabed.dispose();
+          if (environment.texture !== null) {
+            disposeHostTexture(environment.texture);
+          }
         }
       },
     },
@@ -325,6 +342,42 @@ function createCanvasStage(
   canvas.setAttribute("role", "img");
   stage.append(canvas);
   return stage;
+}
+
+function addReferenceSeabed(scene: Scene): { dispose(): void } {
+  const fixtureColor = new MeshBasicMaterial({ color: new Color(0x0a505a) });
+  const shallow = new Mesh(new PlaneGeometry(16, 20), fixtureColor);
+  shallow.name = "Reference 1m scene-depth fixture";
+  shallow.rotation.x = -Math.PI / 2;
+  shallow.position.set(-10, -1, -40);
+  const deep = new Mesh(new PlaneGeometry(16, 20), fixtureColor);
+  deep.name = "Reference 21m scene-depth fixture";
+  deep.rotation.x = -Math.PI / 2;
+  deep.position.set(10, -21, -40);
+  const foreground = new Mesh(
+    new PlaneGeometry(16, 16),
+    new MeshBasicMaterial({ color: new Color(0xff40c8) }),
+  );
+  foreground.name = "Reference foreground scene-depth fixture";
+  foreground.rotation.x = -Math.PI / 2;
+  foreground.position.set(-20, 6, -40);
+  scene.add(shallow, deep, foreground);
+  return Object.freeze({
+    dispose(): void {
+      scene.remove(shallow, deep, foreground);
+      shallow.geometry.dispose();
+      deep.geometry.dispose();
+      foreground.geometry.dispose();
+      fixtureColor.dispose();
+      foreground.material.dispose();
+    },
+  });
+}
+
+function disposeHostTexture(texture: object): void {
+  if ("dispose" in texture && typeof texture.dispose === "function") {
+    texture.dispose();
+  }
 }
 
 function readScenario(value: string | null): MemoryHostScenario {
@@ -369,6 +422,6 @@ function readRevealFrames(
 
 declare global {
   interface Window {
-    __REAL_WATER_QA__?: QaHarnessV3;
+    __REAL_WATER_QA__?: QaHarnessV4;
   }
 }

@@ -2,14 +2,11 @@ import {
   abs,
   cameraPosition,
   cos,
-  dot,
   float,
   highpModelNormalViewMatrix,
   length,
-  max,
   mix,
   positionGeometry,
-  pow,
   sin,
   smoothstep,
   uniform,
@@ -309,12 +306,9 @@ export function createSpectralBandRendering(
     float(0.58),
     fragmentSurface.slopeVariance.mul(8).clamp(0, 1),
   );
-  const sunDirection = vec3(0.32, 0.84, 0.44).normalize();
   const viewDirection = cameraPosition
     .sub(vec3(fragmentSample.hostX, vertexHeight, fragmentSample.hostZ))
     .normalize();
-  const halfDirection = sunDirection.add(viewDirection).normalize();
-  const specularPower = mix(float(110), float(10), roughnessNode);
   const nearWhite = smoothstep(
     0.22,
     0.9,
@@ -342,13 +336,7 @@ export function createSpectralBandRendering(
       ),
     ),
   );
-  const whiteDetailNode = mix(nearWhite, farWhite, fragmentSlopeFade);
-  const highlightNode = pow(
-    max(dot(localNormal, halfDirection), 0),
-    specularPower,
-  )
-    .mul(mix(float(0.55), float(0.28), roughnessNode))
-    .mul(mix(float(1), farWhite.add(0.35), fragmentSlopeFade));
+  const detailStrengthNode = mix(nearWhite, farWhite, fragmentSlopeFade);
   const writeOriginPhases = (
     originXValue: number,
     originZValue: number,
@@ -499,10 +487,16 @@ export function createSpectralBandRendering(
     originZ,
     positionNode: vec3(vertexSample.hostX, vertexHeight, vertexSample.hostZ),
     normalNode: highpModelNormalViewMatrix.mul(localNormal).normalize(),
+    worldNormalNode: localNormal,
+    viewDirectionNode: viewDirection,
+    hostXNode: fragmentSample.hostX,
+    hostZNode: fragmentSample.hostZ,
     heightNode: vertexHeight,
+    slopeStrengthNode: length(
+      vec2(fragmentSurface.slopeX, fragmentSurface.slopeZ),
+    ),
     roughnessNode,
-    highlightNode,
-    whiteDetailNode,
+    detailStrengthNode,
     sink,
   });
 }

@@ -1,4 +1,27 @@
-import { defineConfig, devices } from "@playwright/test";
+import { arch, cpus, platform } from "node:os";
+import { defineConfig } from "@playwright/test";
+import {
+  powerProjectToken,
+  readHostPowerProfile,
+} from "./apps/reference-experience/e2e/host-power-profile.js";
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "");
+}
+
+const cpuModel = cpus()[0]?.model ?? "unknown-cpu";
+
+export const PLAYWRIGHT_PROJECT_ID = [
+  platform(),
+  arch(),
+  slugify(cpuModel),
+  "chrome",
+  "headless",
+  powerProjectToken(readHostPowerProfile()),
+].join("-");
 
 export default defineConfig({
   expect: {
@@ -6,12 +29,15 @@ export default defineConfig({
   },
   forbidOnly: Boolean(process.env.CI),
   fullyParallel: true,
+  snapshotPathTemplate:
+    "{testDir}/{testFileName}-snapshots/{arg}-{projectName}{ext}",
   projects: [
     {
-      name: "chrome",
+      name: PLAYWRIGHT_PROJECT_ID,
       use: {
-        ...devices["Desktop Chrome"],
+        browserName: "chromium",
         channel: "chrome",
+        headless: true,
         deviceScaleFactor: 1,
         viewport: { width: 1280, height: 720 },
       },

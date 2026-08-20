@@ -1,8 +1,16 @@
-import type { PerspectiveCamera, Scene } from "three";
+import {
+  DataTexture,
+  DirectionalLight,
+  Fog,
+  SRGBColorSpace,
+  type PerspectiveCamera,
+  type Scene,
+} from "three";
 import type { WebGPURenderer } from "three/webgpu";
 import {
   type ArtisticControls,
   type ArtisticControlUpdateReceipt,
+  type HostEnvironmentState,
   type HostLifecycleAdapter,
   type HostPreparationRequest,
   type HostPreparationResult,
@@ -33,11 +41,11 @@ export { createQaHostSimulationController } from "./qa-simulation-controller.js"
 export type { QaHostSimulationController } from "./qa-simulation-controller.js";
 
 export const QA_HARNESS_SCHEMA = "real-water/qa-harness" as const;
-export const QA_HARNESS_VERSION = 3 as const;
+export const QA_HARNESS_VERSION = 4 as const;
 export const QA_HARNESS_FIXED_TICK_HZ = QA_FRAME_FIXED_TICK_HZ;
 export const QA_HARNESS_CAPTURE_NAMES = QA_FRAME_CAPTURE_NAMES;
 export const QA_CAPTURE_SCHEMA = "real-water/qa-capture" as const;
-export const QA_CAPTURE_VERSION = 3 as const;
+export const QA_CAPTURE_VERSION = 4 as const;
 
 export type QaCaptureName = QaFrameCaptureName;
 
@@ -51,7 +59,7 @@ export interface QaCameraV1 {
   readonly far: number;
 }
 
-export interface QaFrameStateReceiptV3 {
+export interface QaFrameStateReceiptV4 {
   readonly seed: number;
   readonly tick: number;
   readonly timeSeconds: number;
@@ -64,23 +72,25 @@ export interface QaCameraReceiptV1 {
   readonly cameraRevision: number;
 }
 
-export interface QaOriginReceiptV3 {
+export interface QaOriginReceiptV4 {
   readonly originX: number;
   readonly originZ: number;
   readonly originRevision: number;
 }
 
-export interface QaPresentationReceiptV3 extends QaFrameStateReceiptV3 {
+export interface QaPresentationReceiptV4 extends QaFrameStateReceiptV4 {
   readonly generation: number;
   readonly presentationId: number;
   readonly manifestHash: string;
   readonly cameraRevision: number;
   readonly controlRevision: number;
+  readonly compileCount: number;
+  readonly probeCount: number;
   readonly captureNames: typeof QA_HARNESS_CAPTURE_NAMES;
   readonly prewarm: QaFramePrewarmReceipt;
 }
 
-export interface QaCaptureV3 extends QaPresentationReceiptV3 {
+export interface QaCaptureV4 extends QaPresentationReceiptV4 {
   readonly schema: typeof QA_CAPTURE_SCHEMA;
   readonly version: typeof QA_CAPTURE_VERSION;
   readonly name: QaCaptureName;
@@ -88,7 +98,10 @@ export interface QaCaptureV3 extends QaPresentationReceiptV3 {
   readonly height: number;
   readonly origin: "top-left";
   readonly format:
-    "rgba8unorm-srgb" | "r32float-linear-view" | "rgb32float-view-normal";
+    | "rgba8unorm-srgb"
+    | "r32float-linear-view"
+    | "rgb32float-view-normal"
+    | "r32float-optical";
   readonly elementType: "uint8" | "float32";
   readonly components: 1 | 3 | 4;
   readonly dataEncoding: "base64";
@@ -103,9 +116,12 @@ export interface QaFrameSource {
   bindLease(lease: RealWaterLease): void;
   setCamera(camera: QaCameraV1): void;
   setOrigin(originX: number, originZ: number): void;
+  setEnvironmentLighting(state: HostEnvironmentState): void;
+  setHostSceneLightingDecoy(enabled: boolean): void;
+  readEnvironmentLighting(): HostEnvironmentState;
 }
 
-export interface QaGameplayQueryV3 {
+export interface QaGameplayQueryV4 {
   readonly point: readonly [number, number, number];
   readonly height: number;
   readonly normal: readonly [number, number, number];
@@ -126,27 +142,31 @@ export interface QaHarnessOptions {
   synthesizeDeviceLoss(): void;
 }
 
-export interface QaHarnessV3 {
+export interface QaHarnessV4 {
   readonly schema: typeof QA_HARNESS_SCHEMA;
   readonly version: typeof QA_HARNESS_VERSION;
   readonly fixedTickHz: typeof QA_HARNESS_FIXED_TICK_HZ;
   readonly captureNames: typeof QA_HARNESS_CAPTURE_NAMES;
   readonly prewarmManifest: typeof QA_FRAME_PREWARM_MANIFEST;
-  reset(request: { readonly seed: number }): Promise<QaFrameStateReceiptV3>;
-  advanceTicks(count: number): Promise<QaFrameStateReceiptV3>;
+  reset(request: { readonly seed: number }): Promise<QaFrameStateReceiptV4>;
+  advanceTicks(count: number): Promise<QaFrameStateReceiptV4>;
   setCamera(camera: QaCameraV1): Promise<QaCameraReceiptV1>;
   setOrigin(origin: {
     readonly x: number;
     readonly z: number;
-  }): Promise<QaOriginReceiptV3>;
-  present(): Promise<QaPresentationReceiptV3>;
-  capture(name: QaCaptureName): Promise<QaCaptureV3>;
+  }): Promise<QaOriginReceiptV4>;
+  present(): Promise<QaPresentationReceiptV4>;
+  capture(name: QaCaptureName): Promise<QaCaptureV4>;
   updateArtisticControls(
     controls: ArtisticControls,
   ): Promise<ArtisticControlUpdateReceipt>;
+  updateEnvironmentLighting(
+    state: HostEnvironmentState,
+  ): Promise<HostEnvironmentState>;
+  setHostSceneLightingDecoy(enabled: boolean): Promise<void>;
   queryGameplay(
     point: readonly [number, number, number],
-  ): Promise<QaGameplayQueryV3>;
+  ): Promise<QaGameplayQueryV4>;
   applySecondQualityProfile(): Promise<void>;
   dispose(): Promise<void>;
   signalLongSuspension(): Promise<void>;
@@ -165,11 +185,11 @@ interface ActiveRecipe {
   pendingTicks: number;
   cameraRevision: number;
   cameraSet: boolean;
-  captures: ReadonlyMap<QaCaptureName, QaCaptureV3> | null;
-  presentation: QaPresentationReceiptV3 | null;
+  captures: ReadonlyMap<QaCaptureName, QaCaptureV4> | null;
+  presentation: QaPresentationReceiptV4 | null;
 }
 
-export function createQaHarness(options: QaHarnessOptions): QaHarnessV3 {
+export function createQaHarness(options: QaHarnessOptions): QaHarnessV4 {
   let active: ActiveRecipe | null = null;
   let queue = Promise.resolve();
 
@@ -188,7 +208,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV3 {
     active = null;
   };
 
-  const harness: QaHarnessV3 = {
+  const harness: QaHarnessV4 = {
     schema: QA_HARNESS_SCHEMA,
     version: QA_HARNESS_VERSION,
     fixedTickHz: QA_HARNESS_FIXED_TICK_HZ,
@@ -337,6 +357,8 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV3 {
           manifestHash: frame.manifestHash,
           cameraRevision: recipe.cameraRevision,
           controlRevision: runtime.controlRevision,
+          compileCount: frame.compileCount,
+          probeCount: frame.probeCount,
           originRevision: runtime.originRevision,
           captureNames: QA_HARNESS_CAPTURE_NAMES,
           prewarm: frame.prewarm,
@@ -368,6 +390,23 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV3 {
         recipe.captures = null;
         recipe.presentation = null;
         return receipt;
+      });
+    },
+    updateEnvironmentLighting(state) {
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        recipe.source.setEnvironmentLighting(state);
+        recipe.captures = null;
+        recipe.presentation = null;
+        return Object.freeze({ ...recipe.source.readEnvironmentLighting() });
+      });
+    },
+    setHostSceneLightingDecoy(enabled) {
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        recipe.source.setHostSceneLightingDecoy(enabled);
+        recipe.captures = null;
+        recipe.presentation = null;
       });
     },
     queryGameplay(point) {
@@ -451,9 +490,19 @@ export function createQaThreeFrameSource(
   scene: Scene,
   camera: PerspectiveCamera,
   simulation: QaHostSimulationController,
+  environmentLighting: {
+    setLighting(state: HostEnvironmentState): void;
+    snapshot(): HostEnvironmentState;
+  },
 ): QaFrameSource {
   let activeDriver: QaFrameDriver | null = null;
   let activeLease: RealWaterLease | null = null;
+  let lightingDecoy: {
+    readonly light: DirectionalLight;
+    readonly environment: DataTexture;
+    readonly fog: Fog;
+    readonly previousFog: Scene["fog"];
+  } | null = null;
   const observedHost: HostLifecycleAdapter = Object.freeze({
     async prepare(request: HostPreparationRequest) {
       const result = await host.prepare(request);
@@ -511,6 +560,51 @@ export function createQaThreeFrameSource(
     },
     setOrigin(originX: number, originZ: number) {
       simulation.setOrigin(originX, originZ);
+    },
+    setEnvironmentLighting(state: HostEnvironmentState) {
+      environmentLighting.setLighting(state);
+    },
+    setHostSceneLightingDecoy(enabled: boolean) {
+      if (enabled) {
+        if (lightingDecoy !== null) {
+          return;
+        }
+        const light = new DirectionalLight(0xfff6e0, 12);
+        light.position.set(20, 40, 10);
+        scene.add(light);
+        const environment = new DataTexture(
+          Uint8Array.from([
+            255, 240, 180, 255, 255, 220, 160, 255, 255, 200, 140, 255, 255,
+            180, 120, 255,
+          ]),
+          2,
+          2,
+        );
+        environment.colorSpace = SRGBColorSpace;
+        environment.needsUpdate = true;
+        scene.environment = environment;
+        const previousFog = scene.fog;
+        const fog = new Fog(0xffcc66, 0.2, 10);
+        scene.fog = fog;
+        lightingDecoy = { light, environment, fog, previousFog };
+        return;
+      }
+      if (lightingDecoy === null) {
+        return;
+      }
+      scene.remove(lightingDecoy.light);
+      lightingDecoy.light.dispose();
+      if (scene.environment === lightingDecoy.environment) {
+        scene.environment = null;
+      }
+      lightingDecoy.environment.dispose();
+      if (scene.fog === lightingDecoy.fog) {
+        scene.fog = lightingDecoy.previousFog;
+      }
+      lightingDecoy = null;
+    },
+    readEnvironmentLighting() {
+      return environmentLighting.snapshot();
     },
   });
 }
@@ -601,9 +695,9 @@ function requireActiveRecipe(
 
 function cacheCaptures(
   captures: readonly QaFrameDriverCapture[],
-  receipt: QaPresentationReceiptV3,
-): ReadonlyMap<QaCaptureName, QaCaptureV3> {
-  const byName = new Map<QaCaptureName, QaCaptureV3>();
+  receipt: QaPresentationReceiptV4,
+): ReadonlyMap<QaCaptureName, QaCaptureV4> {
+  const byName = new Map<QaCaptureName, QaCaptureV4>();
   for (const name of QA_HARNESS_CAPTURE_NAMES) {
     const capture = captures.find((candidate) => candidate.name === name);
     if (capture === undefined) {
@@ -625,8 +719,8 @@ function cacheCaptures(
 
 function encodeCapture(
   capture: QaFrameDriverCapture,
-  receipt: QaPresentationReceiptV3,
-): QaCaptureV3 {
+  receipt: QaPresentationReceiptV4,
+): QaCaptureV4 {
   const shape = QA_FRAME_CAPTURE_SHAPES[capture.name];
   return Object.freeze({
     schema: QA_CAPTURE_SCHEMA,

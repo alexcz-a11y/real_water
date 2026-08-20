@@ -28,9 +28,21 @@ export interface ArtisticControls {
   readonly microDetail: number;
   /** Multiplier applied to every band's temporal frequency. */
   readonly timeScale: number;
+  /** How strongly glancing views pick up the Host environment. */
+  readonly grazingReflection: number;
+  /** How strongly the Host environment radiance appears on the surface. */
+  readonly environmentReflection: number;
+  /** How clearly the Host scene behind the water shows through. */
+  readonly depthSeeThrough: number;
+  /** How quickly the water column colors with optical path. */
+  readonly depthColoring: number;
+  /** How much in-water glow gathers along the optical path. */
+  readonly inWaterGlow: number;
+  /** How brightly thin crests transmit light. */
+  readonly crestGlow: number;
 }
 
-const ARTISTIC_CONTROL_KEYS = [
+export const ARTISTIC_CONTROL_KEYS = [
   "waveStrength",
   "swellDrama",
   "directionality",
@@ -38,6 +50,12 @@ const ARTISTIC_CONTROL_KEYS = [
   "crestSharpness",
   "microDetail",
   "timeScale",
+  "grazingReflection",
+  "environmentReflection",
+  "depthSeeThrough",
+  "depthColoring",
+  "inWaterGlow",
+  "crestGlow",
 ] as const;
 
 const DEFAULT_ARTISTIC_CONTROLS: ArtisticControls =
@@ -168,16 +186,16 @@ export function createRealWaterRuntime(
       const nextControls = freezeArtisticControls(controls);
       const changed = artisticControlsChanged(artisticControls, nextControls);
       if (changed) {
-        const nextRevision = controlRevision + 1;
-        const nextSnapshot = readSnapshot(
-          simulation,
-          nextControls,
-          nextRevision,
-          originRevisions,
-        );
-        sink?.synchronize(nextSnapshot);
         artisticControls = nextControls;
-        controlRevision = nextRevision;
+        controlRevision += 1;
+        sink?.synchronize(
+          readSnapshot(
+            simulation,
+            artisticControls,
+            controlRevision,
+            originRevisions,
+          ),
+        );
       }
       return Object.freeze({
         artisticControls,
@@ -278,6 +296,17 @@ function freezeArtisticControls(controls: ArtisticControls): ArtisticControls {
   assertControlRange(value.crestSharpness, 0, 2, "crestSharpness");
   assertControlRange(value.microDetail, 0, 2, "microDetail");
   assertControlRange(value.timeScale, 0, 2, "timeScale");
+  assertControlRange(value.grazingReflection, 0, 2, "grazingReflection");
+  assertControlRange(
+    value.environmentReflection,
+    0,
+    2,
+    "environmentReflection",
+  );
+  assertControlRange(value.depthSeeThrough, 0, 2, "depthSeeThrough");
+  assertControlRange(value.depthColoring, 0, 2, "depthColoring");
+  assertControlRange(value.inWaterGlow, 0, 2, "inWaterGlow");
+  assertControlRange(value.crestGlow, 0, 2, "crestGlow");
 
   return Object.freeze({
     waveStrength: value.waveStrength,
@@ -287,6 +316,12 @@ function freezeArtisticControls(controls: ArtisticControls): ArtisticControls {
     crestSharpness: value.crestSharpness,
     microDetail: value.microDetail,
     timeScale: value.timeScale,
+    grazingReflection: value.grazingReflection,
+    environmentReflection: value.environmentReflection,
+    depthSeeThrough: value.depthSeeThrough,
+    depthColoring: value.depthColoring,
+    inWaterGlow: value.inWaterGlow,
+    crestGlow: value.crestGlow,
   });
 }
 

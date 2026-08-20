@@ -11,6 +11,11 @@ import type {
   WebGPUDeviceLoss,
 } from "./startup.js";
 import type { HostSimulationAdapter } from "./runtime.js";
+import type { HostEnvironmentAdapter } from "./environment.js";
+import {
+  assertHostEnvironmentMatchesManifest,
+  assertHostEnvironmentTextureMatchesDescriptor,
+} from "./environment.js";
 
 const activeRenderers = new WeakSet<object>();
 
@@ -35,13 +40,17 @@ export interface ThreeHostScene {
 }
 
 /**
- * Stable marker from a borrowed native Three Camera.
+ * Stable marker from a borrowed native Three perspective camera. The basic
+ * optical path requires perspective projection; orthographic cameras are
+ * rejected at Host preparation.
  *
  * @public
  */
 export interface ThreeHostCamera {
   /** Native Three Camera type marker. */
   readonly isCamera: boolean;
+  /** Native Three perspective-camera type marker. */
+  readonly isPerspectiveCamera: boolean;
 }
 
 /**
@@ -54,10 +63,15 @@ export interface ThreeHostLifecycleAdapterOptions {
   readonly renderer: ThreeHostRenderer;
   /** The borrowed Host scene that will contain the Real Water-owned plane. */
   readonly scene: ThreeHostScene;
-  /** The borrowed main camera used for prewarm and the guard frame. */
+  /** The borrowed main perspective camera used for prewarm and the guard frame. */
   readonly camera: ThreeHostCamera;
   /** Host-owned deterministic simulation state read by rendering and queries. */
   readonly simulation: HostSimulationAdapter;
+  /**
+   * Explicit Host-owned Environment Adapter. Real Water never reads
+   * `scene.environment` or guesses sun, sky, or weather.
+   */
+  readonly environment: HostEnvironmentAdapter;
 }
 
 /**
@@ -103,6 +117,7 @@ export function createThreeHostLifecycleAdapter(
           };
         }
         throwIfAborted(request.signal);
+        assertHostEnvironment(options.environment, request.manifest);
         const capability = evaluateRenderingCapability(observation);
         if (capability.status !== "supported") {
           return capability;
@@ -129,6 +144,7 @@ export function createThreeHostLifecycleAdapter(
           },
           invalidated: capabilityInspection.invalidated,
           simulation,
+          environment: options.environment,
         });
         let prewarm: PrewarmOutcome;
         try {
@@ -225,6 +241,27 @@ function assertNativeHostObjects(
       "The Three Host Adapter requires a native Three Scene and Camera.",
     );
   }
+  if (options.camera.isPerspectiveCamera !== true) {
+    throw new TypeError(
+      "The Three Host Adapter requires a perspective camera for the basic optical path.",
+    );
+  }
+}
+
+function assertHostEnvironment(
+  environment: HostEnvironmentAdapter,
+  manifest: HostPreparationRequest["manifest"],
+): void {
+  assertHostEnvironmentMatchesManifest(environment, manifest);
+  if (environment.texture === null || environment.texture.isTexture !== true) {
+    throw new TypeError(
+      "The Host environment radiance must be a Host-owned Three texture.",
+    );
+  }
+  assertHostEnvironmentTextureMatchesDescriptor(
+    environment.texture,
+    environment.reflection,
+  );
 }
 
 function throwIfAborted(signal: AbortSignal): void {

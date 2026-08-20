@@ -57,6 +57,23 @@ export type {
 } from "./runtime.js";
 
 export {
+  SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
+  SUPPORTED_HOST_SUN_ANGULAR_RADIUS_RADIANS,
+  createStaticHostEnvironmentAdapter,
+  createSupportedHostEnvironmentRadianceBytes,
+  createSupportedHostEnvironmentReflection,
+} from "./environment.js";
+export type {
+  HostEnvironmentAdapter,
+  HostEnvironmentColorSpace,
+  HostEnvironmentReflectionDescriptor,
+  HostEnvironmentReflectionResource,
+  HostEnvironmentReflectionType,
+  HostEnvironmentState,
+  HostTexture,
+} from "./environment.js";
+
+export {
   WATER_PRESET_SCHEMA,
   WATER_PRESET_VERSION,
   createWaterPreset,

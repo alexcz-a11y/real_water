@@ -2,8 +2,23 @@
 
 Real Water is an ESM-only TypeScript Module for a reusable native Three.js Open
 Water Domain. The repository now includes a four-band, camera-relative Open
-Water Domain with versioned Calm, Swell, and Storm Water Presets, built on the
-complete prewarm, reveal, reprepare, and recovery path.
+Water Domain with a complete basic optical path, versioned Calm, Swell, and
+Storm Water Presets, and the prewarm, reveal, reprepare, and recovery path.
+
+Issue #20 shades that domain with a Host-owned basic optical path:
+
+- Fresnel, Host environment reflection, depth-aware refraction, absorption,
+  scattering, and crest transmission are visible and art-directable through
+  perceptual Artistic Controls;
+- environment radiance and finite sun come from a public Host Environment
+  Adapter, never from `scene.environment` or guessed sky or weather; the
+  radiance fingerprint is the Host verification credential (SHA-256 of the
+  canonical 8x4 RGBA bytes); identity, size, format, type, and color space must
+  agree with the borrowed Three texture, whose bytes, sampler, and identity stay
+  alive through the lease; pre-water scene color and opaque depth are sampled
+  from the Host viewport after opaque geometry;
+- the test-only QA Harness captures color, depth, normal, and named optical
+  intermediates after explicit reset, ticks, camera, and present.
 
 Issue #19 keeps the four-band Open Water Domain stable across distance and host
 floating-origin shifts:
@@ -15,18 +30,18 @@ floating-origin shifts:
 - non-periodic spectral blending prevents obvious repeating patches;
 - near geometry, middle normal detail, and far slope or BRDF detail transition
   without a visible seam;
-- distant highlights and white-detail placeholders stay stable under camera
-  motion;
+- filtered slope detail and optical glints stay stable under camera motion;
 - the test-only QA Harness exposes `setOrigin` and origin-tagged receipts.
 
 Issue #18 extended the coherent spectral runtime and deterministic QA
 foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly twelve work
-  units: a texture, render target, camera-relative clipmap, four spectral bands,
-  TSL NodeMaterial, RenderPipeline route, eight hidden stabilization frames,
-  completion readback, and main-camera guard frame;
+- the canonical minimal-water Prewarm Manifest declares exactly sixteen work
+  units: a texture, Host equirect environment radiance, viewport scene color,
+  viewport scene depth, render target, camera-relative clipmap, four spectral
+  bands, TSL NodeMaterial, optical route, RenderPipeline route, eight hidden
+  stabilization frames, completion readback, and main-camera guard frame;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
   restores their state after preparation, and never disposes them;
 - progress advances monotonically only when declared manifest work completes;
@@ -47,8 +62,9 @@ foundation:
 - test builds prewarm a private, versioned QA presentation route before reveal;
   production builds contain neither that route nor the QA Harness global;
 - the QA route resets a fixed seed, advances explicit 60 Hz ticks, applies a
-  fixed camera, presents once, and addresses final color, linear depth, and
-  view-space normal captures by name;
+  fixed camera, presents once, and addresses final color, linear depth,
+  view-space normal, and named optical intermediate captures including Fresnel,
+  metric refraction thickness, scattering, and crest transmission;
 - seed, tick, time, origin, and Artistic Control revision feed the prepared
   surface; Playwright verifies repeatability, ocean-scale horizon coverage,
   non-periodic blending, distance LOD, distant-detail stability, origin-shift
@@ -73,8 +89,9 @@ foundation:
 - lease disposal is idempotent and releases only Real Water-owned resources.
 
 This milestone keeps the four-band Open Water Domain stable across distance and
-origin shifts. It does not yet claim Native Quality or production water
-behavior.
+origin shifts and shades it with a complete basic optical path. It does not yet
+claim Native Quality, TRAA, planar or SSR reflections, or production whitewater
+and underwater systems.
 
 ## Required toolchain
 

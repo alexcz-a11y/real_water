@@ -1,25 +1,74 @@
 import { describe, expect, it, vi } from "vitest";
-import { PerspectiveCamera, Scene } from "three";
+import {
+  ClampToEdgeWrapping,
+  DataTexture,
+  LinearSRGBColorSpace,
+  NearestFilter,
+  OrthographicCamera,
+  PerspectiveCamera,
+  RepeatWrapping,
+  Scene,
+  SRGBColorSpace,
+} from "three";
 import {
   createMinimalWaterQualityProfile,
   createMinimalWaterPrewarmManifest,
+  createStaticHostEnvironmentAdapter,
   createStaticHostSimulationAdapter,
+  createSupportedHostEnvironmentRadianceBytes,
   createThreeHostLifecycleAdapter as createBaseThreeHostLifecycleAdapter,
   prepareRealWater,
+  type HostEnvironmentAdapter,
   type LoadingPresenterAdapter,
   type StartupSnapshot,
   type ThreeHostLifecycleAdapterOptions,
   type ThreeHostRenderer,
 } from "../src/index.js";
+import {
+  TEST_ENVIRONMENT_STATE,
+  createTestEnvironmentAdapter,
+  createTestEnvironmentReflection,
+} from "./test-host-environment.js";
 
 const STATIC_SIMULATION = createStaticHostSimulationAdapter();
 
+function createTestEnvironmentTexture(
+  width = 8,
+  height = 4,
+  colorSpace:
+    typeof SRGBColorSpace | typeof LinearSRGBColorSpace = SRGBColorSpace,
+) {
+  const data =
+    width === 8 && height === 4
+      ? createSupportedHostEnvironmentRadianceBytes()
+      : new Uint8Array(width * height * 4).fill(255);
+  const environmentRadiance = new DataTexture(data, width, height);
+  environmentRadiance.name = "test-environment-radiance";
+  environmentRadiance.colorSpace = colorSpace;
+  environmentRadiance.wrapS = RepeatWrapping;
+  environmentRadiance.wrapT = ClampToEdgeWrapping;
+  environmentRadiance.magFilter = NearestFilter;
+  environmentRadiance.minFilter = NearestFilter;
+  environmentRadiance.generateMipmaps = false;
+  environmentRadiance.needsUpdate = true;
+  return environmentRadiance;
+}
+
+function createTestEnvironment(): HostEnvironmentAdapter {
+  return createTestEnvironmentAdapter(createTestEnvironmentTexture());
+}
+
 function createThreeHostLifecycleAdapter(
-  options: Omit<ThreeHostLifecycleAdapterOptions, "simulation">,
+  options: Omit<
+    ThreeHostLifecycleAdapterOptions,
+    "simulation" | "environment"
+  > &
+    Partial<Pick<ThreeHostLifecycleAdapterOptions, "environment">>,
 ) {
   return createBaseThreeHostLifecycleAdapter({
     ...options,
     simulation: STATIC_SIMULATION,
+    environment: options.environment ?? createTestEnvironment(),
   });
 }
 
@@ -135,7 +184,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     });
     expect(renderer.init).toHaveBeenCalledTimes(1);
     expect(renderer.onDeviceLost).not.toBe(previousOnDeviceLost);
-    expect(renderer.initTexture).toHaveBeenCalledTimes(1);
+    expect(renderer.initTexture).toHaveBeenCalledTimes(2);
     expect(renderer.compileAsync).toHaveBeenCalledWith(scene, camera);
     expect(renderer.render).toHaveBeenCalledTimes(10);
     expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(3);
@@ -169,15 +218,6 @@ describe("createThreeHostLifecycleAdapter", () => {
       ),
     ).toEqual(manifest.declarations.map((declaration) => declaration.id));
     const preparedPlane = scene.children[0];
-    expect(
-      lease.updateArtisticControls({
-        ...lease.inspectRuntime().artisticControls,
-        waveStrength: 1.5,
-      }),
-    ).toMatchObject({
-      changed: true,
-      revision: 1,
-    });
     const queryResults = {
       heights: new Float32Array(1),
       normals: new Float32Array(3),
@@ -194,6 +234,34 @@ describe("createThreeHostLifecycleAdapter", () => {
         results: queryResults,
       }),
     ).toBe(queryResults);
+    const geometryBefore = {
+      height: queryResults.heights[0],
+      normal: Array.from(queryResults.normals),
+      velocity: Array.from(queryResults.velocities),
+      foam: queryResults.foam[0],
+    };
+    expect(
+      lease.updateArtisticControls({
+        ...lease.inspectRuntime().artisticControls,
+        grazingReflection: 2,
+      }),
+    ).toMatchObject({
+      changed: true,
+      revision: 1,
+    });
+    expect(
+      lease.queryGameplay({
+        count: 1,
+        positions: new Float32Array(3),
+        results: queryResults,
+      }),
+    ).toBe(queryResults);
+    expect(queryResults.heights[0]).toBe(geometryBefore.height);
+    expect(Array.from(queryResults.normals)).toEqual(geometryBefore.normal);
+    expect(Array.from(queryResults.velocities)).toEqual(
+      geometryBefore.velocity,
+    );
+    expect(queryResults.foam[0]).toBe(geometryBefore.foam);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(1);
     expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(3);
     expect(scene.children[0]).toBe(preparedPlane);
@@ -246,6 +314,337 @@ describe("createThreeHostLifecycleAdapter", () => {
     await replacementLease.dispose();
     expect(scene.children).toHaveLength(0);
     expect(renderer.onDeviceLost).toBe(hostReplacementOnDeviceLost);
+  });
+
+  it("rejects an orthographic camera at Host preparation", async () => {
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer: createCapableRenderer(),
+        scene: new Scene(),
+        camera: new OrthographicCamera(-1, 1, 1, -1, 0.1, 100),
+      }),
+    });
+
+    await expect(run.ready).rejects.toThrow(
+      "The Three Host Adapter requires a perspective camera for the basic optical path.",
+    );
+  });
+
+  it("keeps Host Environment Adapter textures owned by the Host after disposal", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+    const environment = createTestEnvironment();
+    const environmentDispose = vi.spyOn(
+      environment.texture as { dispose(): void },
+      "dispose",
+    );
+    const renderer = {
+      autoClear: true,
+      backend: {
+        device: {
+          limits: {
+            maxComputeInvocationsPerWorkgroup: 256,
+            maxComputeWorkgroupSizeX: 256,
+            maxComputeWorkgroupsPerDimension: 65_535,
+            maxStorageBufferBindingSize: 134_217_728,
+            maxTextureDimension2D: 8_192,
+          },
+        },
+      },
+      compileAsync: vi.fn(async () => {}),
+      contextNode: null,
+      coordinateSystem: 2_001,
+      dispose: vi.fn(),
+      getActiveCubeFace: vi.fn(() => 0),
+      getActiveMipmapLevel: vi.fn(() => 0),
+      getMRT: vi.fn(() => null),
+      getRenderTarget: vi.fn(() => null),
+      hasFeature: vi.fn((name: string) => name === "core-features-and-limits"),
+      init: vi.fn(async () => {}),
+      initTexture: vi.fn(),
+      onDeviceLost: vi.fn(),
+      opaque: true,
+      outputColorSpace: "srgb",
+      readRenderTargetPixelsAsync: vi.fn(async () => new Uint8Array(4)),
+      render: vi.fn(),
+      setMRT: vi.fn(),
+      setRenderTarget: vi.fn(),
+      toneMapping: 0,
+      transparent: false,
+      xr: { enabled: false },
+    };
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        environment,
+      }),
+    }).ready;
+
+    const texture = environment.texture as DataTexture;
+    const expectedBytes = createSupportedHostEnvironmentRadianceBytes();
+    expect(renderer.initTexture).toHaveBeenCalledWith(environment.texture);
+    expect(renderer.initTexture).toHaveBeenCalledTimes(2);
+    expect(Array.from(texture.image.data)).toEqual(Array.from(expectedBytes));
+    expect(texture.name).toBe("test-environment-radiance");
+    expect(texture.wrapS).toBe(RepeatWrapping);
+    expect(texture.wrapT).toBe(ClampToEdgeWrapping);
+    expect(texture.magFilter).toBe(NearestFilter);
+    expect(texture.minFilter).toBe(NearestFilter);
+    expect(texture.generateMipmaps).toBe(false);
+    await lease.dispose();
+    expect(environmentDispose).not.toHaveBeenCalled();
+    expect(Array.from(texture.image.data)).toEqual(Array.from(expectedBytes));
+    expect(texture.name).toBe("test-environment-radiance");
+    expect(texture.wrapS).toBe(RepeatWrapping);
+  });
+
+  it("samples the Host Environment Adapter instead of scene.environment", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+    const decoy = new DataTexture(Uint8Array.from([255, 0, 0, 255]), 1, 1);
+    decoy.name = "scene-environment-decoy";
+    decoy.needsUpdate = true;
+    scene.environment = decoy;
+    const environment = createTestEnvironment();
+    const renderer = {
+      autoClear: true,
+      backend: {
+        device: {
+          limits: {
+            maxComputeInvocationsPerWorkgroup: 256,
+            maxComputeWorkgroupSizeX: 256,
+            maxComputeWorkgroupsPerDimension: 65_535,
+            maxStorageBufferBindingSize: 134_217_728,
+            maxTextureDimension2D: 8_192,
+          },
+        },
+      },
+      compileAsync: vi.fn(async () => {}),
+      contextNode: null,
+      coordinateSystem: 2_001,
+      dispose: vi.fn(),
+      getActiveCubeFace: vi.fn(() => 0),
+      getActiveMipmapLevel: vi.fn(() => 0),
+      getMRT: vi.fn(() => null),
+      getRenderTarget: vi.fn(() => null),
+      hasFeature: vi.fn((name: string) => name === "core-features-and-limits"),
+      init: vi.fn(async () => {}),
+      initTexture: vi.fn(),
+      onDeviceLost: vi.fn(),
+      opaque: true,
+      outputColorSpace: "srgb",
+      readRenderTargetPixelsAsync: vi.fn(async () => new Uint8Array(4)),
+      render: vi.fn(),
+      setMRT: vi.fn(),
+      setRenderTarget: vi.fn(),
+      toneMapping: 0,
+      transparent: false,
+      xr: { enabled: false },
+    };
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        environment,
+      }),
+    }).ready;
+
+    expect(renderer.initTexture).toHaveBeenCalledWith(environment.texture);
+    expect(renderer.initTexture).not.toHaveBeenCalledWith(decoy);
+    await lease.dispose();
+  });
+
+  it("fails closed when Host Environment Adapter textures are not textures", async () => {
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer: {
+          coordinateSystem: 2_001,
+          hasFeature: vi.fn((name: string) =>
+            ["core-features-and-limits"].includes(name),
+          ),
+          init: vi.fn(async () => {}),
+          onDeviceLost: vi.fn(),
+          backend: {
+            device: {
+              limits: {
+                maxComputeInvocationsPerWorkgroup: 256,
+                maxComputeWorkgroupSizeX: 256,
+                maxComputeWorkgroupsPerDimension: 65_535,
+                maxStorageBufferBindingSize: 134_217_728,
+                maxTextureDimension2D: 8_192,
+              },
+            },
+          },
+        },
+        scene: new Scene(),
+        camera: new PerspectiveCamera(),
+        environment: createStaticHostEnvironmentAdapter(
+          createTestEnvironmentReflection({ isTexture: false }),
+          TEST_ENVIRONMENT_STATE,
+        ),
+      }),
+    });
+
+    await expect(run.ready).rejects.toMatchObject({
+      message:
+        "The Host environment radiance must be a Host-owned Three texture.",
+    });
+  });
+
+  it("rejects a borrowed environment texture whose size does not match the descriptor", async () => {
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer: createCapableRenderer(),
+        scene: new Scene(),
+        camera: new PerspectiveCamera(),
+        environment: createStaticHostEnvironmentAdapter(
+          createTestEnvironmentReflection(createTestEnvironmentTexture(2, 2)),
+          TEST_ENVIRONMENT_STATE,
+        ),
+      }),
+    });
+
+    await expect(run.ready).rejects.toThrow(
+      "The Host environment radiance texture does not match its reflection descriptor.",
+    );
+  });
+
+  it("rejects a borrowed cube texture when the prepared radiance is equirect", async () => {
+    const cube = createTestEnvironmentTexture();
+    (cube as { isCubeTexture: boolean }).isCubeTexture = true;
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer: createCapableRenderer(),
+        scene: new Scene(),
+        camera: new PerspectiveCamera(),
+        environment: createStaticHostEnvironmentAdapter(
+          createTestEnvironmentReflection(cube),
+          TEST_ENVIRONMENT_STATE,
+        ),
+      }),
+    });
+
+    await expect(run.ready).rejects.toThrow(
+      "The Host environment radiance texture does not match its reflection descriptor.",
+    );
+  });
+
+  it("applies Host environment scalar changes on a later frame without recompiling", async () => {
+    const lighting = { ...TEST_ENVIRONMENT_STATE };
+    const environment = createStaticHostEnvironmentAdapter(
+      createTestEnvironmentReflection(createTestEnvironmentTexture()),
+      lighting,
+    );
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+    const initialRenderTarget = Object.freeze({ name: "host-target" });
+    let currentRenderTarget: unknown = initialRenderTarget;
+    const renderer = {
+      autoClear: true,
+      backend: {
+        device: {
+          limits: {
+            maxComputeInvocationsPerWorkgroup: 256,
+            maxComputeWorkgroupSizeX: 256,
+            maxComputeWorkgroupsPerDimension: 65_535,
+            maxStorageBufferBindingSize: 134_217_728,
+            maxTextureDimension2D: 8_192,
+          },
+        },
+      },
+      compileAsync: vi.fn(async () => {}),
+      contextNode: null,
+      coordinateSystem: 2_001,
+      dispose: vi.fn(),
+      getActiveCubeFace: vi.fn(() => 0),
+      getActiveMipmapLevel: vi.fn(() => 0),
+      getMRT: vi.fn(() => null),
+      getRenderTarget: vi.fn(() => currentRenderTarget),
+      hasFeature: vi.fn((name: string) => name === "core-features-and-limits"),
+      init: vi.fn(async () => {}),
+      initTexture: vi.fn(),
+      onDeviceLost: vi.fn(),
+      opaque: true,
+      outputColorSpace: "srgb",
+      readRenderTargetPixelsAsync: vi.fn(async () => new Uint8Array(4)),
+      render: vi.fn(),
+      setMRT: vi.fn(),
+      setRenderTarget: vi.fn((target: unknown) => {
+        currentRenderTarget = target;
+      }),
+      toneMapping: 0,
+      transparent: false,
+      xr: { enabled: false },
+    };
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        environment,
+      }),
+    }).ready;
+
+    const preparedChildren = [...scene.children];
+    const compileCalls = renderer.compileAsync.mock.calls.length;
+    const probeCalls = renderer.readRenderTargetPixelsAsync.mock.calls.length;
+    const renderCalls = renderer.render.mock.calls.length;
+
+    lighting.sunIntensity = 0;
+    lighting.environmentIntensity = 0.25;
+    expect(environment.snapshot()).toMatchObject({
+      sunIntensity: 0,
+      environmentIntensity: 0.25,
+    });
+    renderer.render(scene, camera);
+
+    expect(renderer.compileAsync).toHaveBeenCalledTimes(compileCalls);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(
+      probeCalls,
+    );
+    expect(renderer.render).toHaveBeenCalledTimes(renderCalls + 1);
+    expect(scene.children).toEqual(preparedChildren);
+    await lease.dispose();
+    expect(scene.children).toHaveLength(0);
+  });
+
+  it("rejects a borrowed environment texture whose color space does not match", async () => {
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer: createCapableRenderer(),
+        scene: new Scene(),
+        camera: new PerspectiveCamera(),
+        environment: createStaticHostEnvironmentAdapter(
+          createTestEnvironmentReflection(
+            createTestEnvironmentTexture(8, 4, LinearSRGBColorSpace),
+          ),
+          TEST_ENVIRONMENT_STATE,
+        ),
+      }),
+    });
+
+    await expect(run.ready).rejects.toThrow(
+      "The Host environment radiance texture does not match its reflection descriptor.",
+    );
   });
 
   it("cleans partial water resources when progress presentation fails", async () => {
@@ -594,6 +993,28 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(loading.snapshots.at(-1)?.status).toBe("failed");
   });
 });
+
+function createCapableRenderer(): ThreeHostRenderer {
+  return {
+    coordinateSystem: 2_001,
+    hasFeature: vi.fn((name: string) =>
+      ["core-features-and-limits"].includes(name),
+    ),
+    init: vi.fn(async () => {}),
+    onDeviceLost: vi.fn(),
+    backend: {
+      device: {
+        limits: {
+          maxComputeInvocationsPerWorkgroup: 256,
+          maxComputeWorkgroupSizeX: 256,
+          maxComputeWorkgroupsPerDimension: 65_535,
+          maxStorageBufferBindingSize: 134_217_728,
+          maxTextureDimension2D: 8_192,
+        },
+      },
+    },
+  };
+}
 
 function createTestThreeHostLifecycleAdapter(renderer: ThreeHostRenderer) {
   return createThreeHostLifecycleAdapter({

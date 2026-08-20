@@ -8,6 +8,7 @@ import {
   qualityProfileIdentity,
   type QualityProfile,
 } from "../src/quality-profile.js";
+import { SUPPORTED_HOST_ENVIRONMENT_REFLECTION } from "../src/environment.js";
 import {
   SUPPORTED_EFFECT_VARIANTS,
   createMinimalWaterPrewarmManifest,
@@ -139,11 +140,11 @@ describe("Quality Profile manifests", () => {
     const highDetail = createMinimalWaterPrewarmManifest(highDetailProfile);
 
     expect(minimal.manifestHash).toBe(
-      "sha256:220c87cdc637f64b7d390f13be36001ac9f746a3c85efd8edf7d131c49a010de",
+      "sha256:22e8ad66ea9b58d02ceba64377534916c2167f8b1ed1d1aff5bdd0af8587fefc",
     );
     expect(repeated.manifestHash).toBe(minimal.manifestHash);
     expect(highDetail.manifestHash).toBe(
-      "sha256:c50fe4d1456c056fdf00f242d50fcc18143afc8b9953ed1246331830912aec95",
+      "sha256:421ce1d9ceead8b1c1975922ce74bda9245325fb47c2c5485e322ad0961607cb",
     );
     expect(highDetail.manifestHash).not.toBe(minimal.manifestHash);
     expect(minimal.qualityProfile).toEqual(minimalProfile);
@@ -154,6 +155,9 @@ describe("Quality Profile manifests", () => {
     expect(minimal.effectVariants).toEqual(SUPPORTED_EFFECT_VARIANTS);
     expect(minimal.declarations.map(({ id }) => id)).toEqual([
       "water-texture",
+      "water-environment-radiance",
+      "water-scene-color",
+      "water-scene-depth",
       "water-render-target",
       "water-clipmap",
       "water-spectral-band-swell",
@@ -161,6 +165,7 @@ describe("Quality Profile manifests", () => {
       "water-spectral-band-chop",
       "water-spectral-band-ripple",
       "water-material",
+      "water-optical-route",
       "water-render-route",
       "water-hidden-stabilization",
       "water-completion-probe",
@@ -169,18 +174,84 @@ describe("Quality Profile manifests", () => {
     expect(highDetail.declarations.map(({ id }) => id)).toEqual(
       minimal.declarations.map(({ id }) => id),
     );
-    expect(highDetail.declarations[2]?.fingerprint).toBe(
+    expect(
+      Object.fromEntries(
+        minimal.declarations
+          .filter((declaration) =>
+            [
+              "water-environment-radiance",
+              "water-scene-color",
+              "water-scene-depth",
+              "water-optical-route",
+            ].includes(declaration.id),
+          )
+          .map((declaration) => [declaration.id, declaration.label]),
+      ),
+    ).toEqual({
+      "water-environment-radiance":
+        "Host environment radiance (equirect rgba8unorm 8x4 srgb)",
+      "water-scene-color":
+        "Viewport pre-water scene color (viewportSharedTexture)",
+      "water-scene-depth": "Viewport opaque scene depth (viewportDepthTexture)",
+      "water-optical-route":
+        "Basic optical composition route (projected refraction, RGB Beer-Lambert, perspective camera)",
+    });
+    const highDetailClipmap = highDetail.declarations.find(
+      (declaration) => declaration.id === "water-clipmap",
+    );
+    const minimalClipmap = minimal.declarations.find(
+      (declaration) => declaration.id === "water-clipmap",
+    );
+    expect(highDetailClipmap?.fingerprint).toBe(
       "sha256:ac0f415a7ca925b92112e332ed39c7cebef51fcec3ffc07216a0484181be6930",
     );
-    expect(highDetail.declarations[2]?.fingerprint).not.toBe(
-      minimal.declarations[2]?.fingerprint,
+    expect(highDetailClipmap?.fingerprint).not.toBe(
+      minimalClipmap?.fingerprint,
+    );
+    expect(
+      Object.fromEntries(
+        minimal.declarations
+          .filter((declaration) =>
+            [
+              "water-environment-radiance",
+              "water-material",
+              "water-optical-route",
+              "water-render-route",
+              "water-completion-probe",
+            ].includes(declaration.id),
+          )
+          .map((declaration) => [declaration.id, declaration.fingerprint]),
+      ),
+    ).toEqual({
+      "water-environment-radiance":
+        "sha256:3b4e72ce8470faf690ea64fa4f7e0e99c36517e5c93df2036bd80472021b777d",
+      "water-material":
+        "sha256:511030f29a5d42d01344b6a689a2e59f5248e522f1a4249c01a8916fc10e2314",
+      "water-optical-route":
+        "sha256:d223bdd7539e1d31659f03fa18a8e8e8784fde725f9fce9d499f33f48dcf1e63",
+      "water-render-route":
+        "sha256:7eea5ea8565cc2e71e32575ee2dbdae1b997cc7343f3ca96356ddf9f9447a85b",
+      "water-completion-probe":
+        "sha256:21038351bc7a86b5d19736ad762f4be33c24cad188c8613832a8a2c67e13b127",
+    });
+    expect(
+      minimal.declarations.find(
+        (declaration) => declaration.id === "water-optical-route",
+      )?.kind,
+    ).toBe("effect-state");
+    expect(minimal.environmentReflection).toEqual(
+      SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
+    );
+    expect(highDetail.environmentReflection).toEqual(
+      SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
     );
     expect(manifestIdentity(highDetail)).toEqual({
       schema: "real-water/prewarm",
-      version: 1,
+      version: 2,
       id: "reference-minimal-water",
       manifestHash: highDetail.manifestHash,
       qualityProfile: qualityProfileIdentity(highDetailProfile),
+      environmentReflection: SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
       effectVariants: [
         { effectId: "minimal-water-surface", variantId: "basic" },
       ],
@@ -209,6 +280,7 @@ describe("Quality Profile manifests", () => {
       );
       expect(Object.isFrozen(normalized.effectVariants)).toBe(true);
       expect(Object.isFrozen(normalized.effectVariants[0])).toBe(true);
+      expect(Object.isFrozen(normalized.environmentReflection)).toBe(true);
       expect(Object.isFrozen(normalized.declarations)).toBe(true);
       expect(Object.isFrozen(normalized.declarations[0])).toBe(true);
     }
@@ -287,6 +359,104 @@ describe("Quality Profile manifests", () => {
           ),
         };
       },
+    ],
+    [
+      "missing environment reflection",
+      (): PrewarmManifest => {
+        const manifest = createMinimalWaterPrewarmManifest();
+        return {
+          schema: manifest.schema,
+          version: manifest.version,
+          id: manifest.id,
+          manifestHash: manifest.manifestHash,
+          qualityProfile: manifest.qualityProfile,
+          effectVariants: manifest.effectVariants,
+          declarations: manifest.declarations,
+        } as PrewarmManifest;
+      },
+    ],
+    [
+      "extra environment reflection field",
+      (): PrewarmManifest => {
+        const manifest = createMinimalWaterPrewarmManifest();
+        return {
+          ...manifest,
+          environmentReflection: {
+            ...manifest.environmentReflection,
+            encoding: "srgb",
+          } as PrewarmManifest["environmentReflection"],
+        };
+      },
+    ],
+    [
+      "environment reflection identity drift",
+      (): PrewarmManifest => ({
+        ...createMinimalWaterPrewarmManifest(),
+        environmentReflection: {
+          ...SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
+          identity: "other-environment-radiance",
+        },
+      }),
+    ],
+    [
+      "environment reflection fingerprint drift",
+      (): PrewarmManifest => ({
+        ...createMinimalWaterPrewarmManifest(),
+        environmentReflection: {
+          ...SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
+          fingerprint: `sha256:${"0".repeat(64)}`,
+        },
+      }),
+    ],
+    [
+      "environment reflection width drift",
+      (): PrewarmManifest => ({
+        ...createMinimalWaterPrewarmManifest(),
+        environmentReflection: {
+          ...SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
+          width: 16,
+        },
+      }),
+    ],
+    [
+      "environment reflection height drift",
+      (): PrewarmManifest => ({
+        ...createMinimalWaterPrewarmManifest(),
+        environmentReflection: {
+          ...SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
+          height: 8,
+        },
+      }),
+    ],
+    [
+      "environment reflection format drift",
+      (): PrewarmManifest => ({
+        ...createMinimalWaterPrewarmManifest(),
+        environmentReflection: {
+          ...SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
+          format: "rgba16float",
+        } as PrewarmManifest["environmentReflection"],
+      }),
+    ],
+    [
+      "environment reflection type drift",
+      (): PrewarmManifest => ({
+        ...createMinimalWaterPrewarmManifest(),
+        environmentReflection: {
+          ...SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
+          type: "cube",
+        } as PrewarmManifest["environmentReflection"],
+      }),
+    ],
+    [
+      "environment reflection color-space drift",
+      (): PrewarmManifest => ({
+        ...createMinimalWaterPrewarmManifest(),
+        environmentReflection: {
+          ...SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
+          colorSpace: "linear",
+        } as PrewarmManifest["environmentReflection"],
+      }),
     ],
   ])("fails closed on %s", (_name, makeCandidate) => {
     expect(() => normalizePrewarmManifest(makeCandidate())).toThrowError(

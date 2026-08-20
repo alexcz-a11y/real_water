@@ -1,5 +1,5 @@
 import { hasExactKeys, isRecord } from "./internal/record-validation.js";
-import type { ArtisticControls } from "./runtime.js";
+import { ARTISTIC_CONTROL_KEYS, type ArtisticControls } from "./runtime.js";
 
 /**
  * The discriminator for supported Water Presets.
@@ -13,7 +13,7 @@ export const WATER_PRESET_SCHEMA = "real-water/water-preset" as const;
  *
  * @public
  */
-export const WATER_PRESET_VERSION = 1 as const;
+export const WATER_PRESET_VERSION = 2 as const;
 
 /**
  * Built-in named sea characters stored as hot Artistic Controls.
@@ -52,12 +52,14 @@ interface SupportedWaterPreset {
   readonly artisticControls: ArtisticControls;
 }
 
+// Each static hash is the SHA-256 digest of the preset's canonical JSON,
+// excluding presetHash and preserving the public field order.
 const SUPPORTED_WATER_PRESETS: Readonly<
   Record<WaterPresetId, SupportedWaterPreset>
 > = Object.freeze({
   calm: Object.freeze({
     presetHash:
-      "sha256:46e77abd2ff1bc2db00440dab4634c935e56e36d624a0e5fc932c06c9c203069",
+      "sha256:7823cba17b46a26315541babfde3d3b7fda6a937794df7a32cbc3bf3d28df047",
     artisticControls: Object.freeze({
       waveStrength: 0.55,
       swellDrama: 0.35,
@@ -66,11 +68,17 @@ const SUPPORTED_WATER_PRESETS: Readonly<
       crestSharpness: 0.15,
       microDetail: 0.4,
       timeScale: 0.85,
+      grazingReflection: 0.7,
+      environmentReflection: 0.85,
+      depthSeeThrough: 0.95,
+      depthColoring: 0.4,
+      inWaterGlow: 0.35,
+      crestGlow: 0.25,
     }),
   }),
   swell: Object.freeze({
     presetHash:
-      "sha256:88703f2f6e7efb3ccba841230d4ac58dfe9c18bc57ea8969c1a7426cf3c3dc48",
+      "sha256:667f6dd3b383cc3909b98829ba6979aa99fe31b47996f7e806e4768feccad37b",
     artisticControls: Object.freeze({
       waveStrength: 1,
       swellDrama: 1,
@@ -79,11 +87,17 @@ const SUPPORTED_WATER_PRESETS: Readonly<
       crestSharpness: 0,
       microDetail: 1,
       timeScale: 1,
+      grazingReflection: 1,
+      environmentReflection: 1,
+      depthSeeThrough: 1,
+      depthColoring: 1,
+      inWaterGlow: 1,
+      crestGlow: 1,
     }),
   }),
   storm: Object.freeze({
     presetHash:
-      "sha256:07ef1822a50063f707e4a723e15f1eb0e0cb7310b4563a598d7225f7066fe956",
+      "sha256:85ff6bf8c652aaecb3d7aa3e3bf35c693264365c19cec1683c42fe2fb1164f9e",
     artisticControls: Object.freeze({
       waveStrength: 1.45,
       swellDrama: 1.6,
@@ -92,6 +106,12 @@ const SUPPORTED_WATER_PRESETS: Readonly<
       crestSharpness: 1.1,
       microDetail: 1.5,
       timeScale: 1.15,
+      grazingReflection: 1.15,
+      environmentReflection: 0.7,
+      depthSeeThrough: 0.4,
+      depthColoring: 1.55,
+      inWaterGlow: 1.45,
+      crestGlow: 1.6,
     }),
   }),
 });
@@ -140,34 +160,23 @@ export function normalizeWaterPreset(candidate: WaterPreset): WaterPreset {
     throw new TypeError("The Water Preset is not supported.");
   }
 
+  if (value.version === 1) {
+    throw new TypeError(
+      "Water Preset version 1 does not include the required optical Artistic Controls.",
+    );
+  }
+
   const supported = createWaterPreset(value.id);
+  const artisticControls = value.artisticControls;
   if (
     value.schema !== supported.schema ||
     value.version !== supported.version ||
     value.presetHash !== supported.presetHash ||
-    !isRecord(value.artisticControls) ||
-    !hasExactKeys(value.artisticControls, [
-      "waveStrength",
-      "swellDrama",
-      "directionality",
-      "choppiness",
-      "crestSharpness",
-      "microDetail",
-      "timeScale",
-    ]) ||
-    value.artisticControls.waveStrength !==
-      supported.artisticControls.waveStrength ||
-    value.artisticControls.swellDrama !==
-      supported.artisticControls.swellDrama ||
-    value.artisticControls.directionality !==
-      supported.artisticControls.directionality ||
-    value.artisticControls.choppiness !==
-      supported.artisticControls.choppiness ||
-    value.artisticControls.crestSharpness !==
-      supported.artisticControls.crestSharpness ||
-    value.artisticControls.microDetail !==
-      supported.artisticControls.microDetail ||
-    value.artisticControls.timeScale !== supported.artisticControls.timeScale
+    !isRecord(artisticControls) ||
+    !hasExactKeys(artisticControls, ARTISTIC_CONTROL_KEYS) ||
+    ARTISTIC_CONTROL_KEYS.some(
+      (key) => artisticControls[key] !== supported.artisticControls[key],
+    )
   ) {
     throw new TypeError(
       "The Water Preset does not match a supported Artistic Control snapshot.",

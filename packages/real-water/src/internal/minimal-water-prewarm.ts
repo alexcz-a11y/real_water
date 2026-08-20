@@ -2,14 +2,15 @@ import {
   type BufferGeometry,
   DataTexture,
   Mesh,
-  MeshStandardNodeMaterial,
+  NodeMaterial,
   RenderPipeline,
   SRGBColorSpace,
   type Camera,
   type Renderer,
   type Scene,
+  type Texture,
 } from "three/webgpu";
-import { mix, pass, texture, vec3 } from "three/tsl";
+import { pass } from "three/tsl";
 import {
   MINIMAL_WATER_PREWARM_DECLARATION_IDS,
   assertMinimalWaterPrewarmManifest,
@@ -25,11 +26,14 @@ import type {
   ThreeHostRenderer,
   ThreeHostScene,
 } from "../three-host.js";
+import type { HostEnvironmentAdapter } from "../environment.js";
+import { assertHostEnvironmentMatchesManifest } from "../environment.js";
 import type { HostSimulationAdapter } from "../runtime.js";
 import {
   clipmapInnerCellMetres,
   createCameraRelativeClipmapGeometry,
 } from "./camera-relative-clipmap.js";
+import { createWaterOpticsRendering } from "./water-optics-rendering.js";
 import { HOST_RUNTIME_STATE_BRIDGE } from "./runtime-state-bridge.js";
 import { createSpectralBandRendering } from "./spectral-bands-rendering.js";
 
@@ -42,16 +46,18 @@ interface MinimalWaterPrewarmOptions {
   readonly request: HostPreparationRequest;
   readonly invalidated: Promise<WebGPUDeviceLoss>;
   readonly simulation: HostSimulationAdapter;
+  readonly environment: HostEnvironmentAdapter;
 }
 
 interface PreparedResources {
   readonly plane: Mesh;
   readonly geometry: BufferGeometry;
-  readonly material: MeshStandardNodeMaterial;
+  readonly material: NodeMaterial;
   readonly waterTexture: DataTexture;
   readonly pipeline: RenderPipeline;
   readonly scenePass: ReturnType<typeof pass>;
   readonly spectralBand: ReturnType<typeof createSpectralBandRendering>;
+  readonly opticalPath: ReturnType<typeof createWaterOpticsRendering>;
 }
 
 type PartialPreparedResources = {
@@ -105,22 +111,31 @@ export async function prepareMinimalWaterPlane(
 
   try {
     throwIfAborted(options.request.signal);
+    assertHostEnvironmentMatchesManifest(
+      options.environment,
+      options.request.manifest,
+    );
+    const environmentRadiance = requireHostTexture(
+      options.environment.texture,
+      "environment radiance",
+    );
     const waterTexture = createWaterTexture();
     partial.waterTexture = waterTexture;
 
     throwIfAborted(options.request.signal);
     const scenePass = pass(scene, camera);
     partial.scenePass = scenePass;
-    scenePass.renderTarget.texture.name = "Real Water minimal scene color";
 
     throwIfAborted(options.request.signal);
     const geometry = createCameraRelativeClipmapGeometry(
       geometrySegments.widthSegments,
     );
     partial.geometry = geometry;
-    const material = new MeshStandardNodeMaterial();
+    const material = new NodeMaterial();
     partial.material = material;
     material.name = "Real Water minimal material";
+    material.lights = false;
+    material.fog = false;
     const innerCellMetres = clipmapInnerCellMetres(
       geometrySegments.widthSegments,
     );
@@ -129,20 +144,17 @@ export async function prepareMinimalWaterPlane(
       innerCellMetres,
     );
     partial.spectralBand = spectralBand;
+    const opticalPath = createWaterOpticsRendering(
+      spectralBand,
+      options.environment,
+      waterTexture,
+    );
+    partial.opticalPath = opticalPath;
     material.positionNode = spectralBand.positionNode;
     material.normalNode = spectralBand.normalNode;
-    const waterColor = texture(waterTexture).mul(
-      spectralBand.heightNode.mul(0.08).add(1),
-    );
-    const whiteDetail = vec3(0.93, 0.96, 0.98);
-    const surfaceColor = mix(
-      waterColor,
-      whiteDetail,
-      spectralBand.whiteDetailNode.mul(0.55),
-    ).add(vec3(spectralBand.highlightNode).mul(vec3(1, 0.96, 0.82)));
-    material.colorNode = surfaceColor;
-    material.emissiveNode = surfaceColor.rgb;
-    material.roughnessNode = spectralBand.roughnessNode;
+    material.colorNode = opticalPath.colorNode;
+    material.mrtNode = opticalPath.mrtNode;
+    material.transparent = true;
     const plane = new Mesh(geometry, material);
     partial.plane = plane;
     plane.name = "Real Water clipmap";
@@ -154,13 +166,23 @@ export async function prepareMinimalWaterPlane(
     partial.pipeline = pipeline;
     renderer.setRenderTarget(null);
     renderer.initTexture(waterTexture);
-    await renderer.compileAsync(scene, camera);
+    renderer.initTexture(environmentRadiance);
+    await scenePass.compileAsync(renderer);
     throwIfAborted(options.request.signal);
     pipeline.render();
     await probeCompletedFrame(renderer, scenePass.renderTarget);
     throwIfAborted(options.request.signal);
     await options.request.progress.complete(
       MINIMAL_WATER_PREWARM_DECLARATION_IDS.texture,
+    );
+    await options.request.progress.complete(
+      MINIMAL_WATER_PREWARM_DECLARATION_IDS.environmentRadiance,
+    );
+    await options.request.progress.complete(
+      MINIMAL_WATER_PREWARM_DECLARATION_IDS.sceneColor,
+    );
+    await options.request.progress.complete(
+      MINIMAL_WATER_PREWARM_DECLARATION_IDS.sceneDepth,
     );
     await options.request.progress.complete(
       MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderTarget,
@@ -182,6 +204,9 @@ export async function prepareMinimalWaterPlane(
     );
     await options.request.progress.complete(
       MINIMAL_WATER_PREWARM_DECLARATION_IDS.material,
+    );
+    await options.request.progress.complete(
+      MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalRoute,
     );
     await options.request.progress.complete(
       MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
@@ -222,6 +247,7 @@ export async function prepareMinimalWaterPlane(
         pipeline,
         scenePass,
         spectralBand,
+        opticalPath,
       },
       options.invalidated,
       options.simulation,
@@ -251,6 +277,7 @@ function createWaterTexture(): DataTexture {
 async function probeCompletedFrame(
   renderer: Renderer,
   renderTarget: ReturnType<typeof pass>["renderTarget"],
+  textureIndex = 0,
 ): Promise<void> {
   const x = Math.max(0, Math.floor(renderTarget.width / 2));
   const y = Math.max(0, Math.floor(renderTarget.height / 2));
@@ -260,10 +287,23 @@ async function probeCompletedFrame(
     y,
     1,
     1,
+    textureIndex,
   );
   if (pixels.length === 0) {
     throw new Error("The minimal-water completion probe returned no pixels.");
   }
+}
+
+function requireHostTexture(
+  value: HostEnvironmentAdapter["texture"],
+  label: string,
+): Texture {
+  if (value === null || value.isTexture !== true) {
+    throw new TypeError(
+      `The Host ${label} must be a Host-owned Three texture.`,
+    );
+  }
+  return value as unknown as Texture;
 }
 
 function createPreparedLease(
@@ -274,7 +314,7 @@ function createPreparedLease(
 ): HostPreparedLease {
   let disposal: Promise<void> | undefined;
   return Object.freeze({
-    [HOST_RUNTIME_STATE_BRIDGE]: resources.spectralBand.sink,
+    [HOST_RUNTIME_STATE_BRIDGE]: resources.opticalPath.sink,
     invalidated,
     simulation,
     dispose(): Promise<void> {

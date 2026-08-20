@@ -7,8 +7,14 @@
 // @public
 export interface ArtisticControls {
     readonly choppiness: number;
+    readonly crestGlow: number;
     readonly crestSharpness: number;
+    readonly depthColoring: number;
+    readonly depthSeeThrough: number;
     readonly directionality: number;
+    readonly environmentReflection: number;
+    readonly grazingReflection: number;
+    readonly inWaterGlow: number;
     readonly microDetail: number;
     readonly swellDrama: number;
     readonly timeScale: number;
@@ -35,7 +41,16 @@ export function createMinimalWaterPrewarmManifest(profile?: QualityProfile): Pre
 export function createMinimalWaterQualityProfile(id?: MinimalWaterQualityProfileId): QualityProfile;
 
 // @public
+export function createStaticHostEnvironmentAdapter(reflection: HostEnvironmentReflectionResource, state: HostEnvironmentState): HostEnvironmentAdapter;
+
+// @public
 export function createStaticHostSimulationAdapter(): HostSimulationAdapter;
+
+// @public
+export function createSupportedHostEnvironmentRadianceBytes(): Uint8Array;
+
+// @public
+export function createSupportedHostEnvironmentReflection(texture?: HostTexture | null): HostEnvironmentReflectionResource;
 
 // @public
 export function createThreeHostLifecycleAdapter(options: ThreeHostLifecycleAdapterOptions): HostLifecycleAdapter;
@@ -113,6 +128,68 @@ export interface GameplayQueryResults {
 export type HostCompatibilityErrorCode = "UNSUPPORTED_ENVIRONMENT" | "CORE_WEBGPU_REQUIRED" | "WEBGPU_COMPATIBILITY_MODE_UNSUPPORTED" | "WEBGPU_LIMIT_UNSUPPORTED";
 
 // @public
+export interface HostEnvironmentAdapter {
+    // (undocumented)
+    readonly reflection: HostEnvironmentReflectionDescriptor;
+    // (undocumented)
+    snapshot(): HostEnvironmentState;
+    // (undocumented)
+    readonly texture: HostTexture | null;
+}
+
+// @public
+export type HostEnvironmentColorSpace = "srgb";
+
+// @public
+export interface HostEnvironmentReflectionDescriptor {
+    // (undocumented)
+    readonly colorSpace: HostEnvironmentColorSpace;
+    // (undocumented)
+    readonly fingerprint: string;
+    // (undocumented)
+    readonly format: "rgba8unorm";
+    // (undocumented)
+    readonly height: number;
+    // (undocumented)
+    readonly identity: string;
+    // (undocumented)
+    readonly type: HostEnvironmentReflectionType;
+    // (undocumented)
+    readonly width: number;
+}
+
+// @public
+export interface HostEnvironmentReflectionResource extends HostEnvironmentReflectionDescriptor {
+    // (undocumented)
+    readonly texture?: HostTexture | null;
+}
+
+// @public
+export type HostEnvironmentReflectionType = "equirect";
+
+// @public
+export interface HostEnvironmentState {
+    // (undocumented)
+    readonly environmentIntensity: number;
+    // (undocumented)
+    readonly sunAngularRadiusRadians: number;
+    // (undocumented)
+    readonly sunColorB: number;
+    // (undocumented)
+    readonly sunColorG: number;
+    // (undocumented)
+    readonly sunColorR: number;
+    // (undocumented)
+    readonly sunDirectionX: number;
+    // (undocumented)
+    readonly sunDirectionY: number;
+    // (undocumented)
+    readonly sunDirectionZ: number;
+    // (undocumented)
+    readonly sunIntensity: number;
+}
+
+// @public
 export interface HostLifecycleAdapter {
     // (undocumented)
     prepare(request: HostPreparationRequest): Promise<HostPreparationResult>;
@@ -185,6 +262,11 @@ export interface HostSimulationState {
 }
 
 // @public
+export interface HostTexture {
+    readonly isTexture: boolean;
+}
+
+// @public
 export interface LoadingPresenterAdapter {
     // (undocumented)
     present(snapshot: StartupSnapshot, signal: AbortSignal): void | Promise<void>;
@@ -213,6 +295,8 @@ export const MAX_GAMEPLAY_QUERY_POINTS: 2048;
 
 // @public
 export interface MemoryHostLifecycleAdapterOptions {
+    // (undocumented)
+    readonly environment: HostEnvironmentAdapter;
     // (undocumented)
     readonly scenario?: MemoryHostScenario;
     // (undocumented)
@@ -302,7 +386,7 @@ export interface PreparingStartupSnapshot {
 export const PREWARM_MANIFEST_SCHEMA: "real-water/prewarm";
 
 // @public
-export const PREWARM_MANIFEST_VERSION: 1;
+export const PREWARM_MANIFEST_VERSION: 2;
 
 // @public
 export interface PrewarmDeclaration {
@@ -334,6 +418,8 @@ export interface PrewarmManifest {
     // (undocumented)
     readonly effectVariants: readonly PrewarmEffectVariant[];
     // (undocumented)
+    readonly environmentReflection: HostEnvironmentReflectionDescriptor;
+    // (undocumented)
     readonly id: string;
     // (undocumented)
     readonly manifestHash: string;
@@ -349,6 +435,8 @@ export interface PrewarmManifest {
 export interface PrewarmManifestIdentity {
     // (undocumented)
     readonly effectVariants: readonly PrewarmEffectVariant[];
+    // (undocumented)
+    readonly environmentReflection: HostEnvironmentReflectionDescriptor;
     // (undocumented)
     readonly id: string;
     // (undocumented)
@@ -538,13 +626,29 @@ export interface StartupProgress {
 export type StartupSnapshot = LoadingStartupSnapshot | PreparingStartupSnapshot | ReadyStartupSnapshot | ErrorStartupSnapshot;
 
 // @public
+export const SUPPORTED_HOST_ENVIRONMENT_REFLECTION: Readonly<{
+    identity: "water-environment-radiance";
+    fingerprint: "sha256:84b8a165a60b53c9e86a4b1741543e54dba29c63628244127792cbc9fa236f91";
+    width: 8;
+    height: 4;
+    format: "rgba8unorm";
+    type: "equirect";
+    colorSpace: "srgb";
+}>;
+
+// @public
+export const SUPPORTED_HOST_SUN_ANGULAR_RADIUS_RADIANS = 0.069;
+
+// @public
 export interface ThreeHostCamera {
     readonly isCamera: boolean;
+    readonly isPerspectiveCamera: boolean;
 }
 
 // @public
 export interface ThreeHostLifecycleAdapterOptions {
     readonly camera: ThreeHostCamera;
+    readonly environment: HostEnvironmentAdapter;
     readonly renderer: ThreeHostRenderer;
     readonly scene: ThreeHostScene;
     readonly simulation: HostSimulationAdapter;
@@ -565,7 +669,7 @@ export interface ThreeHostScene {
 export const WATER_PRESET_SCHEMA: "real-water/water-preset";
 
 // @public
-export const WATER_PRESET_VERSION: 1;
+export const WATER_PRESET_VERSION: 2;
 
 // @public
 export interface WaterPreset {

@@ -1,4 +1,9 @@
 import { RealWaterStartupError } from "./errors.js";
+import {
+  SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
+  SUPPORTED_HOST_ENVIRONMENT_WORK_PLAN_FINGERPRINT,
+  type HostEnvironmentReflectionDescriptor,
+} from "./environment.js";
 import { hasExactKeys, isRecord } from "./internal/record-validation.js";
 import {
   createMinimalWaterQualityProfile,
@@ -21,7 +26,7 @@ export const PREWARM_MANIFEST_SCHEMA = "real-water/prewarm" as const;
  *
  * @public
  */
-export const PREWARM_MANIFEST_VERSION = 1 as const;
+export const PREWARM_MANIFEST_VERSION = 2 as const;
 
 /**
  * Structural declaration kinds supported by the first Readiness Gate.
@@ -32,7 +37,7 @@ export type PrewarmDeclarationKind =
   "resource" | "effect-state" | "conditional-route";
 
 /**
- * One declared item of work in a version 1 Prewarm Manifest.
+ * One declared item of work in a supported Prewarm Manifest.
  *
  * @public
  */
@@ -44,7 +49,7 @@ export interface PrewarmDeclaration {
 }
 
 /**
- * One exact effect route prepared by a version 1 Prewarm Manifest.
+ * One exact effect route prepared by a supported Prewarm Manifest.
  *
  * @public
  */
@@ -64,6 +69,7 @@ export interface PrewarmManifest {
   readonly id: string;
   readonly manifestHash: string;
   readonly qualityProfile: QualityProfile;
+  readonly environmentReflection: HostEnvironmentReflectionDescriptor;
   readonly effectVariants: readonly PrewarmEffectVariant[];
   readonly declarations: readonly PrewarmDeclaration[];
 }
@@ -79,6 +85,7 @@ export interface PrewarmManifestIdentity {
   readonly id: string;
   readonly manifestHash: string;
   readonly qualityProfile: QualityProfileIdentity;
+  readonly environmentReflection: HostEnvironmentReflectionDescriptor;
   readonly effectVariants: readonly PrewarmEffectVariant[];
 }
 
@@ -102,6 +109,9 @@ export const SUPPORTED_EFFECT_VARIANTS: readonly PrewarmEffectVariant[] =
 
 export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   texture: "water-texture",
+  environmentRadiance: "water-environment-radiance",
+  sceneColor: "water-scene-color",
+  sceneDepth: "water-scene-depth",
   renderTarget: "water-render-target",
   clipmap: "water-clipmap",
   spectralBandSwell: "water-spectral-band-swell",
@@ -109,6 +119,7 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   spectralBandChop: "water-spectral-band-chop",
   spectralBandRipple: "water-spectral-band-ripple",
   material: "water-material",
+  opticalRoute: "water-optical-route",
   renderRoute: "water-render-route",
   hiddenStabilization: "water-hidden-stabilization",
   completionProbe: "water-completion-probe",
@@ -116,12 +127,23 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
 } as const);
 
 const MINIMAL_WATER_MANIFEST_ID = "reference-minimal-water";
+const ENVIRONMENT_REFLECTION_KEYS = [
+  "identity",
+  "fingerprint",
+  "width",
+  "height",
+  "format",
+  "type",
+  "colorSpace",
+] as const;
 // Each static hash is the SHA-256 digest of the manifest's canonical JSON,
-// excluding manifestHash and preserving the public field order.
+// excluding manifestHash and preserving the public field order:
+// schema, version, id, qualityProfile, environmentReflection, effectVariants,
+// declarations.
 const MINIMAL_WATER_MANIFEST_HASH =
-  "sha256:220c87cdc637f64b7d390f13be36001ac9f746a3c85efd8edf7d131c49a010de";
+  "sha256:22e8ad66ea9b58d02ceba64377534916c2167f8b1ed1d1aff5bdd0af8587fefc";
 const MINIMAL_HIGH_DETAIL_WATER_MANIFEST_HASH =
-  "sha256:c50fe4d1456c056fdf00f242d50fcc18143afc8b9953ed1246331830912aec95";
+  "sha256:421ce1d9ceead8b1c1975922ce74bda9245325fb47c2c5485e322ad0961607cb";
 const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.texture,
@@ -129,6 +151,26 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     label: "Minimal water texture",
     fingerprint:
       "sha256:6a6c8aa146e7dd50e15eed0c5b627b961a11fbd49b4655147345a44a5d0bb1bc",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.environmentRadiance,
+    kind: "resource",
+    label: "Host environment radiance (equirect rgba8unorm 8x4 srgb)",
+    fingerprint: SUPPORTED_HOST_ENVIRONMENT_WORK_PLAN_FINGERPRINT,
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.sceneColor,
+    kind: "resource",
+    label: "Viewport pre-water scene color (viewportSharedTexture)",
+    fingerprint:
+      "sha256:7761ba3b4ab1e04567aa1e9e796d3a66e8dab91e157940cce9281e4eaf9e53fb",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.sceneDepth,
+    kind: "resource",
+    label: "Viewport opaque scene depth (viewportDepthTexture)",
+    fingerprint:
+      "sha256:b1c0600e109f08f14c72d84ac848e85a64d47d69daf0406aa966911a0872a169",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderTarget,
@@ -177,14 +219,22 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     kind: "effect-state",
     label: "Minimal water material",
     fingerprint:
-      "sha256:cb92e44849230c27f6fc9ba15d36b173413aae6084afbf08c06c6a7bbe492f75",
+      "sha256:511030f29a5d42d01344b6a689a2e59f5248e522f1a4249c01a8916fc10e2314",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalRoute,
+    kind: "effect-state",
+    label:
+      "Basic optical composition route (projected refraction, RGB Beer-Lambert, perspective camera)",
+    fingerprint:
+      "sha256:d223bdd7539e1d31659f03fa18a8e8e8784fde725f9fce9d499f33f48dcf1e63",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
     kind: "conditional-route",
     label: "Minimal water render route",
     fingerprint:
-      "sha256:1980a55d78567111049b94ebc51967e22a7c07656dcefebe38436ed3c8a35d8b",
+      "sha256:7eea5ea8565cc2e71e32575ee2dbdae1b997cc7343f3ca96356ddf9f9447a85b",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.hiddenStabilization,
@@ -198,7 +248,7 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     kind: "conditional-route",
     label: "GPU completion probe",
     fingerprint:
-      "sha256:8d9e2a4c4179496527e5dbda169711fedd3efb8673d53a6456b0167f13af83ab",
+      "sha256:21038351bc7a86b5d19736ad762f4be33c24cad188c8613832a8a2c67e13b127",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.mainCameraGuard,
@@ -226,7 +276,10 @@ interface SupportedManifestPlan {
 }
 
 /**
- * Returns the complete manifest for the first prewarmed water plane.
+ * Returns the complete manifest for the first prewarmed water plane. This
+ * release binds the canonical 8x4 RGBA8 sRGB equirect Host environment
+ * reflection into both the public descriptor field and the environment-radiance
+ * declaration. The factory is synchronous and does not hash at runtime.
  *
  * @public
  */
@@ -241,6 +294,7 @@ export function createMinimalWaterPrewarmManifest(
     id: MINIMAL_WATER_MANIFEST_ID,
     manifestHash: plan.manifestHash,
     qualityProfile: normalizedProfile,
+    environmentReflection: SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
     effectVariants: SUPPORTED_EFFECT_VARIANTS,
     declarations: plan.declarations,
   });
@@ -292,6 +346,10 @@ export function normalizePrewarmManifest(
 
   const qualityProfile = normalizeManifestQualityProfile(
     value.qualityProfile,
+    value.id,
+  );
+  const environmentReflection = normalizeManifestEnvironmentReflection(
+    value.environmentReflection,
     value.id,
   );
   const effectVariants = normalizeEffectVariants(
@@ -393,6 +451,7 @@ export function normalizePrewarmManifest(
     id: value.id,
     manifestHash: value.manifestHash,
     qualityProfile,
+    environmentReflection,
     effectVariants,
     declarations,
   });
@@ -411,14 +470,23 @@ export function manifestIdentity(
     id: manifest.id,
     manifestHash: manifest.manifestHash,
     qualityProfile: qualityProfileIdentity(manifest.qualityProfile),
+    environmentReflection: freezeEnvironmentReflection(
+      manifest.environmentReflection,
+    ),
     effectVariants: freezeEffectVariants(manifest.effectVariants),
   });
 }
 
 function freezeManifest(manifest: PrewarmManifest): PrewarmManifest {
   return Object.freeze({
-    ...manifest,
+    schema: manifest.schema,
+    version: manifest.version,
+    id: manifest.id,
+    manifestHash: manifest.manifestHash,
     qualityProfile: normalizeQualityProfile(manifest.qualityProfile),
+    environmentReflection: freezeEnvironmentReflection(
+      manifest.environmentReflection,
+    ),
     effectVariants: freezeEffectVariants(manifest.effectVariants),
     declarations: Object.freeze(
       manifest.declarations.map((declaration) =>
@@ -459,6 +527,10 @@ export function assertMinimalWaterPrewarmManifest(
   }
 
   assertEffectVariants(manifest.effectVariants, manifest.id);
+  assertCanonicalEnvironmentReflection(
+    manifest.environmentReflection,
+    manifest.id,
+  );
 
   for (const required of plan.declarations) {
     const candidate = manifest.declarations.find(
@@ -532,6 +604,61 @@ function supportedManifestPlan(
         manifestHash: MINIMAL_WATER_MANIFEST_HASH,
         declarations: MINIMAL_WATER_DECLARATIONS,
       };
+}
+
+function normalizeManifestEnvironmentReflection(
+  value: unknown,
+  manifestId: string,
+): HostEnvironmentReflectionDescriptor {
+  if (value === undefined) {
+    throw manifestError(
+      "The Prewarm Manifest must declare its environment reflection.",
+      { manifestId },
+    );
+  }
+  return assertCanonicalEnvironmentReflection(value, manifestId);
+}
+
+function assertCanonicalEnvironmentReflection(
+  value: unknown,
+  manifestId: string,
+): HostEnvironmentReflectionDescriptor {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [...ENVIRONMENT_REFLECTION_KEYS])
+  ) {
+    throw manifestError(
+      "The Prewarm Manifest environment reflection must use the supported structure.",
+      { manifestId },
+    );
+  }
+  const supported = SUPPORTED_HOST_ENVIRONMENT_REFLECTION;
+  for (const field of ENVIRONMENT_REFLECTION_KEYS) {
+    if (value[field] !== supported[field]) {
+      throw manifestError(
+        "The Prewarm Manifest environment reflection does not match this release.",
+        {
+          field,
+          manifestId,
+        },
+      );
+    }
+  }
+  return freezeEnvironmentReflection(supported);
+}
+
+function freezeEnvironmentReflection(
+  descriptor: HostEnvironmentReflectionDescriptor,
+): HostEnvironmentReflectionDescriptor {
+  return Object.freeze({
+    identity: descriptor.identity,
+    fingerprint: descriptor.fingerprint,
+    width: descriptor.width,
+    height: descriptor.height,
+    format: descriptor.format,
+    type: descriptor.type,
+    colorSpace: descriptor.colorSpace,
+  });
 }
 
 function normalizeManifestQualityProfile(
