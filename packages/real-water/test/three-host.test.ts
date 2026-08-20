@@ -14,11 +14,19 @@ import {
   createMinimalWaterQualityProfile,
   createMinimalWaterPrewarmManifest,
   createStaticHostEnvironmentAdapter,
+  createStaticHostPresentationAdapter,
   createStaticHostSimulationAdapter,
   createSupportedHostEnvironmentRadianceBytes,
   createThreeHostLifecycleAdapter as createBaseThreeHostLifecycleAdapter,
   prepareRealWater,
+  readHostPresentationRoute,
+  readHostPresentedFrame,
   type HostEnvironmentAdapter,
+  type HostPresentationAdapter,
+  type HostPresentationRoute,
+  type HostPresentedFrame,
+  type HostSimulationAdapter,
+  type HostSimulationState,
   type LoadingPresenterAdapter,
   type StartupSnapshot,
   type ThreeHostLifecycleAdapterOptions,
@@ -29,8 +37,32 @@ import {
   createTestEnvironmentAdapter,
   createTestEnvironmentReflection,
 } from "./test-host-environment.js";
+import {
+  DIAGNOSTICS_CAPTURE_NAMES,
+  readHostDiagnosticsPresentedFrame,
+  readHostDiagnosticsRoute,
+} from "../src/diagnostics.js";
 
 const STATIC_SIMULATION = createStaticHostSimulationAdapter();
+const CORE_READY_TEMPORAL = Object.freeze({
+  mode: "TRAA" as const,
+  renderScale: 1 as const,
+  resolutionPolicy: "drawing-buffer-exact" as const,
+  taau: false as const,
+  dynamicResolution: false as const,
+  frameGeneration: false as const,
+  msaaSamples: 0 as const,
+  motionFormat: "rg16float" as const,
+  stockThreeRevision: "185" as const,
+});
+
+function mockDrawingBufferSize() {
+  return vi.fn((target: { width: number; height: number }) => {
+    target.width = 320;
+    target.height = 180;
+    return target;
+  });
+}
 
 function createTestEnvironmentTexture(
   width = 8,
@@ -61,14 +93,20 @@ function createTestEnvironment(): HostEnvironmentAdapter {
 function createThreeHostLifecycleAdapter(
   options: Omit<
     ThreeHostLifecycleAdapterOptions,
-    "simulation" | "environment"
+    "simulation" | "environment" | "presentation"
   > &
-    Partial<Pick<ThreeHostLifecycleAdapterOptions, "environment">>,
+    Partial<
+      Pick<
+        ThreeHostLifecycleAdapterOptions,
+        "environment" | "simulation" | "presentation"
+      >
+    >,
 ) {
   return createBaseThreeHostLifecycleAdapter({
     ...options,
-    simulation: STATIC_SIMULATION,
+    simulation: options.simulation ?? STATIC_SIMULATION,
     environment: options.environment ?? createTestEnvironment(),
+    presentation: options.presentation ?? createStaticHostPresentationAdapter(),
   });
 }
 
@@ -101,7 +139,10 @@ describe("createThreeHostLifecycleAdapter", () => {
 
   it("prewarms and disposes the declared water route through the Startup Interface", async () => {
     const scene = new Scene();
-    const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    camera.updateProjectionMatrix();
+    const hostProjection = camera.projectionMatrix.clone();
+    const hostProjectionInverse = camera.projectionMatrixInverse.clone();
     const initialRenderTarget = Object.freeze({ name: "host-target" });
     let currentRenderTarget: unknown = initialRenderTarget;
     let releaseWarmup: ((pixels: Uint8Array) => void) | undefined;
@@ -114,13 +155,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       autoClear: false,
       backend: {
         device: {
-          limits: {
-            maxComputeInvocationsPerWorkgroup: 256,
-            maxComputeWorkgroupSizeX: 256,
-            maxComputeWorkgroupsPerDimension: 65_535,
-            maxStorageBufferBindingSize: 134_217_728,
-            maxTextureDimension2D: 8_192,
-          },
+          limits: coreDeviceLimits(),
         },
       },
       compileAsync: vi.fn(async () => {}),
@@ -129,6 +164,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       dispose: vi.fn(),
       getActiveCubeFace: vi.fn(() => 4),
       getActiveMipmapLevel: vi.fn(() => 2),
+      getDrawingBufferSize: mockDrawingBufferSize(),
       getMRT: vi.fn(() => null),
       getRenderTarget: vi.fn(() => currentRenderTarget),
       hasFeature: vi.fn((name: string) =>
@@ -180,14 +216,33 @@ describe("createThreeHostLifecycleAdapter", () => {
       rendering: {
         backend: "core-webgpu",
         timestampQuery: true,
+        temporal: CORE_READY_TEMPORAL,
       },
     });
+    expect(Object.isFrozen(lease.capabilities.rendering.temporal)).toBe(true);
+    expect(() => {
+      (lease.capabilities.rendering.temporal as { taau: boolean }).taau = true;
+    }).toThrow(TypeError);
     expect(renderer.init).toHaveBeenCalledTimes(1);
     expect(renderer.onDeviceLost).not.toBe(previousOnDeviceLost);
     expect(renderer.initTexture).toHaveBeenCalledTimes(2);
     expect(renderer.compileAsync).toHaveBeenCalledWith(scene, camera);
-    expect(renderer.render).toHaveBeenCalledTimes(10);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(3);
+    expect(renderer.render).toHaveBeenCalledTimes(13);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(17);
+    const readbackTargets = renderer.readRenderTargetPixelsAsync.mock.calls.map(
+      (call) =>
+        call[0] as { texture?: { name?: string }; textures?: unknown[] },
+    );
+    expect(readbackTargets[0]?.texture?.name).toBe("Real Water final color");
+    expect(readbackTargets[1]?.texture?.name).toBe("Real Water current color");
+    expect(readbackTargets[2]?.textures?.length).toBeGreaterThan(1);
+    expect(readbackTargets[16]?.texture?.name).toBe("Real Water final color");
+    expect(camera.aspect).toBe(1.777);
+    expect(camera.view).toBeNull();
+    expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
+    expect(camera.projectionMatrixInverse.equals(hostProjectionInverse)).toBe(
+      true,
+    );
     expect(currentRenderTarget).toBe(initialRenderTarget);
     expect(renderer.setRenderTarget).toHaveBeenLastCalledWith(
       initialRenderTarget,
@@ -263,7 +318,13 @@ describe("createThreeHostLifecycleAdapter", () => {
     );
     expect(queryResults.foam[0]).toBe(geometryBefore.foam);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(1);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(3);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(17);
+    expect(camera.aspect).toBe(1.777);
+    expect(camera.view).toBeNull();
+    expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
+    expect(camera.projectionMatrixInverse.equals(hostProjectionInverse)).toBe(
+      true,
+    );
     expect(scene.children[0]).toBe(preparedPlane);
 
     renderer.onDeviceLost({
@@ -316,6 +377,87 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(renderer.onDeviceLost).toBe(hostReplacementOnDeviceLost);
   });
 
+  it("rejects a drawing-buffer mismatch before compile or water allocation", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+    const renderer = {
+      autoClear: true,
+      backend: {
+        device: {
+          limits: coreDeviceLimits(),
+        },
+      },
+      compileAsync: vi.fn(async () => {}),
+      contextNode: null,
+      coordinateSystem: 2_001,
+      dispose: vi.fn(),
+      getActiveCubeFace: vi.fn(() => 0),
+      getActiveMipmapLevel: vi.fn(() => 0),
+      getDrawingBufferSize: vi.fn(
+        (target: { width: number; height: number }) => {
+          target.width = 64;
+          target.height = 32;
+          return target;
+        },
+      ),
+      getMRT: vi.fn(() => null),
+      getRenderTarget: vi.fn(() => null),
+      hasFeature: vi.fn((name: string) => name === "core-features-and-limits"),
+      init: vi.fn(async () => {}),
+      initTexture: vi.fn(),
+      onDeviceLost: vi.fn(),
+      opaque: true,
+      outputColorSpace: "srgb",
+      readRenderTargetPixelsAsync: vi.fn(async () => new Uint8Array(4)),
+      render: vi.fn(),
+      setMRT: vi.fn(),
+      setRenderTarget: vi.fn(),
+      toneMapping: 0,
+      transparent: false,
+      xr: { enabled: false },
+    };
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(
+        createMinimalWaterQualityProfile(),
+        { width: 320, height: 180 },
+      ),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({ renderer, scene, camera }),
+    });
+
+    await expect(run.ready).rejects.toThrow(
+      "The Three Host drawing buffer does not match the Prewarm Manifest.",
+    );
+    expect(renderer.init).toHaveBeenCalledTimes(1);
+    expect(renderer.compileAsync).not.toHaveBeenCalled();
+    expect(renderer.initTexture).not.toHaveBeenCalled();
+    expect(renderer.render).not.toHaveBeenCalled();
+    expect(scene.children).toHaveLength(0);
+  });
+
+  it("rejects a borrowed camera that already has an enabled tiled view offset", async () => {
+    const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+    camera.setViewOffset(1920, 1080, 0, 0, 960, 1080);
+    const renderer = createCapableRenderer();
+    const scene = new Scene();
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+      }),
+    });
+
+    await expect(run.ready).rejects.toThrow(
+      "The Three Host Adapter refuses a camera that already has a tiled view offset.",
+    );
+    expect(renderer.init).not.toHaveBeenCalled();
+    expect(scene.children).toHaveLength(0);
+    expect(camera.view?.enabled).toBe(true);
+  });
+
   it("rejects an orthographic camera at Host preparation", async () => {
     const run = prepareRealWater({
       manifest: createMinimalWaterPrewarmManifest(),
@@ -344,13 +486,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       autoClear: true,
       backend: {
         device: {
-          limits: {
-            maxComputeInvocationsPerWorkgroup: 256,
-            maxComputeWorkgroupSizeX: 256,
-            maxComputeWorkgroupsPerDimension: 65_535,
-            maxStorageBufferBindingSize: 134_217_728,
-            maxTextureDimension2D: 8_192,
-          },
+          limits: coreDeviceLimits(),
         },
       },
       compileAsync: vi.fn(async () => {}),
@@ -359,6 +495,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       dispose: vi.fn(),
       getActiveCubeFace: vi.fn(() => 0),
       getActiveMipmapLevel: vi.fn(() => 0),
+      getDrawingBufferSize: mockDrawingBufferSize(),
       getMRT: vi.fn(() => null),
       getRenderTarget: vi.fn(() => null),
       hasFeature: vi.fn((name: string) => name === "core-features-and-limits"),
@@ -416,13 +553,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       autoClear: true,
       backend: {
         device: {
-          limits: {
-            maxComputeInvocationsPerWorkgroup: 256,
-            maxComputeWorkgroupSizeX: 256,
-            maxComputeWorkgroupsPerDimension: 65_535,
-            maxStorageBufferBindingSize: 134_217_728,
-            maxTextureDimension2D: 8_192,
-          },
+          limits: coreDeviceLimits(),
         },
       },
       compileAsync: vi.fn(async () => {}),
@@ -431,6 +562,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       dispose: vi.fn(),
       getActiveCubeFace: vi.fn(() => 0),
       getActiveMipmapLevel: vi.fn(() => 0),
+      getDrawingBufferSize: mockDrawingBufferSize(),
       getMRT: vi.fn(() => null),
       getRenderTarget: vi.fn(() => null),
       hasFeature: vi.fn((name: string) => name === "core-features-and-limits"),
@@ -477,13 +609,7 @@ describe("createThreeHostLifecycleAdapter", () => {
           onDeviceLost: vi.fn(),
           backend: {
             device: {
-              limits: {
-                maxComputeInvocationsPerWorkgroup: 256,
-                maxComputeWorkgroupSizeX: 256,
-                maxComputeWorkgroupsPerDimension: 65_535,
-                maxStorageBufferBindingSize: 134_217_728,
-                maxTextureDimension2D: 8_192,
-              },
+              limits: coreDeviceLimits(),
             },
           },
         },
@@ -558,13 +684,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       autoClear: true,
       backend: {
         device: {
-          limits: {
-            maxComputeInvocationsPerWorkgroup: 256,
-            maxComputeWorkgroupSizeX: 256,
-            maxComputeWorkgroupsPerDimension: 65_535,
-            maxStorageBufferBindingSize: 134_217_728,
-            maxTextureDimension2D: 8_192,
-          },
+          limits: coreDeviceLimits(),
         },
       },
       compileAsync: vi.fn(async () => {}),
@@ -573,6 +693,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       dispose: vi.fn(),
       getActiveCubeFace: vi.fn(() => 0),
       getActiveMipmapLevel: vi.fn(() => 0),
+      getDrawingBufferSize: mockDrawingBufferSize(),
       getMRT: vi.fn(() => null),
       getRenderTarget: vi.fn(() => currentRenderTarget),
       hasFeature: vi.fn((name: string) => name === "core-features-and-limits"),
@@ -655,13 +776,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       autoClear: true,
       backend: {
         device: {
-          limits: {
-            maxComputeInvocationsPerWorkgroup: 256,
-            maxComputeWorkgroupSizeX: 256,
-            maxComputeWorkgroupsPerDimension: 65_535,
-            maxStorageBufferBindingSize: 134_217_728,
-            maxTextureDimension2D: 8_192,
-          },
+          limits: coreDeviceLimits(),
         },
       },
       compileAsync: vi.fn(async () => {}),
@@ -670,6 +785,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       dispose: vi.fn(),
       getActiveCubeFace: vi.fn(() => 0),
       getActiveMipmapLevel: vi.fn(() => 0),
+      getDrawingBufferSize: mockDrawingBufferSize(),
       getMRT: vi.fn(() => null),
       getRenderTarget: vi.fn(() => currentRenderTarget),
       hasFeature: vi.fn((name: string) => name === "core-features-and-limits"),
@@ -708,7 +824,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     });
     expect(scene.children).toHaveLength(0);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(1);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(1);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(8);
     expect(renderer.dispose).not.toHaveBeenCalled();
   });
 
@@ -772,13 +888,9 @@ describe("createThreeHostLifecycleAdapter", () => {
     const renderer = {
       backend: {
         device: {
-          limits: {
-            maxComputeInvocationsPerWorkgroup: 256,
-            maxComputeWorkgroupSizeX: 256,
-            maxComputeWorkgroupsPerDimension: 65_535,
+          limits: coreDeviceLimits({
             maxStorageBufferBindingSize: 67_108_864,
-            maxTextureDimension2D: 8_192,
-          },
+          }),
         },
       },
       coordinateSystem: 2_001,
@@ -804,18 +916,76 @@ describe("createThreeHostLifecycleAdapter", () => {
     });
   });
 
+  it("rejects a Core device below eight color attachments", async () => {
+    const renderer = {
+      backend: {
+        device: {
+          limits: coreDeviceLimits({
+            maxColorAttachments: 7,
+          }),
+        },
+      },
+      coordinateSystem: 2_001,
+      hasFeature: vi.fn((name: string) => name === "core-features-and-limits"),
+      init: vi.fn(async () => {}),
+      onDeviceLost: vi.fn(),
+    };
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: new RecordingLoadingPresenter(),
+      host: createTestThreeHostLifecycleAdapter(renderer),
+    });
+
+    await expect(run.ready).rejects.toMatchObject({
+      code: "WEBGPU_LIMIT_UNSUPPORTED",
+      diagnostics: {
+        actualLimit: 7,
+        limitName: "maxColorAttachments",
+        missingLimitCount: 1,
+        requiredLimit: 8,
+      },
+      phase: "host-compatibility",
+    });
+  });
+
+  it("rejects a Core device below 32 color-attachment bytes per sample", async () => {
+    const renderer = {
+      backend: {
+        device: {
+          limits: coreDeviceLimits({
+            maxColorAttachmentBytesPerSample: 28,
+          }),
+        },
+      },
+      coordinateSystem: 2_001,
+      hasFeature: vi.fn((name: string) => name === "core-features-and-limits"),
+      init: vi.fn(async () => {}),
+      onDeviceLost: vi.fn(),
+    };
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: new RecordingLoadingPresenter(),
+      host: createTestThreeHostLifecycleAdapter(renderer),
+    });
+
+    await expect(run.ready).rejects.toMatchObject({
+      code: "WEBGPU_LIMIT_UNSUPPORTED",
+      diagnostics: {
+        actualLimit: 28,
+        limitName: "maxColorAttachmentBytesPerSample",
+        missingLimitCount: 1,
+        requiredLimit: 32,
+      },
+      phase: "host-compatibility",
+    });
+  });
+
   it("reports device loss raised during Three renderer initialization", async () => {
     const previousOnDeviceLost = vi.fn();
     const renderer = {
       backend: {
         device: {
-          limits: {
-            maxComputeInvocationsPerWorkgroup: 256,
-            maxComputeWorkgroupSizeX: 256,
-            maxComputeWorkgroupsPerDimension: 65_535,
-            maxStorageBufferBindingSize: 134_217_728,
-            maxTextureDimension2D: 8_192,
-          },
+          limits: coreDeviceLimits(),
         },
       },
       coordinateSystem: 2_001,
@@ -862,13 +1032,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       autoClear: true,
       backend: {
         device: {
-          limits: {
-            maxComputeInvocationsPerWorkgroup: 256,
-            maxComputeWorkgroupSizeX: 256,
-            maxComputeWorkgroupsPerDimension: 65_535,
-            maxStorageBufferBindingSize: 134_217_728,
-            maxTextureDimension2D: 8_192,
-          },
+          limits: coreDeviceLimits(),
         },
       },
       compileAsync: vi.fn(async () => {}),
@@ -877,6 +1041,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       dispose: vi.fn(),
       getActiveCubeFace: vi.fn(() => 0),
       getActiveMipmapLevel: vi.fn(() => 0),
+      getDrawingBufferSize: mockDrawingBufferSize(),
       getMRT: vi.fn(() => null),
       getRenderTarget: vi.fn(() => currentRenderTarget),
       hasFeature: vi.fn((name: string) => name === "core-features-and-limits"),
@@ -992,7 +1157,654 @@ describe("createThreeHostLifecycleAdapter", () => {
     });
     expect(loading.snapshots.at(-1)?.status).toBe("failed");
   });
+
+  it("presents through the bound Core Host route without ready-frame compile or probe", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    camera.updateProjectionMatrix();
+    const hostProjection = camera.projectionMatrix.clone();
+    const simulation = createMutableSimulationAdapter();
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const manifest = createMinimalWaterPrewarmManifest();
+    const lease = await prepareRealWater({
+      manifest,
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        simulation,
+        presentation,
+      }),
+    }).ready;
+
+    expect(lease).not.toHaveProperty("present");
+    expect(renderer.compileAsync).toHaveBeenCalledTimes(1);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(17);
+    expect(renderer.render).toHaveBeenCalledTimes(13);
+    expect(presentation.route).toBeDefined();
+
+    const first = readHostPresentedFrame(await presentation.present());
+    const second = readHostPresentedFrame(await presentation.present());
+    expect(first).toMatchObject({
+      presentationId: 1,
+      manifestHash: manifest.manifestHash,
+      seed: 0,
+      tick: 0,
+      timeSeconds: 0,
+      simulationResetRevision: 0,
+      controlRevision: 0,
+      originRevision: 0,
+      cameraCutRevision: 0,
+      seaStateCutRevision: 0,
+      temporal: {
+        historyEpoch: 1,
+        resetReason: null,
+        resetFrame: false,
+      },
+    });
+    expect(second.presentationId).toBe(2);
+    expect(second.temporal.historyEpoch).toBe(1);
+    expect(second.temporal.resetReason).toBeNull();
+    expect(renderer.compileAsync).toHaveBeenCalledTimes(1);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(17);
+
+    simulation.assign({ tick: 8, timeSeconds: 8 / 60, paused: false });
+    const continuousTick = readHostPresentedFrame(await presentation.present());
+    expect(continuousTick).toMatchObject({
+      presentationId: 3,
+      tick: 8,
+      temporal: {
+        historyEpoch: 1,
+        resetReason: null,
+        resetFrame: false,
+      },
+    });
+
+    lease.updateArtisticControls({
+      ...lease.inspectRuntime().artisticControls,
+      waveStrength: 2,
+    });
+    const continuousControl = readHostPresentedFrame(
+      await presentation.present(),
+    );
+    expect(continuousControl).toMatchObject({
+      controlRevision: 1,
+      seaStateCutRevision: 0,
+      temporal: {
+        historyEpoch: 1,
+        resetReason: null,
+        resetFrame: false,
+      },
+    });
+
+    presentation.incrementCameraCut();
+    const cameraCut = readHostPresentedFrame(await presentation.present());
+    expect(cameraCut).toMatchObject({
+      cameraCutRevision: 1,
+      temporal: {
+        historyEpoch: 2,
+        resetReason: "camera-cut",
+        resetFrame: true,
+      },
+    });
+    const afterCameraCut = readHostPresentedFrame(await presentation.present());
+    expect(afterCameraCut.temporal).toEqual({
+      historyEpoch: 2,
+      resetReason: null,
+      resetFrame: false,
+    });
+
+    simulation.assign({ originX: 12, originZ: -4 });
+    const originShift = readHostPresentedFrame(await presentation.present());
+    expect(originShift).toMatchObject({
+      originRevision: 1,
+      temporal: {
+        historyEpoch: 3,
+        resetReason: "origin-shift",
+        resetFrame: true,
+      },
+    });
+
+    lease.updateArtisticControls(lease.inspectRuntime().artisticControls, {
+      transition: "sea-state-cut",
+    });
+    const seaStateCut = readHostPresentedFrame(await presentation.present());
+    expect(seaStateCut).toMatchObject({
+      seaStateCutRevision: 1,
+      temporal: {
+        historyEpoch: 4,
+        resetReason: "sea-state-cut",
+        resetFrame: true,
+      },
+    });
+
+    simulation.assign({ seed: 7 });
+    const seedReset = readHostPresentedFrame(await presentation.present());
+    expect(seedReset).toMatchObject({
+      temporal: {
+        historyEpoch: 5,
+        resetReason: "simulation-reset",
+        resetFrame: true,
+      },
+    });
+
+    simulation.assign({ tick: 2, timeSeconds: 2 / 60 });
+    const rewind = readHostPresentedFrame(await presentation.present());
+    expect(rewind).toMatchObject({
+      tick: 2,
+      temporal: {
+        historyEpoch: 6,
+        resetReason: "simulation-reset",
+        resetFrame: true,
+      },
+    });
+
+    simulation.assign({ timeSeconds: 1 / 60 });
+    const timeRewind = readHostPresentedFrame(await presentation.present());
+    expect(timeRewind).toMatchObject({
+      tick: 2,
+      temporal: {
+        historyEpoch: 7,
+        resetReason: "simulation-reset",
+        resetFrame: true,
+      },
+    });
+
+    const [queuedFirst, queuedSecond] = await Promise.all([
+      presentation.present(),
+      presentation.present(),
+    ]);
+    expect(queuedFirst.presentationId + 1).toBe(queuedSecond.presentationId);
+
+    expect(renderer.compileAsync).toHaveBeenCalledTimes(1);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(17);
+    expect(camera.view).toBeNull();
+    expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
+    expect(scene.children).toHaveLength(1);
+
+    renderer.getDrawingBufferSize.mockImplementation(
+      (target: { width: number; height: number }) => {
+        target.width = 64;
+        target.height = 32;
+        return target;
+      },
+    );
+    await expect(presentation.present()).rejects.toThrow(
+      "The Three Host drawing buffer does not match the Prewarm Manifest.",
+    );
+    renderer.getDrawingBufferSize.mockImplementation(mockDrawingBufferSize());
+    const recovered = readHostPresentedFrame(await presentation.present());
+    expect(recovered.presentationId).toBe(queuedSecond.presentationId + 1);
+
+    const boundRoute = presentation.route as HostPresentationRoute;
+    await lease.dispose();
+    await expect(boundRoute.present()).rejects.toThrow(/unbound/i);
+    expect(scene.children).toHaveLength(0);
+  });
+
+  it("serializes queued presents at concurrency 1 and restores full Host state", async () => {
+    const scene = new Scene();
+    scene.name = "host-scene";
+    const hostOverride = Object.freeze({ name: "host-override" });
+    scene.overrideMaterial = hostOverride as never;
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    camera.layers.mask = 7;
+    camera.updateProjectionMatrix();
+    const hostProjection = camera.projectionMatrix.clone();
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const hostTarget = Object.freeze({ name: "live-host-target" });
+    const hostMrt = Object.freeze({ name: "host-mrt" });
+    const hostContext = Object.freeze({ name: "host-context" });
+    renderer.autoClear = false;
+    renderer.toneMapping = 4;
+    renderer.outputColorSpace = "srgb-linear";
+    renderer.transparent = true;
+    renderer.opaque = false;
+    renderer.contextNode = hostContext;
+    renderer.xr.enabled = true;
+    renderer.getMRT.mockReturnValue(hostMrt);
+    renderer.getActiveCubeFace.mockReturnValue(3);
+    renderer.getActiveMipmapLevel.mockReturnValue(2);
+    renderer.setRenderTarget(hostTarget, 3, 2);
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        presentation,
+      }),
+    }).ready;
+
+    const sizeCallsAtReady = renderer.getDrawingBufferSize.mock.calls.length;
+    const first = presentation.present();
+    const second = presentation.present();
+    await Promise.resolve();
+    expect(renderer.getDrawingBufferSize.mock.calls.length).toBe(
+      sizeCallsAtReady + 1,
+    );
+    const [firstFrame, secondFrame] = await Promise.all([first, second]);
+    expect(secondFrame.presentationId).toBe(firstFrame.presentationId + 1);
+    expect(renderer.getDrawingBufferSize.mock.calls.length).toBe(
+      sizeCallsAtReady + 2,
+    );
+
+    expect(renderer.autoClear).toBe(false);
+    expect(renderer.toneMapping).toBe(4);
+    expect(renderer.outputColorSpace).toBe("srgb-linear");
+    expect(renderer.transparent).toBe(true);
+    expect(renderer.opaque).toBe(false);
+    expect(renderer.contextNode).toBe(hostContext);
+    expect(renderer.xr.enabled).toBe(true);
+    expect(renderer.setMRT).toHaveBeenLastCalledWith(hostMrt);
+    expect(renderer.getRenderTarget()).toBe(hostTarget);
+    expect(renderer.setRenderTarget).toHaveBeenLastCalledWith(hostTarget, 3, 2);
+    expect(scene.name).toBe("host-scene");
+    expect(scene.overrideMaterial).toBe(hostOverride);
+    expect(camera.layers.mask).toBe(7);
+    expect(camera.view).toBeNull();
+    expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
+
+    renderer.render.mockImplementationOnce(() => {
+      throw new Error("Synthetic present failure.");
+    });
+    await expect(presentation.present()).rejects.toThrow(
+      "Synthetic present failure.",
+    );
+    expect(renderer.autoClear).toBe(false);
+    expect(renderer.getRenderTarget()).toBe(hostTarget);
+    expect(scene.name).toBe("host-scene");
+    expect(camera.layers.mask).toBe(7);
+    await expect(presentation.present()).rejects.toThrow(/unbound/i);
+    await lease.dispose();
+  });
+
+  it("reuses prewarmed render-target identities on repeated ready presents", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        presentation,
+      }),
+    }).ready;
+
+    const targetsAtReady = new Set(
+      renderer.setRenderTarget.mock.calls.map((call) => call[0]),
+    );
+    const compileAtReady = renderer.compileAsync.mock.calls.length;
+    const probeAtReady = renderer.readRenderTargetPixelsAsync.mock.calls.length;
+    const initAtReady = renderer.initTexture.mock.calls.length;
+
+    await presentation.present();
+    await presentation.present();
+
+    for (const call of renderer.setRenderTarget.mock.calls) {
+      const target = call[0];
+      if (target !== null && target !== undefined) {
+        expect(targetsAtReady.has(target)).toBe(true);
+      }
+    }
+    expect(renderer.compileAsync).toHaveBeenCalledTimes(compileAtReady);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(
+      probeAtReady,
+    );
+    expect(renderer.initTexture).toHaveBeenCalledTimes(initAtReady);
+    expect(scene.children).toHaveLength(1);
+    await lease.dispose();
+  });
+
+  it("drains an in-flight Core present before destroying Host resources", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        presentation,
+      }),
+    }).ready;
+
+    const order: string[] = [];
+    const originalRemove = scene.remove.bind(scene);
+    scene.remove = ((object: Parameters<Scene["remove"]>[0]) => {
+      order.push("destroy");
+      return originalRemove(object);
+    }) as Scene["remove"];
+    renderer.render.mockImplementation(() => {
+      order.push("render");
+    });
+
+    const presentP = readHostDiagnosticsRoute(
+      presentation.route as HostPresentationRoute,
+    ).present({
+      outputs: ["final-color"],
+    });
+    await Promise.resolve();
+    order.push("dispose-start");
+    const disposeP = lease.dispose();
+    const overlappingPrepare = createThreeHostLifecycleAdapter({
+      renderer,
+      scene,
+      camera,
+    }).prepare({
+      manifest: createMinimalWaterPrewarmManifest(),
+      progress: { complete: async () => {} },
+      signal: new AbortController().signal,
+    });
+    await expect(overlappingPrepare).rejects.toThrow(
+      "The Host renderer already owns an active Open Water Domain.",
+    );
+    await presentP;
+    await disposeP;
+    expect(order.includes("render")).toBe(true);
+    expect(order.includes("dispose-start")).toBe(true);
+    expect(order.indexOf("render")).toBeLessThan(
+      order.indexOf("dispose-start"),
+    );
+    expect(order.indexOf("dispose-start")).toBeLessThan(
+      order.lastIndexOf("destroy"),
+    );
+    expect(order.at(-1)).toBe("destroy");
+    expect(scene.children).toHaveLength(0);
+  });
+
+  it("keeps the first live diagnostics reset on the prewarmed history epoch", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    const simulation = createMutableSimulationAdapter();
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        simulation,
+        presentation,
+      }),
+    }).ready;
+
+    simulation.assign({ simulationResetRevision: 1 });
+    const first = readHostDiagnosticsPresentedFrame(
+      await readHostDiagnosticsRoute(
+        presentation.route as HostPresentationRoute,
+      ).present({
+        outputs: [],
+      }),
+    );
+    expect(first.simulationResetRevision).toBe(1);
+    expect(first.seed).toBe(0);
+    expect(first.timeSeconds).toBe(0);
+    expect(first.temporal).toEqual({
+      historyEpoch: 1,
+      resetReason: "simulation-reset",
+      resetFrame: true,
+    });
+    simulation.assign({ simulationResetRevision: 2 });
+    const second = readHostDiagnosticsPresentedFrame(
+      await readHostDiagnosticsRoute(
+        presentation.route as HostPresentationRoute,
+      ).present({
+        outputs: [],
+      }),
+    );
+    expect(second.simulationResetRevision).toBe(2);
+    expect(second.temporal).toEqual({
+      historyEpoch: 2,
+      resetReason: "simulation-reset",
+      resetFrame: true,
+    });
+    await lease.dispose();
+  });
+
+  it("presents diagnostics outputs from the bound Core route without a second scene render", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    const simulation = createMutableSimulationAdapter();
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const manifest = createMinimalWaterPrewarmManifest();
+    const lease = await prepareRealWater({
+      manifest,
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        simulation,
+        presentation,
+      }),
+    }).ready;
+
+    expect(lease).not.toHaveProperty("present");
+    expect(lease).not.toHaveProperty("captures");
+    const route = presentation.route as HostPresentationRoute;
+    expect(Object.keys(route)).toEqual(["present"]);
+    const diagnostics = readHostDiagnosticsRoute(route);
+    const compileAtReady = renderer.compileAsync.mock.calls.length;
+    const probeAtReady = renderer.readRenderTargetPixelsAsync.mock.calls.length;
+    const renderAtReady = renderer.render.mock.calls.length;
+
+    const empty = readHostDiagnosticsPresentedFrame(
+      await diagnostics.present({ outputs: [] }),
+    );
+    expect(empty.outputs).toEqual([]);
+    expect(empty.temporal.historyEpoch).toBe(1);
+    expect(empty.diagnosticReadbackCount).toBe(0);
+    expect(empty.probeCount).toBe(probeAtReady);
+    expect(empty.compileCount).toBe(compileAtReady);
+    expect(empty.sceneRenderCount).toBeGreaterThan(0);
+    expect(renderer.compileAsync).toHaveBeenCalledTimes(compileAtReady);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(
+      probeAtReady,
+    );
+    expect(renderer.render.mock.calls.length).toBe(renderAtReady + 2);
+
+    const sceneRendersAfterEmpty = empty.sceneRenderCount;
+    const withCurrent = readHostDiagnosticsPresentedFrame(
+      await diagnostics.present({
+        outputs: ["final-color", "current-color", "motion-vector"],
+      }),
+    );
+    expect(withCurrent.outputs.map((output) => output.name)).toEqual([
+      "final-color",
+      "current-color",
+      "motion-vector",
+    ]);
+    expect(
+      new Set(withCurrent.outputs.map((output) => output.width)).size,
+    ).toBe(1);
+    expect(
+      new Set(withCurrent.outputs.map((output) => output.height)).size,
+    ).toBe(1);
+    expect(withCurrent.outputs[0]?.width).toBe(withCurrent.width);
+    expect(withCurrent.outputs[0]?.height).toBe(withCurrent.height);
+    expect(withCurrent.presentationId).toBe(empty.presentationId + 1);
+    expect(withCurrent.manifestHash).toBe(manifest.manifestHash);
+    expect(withCurrent.diagnosticReadbackCount).toBe(3);
+    expect(withCurrent.probeCount).toBe(probeAtReady);
+    expect(withCurrent.compileCount).toBe(compileAtReady);
+    expect(withCurrent.sceneRenderCount).toBe(sceneRendersAfterEmpty + 1);
+    expect(renderer.compileAsync).toHaveBeenCalledTimes(compileAtReady);
+    expect(withCurrent.outputs[2]).toMatchObject({
+      name: "motion-vector",
+      format: "rg32float-ndc",
+    });
+    expect(withCurrent.outputs[2]?.data[0]).toBe(0.25);
+    expect(withCurrent.outputs[2]?.data[1]).toBe(-0.125);
+
+    simulation.assign({ simulationResetRevision: 1 });
+    const resetFrame = readHostDiagnosticsPresentedFrame(
+      await diagnostics.present({
+        outputs: ["motion-vector"],
+      }),
+    );
+    expect(resetFrame.temporal).toEqual({
+      historyEpoch: 2,
+      resetReason: "simulation-reset",
+      resetFrame: true,
+    });
+    expect(resetFrame.outputs[0]?.data[0]).toBe(0.25);
+    expect(resetFrame.outputs[0]?.data[1]).toBe(-0.125);
+
+    await expect(
+      diagnostics.present({
+        outputs: ["final-color", "final-color"],
+      }),
+    ).rejects.toThrowError(/unique/i);
+
+    const all = readHostDiagnosticsPresentedFrame(
+      await diagnostics.present({
+        outputs: [...DIAGNOSTICS_CAPTURE_NAMES],
+      }),
+    );
+    expect(all.outputs).toHaveLength(12);
+    expect(all.diagnosticReadbackCount).toBe(16);
+    expect(all.sceneRenderCount).toBe(resetFrame.sceneRenderCount + 1);
+
+    await lease.dispose();
+    await expect(diagnostics.present({ outputs: [] })).rejects.toThrow(
+      /unbound/i,
+    );
+    await expect(route.present()).rejects.toThrow(/unbound/i);
+  });
+
+  it("shares one queue and one Host scene render across interleaved root and diagnostics presents", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        presentation,
+      }),
+    }).ready;
+    const route = presentation.route as HostPresentationRoute;
+    const diagnostics = readHostDiagnosticsRoute(route);
+    const renderAtReady = renderer.render.mock.calls.length;
+
+    const rootFirst = readHostPresentedFrame(await route.present());
+    const renderAfterRoot = renderer.render.mock.calls.length;
+    const diagnosticsFrame = readHostDiagnosticsPresentedFrame(
+      await diagnostics.present({ outputs: [] }),
+    );
+    const renderAfterDiagnostics = renderer.render.mock.calls.length;
+    const rootSecond = readHostPresentedFrame(await route.present());
+    const renderAfterSecondRoot = renderer.render.mock.calls.length;
+    const trailing = readHostDiagnosticsPresentedFrame(
+      await diagnostics.present({ outputs: [] }),
+    );
+
+    expect(rootFirst.presentationId).toBe(1);
+    expect(diagnosticsFrame.presentationId).toBe(2);
+    expect(rootSecond.presentationId).toBe(3);
+    expect(trailing.presentationId).toBe(4);
+    expect(rootFirst.seed).toBe(0);
+    expect(rootFirst.timeSeconds).toBe(0);
+    expect(rootFirst.simulationResetRevision).toBe(0);
+    expect(trailing.sceneRenderCount).toBe(
+      diagnosticsFrame.sceneRenderCount + 2,
+    );
+    expect(renderAfterRoot - renderAtReady).toBe(2);
+    expect(renderAfterDiagnostics - renderAfterRoot).toBe(2);
+    expect(renderAfterSecondRoot - renderAfterDiagnostics).toBe(2);
+    expect(renderer.render.mock.calls.length - renderAfterSecondRoot).toBe(2);
+
+    await lease.dispose();
+  });
+
+  it("recovers from a pre-render viewport mismatch and poisons after a post-render failure", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        presentation,
+      }),
+    }).ready;
+    const route = presentation.route as HostPresentationRoute;
+    const diagnostics = readHostDiagnosticsRoute(route);
+
+    renderer.getDrawingBufferSize.mockImplementation(
+      (target: { width: number; height: number }) => {
+        target.width = 64;
+        target.height = 32;
+        return target;
+      },
+    );
+    await expect(route.present()).rejects.toThrow(
+      "The Three Host drawing buffer does not match the Prewarm Manifest.",
+    );
+    renderer.getDrawingBufferSize.mockImplementation(mockDrawingBufferSize());
+    const recovered = readHostPresentedFrame(await route.present());
+    expect(recovered.presentationId).toBe(1);
+
+    renderer.readRenderTargetPixelsAsync.mockImplementationOnce(async () => {
+      throw new Error("named-output readback failed");
+    });
+    await expect(
+      diagnostics.present({ outputs: ["final-color"] }),
+    ).rejects.toThrow(/named-output readback failed/i);
+    await expect(route.present()).rejects.toThrow(/unbound/i);
+    await expect(diagnostics.present({ outputs: [] })).rejects.toThrow(
+      /unbound/i,
+    );
+
+    await lease.dispose();
+  });
 });
+
+function coreDeviceLimits(
+  overrides: Partial<{
+    maxComputeInvocationsPerWorkgroup: number;
+    maxComputeWorkgroupSizeX: number;
+    maxComputeWorkgroupsPerDimension: number;
+    maxColorAttachmentBytesPerSample: number;
+    maxColorAttachments: number;
+    maxStorageBufferBindingSize: number;
+    maxTextureDimension2D: number;
+  }> = {},
+) {
+  return {
+    maxComputeInvocationsPerWorkgroup: 256,
+    maxComputeWorkgroupSizeX: 256,
+    maxComputeWorkgroupsPerDimension: 65_535,
+    maxColorAttachmentBytesPerSample: 32,
+    maxColorAttachments: 8,
+    maxStorageBufferBindingSize: 134_217_728,
+    maxTextureDimension2D: 8_192,
+    ...overrides,
+  };
+}
 
 function createCapableRenderer(): ThreeHostRenderer {
   return {
@@ -1004,13 +1816,7 @@ function createCapableRenderer(): ThreeHostRenderer {
     onDeviceLost: vi.fn(),
     backend: {
       device: {
-        limits: {
-          maxComputeInvocationsPerWorkgroup: 256,
-          maxComputeWorkgroupSizeX: 256,
-          maxComputeWorkgroupsPerDimension: 65_535,
-          maxStorageBufferBindingSize: 134_217_728,
-          maxTextureDimension2D: 8_192,
-        },
+        limits: coreDeviceLimits(),
       },
     },
   };
@@ -1022,4 +1828,143 @@ function createTestThreeHostLifecycleAdapter(renderer: ThreeHostRenderer) {
     scene: new Scene(),
     camera: new PerspectiveCamera(),
   });
+}
+
+function createPrewarmRenderer() {
+  let currentRenderTarget: unknown = Object.freeze({ name: "host-target" });
+  return {
+    autoClear: true,
+    backend: {
+      device: {
+        limits: coreDeviceLimits(),
+      },
+    },
+    compileAsync: vi.fn(async () => {}),
+    contextNode: null,
+    coordinateSystem: 2_001,
+    dispose: vi.fn(),
+    getActiveCubeFace: vi.fn(() => 0),
+    getActiveMipmapLevel: vi.fn(() => 0),
+    getDrawingBufferSize: mockDrawingBufferSize(),
+    getMRT: vi.fn(() => null),
+    getRenderTarget: vi.fn(() => currentRenderTarget),
+    hasFeature: vi.fn((name: string) => name === "core-features-and-limits"),
+    init: vi.fn(async () => {}),
+    initTexture: vi.fn(),
+    onDeviceLost: vi.fn(),
+    opaque: true,
+    outputColorSpace: "srgb",
+    readRenderTargetPixelsAsync: vi.fn(
+      async (
+        target: {
+          texture?: { name?: string };
+          textures?: ReadonlyArray<{ name?: string }>;
+        },
+        _x: number,
+        _y: number,
+        width: number,
+        height: number,
+        textureIndex = 0,
+      ) => mockPresentationReadback(target, width, height, textureIndex),
+    ),
+    render: vi.fn(),
+    setMRT: vi.fn(),
+    setRenderTarget: vi.fn((target: unknown) => {
+      currentRenderTarget = target;
+    }),
+    toneMapping: 0,
+    transparent: false,
+    xr: { enabled: false },
+  };
+}
+
+function mockPresentationReadback(
+  target: {
+    texture?: { name?: string };
+    textures?: ReadonlyArray<{ name?: string }>;
+  },
+  width: number,
+  height: number,
+  textureIndex: number,
+): Uint8Array | Uint16Array | Float32Array {
+  const name = String(
+    target.textures?.[textureIndex]?.name ?? target.texture?.name ?? "",
+  );
+  const pixels = Math.max(1, width) * Math.max(1, height);
+  if (name.includes("inverse linear")) {
+    return new Float32Array(pixels).fill(1);
+  }
+  if (name.includes("view normal")) {
+    return new Uint16Array(pixels * 2);
+  }
+  if (name.includes("motion")) {
+    const data = new Float32Array(pixels * 2);
+    data[0] = 0.25;
+    data[1] = -0.125;
+    return data;
+  }
+  if (name.includes("optical factors")) {
+    return new Uint16Array(pixels * 4);
+  }
+  if (name.includes("diagnostics")) {
+    return new Uint8Array(pixels * 2);
+  }
+  return new Uint8Array(pixels * 4);
+}
+
+function createMutableSimulationAdapter(): HostSimulationAdapter & {
+  assign(next: Partial<HostSimulationState>): void;
+} {
+  let state: HostSimulationState = {
+    seed: 0,
+    tick: 0,
+    timeSeconds: 0,
+    paused: true,
+    originX: 0,
+    originZ: 0,
+    simulationResetRevision: 0,
+  };
+  return {
+    snapshot() {
+      return { ...state };
+    },
+    assign(next) {
+      state = { ...state, ...next };
+    },
+  };
+}
+
+function createCapturingPresentationAdapter(): HostPresentationAdapter & {
+  incrementCameraCut(): number;
+  present(): Promise<HostPresentedFrame>;
+  route: HostPresentationRoute | undefined;
+} {
+  let cameraCutRevision = 0;
+  let route: HostPresentationRoute | undefined;
+  return {
+    snapshot() {
+      return { cameraCutRevision };
+    },
+    bind(next) {
+      route = readHostPresentationRoute(next);
+      return Object.freeze({
+        dispose() {},
+      });
+    },
+    incrementCameraCut() {
+      cameraCutRevision += 1;
+      return cameraCutRevision;
+    },
+    present() {
+      if (route === undefined) {
+        throw new Error(
+          "The capturing presentation adapter has no bound route.",
+        );
+      }
+      return route.present();
+    },
+    get route() {
+      return route;
+    },
+  };
 }

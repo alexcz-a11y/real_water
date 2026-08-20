@@ -7,9 +7,11 @@ import {
   equirectUV,
   exp,
   float,
+  linearDepth,
   max,
   mix,
   mrt,
+  normalView,
   perspectiveDepthToViewZ,
   positionView,
   refract,
@@ -22,6 +24,7 @@ import {
   uniform,
   vec3,
   vec4,
+  velocity,
   viewportDepthTexture,
   viewportSafeUV,
   viewportSharedTexture,
@@ -32,6 +35,10 @@ import type { OpenWaterRuntimeSnapshot, RuntimeStateSink } from "../runtime.js";
 import { createWaterPreset } from "../water-preset.js";
 import type { createSpectralBandRendering } from "./spectral-bands-rendering.js";
 
+export const INVERSE_LINEAR_DEPTH_ATTACHMENT =
+  "Real Water inverse linear depth";
+export const VIEW_NORMAL_ATTACHMENT = "Real Water view normal";
+export const MOTION_VECTORS_ATTACHMENT = "Real Water motion vectors";
 export const OPTICAL_FACTORS_ATTACHMENT = "Real Water optical factors";
 export const OPTICAL_DIAGNOSTICS_A_ATTACHMENT =
   "Real Water optical diagnostics A";
@@ -263,6 +270,9 @@ export function createWaterOpticsRendering(
   );
   const mrtNode = mrt({
     output: surfaceColor,
+    [INVERSE_LINEAR_DEPTH_ATTACHMENT]: linearDepth().oneMinus(),
+    [VIEW_NORMAL_ATTACHMENT]: vec4(normalView.x, normalView.y, 0, 1),
+    [MOTION_VECTORS_ATTACHMENT]: velocity,
     [OPTICAL_FACTORS_ATTACHMENT]: factorsNode,
     [OPTICAL_DIAGNOSTICS_A_ATTACHMENT]: diagnosticsANode,
     [OPTICAL_DIAGNOSTICS_B_ATTACHMENT]: diagnosticsBNode,

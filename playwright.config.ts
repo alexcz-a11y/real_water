@@ -46,6 +46,7 @@ export default defineConfig({
   reporter: process.env.CI ? "github" : "list",
   retries: process.env.CI ? 2 : 0,
   testDir: "./apps/reference-experience/e2e",
+  testMatch: "**/*.spec.ts",
   use: {
     baseURL: "http://127.0.0.1:4173",
     trace: "retain-on-failure",

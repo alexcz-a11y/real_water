@@ -8,6 +8,8 @@ export const requiredCoreWebGPULimits = Object.freeze({
   maxComputeInvocationsPerWorkgroup: 256,
   maxComputeWorkgroupSizeX: 256,
   maxComputeWorkgroupsPerDimension: 65_535,
+  maxColorAttachments: 8,
+  maxColorAttachmentBytesPerSample: 32,
 });
 
 export type CoreWebGPULimitName = keyof typeof requiredCoreWebGPULimits;

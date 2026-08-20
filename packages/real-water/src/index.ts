@@ -9,6 +9,7 @@ export type {
   QualityProfile,
   QualityProfileIdentity,
   QualityProfileSurface,
+  QualityProfileTemporal,
 } from "./quality-profile.js";
 
 export {
@@ -19,6 +20,7 @@ export {
 export type {
   PrewarmDeclaration,
   PrewarmDeclarationKind,
+  PrewarmDrawingBuffer,
   PrewarmEffectVariant,
   PrewarmManifest,
   PrewarmManifestIdentity,
@@ -28,6 +30,7 @@ export type {
   GameplayCapabilities,
   RealWaterCapabilities,
   RenderingCapabilities,
+  RenderingCapabilitiesTemporal,
 } from "./capabilities.js";
 export { MAX_GAMEPLAY_QUERY_POINTS } from "./capabilities.js";
 
@@ -47,6 +50,8 @@ export type {
 export { createStaticHostSimulationAdapter } from "./runtime.js";
 export type {
   ArtisticControls,
+  ArtisticControlTransition,
+  ArtisticControlUpdateOptions,
   ArtisticControlUpdateReceipt,
   GameplayQueryBatch,
   GameplayQueryResults,
@@ -55,6 +60,24 @@ export type {
   OpenWaterRuntimeSnapshot,
   RealWaterRuntime,
 } from "./runtime.js";
+
+export {
+  assertHostPresentationAdapter,
+  createStaticHostPresentationAdapter,
+  readHostPresentationBinding,
+  readHostPresentationRoute,
+  readHostPresentationState,
+  readHostPresentedFrame,
+} from "./presentation.js";
+export type {
+  HostPresentationAdapter,
+  HostPresentationBinding,
+  HostPresentationRoute,
+  HostPresentationState,
+  HostPresentedFrame,
+  HostPresentedTemporal,
+  HostTemporalResetReason,
+} from "./presentation.js";
 
 export {
   SUPPORTED_HOST_ENVIRONMENT_REFLECTION,

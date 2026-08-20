@@ -2,11 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createMemoryHostLifecycleAdapter as createBaseMemoryHostLifecycleAdapter,
   createMinimalWaterPrewarmManifest,
+  createStaticHostPresentationAdapter,
   createStaticHostSimulationAdapter,
   prepareRealWater,
   type GameplayQueryResults,
 } from "../src/index.js";
-import { createRealWaterRuntime } from "../src/runtime.js";
+import {
+  createRealWaterRuntime,
+  readHostSimulationState,
+} from "../src/runtime.js";
 import { createTestEnvironmentAdapter } from "./test-host-environment.js";
 
 const STATIC_SIMULATION = createStaticHostSimulationAdapter();
@@ -14,7 +18,7 @@ const STATIC_SIMULATION = createStaticHostSimulationAdapter();
 function createMemoryHostLifecycleAdapter(
   options: Omit<
     Parameters<typeof createBaseMemoryHostLifecycleAdapter>[0],
-    "simulation" | "environment"
+    "simulation" | "environment" | "presentation"
   > &
     Partial<
       Pick<
@@ -27,10 +31,38 @@ function createMemoryHostLifecycleAdapter(
     ...options,
     simulation: options.simulation ?? STATIC_SIMULATION,
     environment: createTestEnvironmentAdapter(),
+    presentation: createStaticHostPresentationAdapter(),
   });
 }
 
 describe("ready Open Water runtime", () => {
+  it("publishes simulationResetRevision 0 on the static Host Simulation Adapter", () => {
+    const adapter = createStaticHostSimulationAdapter();
+    expect(adapter.snapshot()).toEqual({
+      seed: 0,
+      tick: 0,
+      timeSeconds: 0,
+      paused: true,
+      originX: 0,
+      originZ: 0,
+      simulationResetRevision: 0,
+    });
+    expect(readHostSimulationState(adapter).simulationResetRevision).toBe(0);
+    expect(() =>
+      readHostSimulationState({
+        snapshot: () => ({
+          seed: 0,
+          tick: 0,
+          timeSeconds: 0,
+          paused: true,
+          originX: 0,
+          originZ: 0,
+          simulationResetRevision: -1,
+        }),
+      }),
+    ).toThrowError(/simulationResetRevision/i);
+  });
+
   it("publishes the prepared per-tick Gameplay Query capacity", async () => {
     const lease = await prepareRealWater({
       manifest: createMinimalWaterPrewarmManifest(),
@@ -56,6 +88,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
       manifest: createMinimalWaterPrewarmManifest(),
@@ -148,6 +181,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      simulationResetRevision: 0,
     });
     lease.queryGameplay({
       count: 1,
@@ -162,7 +196,12 @@ describe("ready Open Water runtime", () => {
 
   it("synchronizes the render sink only when Artistic Controls change", () => {
     const sink = { synchronize: vi.fn() };
-    const runtime = createRealWaterRuntime(() => {}, STATIC_SIMULATION, sink);
+    const runtime = createRealWaterRuntime(
+      () => {},
+      STATIC_SIMULATION,
+      createStaticHostPresentationAdapter(),
+      sink,
+    );
     const controls = runtime.inspectRuntime().artisticControls;
 
     runtime.updateArtisticControls(controls);
@@ -183,6 +222,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
       manifest: createMinimalWaterPrewarmManifest(),
@@ -229,6 +269,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      simulationResetRevision: 0,
     });
     expect(() =>
       lease.queryGameplay({
@@ -246,6 +287,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      simulationResetRevision: 0,
     });
     expect(() =>
       lease.queryGameplay({
@@ -325,6 +367,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
       manifest: createMinimalWaterPrewarmManifest(),
@@ -365,6 +408,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 40,
       originZ: -12,
+      simulationResetRevision: 0,
     });
     const shifted = lease.inspectRuntime();
     lease.queryGameplay({
@@ -402,6 +446,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 40,
       originZ: -12,
+      simulationResetRevision: 0,
     });
     expect(lease.inspectRuntime()).toMatchObject({
       originX: 40,
@@ -420,6 +465,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
       manifest: createMinimalWaterPrewarmManifest(),
@@ -437,6 +483,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 96,
       originZ: -24,
+      simulationResetRevision: 0,
     });
     const firstInspect = lease.inspectRuntime();
 
@@ -453,6 +500,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 96,
       originZ: -24,
+      simulationResetRevision: 0,
     });
     expect(lease.inspectRuntime().originRevision).toBe(1);
     await lease.dispose();
@@ -467,6 +515,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: baselineOrigin,
       originZ: 0,
+      simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
       manifest: createMinimalWaterPrewarmManifest(),
@@ -494,6 +543,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: baselineOrigin + 96,
       originZ: 0,
+      simulationResetRevision: 0,
     });
     const shifted = lease.inspectRuntime();
     lease.queryGameplay({
@@ -589,6 +639,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
       manifest: createMinimalWaterPrewarmManifest(),

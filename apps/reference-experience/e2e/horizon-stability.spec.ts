@@ -5,6 +5,7 @@ import {
   WATER_PRESET_VERSION,
   createWaterPreset,
 } from "real-water";
+import type { QaFramePrewarmReceipt } from "../src/qa-frame-driver.js";
 import {
   QA_CAPTURE_SCHEMA,
   QA_CAPTURE_VERSION,
@@ -12,7 +13,7 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV4,
+  type QaHarnessV5,
 } from "../src/qa-harness.js";
 import { REFERENCE_ENVIRONMENT_LIGHTING } from "../src/reference-optical-inputs.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
@@ -87,7 +88,7 @@ test("breaks repeating Open Water patches on the deterministic horizon route", a
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async (shiftMetres) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV4 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV5 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -103,24 +104,20 @@ test("breaks repeating Open Water patches on the deterministic horizon route", a
       readonly tick: number;
       readonly manifestHash: string;
       readonly controlRevision: number;
-      readonly qaPrewarm: {
-        readonly schema: string;
-        readonly version: number;
-        readonly id: string;
-        readonly declarations: readonly unknown[];
-        readonly captures: readonly unknown[];
-        readonly rendererDevice: unknown;
-      };
+      readonly qaPrewarm: QaFramePrewarmReceipt;
     }> => {
-      const camera = await harness.setCamera({
-        projection: "perspective",
-        position: [positionX, 8, 0],
-        target: [positionX + 400, 0, 0],
-        up: [0, 1, 0],
-        verticalFovDegrees: 50,
-        near: 0.5,
-        far: 4_000,
-      });
+      const camera = await harness.setCamera(
+        {
+          projection: "perspective",
+          position: [positionX, 8, 0],
+          target: [positionX + 400, 0, 0],
+          up: [0, 1, 0],
+          verticalFovDegrees: 50,
+          near: 0.5,
+          far: 4_000,
+        },
+        { transition: "continuous" },
+      );
       const presentation = await harness.present();
       const depth = await harness.capture("depth");
       const normal = await harness.capture("normal");
@@ -133,14 +130,7 @@ test("breaks repeating Open Water patches on the deterministic horizon route", a
         tick: presentation.tick,
         manifestHash: presentation.manifestHash,
         controlRevision: presentation.controlRevision,
-        qaPrewarm: {
-          schema: harness.prewarmManifest.schema,
-          version: harness.prewarmManifest.version,
-          id: harness.prewarmManifest.id,
-          declarations: harness.prewarmManifest.declarations,
-          captures: harness.prewarmManifest.captures,
-          rendererDevice: presentation.prewarm.rendererDevice,
-        },
+        qaPrewarm: presentation.prewarm,
       };
     };
 
@@ -181,8 +171,14 @@ test("breaks repeating Open Water patches on the deterministic horizon route", a
     tick: result.first.tick,
     camera: HORIZON_CAMERA,
     controlRevision: result.first.controlRevision,
-    coreManifest: coreManifestEvidence(result.first.manifestHash),
+    coreManifest: coreManifestEvidence(result.first.qaPrewarm.core),
     qaPrewarm: result.first.qaPrewarm,
+    captures: [
+      {
+        width: result.first.qaPrewarm.width,
+        height: result.first.qaPrewarm.height,
+      },
+    ],
     qaHarness: HORIZON_QA_HARNESS,
     qaCapture: HORIZON_QA_CAPTURE,
     artisticControls: SWELL_PRESET.artisticControls,
@@ -204,22 +200,25 @@ test("preserves queried and rendered Open Water across a host origin shift", asy
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async (periodMetres) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV4 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV5 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
 
     await harness.reset({ seed: 0x4000_0000 });
     await harness.advanceTicks(18);
-    await harness.setCamera({
-      projection: "perspective",
-      position: [periodMetres, 12, 0],
-      target: [periodMetres, 0, 0],
-      up: [0, 0, -1],
-      verticalFovDegrees: 40,
-      near: 0.1,
-      far: 100,
-    });
+    await harness.setCamera(
+      {
+        projection: "perspective",
+        position: [periodMetres, 12, 0],
+        target: [periodMetres, 0, 0],
+        up: [0, 0, -1],
+        verticalFovDegrees: 40,
+        near: 0.1,
+        far: 100,
+      },
+      { transition: "continuous" },
+    );
     const beforePresentation = await harness.present();
     const beforeQuery = await harness.queryGameplay([periodMetres, 0, 0]);
     const beforeColor = await harness.capture("final-color");
@@ -230,15 +229,18 @@ test("preserves queried and rendered Open Water across a host origin shift", asy
       x: periodMetres,
       z: 0,
     });
-    await harness.setCamera({
-      projection: "perspective",
-      position: [0, 12, 0],
-      target: [0, 0, 0],
-      up: [0, 0, -1],
-      verticalFovDegrees: 40,
-      near: 0.1,
-      far: 100,
-    });
+    await harness.setCamera(
+      {
+        projection: "perspective",
+        position: [0, 12, 0],
+        target: [0, 0, 0],
+        up: [0, 0, -1],
+        verticalFovDegrees: 40,
+        near: 0.1,
+        far: 100,
+      },
+      { transition: "continuous" },
+    );
     const afterPresentation = await harness.present();
     const afterQuery = await harness.queryGameplay([0, 0, 0]);
     const afterColor = await harness.capture("final-color");
@@ -259,14 +261,7 @@ test("preserves queried and rendered Open Water across a host origin shift", asy
       afterDepth: afterDepth.data,
       beforeNormal: beforeNormal.data,
       afterNormal: afterNormal.data,
-      qaPrewarm: {
-        schema: harness.prewarmManifest.schema,
-        version: harness.prewarmManifest.version,
-        id: harness.prewarmManifest.id,
-        declarations: harness.prewarmManifest.declarations,
-        captures: harness.prewarmManifest.captures,
-        rendererDevice: afterPresentation.prewarm.rendererDevice,
-      },
+      qaPrewarm: afterPresentation.prewarm,
     };
   }, ORIGIN_SHIFT_METRES);
 
@@ -314,8 +309,11 @@ test("preserves queried and rendered Open Water across a host origin shift", asy
     tick: result.afterPresentation.tick,
     camera: DOWN_CAMERA,
     controlRevision: result.afterPresentation.controlRevision,
-    coreManifest: coreManifestEvidence(result.afterPresentation.manifestHash),
+    coreManifest: coreManifestEvidence(result.qaPrewarm.core),
     qaPrewarm: result.qaPrewarm,
+    captures: [
+      { width: result.qaPrewarm.width, height: result.qaPrewarm.height },
+    ],
     qaHarness: HORIZON_QA_HARNESS,
     qaCapture: HORIZON_QA_CAPTURE,
     artisticControls: SWELL_PRESET.artisticControls,
@@ -338,7 +336,7 @@ test("preserves queried and rendered Open Water across a billion-metre origin sh
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ baselineOrigin, periodMetres }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV4 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV5 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -346,15 +344,18 @@ test("preserves queried and rendered Open Water across a billion-metre origin sh
       await harness.reset({ seed: 0x4000_0000 });
       await harness.advanceTicks(18);
       await harness.setOrigin({ x: baselineOrigin, z: 0 });
-      await harness.setCamera({
-        projection: "perspective",
-        position: [periodMetres, 12, 0],
-        target: [periodMetres, 0, 0],
-        up: [0, 0, -1],
-        verticalFovDegrees: 40,
-        near: 0.1,
-        far: 100,
-      });
+      await harness.setCamera(
+        {
+          projection: "perspective",
+          position: [periodMetres, 12, 0],
+          target: [periodMetres, 0, 0],
+          up: [0, 0, -1],
+          verticalFovDegrees: 40,
+          near: 0.1,
+          far: 100,
+        },
+        { transition: "continuous" },
+      );
       const beforePresentation = await harness.present();
       const beforeQuery = await harness.queryGameplay([periodMetres, 0, 0]);
       const beforeColor = await harness.capture("final-color");
@@ -364,15 +365,18 @@ test("preserves queried and rendered Open Water across a billion-metre origin sh
         x: baselineOrigin + periodMetres,
         z: 0,
       });
-      await harness.setCamera({
-        projection: "perspective",
-        position: [0, 12, 0],
-        target: [0, 0, 0],
-        up: [0, 0, -1],
-        verticalFovDegrees: 40,
-        near: 0.1,
-        far: 100,
-      });
+      await harness.setCamera(
+        {
+          projection: "perspective",
+          position: [0, 12, 0],
+          target: [0, 0, 0],
+          up: [0, 0, -1],
+          verticalFovDegrees: 40,
+          near: 0.1,
+          far: 100,
+        },
+        { transition: "continuous" },
+      );
       const afterPresentation = await harness.present();
       const afterQuery = await harness.queryGameplay([0, 0, 0]);
       const afterColor = await harness.capture("final-color");
@@ -398,14 +402,7 @@ test("preserves queried and rendered Open Water across a billion-metre origin sh
         center,
         width: afterDepth.width,
         height: afterDepth.height,
-        qaPrewarm: {
-          schema: harness.prewarmManifest.schema,
-          version: harness.prewarmManifest.version,
-          id: harness.prewarmManifest.id,
-          declarations: harness.prewarmManifest.declarations,
-          captures: harness.prewarmManifest.captures,
-          rendererDevice: afterPresentation.prewarm.rendererDevice,
-        },
+        qaPrewarm: afterPresentation.prewarm,
       };
     },
     {
@@ -437,8 +434,11 @@ test("preserves queried and rendered Open Water across a billion-metre origin sh
     tick: result.afterPresentation.tick,
     camera: DOWN_CAMERA,
     controlRevision: result.afterPresentation.controlRevision,
-    coreManifest: coreManifestEvidence(result.afterPresentation.manifestHash),
+    coreManifest: coreManifestEvidence(result.qaPrewarm.core),
     qaPrewarm: result.qaPrewarm,
+    captures: [
+      { width: result.qaPrewarm.width, height: result.qaPrewarm.height },
+    ],
     qaHarness: HORIZON_QA_HARNESS,
     qaCapture: HORIZON_QA_CAPTURE,
     artisticControls: SWELL_PRESET.artisticControls,
@@ -460,25 +460,29 @@ test("transitions near geometry, middle normals, and far slope detail without a 
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV4 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV5 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
     await harness.reset({ seed: 0x4000_0000 });
     await harness.advanceTicks(24);
-    await harness.setCamera({
-      projection: "perspective",
-      position: [0, 8, 0],
-      target: [400, 0, 0],
-      up: [0, 1, 0],
-      verticalFovDegrees: 50,
-      near: 0.5,
-      far: 4_000,
-    });
+    await harness.setCamera(
+      {
+        projection: "perspective",
+        position: [0, 8, 0],
+        target: [400, 0, 0],
+        up: [0, 1, 0],
+        verticalFovDegrees: 50,
+        near: 0.5,
+        far: 4_000,
+      },
+      { transition: "continuous" },
+    );
     const presentation = await harness.present();
     const depth = await harness.capture("depth");
     const normal = await harness.capture("normal");
     const color = await harness.capture("final-color");
+    const current = await harness.capture("current-color");
     const glint = await harness.capture("optical-glint");
     return {
       width: depth.width,
@@ -486,25 +490,20 @@ test("transitions near geometry, middle normals, and far slope detail without a 
       depth: depth.data,
       normal: normal.data,
       color: color.data,
+      current: current.data,
       glint: glint.data,
       seed: presentation.seed,
       tick: presentation.tick,
       manifestHash: presentation.manifestHash,
       controlRevision: presentation.controlRevision,
-      qaPrewarm: {
-        schema: harness.prewarmManifest.schema,
-        version: harness.prewarmManifest.version,
-        id: harness.prewarmManifest.id,
-        declarations: harness.prewarmManifest.declarations,
-        captures: harness.prewarmManifest.captures,
-        rendererDevice: presentation.prewarm.rendererDevice,
-      },
+      qaPrewarm: presentation.prewarm,
     };
   });
 
   const depths = decodeFloat32(result.depth);
   const normals = decodeFloat32(result.normal);
   const color = decodeUint8(result.color);
+  const current = decodeUint8(result.current);
   const near = collectDepthBand(
     depths,
     normals,
@@ -542,6 +541,14 @@ test("transitions near geometry, middle normals, and far slope detail without a 
     FAR_DEPTH_METRES.max,
   );
 
+  const farCurrentLuma = bandLuma(
+    depths,
+    current,
+    result.width,
+    result.height,
+    FAR_DEPTH_METRES.min,
+    FAR_DEPTH_METRES.max,
+  );
   expect(near.count).toBeGreaterThan(4);
   expect(mid.count).toBeGreaterThan(4);
   expect(far.count).toBeGreaterThan(4);
@@ -549,7 +556,7 @@ test("transitions near geometry, middle normals, and far slope detail without a 
   expect(mid.normalSpread).toBeGreaterThan(0.06);
   expect(mid.normalSpread).toBeGreaterThan(far.normalSpread * 2);
   expect(far.normalSpread).toBeLessThan(0.12);
-  expect(far.slopeEnergy).toBeGreaterThan(8);
+  expect(farCurrentLuma.range).toBeGreaterThan(8);
   const glintValues = decodeFloat32(result.glint);
   const midGlint = collectScalarBand(
     depths,
@@ -579,8 +586,11 @@ test("transitions near geometry, middle normals, and far slope detail without a 
     tick: result.tick,
     camera: HORIZON_CAMERA,
     controlRevision: result.controlRevision,
-    coreManifest: coreManifestEvidence(result.manifestHash),
+    coreManifest: coreManifestEvidence(result.qaPrewarm.core),
     qaPrewarm: result.qaPrewarm,
+    captures: [
+      { width: result.qaPrewarm.width, height: result.qaPrewarm.height },
+    ],
     qaHarness: HORIZON_QA_HARNESS,
     qaCapture: HORIZON_QA_CAPTURE,
     artisticControls: SWELL_PRESET.artisticControls,
@@ -602,71 +612,155 @@ test("keeps filtered slope detail and optical glints stable under camera motion"
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV4 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV5 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
     await harness.reset({ seed: 0x4000_0000 });
     await harness.advanceTicks(24);
-    await harness.setCamera({
-      projection: "perspective",
-      position: [0, 8, 0],
-      target: [400, 0, 0],
-      up: [0, 1, 0],
-      verticalFovDegrees: 50,
-      near: 0.5,
-      far: 4_000,
-    });
+    await harness.setCamera(
+      {
+        projection: "perspective",
+        position: [0, 8, 0],
+        target: [400, 0, 0],
+        up: [0, 1, 0],
+        verticalFovDegrees: 50,
+        near: 0.5,
+        far: 4_000,
+      },
+      { transition: "continuous" },
+    );
     const presentation = await harness.present();
     const firstColor = await harness.capture("final-color");
     const firstDepth = await harness.capture("depth");
     const firstNormal = await harness.capture("normal");
     const firstGlint = await harness.capture("optical-glint");
-    await harness.setCamera({
-      projection: "perspective",
-      position: [0, 8, 1],
-      target: [400, 0, 1],
-      up: [0, 1, 0],
-      verticalFovDegrees: 50,
-      near: 0.5,
-      far: 4_000,
-    });
+    await harness.setCamera(
+      {
+        projection: "perspective",
+        position: [0, 8, 1],
+        target: [400, 0, 1],
+        up: [0, 1, 0],
+        verticalFovDegrees: 50,
+        near: 0.5,
+        far: 4_000,
+      },
+      { transition: "continuous" },
+    );
     await harness.present();
     const secondColor = await harness.capture("final-color");
+    const secondDepth = await harness.capture("depth");
     const secondNormal = await harness.capture("normal");
     const secondGlint = await harness.capture("optical-glint");
+    const decodeFloat32 = (data: string): Float32Array => {
+      const bytes = Uint8Array.from(atob(data), (byte) => byte.charCodeAt(0));
+      const view = new DataView(
+        bytes.buffer,
+        bytes.byteOffset,
+        bytes.byteLength,
+      );
+      const values = new Float32Array(bytes.byteLength / 4);
+      for (let index = 0; index < values.length; index += 1) {
+        values[index] = view.getFloat32(index * 4, true);
+      }
+      return values;
+    };
+    const decodeUint8 = (data: string): Uint8Array =>
+      Uint8Array.from(atob(data), (byte) => byte.charCodeAt(0));
+    const median = (values: readonly number[]): number => {
+      if (values.length === 0) {
+        return 0;
+      }
+      const sorted = [...values].sort((left, right) => left - right);
+      const middle = Math.floor(sorted.length / 2);
+      return sorted.length % 2 === 0
+        ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
+        : (sorted[middle] ?? 0);
+    };
+    const measureRoi = (
+      depths: ArrayLike<number>,
+      glint: ArrayLike<number>,
+      color: Uint8Array,
+      width: number,
+      height: number,
+    ) => {
+      const farLuma: number[] = [];
+      const roiLuma: number[] = [];
+      for (let pixel = 0; pixel < width * height; pixel += 1) {
+        const depth = depths[pixel] ?? Number.NaN;
+        if (depth < 8 || depth > 1_500) {
+          continue;
+        }
+        const colorIndex = pixel * 4;
+        const luma =
+          0.2126 * (color[colorIndex] ?? 0) +
+          0.7152 * (color[colorIndex + 1] ?? 0) +
+          0.0722 * (color[colorIndex + 2] ?? 0);
+        farLuma.push(luma);
+        if ((glint[pixel] ?? 0) >= 0.08) {
+          roiLuma.push(luma);
+        }
+      }
+      const bandMedian = median(farLuma);
+      const roiMedian = median(roiLuma);
+      return {
+        farCount: farLuma.length,
+        roiCount: roiLuma.length,
+        minRoiCount: Math.max(4, Math.ceil(farLuma.length * 0.001)),
+        farMedian: bandMedian,
+        roiMedian,
+        gain: roiMedian - bandMedian,
+      };
+    };
+    const stress: Array<{
+      readonly farCount: number;
+      readonly roiCount: number;
+      readonly minRoiCount: number;
+      readonly gain: number;
+    }> = [];
+    for (let frame = 0; frame < 24; frame += 1) {
+      await harness.present();
+      const color = await harness.capture("final-color");
+      const depth = await harness.capture("depth");
+      const glint = await harness.capture("optical-glint");
+      stress.push(
+        measureRoi(
+          decodeFloat32(depth.data),
+          decodeFloat32(glint.data),
+          decodeUint8(color.data),
+          color.width,
+          color.height,
+        ),
+      );
+    }
     return {
       width: firstColor.width,
       height: firstColor.height,
       firstColor: firstColor.data,
       secondColor: secondColor.data,
       firstDepth: firstDepth.data,
+      secondDepth: secondDepth.data,
       firstNormal: firstNormal.data,
       firstGlint: firstGlint.data,
       secondNormal: secondNormal.data,
       secondGlint: secondGlint.data,
+      stress,
       seed: presentation.seed,
       tick: presentation.tick,
       manifestHash: presentation.manifestHash,
       controlRevision: presentation.controlRevision,
-      qaPrewarm: {
-        schema: harness.prewarmManifest.schema,
-        version: harness.prewarmManifest.version,
-        id: harness.prewarmManifest.id,
-        declarations: harness.prewarmManifest.declarations,
-        captures: harness.prewarmManifest.captures,
-        rendererDevice: presentation.prewarm.rendererDevice,
-      },
+      qaPrewarm: presentation.prewarm,
     };
   });
 
-  const depths = decodeFloat32(result.firstDepth);
+  const firstDepths = decodeFloat32(result.firstDepth);
+  const secondDepths = decodeFloat32(result.secondDepth);
   const firstColor = decodeUint8(result.firstColor);
   const secondColor = decodeUint8(result.secondColor);
   const firstNormal = decodeFloat32(result.firstNormal);
   const secondNormal = decodeFloat32(result.secondNormal);
   const far = collectFarRegion(
-    depths,
+    firstDepths,
     firstColor,
     secondColor,
     firstNormal,
@@ -676,9 +770,27 @@ test("keeps filtered slope detail and optical glints stable under camera motion"
     FAR_HIGHLIGHT_DEPTH_METRES.min,
     FAR_HIGHLIGHT_DEPTH_METRES.max,
   );
+  const firstRoi = collectCausalGlintRoi(
+    firstDepths,
+    decodeFloat32(result.firstGlint),
+    firstColor,
+    result.width,
+    result.height,
+    NEAR_DEPTH_METRES.min,
+    FAR_HIGHLIGHT_DEPTH_METRES.max,
+  );
+  const secondRoi = collectCausalGlintRoi(
+    secondDepths,
+    decodeFloat32(result.secondGlint),
+    secondColor,
+    result.width,
+    result.height,
+    NEAR_DEPTH_METRES.min,
+    FAR_HIGHLIGHT_DEPTH_METRES.max,
+  );
 
   const firstGlint = collectScalarBand(
-    depths,
+    firstDepths,
     decodeFloat32(result.firstGlint),
     result.width,
     result.height,
@@ -686,31 +798,46 @@ test("keeps filtered slope detail and optical glints stable under camera motion"
     FAR_HIGHLIGHT_DEPTH_METRES.max,
   );
   const secondGlint = collectScalarBand(
-    depths,
+    secondDepths,
     decodeFloat32(result.secondGlint),
     result.width,
     result.height,
     NEAR_DEPTH_METRES.min,
     FAR_HIGHLIGHT_DEPTH_METRES.max,
   );
+  console.log(
+    JSON.stringify({
+      firstRoi,
+      secondRoi,
+      stress: result.stress,
+    }),
+  );
   expect(far.count).toBeGreaterThan(80);
   expect(far.highlightContrast).toBeGreaterThan(18);
-  expect(far.brightFraction).toBeGreaterThan(0.02);
+  expect(firstRoi.roiCount).toBeGreaterThanOrEqual(firstRoi.minRoiCount);
+  expect(firstRoi.gain).toBeGreaterThan(12);
+  expect(secondRoi.roiCount).toBeGreaterThanOrEqual(secondRoi.minRoiCount);
+  expect(secondRoi.gain).toBeGreaterThan(12);
   expect(firstGlint.max).toBeGreaterThan(0.2);
   expect(firstGlint.mean).toBeGreaterThan(0.002);
   expect(Math.abs(firstGlint.mean - secondGlint.mean)).toBeLessThan(0.01);
-  expect(Math.abs(far.brightFraction - far.movedBrightFraction)).toBeLessThan(
-    0.05,
-  );
   expect(far.colorMeanAbs).toBeLessThan(8);
   expect(far.normalMeanAbs).toBeLessThan(0.12);
+  expect(result.stress).toHaveLength(24);
+  for (const frame of result.stress) {
+    expect(frame.roiCount).toBeGreaterThanOrEqual(frame.minRoiCount);
+    expect(frame.gain).toBeGreaterThan(12);
+  }
   await attachRegressionAcceptance(testInfo, page, {
     seed: result.seed,
     tick: result.tick,
     camera: HORIZON_CAMERA,
     controlRevision: result.controlRevision,
-    coreManifest: coreManifestEvidence(result.manifestHash),
+    coreManifest: coreManifestEvidence(result.qaPrewarm.core),
     qaPrewarm: result.qaPrewarm,
+    captures: [
+      { width: result.qaPrewarm.width, height: result.qaPrewarm.height },
+    ],
     qaHarness: HORIZON_QA_HARNESS,
     qaCapture: HORIZON_QA_CAPTURE,
     artisticControls: SWELL_PRESET.artisticControls,
@@ -726,6 +853,44 @@ test("keeps filtered slope detail and optical glints stable under camera motion"
     },
   });
 });
+
+function bandLuma(
+  depths: readonly number[],
+  color: Uint8Array,
+  width: number,
+  height: number,
+  minDepth: number,
+  maxDepth: number,
+): Readonly<{
+  readonly count: number;
+  readonly min: number;
+  readonly max: number;
+  readonly mean: number;
+  readonly range: number;
+}> {
+  const luma: number[] = [];
+  for (let pixel = 0; pixel < width * height; pixel += 1) {
+    const depth = depths[pixel] ?? Number.NaN;
+    if (depth < minDepth || depth > maxDepth) {
+      continue;
+    }
+    const colorIndex = pixel * 4;
+    luma.push(
+      0.2126 * (color[colorIndex] ?? 0) +
+        0.7152 * (color[colorIndex + 1] ?? 0) +
+        0.0722 * (color[colorIndex + 2] ?? 0),
+    );
+  }
+  const min = Math.min(...luma);
+  const max = Math.max(...luma);
+  return {
+    count: luma.length,
+    min,
+    max,
+    mean: luma.reduce((sum, value) => sum + value, 0) / luma.length,
+    range: max - min,
+  };
+}
 
 function collectDepthBand(
   depths: readonly number[],
@@ -849,13 +1014,10 @@ function collectFarRegion(
 ): Readonly<{
   readonly count: number;
   readonly highlightContrast: number;
-  readonly brightFraction: number;
-  readonly movedBrightFraction: number;
   readonly colorMeanAbs: number;
   readonly normalMeanAbs: number;
 }> {
   const luma: number[] = [];
-  const movedLuma: number[] = [];
   let colorAbs = 0;
   let normalAbs = 0;
   for (let pixel = 0; pixel < width * height; pixel += 1) {
@@ -871,7 +1033,6 @@ function collectFarRegion(
     const g2 = secondColor[colorIndex + 1] ?? 0;
     const b2 = secondColor[colorIndex + 2] ?? 0;
     luma.push(0.2126 * r + 0.7152 * g + 0.0722 * b);
-    movedLuma.push(0.2126 * r2 + 0.7152 * g2 + 0.0722 * b2);
     colorAbs += (Math.abs(r - r2) + Math.abs(g - g2) + Math.abs(b - b2)) / 3;
     const normalIndex = pixel * 3;
     normalAbs += Math.hypot(
@@ -883,20 +1044,58 @@ function collectFarRegion(
     );
   }
   const count = luma.length;
-  const meanLuma = mean(luma);
   const medianLuma = median(luma);
   const maxLuma = luma.reduce((best, value) => Math.max(best, value), 0);
-  const bright = (values: readonly number[]): number =>
-    count === 0
-      ? 0
-      : values.filter((value) => value > meanLuma + 12).length / count;
   return {
     count,
     highlightContrast: maxLuma - medianLuma,
-    brightFraction: bright(luma),
-    movedBrightFraction: bright(movedLuma),
     colorMeanAbs: count === 0 ? 0 : colorAbs / count,
     normalMeanAbs: count === 0 ? 0 : normalAbs / count,
+  };
+}
+
+function collectCausalGlintRoi(
+  depths: readonly number[],
+  glint: readonly number[],
+  color: Uint8Array,
+  width: number,
+  height: number,
+  minDepth: number,
+  maxDepth: number,
+): Readonly<{
+  readonly farCount: number;
+  readonly roiCount: number;
+  readonly minRoiCount: number;
+  readonly farMedian: number;
+  readonly roiMedian: number;
+  readonly gain: number;
+}> {
+  const farLuma: number[] = [];
+  const roiLuma: number[] = [];
+  for (let pixel = 0; pixel < width * height; pixel += 1) {
+    const depth = depths[pixel] ?? Number.NaN;
+    if (depth < minDepth || depth > maxDepth) {
+      continue;
+    }
+    const colorIndex = pixel * 4;
+    const luma =
+      0.2126 * (color[colorIndex] ?? 0) +
+      0.7152 * (color[colorIndex + 1] ?? 0) +
+      0.0722 * (color[colorIndex + 2] ?? 0);
+    farLuma.push(luma);
+    if ((glint[pixel] ?? 0) >= 0.08) {
+      roiLuma.push(luma);
+    }
+  }
+  const farMedian = median(farLuma);
+  const roiMedian = median(roiLuma);
+  return {
+    farCount: farLuma.length,
+    roiCount: roiLuma.length,
+    minRoiCount: Math.max(4, Math.ceil(farLuma.length * 0.001)),
+    farMedian,
+    roiMedian,
+    gain: roiMedian - farMedian,
   };
 }
 

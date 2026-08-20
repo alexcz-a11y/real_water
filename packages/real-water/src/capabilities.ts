@@ -1,4 +1,21 @@
 /**
+ * Native temporal evidence exposed only after a ready lease is published.
+ *
+ * @public
+ */
+export interface RenderingCapabilitiesTemporal {
+  readonly mode: "TRAA";
+  readonly renderScale: 1;
+  readonly resolutionPolicy: "drawing-buffer-exact";
+  readonly taau: false;
+  readonly dynamicResolution: false;
+  readonly frameGeneration: false;
+  readonly msaaSamples: 0;
+  readonly motionFormat: "rg16float";
+  readonly stockThreeRevision: "185";
+}
+
+/**
  * Stable rendering capabilities exposed by a ready Real Water lease.
  *
  * @public
@@ -6,6 +23,7 @@
 export interface RenderingCapabilities {
   readonly backend: "core-webgpu";
   readonly timestampQuery: boolean;
+  readonly temporal: RenderingCapabilitiesTemporal;
 }
 
 /**
@@ -34,6 +52,19 @@ export interface RealWaterCapabilities {
   readonly gameplay: GameplayCapabilities;
 }
 
+const NATIVE_TEMPORAL_CAPABILITIES: RenderingCapabilitiesTemporal =
+  Object.freeze({
+    mode: "TRAA",
+    renderScale: 1,
+    resolutionPolicy: "drawing-buffer-exact",
+    taau: false,
+    dynamicResolution: false,
+    frameGeneration: false,
+    msaaSamples: 0,
+    motionFormat: "rg16float",
+    stockThreeRevision: "185",
+  });
+
 export function createCoreWebGPUCapabilities(
   timestampQuery: boolean,
 ): RealWaterCapabilities {
@@ -44,6 +75,7 @@ export function createCoreWebGPUCapabilities(
     rendering: Object.freeze({
       backend: "core-webgpu" as const,
       timestampQuery,
+      temporal: NATIVE_TEMPORAL_CAPABILITIES,
     }),
   });
 }

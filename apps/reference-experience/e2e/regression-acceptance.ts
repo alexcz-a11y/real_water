@@ -1,55 +1,62 @@
-import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { cpus, release } from "node:os";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import type { Page, TestInfo } from "@playwright/test";
-import {
-  createMinimalWaterPrewarmManifest,
-  type ArtisticControls,
-  type HostEnvironmentReflectionDescriptor,
-  type HostEnvironmentState,
-  type WaterPresetIdentity,
+import type {
+  ArtisticControls,
+  HostEnvironmentReflectionDescriptor,
+  HostEnvironmentState,
+  WaterPresetIdentity,
 } from "real-water";
 import type { QaCameraV1 } from "../src/qa-harness.js";
+import type { QaFramePrewarmReceipt } from "../src/qa-frame-driver.js";
+import { QA_FRAME_PREWARM_MANIFEST } from "../src/qa-frame-driver.js";
 import {
-  isAdmittedPowerProfile,
-  readHostPowerProfile,
-  type HostPowerProfile,
-} from "./host-power-profile.js";
+  REGRESSION_ACCEPTANCE_EVIDENCE_CLASS,
+  REGRESSION_ACCEPTANCE_RELATIVE_DIRECTORY,
+  REGRESSION_ACCEPTANCE_SCHEMA,
+  REGRESSION_ACCEPTANCE_VERSION,
+  assertNativeTemporalPolicy,
+  assertRegressionDrawingBuffersAgree,
+  canonicalJson,
+  readPresentationFrameEvidence,
+  readQaBoundCoreManifestIdentity,
+  readReadyCapabilities,
+  readRegressionAcceptanceEvidence,
+  readTemporalStressEvidence,
+  sha256Buffer,
+  type PresentationFrameEvidence,
+  type QaBoundCoreManifestIdentity,
+  type RegressionDrawingBuffer,
+  type TemporalStressEvidenceV1,
+} from "./regression-acceptance-evidence.js";
+import { readHostPowerProfile } from "./host-power-profile.js";
+import {
+  isAdmittedOpticalScreenshotProfile,
+  rendererDeviceFingerprint,
+  type OpticalScreenshotProfile,
+} from "./optical-screenshot-profile.js";
 
-export const REGRESSION_ACCEPTANCE_DIRECTORY = join(
-  "test-results",
-  "regression-acceptance",
-);
+export {
+  coreManifestEvidence,
+  NATIVE_REGRESSION_TEMPORAL_POLICY,
+  REGRESSION_ACCEPTANCE_EVIDENCE_CLASS,
+  REGRESSION_ACCEPTANCE_RELATIVE_DIRECTORY,
+  createPresentationFrameEvidence,
+  readPresentationFrameEvidence,
+  sha256Buffer,
+} from "./regression-acceptance-evidence.js";
+export {
+  ADMITTED_OPTICAL_SCREENSHOT_PROFILE,
+  isAdmittedOpticalScreenshotProfile,
+  rendererDeviceFingerprint,
+  type OpticalScreenshotProfile,
+} from "./optical-screenshot-profile.js";
 
-const CORE_MANIFEST = createMinimalWaterPrewarmManifest();
+export const REGRESSION_ACCEPTANCE_DIRECTORY =
+  REGRESSION_ACCEPTANCE_RELATIVE_DIRECTORY;
+
 const HOST_POWER_PROFILE = readHostPowerProfile();
-
-export const ADMITTED_OPTICAL_SCREENSHOT_PROFILE = Object.freeze({
-  os: "darwin",
-  osRelease: "27.0.0",
-  arch: "arm64",
-  cpuModel: "Apple M5",
-  chromeVersion: "151.0.7922.169",
-  headless: true,
-  powerState: "ac",
-  lowPowerMode: 0,
-  rendererDeviceFingerprint:
-    "sha256:6ee054fd1f40dd96953cf1c3be499df39dd40c603c7817e8abadaa5d0f08a2b5",
-});
-
-export interface OpticalScreenshotProfile {
-  readonly os: string;
-  readonly osRelease: string;
-  readonly arch: string;
-  readonly cpuModel: string;
-  readonly chromeVersion: string;
-  readonly headless: boolean;
-  readonly powerState: HostPowerProfile["powerState"];
-  readonly lowPowerMode: HostPowerProfile["lowPowerMode"];
-  readonly projectId: string;
-  readonly rendererDeviceFingerprint: string | null;
-}
 
 export interface RegressionAcceptanceScreenshot {
   readonly name: string;
@@ -77,29 +84,10 @@ export interface RegressionAcceptanceDetails {
   readonly controlRevision: number;
   readonly coreManifest: {
     readonly hash: string;
-    readonly identity: {
-      readonly schema: string;
-      readonly version: number;
-      readonly id: string;
-      readonly manifestHash: string;
-      readonly qualityProfile: {
-        readonly schema: string;
-        readonly version: number;
-        readonly id: string;
-        readonly profileHash: string;
-      };
-      readonly environmentReflection: HostEnvironmentReflectionDescriptor;
-      readonly effectVariants: readonly unknown[];
-    };
+    readonly identity: QaBoundCoreManifestIdentity;
   };
-  readonly qaPrewarm: {
-    readonly schema: string;
-    readonly version: number;
-    readonly id: string;
-    readonly declarations?: readonly unknown[];
-    readonly captures?: readonly unknown[];
-    readonly rendererDevice?: unknown;
-  };
+  readonly qaPrewarm: QaFramePrewarmReceipt;
+  readonly captures?: readonly RegressionDrawingBuffer[];
   readonly qaHarness?: {
     readonly schema: string;
     readonly version: number;
@@ -116,47 +104,9 @@ export interface RegressionAcceptanceDetails {
     readonly lighting: HostEnvironmentState;
   };
   readonly screenshot?: RegressionAcceptanceScreenshot;
-}
-
-export function coreManifestEvidence(hash: string): {
-  readonly hash: string;
-  readonly identity: RegressionAcceptanceDetails["coreManifest"]["identity"];
-} {
-  return {
-    hash,
-    identity: {
-      schema: CORE_MANIFEST.schema,
-      version: CORE_MANIFEST.version,
-      id: CORE_MANIFEST.id,
-      manifestHash: hash,
-      qualityProfile: {
-        schema: CORE_MANIFEST.qualityProfile.schema,
-        version: CORE_MANIFEST.qualityProfile.version,
-        id: CORE_MANIFEST.qualityProfile.id,
-        profileHash: CORE_MANIFEST.qualityProfile.profileHash,
-      },
-      environmentReflection: CORE_MANIFEST.environmentReflection,
-      effectVariants: CORE_MANIFEST.effectVariants,
-    },
-  };
-}
-
-export function rendererDeviceFingerprint(
-  rendererDevice: unknown,
-): string | null {
-  if (!isRendererDeviceInventory(rendererDevice)) {
-    return null;
-  }
-  const canonical = {
-    features: [...rendererDevice.features].sort(),
-    limits: Object.fromEntries(
-      Object.entries(rendererDevice.limits).filter(
-        (entry): entry is [string, number] =>
-          typeof entry[1] === "number" && Number.isFinite(entry[1]),
-      ),
-    ),
-  };
-  return `sha256:${createHash("sha256").update(JSON.stringify(canonical)).digest("hex")}`;
+  readonly temporalStress?: TemporalStressEvidenceV1;
+  readonly presentationFrame?: PresentationFrameEvidence;
+  readonly screenshotPng?: Buffer;
 }
 
 export async function readOpticalScreenshotProfile(
@@ -182,33 +132,30 @@ export async function readOpticalScreenshotProfile(
   };
 }
 
-export function isAdmittedOpticalScreenshotProfile(
-  profile: OpticalScreenshotProfile,
-): boolean {
-  return (
-    profile.os === ADMITTED_OPTICAL_SCREENSHOT_PROFILE.os &&
-    profile.osRelease === ADMITTED_OPTICAL_SCREENSHOT_PROFILE.osRelease &&
-    profile.arch === ADMITTED_OPTICAL_SCREENSHOT_PROFILE.arch &&
-    profile.cpuModel === ADMITTED_OPTICAL_SCREENSHOT_PROFILE.cpuModel &&
-    profile.chromeVersion ===
-      ADMITTED_OPTICAL_SCREENSHOT_PROFILE.chromeVersion &&
-    profile.headless === ADMITTED_OPTICAL_SCREENSHOT_PROFILE.headless &&
-    profile.powerState === ADMITTED_OPTICAL_SCREENSHOT_PROFILE.powerState &&
-    profile.lowPowerMode === ADMITTED_OPTICAL_SCREENSHOT_PROFILE.lowPowerMode &&
-    profile.rendererDeviceFingerprint ===
-      ADMITTED_OPTICAL_SCREENSHOT_PROFILE.rendererDeviceFingerprint &&
-    isAdmittedPowerProfile({
-      powerState: profile.powerState,
-      lowPowerMode: profile.lowPowerMode,
-    })
-  );
-}
-
 export async function attachRegressionAcceptance(
   testInfo: TestInfo,
   page: Page,
   details: RegressionAcceptanceDetails,
 ): Promise<Readonly<Record<string, unknown>>> {
+  const coreIdentity = readQaBoundCoreManifestIdentity(
+    details.coreManifest.identity,
+  );
+  if (details.coreManifest.hash !== coreIdentity.manifestHash) {
+    throw new Error(
+      "Regression acceptance coreManifest.hash disagrees with the Core identity.",
+    );
+  }
+  if (details.qaPrewarm.core.manifestHash !== coreIdentity.manifestHash) {
+    throw new Error(
+      "QA prewarm Core identity disagrees with the Regression acceptance Core hash.",
+    );
+  }
+  assertNativeTemporalPolicy(coreIdentity.qualityProfile.temporal);
+  const capabilities = readReadyCapabilities(
+    details.qaPrewarm.capabilities,
+    coreIdentity.qualityProfile.temporal,
+  );
+  assertQaPrewarmV4(details.qaPrewarm);
   const [userAgent, hardwareConcurrency, drawingBuffer, navigatorGpuAdapter] =
     await Promise.all([
       page.evaluate(() => navigator.userAgent),
@@ -221,6 +168,23 @@ export async function attachRegressionAcceptance(
       }),
       readNavigatorGpuAdapterEvidence(page),
     ]);
+  assertRegressionDrawingBuffersAgree({
+    browserCanvas: drawingBuffer,
+    coreDrawingBuffer: coreIdentity.drawingBuffer,
+    qaPrewarm: {
+      width: details.qaPrewarm.width,
+      height: details.qaPrewarm.height,
+    },
+    captures: details.captures,
+  });
+  const temporalStress =
+    details.temporalStress === undefined
+      ? undefined
+      : readTemporalStressEvidence(details.temporalStress);
+  const presentationFrame =
+    details.presentationFrame === undefined
+      ? undefined
+      : readPresentationFrameEvidence(details.presentationFrame);
   const chromeVersion =
     page.context().browser()?.version() ??
     chromeVersionFromUserAgent(userAgent);
@@ -233,8 +197,10 @@ export async function attachRegressionAcceptance(
   const screenshotAsserted = details.screenshot?.asserted ?? false;
   const screenshotAuthoritative =
     details.screenshot?.authoritative ?? (screenshotAsserted && admitted);
-  const manifest = {
-    evidenceClass: "Regression acceptance",
+  const manifest = readRegressionAcceptanceEvidence({
+    schema: REGRESSION_ACCEPTANCE_SCHEMA,
+    version: REGRESSION_ACCEPTANCE_VERSION,
+    evidenceClass: REGRESSION_ACCEPTANCE_EVIDENCE_CLASS,
     chromeVersion,
     userAgent,
     os: process.platform,
@@ -247,7 +213,9 @@ export async function attachRegressionAcceptance(
     headed: testInfo.project.use.headless === false,
     headless: testInfo.project.use.headless !== false,
     devicePixelRatio: testInfo.project.use.deviceScaleFactor ?? 1,
-    drawingBuffer,
+    drawingBuffer: coreIdentity.drawingBuffer,
+    browserCanvas: drawingBuffer,
+    temporalPolicy: capabilities.rendering.temporal,
     navigatorGpuAdapter,
     rendererDevice: details.qaPrewarm.rendererDevice ?? null,
     rendererDeviceFingerprint: screenshotProfile.rendererDeviceFingerprint,
@@ -265,24 +233,49 @@ export async function attachRegressionAcceptance(
     controlRevision: details.controlRevision,
     coreManifest: details.coreManifest,
     qaPrewarmManifest: details.qaPrewarm,
-    qaHarness: details.qaHarness,
-    qaCapture: details.qaCapture,
-    artisticControls: details.artisticControls,
-    waterPreset: details.waterPreset,
-    environment: details.environment,
-    screenshot: details.screenshot,
-  };
-  const filePath = resolve(
-    process.cwd(),
-    REGRESSION_ACCEPTANCE_DIRECTORY,
-    regressionAcceptanceFileName(testInfo),
-  );
+    qaHarness: details.qaHarness ?? null,
+    qaCapture: details.qaCapture ?? null,
+    artisticControls: details.artisticControls ?? null,
+    waterPreset: details.waterPreset ?? null,
+    environment: details.environment ?? null,
+    screenshot: details.screenshot ?? null,
+    presentationFrame: presentationFrame ?? null,
+    temporalStress: temporalStress ?? null,
+  });
+  const artifacts = regressionAcceptanceArtifacts(testInfo);
   await mkdir(resolve(process.cwd(), REGRESSION_ACCEPTANCE_DIRECTORY), {
     recursive: true,
   });
-  await writeFile(filePath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  if (presentationFrame !== undefined) {
+    if (details.screenshotPng === undefined) {
+      throw new Error(
+        "Isolated presentationFrame evidence requires the persisted PNG buffer.",
+      );
+    }
+    const pngHash = sha256Buffer(details.screenshotPng);
+    if (
+      presentationFrame.pngAttachmentName !== artifacts.pngFileName ||
+      presentationFrame.pngAttachmentPath !== artifacts.pngRelativePath ||
+      presentationFrame.pngAttachmentSha256 !== pngHash ||
+      presentationFrame.screenshotPngSha256 !== pngHash
+    ) {
+      throw new Error(
+        "presentationFrame PNG identity must match the persisted regression-acceptance artifact.",
+      );
+    }
+    await writeFile(artifacts.pngPath, details.screenshotPng);
+    await testInfo.attach(artifacts.pngFileName, {
+      path: artifacts.pngPath,
+      contentType: "image/png",
+    });
+  }
+  await writeFile(
+    artifacts.jsonPath,
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8",
+  );
   await testInfo.attach("regression-acceptance.json", {
-    path: filePath,
+    path: artifacts.jsonPath,
     contentType: "application/json",
   });
   return manifest;
@@ -319,7 +312,14 @@ async function readNavigatorGpuAdapterEvidence(page: Page): Promise<unknown> {
   });
 }
 
-function regressionAcceptanceFileName(testInfo: TestInfo): string {
+export function regressionAcceptanceArtifacts(testInfo: TestInfo): {
+  readonly jsonFileName: string;
+  readonly pngFileName: string;
+  readonly jsonRelativePath: string;
+  readonly pngRelativePath: string;
+  readonly jsonPath: string;
+  readonly pngPath: string;
+} {
   const unique = [
     testInfo.project.name,
     testInfo.testId,
@@ -333,34 +333,52 @@ function regressionAcceptanceFileName(testInfo: TestInfo): string {
     .replace(/[^A-Za-z0-9._-]+/gu, "-")
     .replace(/^-+|-+$/gu, "")
     .slice(0, 80);
-  return `${unique}${title === "" ? "" : `--${title}`}.json`;
-}
-
-function isRendererDeviceInventory(value: unknown): value is {
-  readonly features: readonly string[];
-  readonly limits: Readonly<Record<string, number>>;
-} {
-  if (value === null || typeof value !== "object") {
-    return false;
-  }
-  if (!("features" in value) || !("limits" in value)) {
-    return false;
-  }
-  const { features, limits } = value;
-  if (
-    !Array.isArray(features) ||
-    !features.every((feature) => typeof feature === "string")
-  ) {
-    return false;
-  }
-  if (limits === null || typeof limits !== "object" || Array.isArray(limits)) {
-    return false;
-  }
-  return Object.values(limits).every(
-    (entry) => typeof entry === "number" && Number.isFinite(entry),
-  );
+  const stem = `${unique}${title === "" ? "" : `--${title}`}`;
+  const jsonFileName = `${stem}.json`;
+  const pngFileName = `${stem}.png`;
+  const jsonRelativePath = `${REGRESSION_ACCEPTANCE_DIRECTORY}/${jsonFileName}`;
+  const pngRelativePath = `${REGRESSION_ACCEPTANCE_DIRECTORY}/${pngFileName}`;
+  return {
+    jsonFileName,
+    pngFileName,
+    jsonRelativePath,
+    pngRelativePath,
+    jsonPath: resolve(process.cwd(), jsonRelativePath),
+    pngPath: resolve(process.cwd(), pngRelativePath),
+  };
 }
 
 function chromeVersionFromUserAgent(userAgent: string): string {
   return /(?:Chrome|Chromium)\/([\d.]+)/u.exec(userAgent)?.[1] ?? userAgent;
+}
+
+function assertQaPrewarmV4(prewarm: QaFramePrewarmReceipt): void {
+  if (
+    prewarm.manifest.schema !== QA_FRAME_PREWARM_MANIFEST.schema ||
+    prewarm.manifest.version !== 4 ||
+    prewarm.manifest.id !== QA_FRAME_PREWARM_MANIFEST.id
+  ) {
+    throw new Error("Regression acceptance requires QA prewarm v4.");
+  }
+  if (
+    canonicalJson(prewarm.manifest.captures) !==
+      canonicalJson(QA_FRAME_PREWARM_MANIFEST.captures) ||
+    canonicalJson(prewarm.manifest.coreDeclarations) !==
+      canonicalJson(QA_FRAME_PREWARM_MANIFEST.coreDeclarations) ||
+    QA_FRAME_PREWARM_MANIFEST.captures.length !== 12
+  ) {
+    throw new Error(
+      "Regression acceptance requires the exact QA v4 12-name capture mapping.",
+    );
+  }
+  if (prewarm.rendererDevice === null || prewarm.rendererDevice === undefined) {
+    throw new Error(
+      "Regression acceptance requires the QA renderer device inventory.",
+    );
+  }
+  if (prewarm.capabilities === undefined) {
+    throw new Error(
+      "Regression acceptance requires the actual ready capabilities.",
+    );
+  }
 }

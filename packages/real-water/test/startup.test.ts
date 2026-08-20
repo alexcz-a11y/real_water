@@ -4,6 +4,7 @@ import {
   SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
   createMemoryHostLifecycleAdapter as createBaseMemoryHostLifecycleAdapter,
   createMinimalWaterPrewarmManifest,
+  createStaticHostPresentationAdapter,
   createStaticHostSimulationAdapter,
   prepareRealWater,
   type HostLifecycleAdapter,
@@ -23,26 +24,40 @@ class RecordingLoadingPresenter implements LoadingPresenterAdapter {
   }
 }
 
+const TEST_TEMPORAL_CAPABILITIES = Object.freeze({
+  mode: "TRAA" as const,
+  renderScale: 1 as const,
+  resolutionPolicy: "drawing-buffer-exact" as const,
+  taau: false as const,
+  dynamicResolution: false as const,
+  frameGeneration: false as const,
+  msaaSamples: 0 as const,
+  motionFormat: "rg16float" as const,
+  stockThreeRevision: "185" as const,
+});
 const TEST_CAPABILITIES = Object.freeze({
   gameplay: Object.freeze({ maxQueryPointsPerTick: 2_048 as const }),
   rendering: Object.freeze({
     backend: "core-webgpu" as const,
     timestampQuery: false,
+    temporal: TEST_TEMPORAL_CAPABILITIES,
   }),
 });
 const NEVER_INVALIDATED = new Promise<never>(() => {});
 const STATIC_SIMULATION = createStaticHostSimulationAdapter();
+const STATIC_PRESENTATION = createStaticHostPresentationAdapter();
 
 function createMemoryHostLifecycleAdapter(
   options: Omit<
     MemoryHostLifecycleAdapterOptions,
-    "simulation" | "environment"
+    "simulation" | "environment" | "presentation"
   >,
 ): HostLifecycleAdapter {
   return createBaseMemoryHostLifecycleAdapter({
     ...options,
     simulation: STATIC_SIMULATION,
     environment: createTestEnvironmentAdapter(),
+    presentation: STATIC_PRESENTATION,
   });
 }
 
@@ -64,11 +79,159 @@ describe("prepareRealWater", () => {
       rendering: {
         backend: "core-webgpu",
         timestampQuery: true,
+        temporal: TEST_TEMPORAL_CAPABILITIES,
       },
     });
     expect(Object.isFrozen(lease.capabilities)).toBe(true);
     expect(Object.isFrozen(lease.capabilities.rendering)).toBe(true);
+    expect(Object.isFrozen(lease.capabilities.rendering.temporal)).toBe(true);
+    expect(() => {
+      (lease.capabilities.rendering.temporal as { taau: boolean }).taau = true;
+    }).toThrow(TypeError);
+    expect(() => {
+      (
+        lease.capabilities.rendering.temporal as {
+          resolutionPolicy: string;
+        }
+      ).resolutionPolicy = "dynamic";
+    }).toThrow(TypeError);
     await lease.dispose();
+  });
+
+  it("does not expose present() on the ready lease", async () => {
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: new RecordingLoadingPresenter(),
+      host: createMemoryHostLifecycleAdapter({ stepDelayMs: 0 }),
+    }).ready;
+
+    expect(lease).not.toHaveProperty("present");
+    await lease.dispose();
+  });
+
+  it("disposes the Host lease and never presents ready when bind fails", async () => {
+    const dispose = vi.fn();
+    const loading = new RecordingLoadingPresenter();
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading,
+      host: createReadyHost(undefined, {
+        invalidated: NEVER_INVALIDATED,
+        simulation: STATIC_SIMULATION,
+        presentation: {
+          snapshot: () => ({ cameraCutRevision: 0 }),
+          bind() {
+            throw new Error("Synthetic presentation bind failure.");
+          },
+        },
+        dispose,
+      }),
+    });
+
+    await expect(run.ready).rejects.toMatchObject({
+      code: "HOST_PROTOCOL_VIOLATION",
+      phase: "readiness-gate",
+      retryable: false,
+      message: "Synthetic presentation bind failure.",
+    });
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(
+      loading.snapshots.some((snapshot) => snapshot.status === "ready"),
+    ).toBe(false);
+  });
+
+  it("rejects a Host binding that is not the exact dispose() contract", async () => {
+    const dispose = vi.fn();
+    const loading = new RecordingLoadingPresenter();
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading,
+      host: createReadyHost(undefined, {
+        invalidated: NEVER_INVALIDATED,
+        simulation: STATIC_SIMULATION,
+        presentation: {
+          snapshot: () => ({ cameraCutRevision: 0 }),
+          bind: () => ({ dispose() {}, extra: true }) as never,
+        },
+        dispose,
+      }),
+    });
+
+    await expect(run.ready).rejects.toMatchObject({
+      code: "HOST_PROTOCOL_VIOLATION",
+      phase: "readiness-gate",
+    });
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(
+      loading.snapshots.some((snapshot) => snapshot.status === "ready"),
+    ).toBe(false);
+  });
+
+  it("binds the Core route before the ready snapshot and ready resolve", async () => {
+    const order: string[] = [];
+    const loading: LoadingPresenterAdapter = {
+      present(snapshot) {
+        if (snapshot.status === "ready") {
+          order.push("ready-snapshot");
+        }
+      },
+    };
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading,
+      host: createReadyHost(undefined, {
+        invalidated: NEVER_INVALIDATED,
+        simulation: STATIC_SIMULATION,
+        presentation: {
+          snapshot: () => ({ cameraCutRevision: 0 }),
+          bind() {
+            order.push("bind");
+            return Object.freeze({ dispose() {} });
+          },
+        },
+        dispose() {},
+      }),
+    }).ready;
+
+    order.push("ready-resolve");
+    expect(order).toEqual(["bind", "ready-snapshot", "ready-resolve"]);
+    expect(lease).not.toHaveProperty("present");
+    await lease.dispose();
+  });
+
+  it("fails readiness when bind synchronously calls route.present", async () => {
+    const dispose = vi.fn();
+    const loading = new RecordingLoadingPresenter();
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading,
+      host: createReadyHost(undefined, {
+        invalidated: NEVER_INVALIDATED,
+        simulation: STATIC_SIMULATION,
+        presentation: {
+          snapshot: () => ({ cameraCutRevision: 0 }),
+          bind(route) {
+            try {
+              void route.present();
+            } catch {
+              // The Host must not hide a bind-time present attempt.
+            }
+            return Object.freeze({ dispose() {} });
+          },
+        },
+        dispose,
+      }),
+    });
+
+    await expect(run.ready).rejects.toMatchObject({
+      code: "HOST_PROTOCOL_VIOLATION",
+      phase: "readiness-gate",
+      message: "Host Presentation bind must not call present().",
+    });
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(
+      loading.snapshots.some((snapshot) => snapshot.status === "ready"),
+    ).toBe(false);
   });
 
   it("selects a declared effect variant with an immutable revision receipt", async () => {
@@ -192,6 +355,7 @@ describe("prepareRealWater", () => {
       host: createReadyHost(undefined, {
         invalidated,
         simulation: STATIC_SIMULATION,
+        presentation: STATIC_PRESENTATION,
         dispose() {},
       }),
     });
@@ -299,6 +463,7 @@ describe("prepareRealWater", () => {
       host: createReadyHost(undefined, {
         invalidated: hostInvalidated,
         simulation: STATIC_SIMULATION,
+        presentation: STATIC_PRESENTATION,
         dispose() {},
       }),
     });
@@ -349,6 +514,7 @@ describe("prepareRealWater", () => {
       host: createReadyHost(undefined, {
         invalidated: Promise.resolve(loss),
         simulation: STATIC_SIMULATION,
+        presentation: STATIC_PRESENTATION,
         dispose,
       }),
     });
@@ -434,7 +600,12 @@ describe("prepareRealWater", () => {
           return {
             status: "ready",
             capabilities: TEST_CAPABILITIES,
-            lease: { invalidated, simulation: STATIC_SIMULATION, dispose },
+            lease: {
+              invalidated,
+              simulation: STATIC_SIMULATION,
+              presentation: STATIC_PRESENTATION,
+              dispose,
+            },
           };
         },
       },
@@ -501,15 +672,16 @@ describe("prepareRealWater", () => {
     );
     expect(lease.manifest).toEqual({
       schema: "real-water/prewarm",
-      version: 2,
+      version: 3,
       id: manifest.id,
       manifestHash: manifest.manifestHash,
       qualityProfile: {
         schema: "real-water/quality-profile",
-        version: 1,
+        version: 2,
         id: "minimal",
         profileHash: manifest.qualityProfile.profileHash,
       },
+      drawingBuffer: { width: 320, height: 180 },
       environmentReflection: SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
       effectVariants: [
         {
@@ -695,7 +867,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 16,
+        totalWork: 30,
       },
     });
   });
@@ -732,6 +904,7 @@ describe("prepareRealWater", () => {
     const host = createReadyHost(undefined, {
       invalidated: NEVER_INVALIDATED,
       simulation: STATIC_SIMULATION,
+      presentation: STATIC_PRESENTATION,
       dispose() {
         disposalCalls += 1;
       },
@@ -851,6 +1024,7 @@ describe("prepareRealWater", () => {
             lease: {
               invalidated: NEVER_INVALIDATED,
               simulation: STATIC_SIMULATION,
+              presentation: STATIC_PRESENTATION,
               dispose() {},
             },
           };
@@ -928,6 +1102,7 @@ describe("prepareRealWater", () => {
       lease: {
         invalidated: NEVER_INVALIDATED,
         simulation: STATIC_SIMULATION,
+        presentation: STATIC_PRESENTATION,
         dispose() {
           disposalCalls += 1;
         },
@@ -977,6 +1152,7 @@ describe("prepareRealWater", () => {
             lease: {
               invalidated: NEVER_INVALIDATED,
               simulation: STATIC_SIMULATION,
+              presentation: STATIC_PRESENTATION,
               dispose() {},
             },
           };
@@ -1024,6 +1200,7 @@ describe("prepareRealWater", () => {
             lease: {
               invalidated: NEVER_INVALIDATED,
               simulation: STATIC_SIMULATION,
+              presentation: STATIC_PRESENTATION,
               dispose() {
                 disposalCalls += 1;
               },
@@ -1152,6 +1329,7 @@ describe("prepareRealWater", () => {
             lease: {
               invalidated: NEVER_INVALIDATED,
               simulation: STATIC_SIMULATION,
+              presentation: STATIC_PRESENTATION,
               dispose() {
                 disposalCalls += 1;
               },
@@ -1226,6 +1404,7 @@ describe("prepareRealWater", () => {
       host: createReadyHost(undefined, {
         invalidated: NEVER_INVALIDATED,
         simulation: STATIC_SIMULATION,
+        presentation: STATIC_PRESENTATION,
         dispose: disposeHostLease,
       }),
     });
@@ -1318,6 +1497,7 @@ describe("prepareRealWater", () => {
             lease: {
               invalidated: NEVER_INVALIDATED,
               simulation: STATIC_SIMULATION,
+              presentation: STATIC_PRESENTATION,
               dispose() {},
             },
           };
@@ -1354,6 +1534,9 @@ describe("prepareRealWater", () => {
     const first = manifest.declarations[0];
 
     expect(Object.isFrozen(manifest)).toBe(true);
+    expect(Object.isFrozen(manifest.drawingBuffer)).toBe(true);
+    expect(manifest.version).toBe(3);
+    expect(manifest.drawingBuffer).toEqual({ width: 320, height: 180 });
     expect(Object.isFrozen(manifest.declarations)).toBe(true);
     expect(Object.isFrozen(first)).toBe(true);
     expect(manifest.declarations.map((declaration) => declaration.id)).toEqual([
@@ -1370,6 +1553,20 @@ describe("prepareRealWater", () => {
       "water-material",
       "water-optical-route",
       "water-render-route",
+      "water-procedural-motion",
+      "water-motion-vectors",
+      "water-inverse-linear-depth",
+      "water-view-normal",
+      "water-optical-factors-target",
+      "water-optical-diagnostics-a",
+      "water-optical-diagnostics-b",
+      "water-final-color-target",
+      "water-current-color-target",
+      "water-stock-traa-history",
+      "water-traa-resolve-jitter",
+      "water-traa-reset-route",
+      "water-current-color-conversion",
+      "water-named-output-routes",
       "water-hidden-stabilization",
       "water-completion-probe",
       "water-main-camera-guard",
@@ -1388,6 +1585,7 @@ function createReadyHost(
   lease: HostPreparedLease = {
     invalidated: NEVER_INVALIDATED,
     simulation: STATIC_SIMULATION,
+    presentation: STATIC_PRESENTATION,
     dispose() {},
   },
 ): HostLifecycleAdapter {

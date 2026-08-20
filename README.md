@@ -37,11 +37,17 @@ Issue #18 extended the coherent spectral runtime and deterministic QA
 foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly sixteen work
+- the canonical minimal-water Prewarm Manifest declares exactly thirty work
   units: a texture, Host equirect environment radiance, viewport scene color,
-  viewport scene depth, render target, camera-relative clipmap, four spectral
-  bands, TSL NodeMaterial, optical route, RenderPipeline route, eight hidden
-  stabilization frames, completion readback, and main-camera guard frame;
+  viewport scene depth, 7-attachment MRT, camera-relative clipmap, four spectral
+  bands, TSL NodeMaterial, optical route, one-scene render route, procedural
+  motion, velocity, inverse-linear depth, view-normal, optical factors, optical
+  diagnostics A/B, Core final-color and current-color targets, stock TRAA
+  color+depth history, resolve/jitter route, no-allocation reset route,
+  current-color conversion, twelve named diagnostics output routes, eight hidden
+  temporal stabilization frames, named-output completion probes, and main-camera
+  guard frame. Version 3 binds the physical drawing buffer into that work plan;
+  a viewport change creates a new manifest and lease;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
   restores their state after preparation, and never disposes them;
 - progress advances monotonically only when declared manifest work completes;
@@ -52,6 +58,12 @@ foundation:
 - every Host explicitly supplies a Host Simulation Adapter whose seed, tick,
   time, pause state, and floating origin drive both rendering and the CPU
   evaluator without any wall-clock read;
+- every Host also supplies a Host Presentation Adapter whose camera-cut revision
+  is visible on the lightweight snapshot and whose `bind(route)` accepts the
+  receipt-only Core presentation route without calling or scheduling
+  `present()`; explicit sea-state cuts increment `seaStateCutRevision` even when
+  Artistic Controls are unchanged; Hosts that drive frames start after bind, and
+  Core never owns RAF;
 - the ready Runtime Interface applies complete hot Artistic Controls, including
   versioned Calm, Swell, and Storm Water Presets, and revisions them only when
   the snapshot changes;
@@ -59,12 +71,16 @@ foundation:
   tick, control-revision, and snapshot-age buffers with no GPU readback;
 - query capacity is fixed at 2,048 points per simulation tick and fails with a
   structured error before output mutation when exceeded;
-- test builds prewarm a private, versioned QA presentation route before reveal;
-  production builds contain neither that route nor the QA Harness global;
-- the QA route resets a fixed seed, advances explicit 60 Hz ticks, applies a
-  fixed camera, presents once, and addresses final color, linear depth,
+- production Hosts bind the receipt-only Core presentation route, which owns
+  stock r185 TRAA, the 7-attachment scene MRT, and optional
+  `real-water/diagnostics` CPU readbacks of that same bound frame;
+- the test-only QA Harness is an explicit `?qa=1` facade over that Core route:
+  it resets a fixed seed by incrementing Host `simulationResetRevision`,
+  advances explicit 60 Hz ticks, applies a camera with an explicit continuous or
+  camera-cut transition, presents once, and addresses final color, linear depth,
   view-space normal, and named optical intermediate captures including Fresnel,
-  metric refraction thickness, scattering, and crest transmission;
+  metric refraction thickness, scattering, and crest transmission; production
+  builds do not install the QA Harness global;
 - seed, tick, time, origin, and Artistic Control revision feed the prepared
   surface; Playwright verifies repeatability, ocean-scale horizon coverage,
   non-periodic blending, distance LOD, distant-detail stability, origin-shift
@@ -72,8 +88,10 @@ foundation:
   wall-clock sleeps or animation-frame polling;
 - the Reference Experience keeps the canvas hidden through preparation and
   reveals it on the next refresh after readiness;
-- immutable `minimal` and `minimal-high-detail` Quality Profiles derive distinct
-  manifest hashes and geometry structures;
+- immutable version-2 `minimal` and `minimal-high-detail` Quality Profiles pin
+  the Native temporal policy (TRAA at render scale 1; TAAU, dynamic resolution,
+  frame generation, and MSAA samples off) and derive distinct manifest hashes
+  and geometry structures;
 - applying a changed Quality Profile, or resuming after a confirmed long
   suspension, conceals the stage and repeats the complete Readiness Gate;
 - ready leases expose long-suspension and device-loss invalidation through the
@@ -89,9 +107,10 @@ foundation:
 - lease disposal is idempotent and releases only Real Water-owned resources.
 
 This milestone keeps the four-band Open Water Domain stable across distance and
-origin shifts and shades it with a complete basic optical path. It does not yet
-claim Native Quality, TRAA, planar or SSR reflections, or production whitewater
-and underwater systems.
+origin shifts, shades it with a complete basic optical path, and ships stock
+r185 TRAA on the Core presentation route. TRAA regression acceptance is
+work-in-progress. It does not claim Native certification, planar or SSR
+reflections, or production whitewater and underwater systems.
 
 ## Required toolchain
 

@@ -7,6 +7,7 @@ import {
   createMinimalWaterPrewarmManifest,
   createMinimalWaterQualityProfile,
   createStaticHostEnvironmentAdapter,
+  createStaticHostPresentationAdapter,
   createStaticHostSimulationAdapter,
   createSupportedHostEnvironmentRadianceBytes,
   prepareRealWater,
@@ -142,6 +143,7 @@ describe("Host Environment Adapter", () => {
     expect(() =>
       createMemoryHostLifecycleAdapter({
         simulation: createStaticHostSimulationAdapter(),
+        presentation: createStaticHostPresentationAdapter(),
         stepDelayMs: 0,
       } as never),
     ).toThrow("The Memory Host Adapter requires a Host Environment Adapter.");
@@ -155,6 +157,7 @@ describe("Host Environment Adapter", () => {
           createTestEnvironmentReflection(),
           TEST_ENVIRONMENT_STATE,
         ),
+        presentation: createStaticHostPresentationAdapter(),
         stepDelayMs: 0,
       }),
     }).ready;
@@ -254,6 +257,7 @@ describe("Host Environment Adapter", () => {
         host: createMemoryHostLifecycleAdapter({
           simulation: createStaticHostSimulationAdapter(),
           environment: mismatched,
+          presentation: createStaticHostPresentationAdapter(),
           stepDelayMs: 0,
         }),
       }).ready,

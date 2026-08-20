@@ -116,12 +116,36 @@ if (
   );
 }
 
+const qaFrameDriver = resolve(
+  "apps/reference-experience/src/qa-frame-driver.ts",
+);
+const qaFrameDriverSource = await readFile(qaFrameDriver, "utf8");
+const qaDriverBans = [
+  [/\bfrom\s+["']three(?:\/tsl|\/webgpu|\/addons)?["']/u, "Three/TSL import"],
+  [/\bTRAANode\b/u, "TRAANode ownership"],
+  [/\bRenderTarget\b/u, "RenderTarget ownership"],
+  [/\bRenderPipeline\b/u, "RenderPipeline ownership"],
+  [/\bpass\s*\(/u, "pass() ownership"],
+  [/\bmrt\s*\(/u, "mrt() ownership"],
+  [/qa-traa-r185/u, "duplicate QA TRAA adapter"],
+  [/\bresetHistory\b/u, "public diagnostics resetHistory knob"],
+  [/\bpendingResetHistory\b/u, "QA pendingResetHistory latch"],
+  [/\bsuppressJitter\b/u, "test-tailored jitter suppression"],
+  [/\breplayLast\b/u, "test-tailored jitter replay"],
+  [/qa-final-color-target/u, "fake QA GPU declaration"],
+];
+for (const [pattern, label] of qaDriverBans) {
+  if (pattern.test(qaFrameDriverSource)) {
+    failures.push(qaFrameDriver + ": forbidden " + label);
+  }
+}
+
 if (failures.length > 0) {
   throw new Error(failures.join("\n"));
 }
 
 console.log(
-  "Core boundary check passed: no UI, network, persistence, framework, physics-engine, hidden Three ownership, or TSL node package seam.",
+  "Core boundary check passed: no UI, network, persistence, framework, physics-engine, hidden Three ownership, TSL node package seam, or QA scene/TRAA ownership.",
 );
 
 async function sourceFiles(directory) {

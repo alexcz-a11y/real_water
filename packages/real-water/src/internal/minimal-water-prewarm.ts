@@ -1,16 +1,14 @@
 import {
   type BufferGeometry,
   DataTexture,
+  type PerspectiveCamera,
   Mesh,
   NodeMaterial,
-  RenderPipeline,
-  SRGBColorSpace,
-  type Camera,
   type Renderer,
   type Scene,
+  SRGBColorSpace,
   type Texture,
 } from "three/webgpu";
-import { pass } from "three/tsl";
 import {
   MINIMAL_WATER_PREWARM_DECLARATION_IDS,
   assertMinimalWaterPrewarmManifest,
@@ -29,15 +27,30 @@ import type {
 import type { HostEnvironmentAdapter } from "../environment.js";
 import { assertHostEnvironmentMatchesManifest } from "../environment.js";
 import type { HostSimulationAdapter } from "../runtime.js";
+import type { HostPresentationAdapter } from "../presentation.js";
+import { HOST_RUNTIME_STATE_BRIDGE } from "./runtime-state-bridge.js";
+import { HOST_PRESENTATION_ROUTE_BRIDGE } from "./presentation-route-bridge.js";
 import {
   clipmapInnerCellMetres,
   createCameraRelativeClipmapGeometry,
 } from "./camera-relative-clipmap.js";
 import { createWaterOpticsRendering } from "./water-optics-rendering.js";
-import { HOST_RUNTIME_STATE_BRIDGE } from "./runtime-state-bridge.js";
 import { createSpectralBandRendering } from "./spectral-bands-rendering.js";
-
-const HIDDEN_STABILIZATION_FRAME_COUNT = 8;
+import {
+  captureHostState,
+  compileAndPrimePreparedWaterPresentation,
+  createPreparedWaterPresentationResources,
+  createPresentationRouteBridge,
+  disposePartialPreparedWaterPresentationResources,
+  disposePreparedWaterPresentationResources,
+  probePreparedCompletion,
+  readDrawingBufferSize,
+  renderHiddenStabilizationFrames,
+  renderMainCameraGuard,
+  restoreHostState,
+  type PartialPreparedWaterPresentationResources,
+  type PreparedWaterPresentationResources,
+} from "./prepared-water-presentation.js";
 
 interface MinimalWaterPrewarmOptions {
   readonly renderer: ThreeHostRenderer;
@@ -47,6 +60,7 @@ interface MinimalWaterPrewarmOptions {
   readonly invalidated: Promise<WebGPUDeviceLoss>;
   readonly simulation: HostSimulationAdapter;
   readonly environment: HostEnvironmentAdapter;
+  readonly presentation: HostPresentationAdapter;
 }
 
 interface PreparedResources {
@@ -54,14 +68,18 @@ interface PreparedResources {
   readonly geometry: BufferGeometry;
   readonly material: NodeMaterial;
   readonly waterTexture: DataTexture;
-  readonly pipeline: RenderPipeline;
-  readonly scenePass: ReturnType<typeof pass>;
   readonly spectralBand: ReturnType<typeof createSpectralBandRendering>;
   readonly opticalPath: ReturnType<typeof createWaterOpticsRendering>;
+  readonly presentation: PreparedWaterPresentationResources;
 }
 
 type PartialPreparedResources = {
-  -readonly [Key in keyof PreparedResources]?: PreparedResources[Key];
+  -readonly [
+    Key in keyof Omit<PreparedResources, "presentation">
+  ]?: PreparedResources[Key];
+} & {
+  presentation?: PreparedWaterPresentationResources;
+  presentationPartial?: PartialPreparedWaterPresentationResources;
 };
 
 export async function prepareMinimalWaterPlane(
@@ -74,7 +92,7 @@ export async function prepareMinimalWaterPlane(
 
   const renderer = options.renderer as unknown as Renderer;
   const scene = options.scene as unknown as Scene;
-  const camera = options.camera as unknown as Camera;
+  const camera = options.camera as unknown as PerspectiveCamera;
   const state = captureHostState(renderer, scene, camera);
   const partial: PartialPreparedResources = {};
   let resourcesDisposed = false;
@@ -111,6 +129,16 @@ export async function prepareMinimalWaterPlane(
 
   try {
     throwIfAborted(options.request.signal);
+    const declaredDrawingBuffer = options.request.manifest.drawingBuffer;
+    const actualDrawingBuffer = readDrawingBufferSize(renderer);
+    if (
+      actualDrawingBuffer.width !== declaredDrawingBuffer.width ||
+      actualDrawingBuffer.height !== declaredDrawingBuffer.height
+    ) {
+      throw new Error(
+        "The Three Host drawing buffer does not match the Prewarm Manifest.",
+      );
+    }
     assertHostEnvironmentMatchesManifest(
       options.environment,
       options.request.manifest,
@@ -123,8 +151,14 @@ export async function prepareMinimalWaterPlane(
     partial.waterTexture = waterTexture;
 
     throwIfAborted(options.request.signal);
-    const scenePass = pass(scene, camera);
-    partial.scenePass = scenePass;
+    const createdPresentation = createPreparedWaterPresentationResources(
+      renderer,
+      scene,
+      camera,
+      declaredDrawingBuffer,
+    );
+    partial.presentation = createdPresentation.resources;
+    partial.presentationPartial = createdPresentation.partial;
 
     throwIfAborted(options.request.signal);
     const geometry = createCameraRelativeClipmapGeometry(
@@ -141,6 +175,7 @@ export async function prepareMinimalWaterPlane(
     );
     const spectralBand = createSpectralBandRendering(
       options.simulation,
+      options.presentation,
       innerCellMetres,
     );
     partial.spectralBand = spectralBand;
@@ -162,101 +197,105 @@ export async function prepareMinimalWaterPlane(
     scene.add(plane);
 
     throwIfAborted(options.request.signal);
-    const pipeline = new RenderPipeline(renderer, scenePass);
-    partial.pipeline = pipeline;
     renderer.setRenderTarget(null);
     renderer.initTexture(waterTexture);
     renderer.initTexture(environmentRadiance);
-    await scenePass.compileAsync(renderer);
-    throwIfAborted(options.request.signal);
-    pipeline.render();
-    await probeCompletedFrame(renderer, scenePass.renderTarget);
-    throwIfAborted(options.request.signal);
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.texture,
+    await compileAndPrimePreparedWaterPresentation(
+      renderer,
+      camera,
+      createdPresentation.resources,
+      options.request.signal,
     );
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.environmentRadiance,
-    );
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.sceneColor,
-    );
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.sceneDepth,
-    );
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderTarget,
-    );
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.clipmap,
-    );
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandSwell,
-    );
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandWind,
-    );
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandChop,
-    );
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandRipple,
-    );
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.material,
-    );
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalRoute,
-    );
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
-    );
+    await completeDeclaredWork(options.request.progress, [
+      "texture",
+      "environmentRadiance",
+      "sceneColor",
+      "sceneDepth",
+      "renderTarget",
+      "clipmap",
+      "spectralBandSwell",
+      "spectralBandWind",
+      "spectralBandChop",
+      "spectralBandRipple",
+      "material",
+      "opticalRoute",
+      "renderRoute",
+      "proceduralMotion",
+      "motionVectors",
+      "inverseLinearDepth",
+      "viewNormal",
+      "opticalFactorsTarget",
+      "opticalDiagnosticsA",
+      "opticalDiagnosticsB",
+      "finalColorTarget",
+      "currentColorTarget",
+      "stockTraaHistory",
+      "traaResolveJitter",
+      "traaResetRoute",
+      "currentColorConversion",
+      "namedOutputRoutes",
+    ]);
 
-    throwIfAborted(options.request.signal);
-    for (let frame = 0; frame < HIDDEN_STABILIZATION_FRAME_COUNT; frame += 1) {
-      pipeline.render();
-      throwIfAborted(options.request.signal);
-    }
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.hiddenStabilization,
+    renderHiddenStabilizationFrames(
+      renderer,
+      camera,
+      createdPresentation.resources,
+      options.request.signal,
     );
+    await completeDeclaredWork(options.request.progress, [
+      "hiddenStabilization",
+    ]);
 
-    await probeCompletedFrame(renderer, scenePass.renderTarget);
-    throwIfAborted(options.request.signal);
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.completionProbe,
+    await probePreparedCompletion(
+      renderer,
+      createdPresentation.resources,
+      options.request.signal,
     );
+    await completeDeclaredWork(options.request.progress, ["completionProbe"]);
 
-    throwIfAborted(options.request.signal);
-    pipeline.render();
-    await probeCompletedFrame(renderer, scenePass.renderTarget);
-    throwIfAborted(options.request.signal);
-    await options.request.progress.complete(
-      MINIMAL_WATER_PREWARM_DECLARATION_IDS.mainCameraGuard,
+    await renderMainCameraGuard(
+      renderer,
+      camera,
+      createdPresentation.resources,
+      options.request.signal,
     );
+    await completeDeclaredWork(options.request.progress, ["mainCameraGuard"]);
 
     throwIfAborted(options.request.signal);
     restoreCapturedHostState();
     return createPreparedLease(
       scene,
+      renderer,
+      camera,
       {
         plane,
         geometry,
         material,
         waterTexture,
-        pipeline,
-        scenePass,
         spectralBand,
         opticalPath,
+        presentation: createdPresentation.resources,
       },
       options.invalidated,
       options.simulation,
+      options.presentation,
+      declaredDrawingBuffer,
+      options.request.manifest.manifestHash,
     );
   } catch (cause) {
     cleanupPreparation();
     throw cause;
   } finally {
     options.request.signal.removeEventListener("abort", cleanupAfterAbort);
+  }
+}
+
+async function completeDeclaredWork(
+  progress: HostPreparationRequest["progress"],
+  keys: readonly (keyof typeof MINIMAL_WATER_PREWARM_DECLARATION_IDS)[],
+): Promise<void> {
+  for (const key of keys) {
+    await progress.complete(MINIMAL_WATER_PREWARM_DECLARATION_IDS[key]);
   }
 }
 
@@ -274,26 +313,6 @@ function createWaterTexture(): DataTexture {
   return waterTexture;
 }
 
-async function probeCompletedFrame(
-  renderer: Renderer,
-  renderTarget: ReturnType<typeof pass>["renderTarget"],
-  textureIndex = 0,
-): Promise<void> {
-  const x = Math.max(0, Math.floor(renderTarget.width / 2));
-  const y = Math.max(0, Math.floor(renderTarget.height / 2));
-  const pixels = await renderer.readRenderTargetPixelsAsync(
-    renderTarget,
-    x,
-    y,
-    1,
-    1,
-    textureIndex,
-  );
-  if (pixels.length === 0) {
-    throw new Error("The minimal-water completion probe returned no pixels.");
-  }
-}
-
 function requireHostTexture(
   value: HostEnvironmentAdapter["texture"],
   label: string,
@@ -308,17 +327,34 @@ function requireHostTexture(
 
 function createPreparedLease(
   scene: Scene,
+  renderer: Renderer,
+  camera: PerspectiveCamera,
   resources: PreparedResources,
   invalidated: Promise<WebGPUDeviceLoss>,
   simulation: HostSimulationAdapter,
+  presentation: HostPresentationAdapter,
+  drawingBuffer: Readonly<{ width: number; height: number }>,
+  manifestHash: string,
 ): HostPreparedLease {
+  const presentationRoute = createPresentationRouteBridge(
+    renderer,
+    scene,
+    camera,
+    resources.presentation,
+    drawingBuffer,
+    manifestHash,
+  );
   let disposal: Promise<void> | undefined;
   return Object.freeze({
     [HOST_RUNTIME_STATE_BRIDGE]: resources.opticalPath.sink,
+    [HOST_PRESENTATION_ROUTE_BRIDGE]: presentationRoute,
     invalidated,
     simulation,
+    presentation,
     dispose(): Promise<void> {
-      disposal ??= Promise.resolve().then(() => {
+      presentationRoute.unbind();
+      disposal ??= Promise.resolve().then(async () => {
+        await presentationRoute.drain();
         disposePreparedResources(scene, resources);
       });
       return disposal;
@@ -331,8 +367,7 @@ function disposePreparedResources(
   resources: PreparedResources,
 ): void {
   scene.remove(resources.plane);
-  resources.pipeline.dispose();
-  resources.scenePass.dispose();
+  disposePreparedWaterPresentationResources(resources.presentation);
   resources.material.dispose();
   resources.geometry.dispose();
   resources.waterTexture.dispose();
@@ -348,8 +383,17 @@ function disposePartialResourcesSilently(
         scene.remove(resources.plane);
       }
     },
-    () => resources.pipeline?.dispose(),
-    () => resources.scenePass?.dispose(),
+    () => {
+      if (resources.presentation !== undefined) {
+        disposePreparedWaterPresentationResources(resources.presentation);
+        return;
+      }
+      if (resources.presentationPartial !== undefined) {
+        disposePartialPreparedWaterPresentationResources(
+          resources.presentationPartial,
+        );
+      }
+    },
     () => resources.material?.dispose(),
     () => resources.geometry?.dispose(),
     () => resources.waterTexture?.dispose(),
@@ -361,70 +405,6 @@ function disposePartialResourcesSilently(
       // Startup continues to reject with the primary preparation failure.
     }
   }
-}
-
-interface HostState {
-  readonly renderTarget: ReturnType<Renderer["getRenderTarget"]>;
-  readonly activeCubeFace: number;
-  readonly activeMipmapLevel: number;
-  readonly mrt: ReturnType<Renderer["getMRT"]>;
-  readonly toneMapping: Renderer["toneMapping"];
-  readonly outputColorSpace: Renderer["outputColorSpace"];
-  readonly autoClear: boolean;
-  readonly transparent: boolean;
-  readonly opaque: boolean;
-  readonly contextNode: Renderer["contextNode"];
-  readonly xrEnabled: boolean;
-  readonly sceneName: string;
-  readonly sceneOverrideMaterial: Scene["overrideMaterial"];
-  readonly cameraLayerMask: number;
-}
-
-function captureHostState(
-  renderer: Renderer,
-  scene: Scene,
-  camera: Camera,
-): HostState {
-  return {
-    renderTarget: renderer.getRenderTarget(),
-    activeCubeFace: renderer.getActiveCubeFace(),
-    activeMipmapLevel: renderer.getActiveMipmapLevel(),
-    mrt: renderer.getMRT(),
-    toneMapping: renderer.toneMapping,
-    outputColorSpace: renderer.outputColorSpace,
-    autoClear: renderer.autoClear,
-    transparent: renderer.transparent,
-    opaque: renderer.opaque,
-    contextNode: renderer.contextNode,
-    xrEnabled: renderer.xr.enabled,
-    sceneName: scene.name,
-    sceneOverrideMaterial: scene.overrideMaterial,
-    cameraLayerMask: camera.layers.mask,
-  };
-}
-
-function restoreHostState(
-  renderer: Renderer,
-  scene: Scene,
-  camera: Camera,
-  state: HostState,
-): void {
-  renderer.setRenderTarget(
-    state.renderTarget,
-    state.activeCubeFace,
-    state.activeMipmapLevel,
-  );
-  renderer.setMRT(state.mrt);
-  renderer.toneMapping = state.toneMapping;
-  renderer.outputColorSpace = state.outputColorSpace;
-  renderer.autoClear = state.autoClear;
-  renderer.transparent = state.transparent;
-  renderer.opaque = state.opaque;
-  renderer.contextNode = state.contextNode;
-  renderer.xr.enabled = state.xrEnabled;
-  scene.name = state.sceneName;
-  scene.overrideMaterial = state.sceneOverrideMaterial;
-  camera.layers.mask = state.cameraLayerMask;
 }
 
 function throwIfAborted(signal: AbortSignal): void {

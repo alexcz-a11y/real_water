@@ -7,6 +7,10 @@ import {
 } from "./internal/origin-revision-tracker.js";
 import { writeSpectralBandQueries } from "./internal/spectral-bands.js";
 import { createWaterPreset } from "./water-preset.js";
+import {
+  readHostPresentationState,
+  type HostPresentationAdapter,
+} from "./presentation.js";
 
 /**
  * Hot, perceptual controls for the prepared four-band Open Water Domain.
@@ -68,6 +72,12 @@ const DEFAULT_ARTISTIC_CONTROLS: ArtisticControls =
  * Gameplay Query positions are in the current Host frame; the runtime evaluates
  * the Open Water Domain at `(x + originX, z + originZ)`.
  *
+ * `simulationResetRevision` is a monotonic Host-authored reset hook. It starts
+ * at 0 from adapter creation and increments on every explicit Host simulation
+ * reset, including when seed and tick are unchanged. Seed change, tick rewind,
+ * and time rewind remain fail-safe Core resets even if this revision is
+ * unchanged.
+ *
  * @public
  */
 export interface HostSimulationState {
@@ -77,6 +87,7 @@ export interface HostSimulationState {
   readonly paused: boolean;
   readonly originX: number;
   readonly originZ: number;
+  readonly simulationResetRevision: number;
 }
 
 /**
@@ -95,7 +106,9 @@ export interface HostSimulationAdapter {
  * verified Host origin at runtime creation, increments only when that origin
  * actually changes, and is unchanged by later ticks at the same origin.
  * Spectral wave state, seed, tick, time, and Artistic Controls are retained
- * across origin shifts.
+ * across origin shifts. `seaStateCutRevision` increments only on an explicit
+ * sea-state cut. `cameraCutRevision` is read from the Host Presentation
+ * Adapter and is not stored as runtime-owned durable state.
  *
  * @public
  */
@@ -103,6 +116,28 @@ export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
   readonly artisticControls: ArtisticControls;
   readonly controlRevision: number;
   readonly originRevision: number;
+  readonly seaStateCutRevision: number;
+  readonly cameraCutRevision: number;
+}
+
+/**
+ * How an Artistic Control update treats the previous presented sea state.
+ *
+ * `continuous` updates the current field and preserves previous presented
+ * controls. `sea-state-cut` is an explicit history reset even when values are
+ * unchanged.
+ *
+ * @public
+ */
+export type ArtisticControlTransition = "continuous" | "sea-state-cut";
+
+/**
+ * Exact options for a hot Artistic Control update.
+ *
+ * @public
+ */
+export interface ArtisticControlUpdateOptions {
+  readonly transition: ArtisticControlTransition;
 }
 
 /**
@@ -114,6 +149,8 @@ export interface ArtisticControlUpdateReceipt {
   readonly artisticControls: ArtisticControls;
   readonly changed: boolean;
   readonly revision: number;
+  readonly transition: ArtisticControlTransition;
+  readonly seaStateCutRevision: number;
 }
 
 /**
@@ -156,6 +193,7 @@ export interface GameplayQueryBatch {
 export interface RealWaterRuntime {
   updateArtisticControls(
     controls: ArtisticControls,
+    options?: ArtisticControlUpdateOptions,
   ): ArtisticControlUpdateReceipt;
   queryGameplay(batch: GameplayQueryBatch): GameplayQueryResults;
   inspectRuntime(): OpenWaterRuntimeSnapshot;
@@ -168,10 +206,13 @@ export interface RuntimeStateSink {
 export function createRealWaterRuntime(
   assertActive: () => void,
   simulation: HostSimulationAdapter,
+  presentation: HostPresentationAdapter,
   sink?: RuntimeStateSink,
 ): RealWaterRuntime {
+  readHostPresentationState(presentation);
   let artisticControls = DEFAULT_ARTISTIC_CONTROLS;
   let controlRevision = 0;
+  let seaStateCutRevision = 0;
   let queryTick = -1;
   let queriesUsedThisTick = 0;
   const originRevisions = createOriginRevisionTracker(
@@ -181,19 +222,29 @@ export function createRealWaterRuntime(
   return Object.freeze({
     updateArtisticControls(
       controls: ArtisticControls,
+      options?: ArtisticControlUpdateOptions,
     ): ArtisticControlUpdateReceipt {
       assertActive();
+      const presentationState = readHostPresentationState(presentation);
+      const nextTransition = readArtisticControlUpdateOptions(options);
       const nextControls = freezeArtisticControls(controls);
       const changed = artisticControlsChanged(artisticControls, nextControls);
       if (changed) {
         artisticControls = nextControls;
         controlRevision += 1;
+      }
+      if (nextTransition === "sea-state-cut") {
+        seaStateCutRevision += 1;
+      }
+      if (changed || nextTransition === "sea-state-cut") {
         sink?.synchronize(
           readSnapshot(
             simulation,
+            presentationState,
             artisticControls,
             controlRevision,
             originRevisions,
+            seaStateCutRevision,
           ),
         );
       }
@@ -201,10 +252,13 @@ export function createRealWaterRuntime(
         artisticControls,
         changed,
         revision: controlRevision,
+        transition: nextTransition,
+        seaStateCutRevision,
       });
     },
     queryGameplay(batch: GameplayQueryBatch): GameplayQueryResults {
       assertActive();
+      readHostPresentationState(presentation);
       validateGameplayQueryBatch(batch);
       const state = readHostSimulationState(simulation);
       originRevisions.observe(state);
@@ -226,9 +280,11 @@ export function createRealWaterRuntime(
       assertActive();
       return readSnapshot(
         simulation,
+        readHostPresentationState(presentation),
         artisticControls,
         controlRevision,
         originRevisions,
+        seaStateCutRevision,
       );
     },
   });
@@ -247,6 +303,7 @@ export function createStaticHostSimulationAdapter(): HostSimulationAdapter {
     paused: true,
     originX: 0,
     originZ: 0,
+    simulationResetRevision: 0,
   });
   return Object.freeze({ snapshot: () => snapshot });
 }
@@ -277,6 +334,14 @@ export function readHostSimulationState(
   }
   if (!Number.isFinite(state.originX) || !Number.isFinite(state.originZ)) {
     throw new RangeError("Open Water origin must be finite.");
+  }
+  if (
+    !Number.isSafeInteger(state.simulationResetRevision) ||
+    state.simulationResetRevision < 0
+  ) {
+    throw new RangeError(
+      "Open Water simulationResetRevision must be a non-negative safe integer.",
+    );
   }
   return state;
 }
@@ -354,11 +419,35 @@ function freezeSnapshot(
   return Object.freeze({ ...snapshot });
 }
 
+function readArtisticControlUpdateOptions(
+  options: ArtisticControlUpdateOptions | undefined,
+): ArtisticControlTransition {
+  if (options === undefined) {
+    return "continuous";
+  }
+  if (!isRecord(options) || !hasExactKeys(options, ["transition"])) {
+    throw new TypeError(
+      "Artistic Control update options must use the exact supported set.",
+    );
+  }
+  if (
+    options.transition !== "continuous" &&
+    options.transition !== "sea-state-cut"
+  ) {
+    throw new TypeError(
+      "Artistic Control transition must be continuous or sea-state-cut.",
+    );
+  }
+  return options.transition;
+}
+
 function readSnapshot(
   simulation: HostSimulationAdapter,
+  presentationState: ReturnType<typeof readHostPresentationState>,
   artisticControls: ArtisticControls,
   controlRevision: number,
   originRevisions: OriginRevisionTracker,
+  seaStateCutRevision: number,
 ): OpenWaterRuntimeSnapshot {
   const state = readHostSimulationState(simulation);
   return freezeSnapshot({
@@ -368,9 +457,12 @@ function readSnapshot(
     paused: state.paused,
     originX: state.originX,
     originZ: state.originZ,
+    simulationResetRevision: state.simulationResetRevision,
     artisticControls,
     controlRevision,
     originRevision: originRevisions.observe(state),
+    seaStateCutRevision,
+    cameraCutRevision: presentationState.cameraCutRevision,
   });
 }
 

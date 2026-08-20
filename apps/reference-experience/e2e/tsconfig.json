@@ -1,0 +1,28 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "outDir": "dist-types",
+    "rootDir": ".",
+    "tsBuildInfoFile": "dist-types/tsconfig.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": [
+    "./regression-acceptance-evidence.ts",
+    "./optical-screenshot-profile.ts",
+    "./host-power-profile.ts"
+  ],
+  "references": [
+    {
+      "path": ".."
+    },
+    {
+      "path": "../../../packages/real-water"
+    }
+  ]
+}

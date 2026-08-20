@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createMemoryHostLifecycleAdapter,
   createMinimalWaterPrewarmManifest,
+  createStaticHostPresentationAdapter,
   createStaticHostSimulationAdapter,
   createWaterPreset,
   prepareRealWater,
@@ -169,6 +170,7 @@ describe("Water Preset runtime switching", () => {
       host: createMemoryHostLifecycleAdapter({
         simulation: createStaticHostSimulationAdapter(),
         environment: createTestEnvironmentAdapter(),
+        presentation: createStaticHostPresentationAdapter(),
         stepDelayMs: 0,
       }),
     }).ready;

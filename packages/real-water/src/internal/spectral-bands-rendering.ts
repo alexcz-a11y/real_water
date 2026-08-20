@@ -5,14 +5,19 @@ import {
   float,
   highpModelNormalViewMatrix,
   length,
+  Fn,
   mix,
+  nodeObject,
+  NodeUpdateType,
   positionGeometry,
+  positionPrevious,
   sin,
   smoothstep,
   uniform,
   vec2,
   vec3,
 } from "three/tsl";
+import { Node } from "three/webgpu";
 import type {
   ArtisticControls,
   HostSimulationAdapter,
@@ -20,6 +25,10 @@ import type {
   RuntimeStateSink,
 } from "../runtime.js";
 import { readHostSimulationState } from "../runtime.js";
+import {
+  readHostPresentationState,
+  type HostPresentationAdapter,
+} from "../presentation.js";
 import {
   BAND_GEOMETRY_FADE_END_FACTOR,
   BAND_GEOMETRY_FADE_START_FACTOR,
@@ -49,6 +58,7 @@ const INITIAL_ARTISTIC_CONTROLS: ArtisticControls =
 
 export function createSpectralBandRendering(
   simulation: HostSimulationAdapter,
+  presentation: HostPresentationAdapter,
   innerCellMetres: number,
 ) {
   const originX = uniform(0);
@@ -62,19 +72,28 @@ export function createSpectralBandRendering(
   const farWhiteOriginPhaseA = uniform(0);
   const farWhiteOriginPhaseB = uniform(0);
   const initialBands = prepareSpectralBands(INITIAL_ARTISTIC_CONTROLS);
-  const bandUniforms = SPECTRAL_BANDS.map((band, index) => {
-    const initial = initialBands[index];
-    return {
-      amplitude: uniform(initial?.amplitude ?? 0),
-      wavelengthMetres: band.wavelengthMetres,
-      waveNumber: (Math.PI * 2) / band.wavelengthMetres,
-      angularFrequency: (Math.PI * 2) / band.periodSeconds,
-      directionX: uniform(initial?.directionX ?? 1),
-      directionZ: uniform(initial?.directionZ ?? 0),
-      originPhase: uniform(0),
-      rotatedOriginPhase: uniform(0),
-    };
-  });
+  const createBandUniforms = () =>
+    SPECTRAL_BANDS.map((band, index) => {
+      const initial = initialBands[index];
+      return {
+        amplitude: uniform(initial?.amplitude ?? 0),
+        wavelengthMetres: band.wavelengthMetres,
+        waveNumber: (Math.PI * 2) / band.wavelengthMetres,
+        angularFrequency: (Math.PI * 2) / band.periodSeconds,
+        directionX: uniform(initial?.directionX ?? 1),
+        directionZ: uniform(initial?.directionZ ?? 0),
+        originPhase: uniform(0),
+        rotatedOriginPhase: uniform(0),
+      };
+    });
+  const bandUniforms = createBandUniforms();
+  const previousBandUniforms = createBandUniforms();
+  const previousPhaseOffset = uniform(0);
+  const previousTimeSeconds = uniform(0);
+  const previousTimeScale = uniform(1);
+  const previousCrestSharpness = uniform(0);
+  const previousBlendOriginPhaseA = uniform(0);
+  const previousBlendOriginPhaseB = uniform(0);
 
   const createHostSample = () => {
     // Clipmap snap uniforms stay in the Host frame. positionLocal includes that
@@ -102,24 +121,53 @@ export function createSpectralBandRendering(
   type ViewDistance = ReturnType<typeof viewDistanceNode>;
   type SlopeFade = ReturnType<typeof slopeFadeNode>;
 
+  type BandUniforms = (typeof bandUniforms)[number];
+  type WaveFieldNodes = Readonly<{
+    readonly phaseOffset: typeof phaseOffset;
+    readonly timeSeconds: typeof timeSeconds;
+    readonly timeScale: typeof timeScale;
+    readonly crestSharpness: typeof crestSharpness;
+    readonly blendOriginPhaseA: typeof blendOriginPhaseA;
+    readonly blendOriginPhaseB: typeof blendOriginPhaseB;
+    readonly bands: readonly BandUniforms[];
+  }>;
+  const currentWaveField: WaveFieldNodes = {
+    phaseOffset,
+    timeSeconds,
+    timeScale,
+    crestSharpness,
+    blendOriginPhaseA,
+    blendOriginPhaseB,
+    bands: bandUniforms,
+  };
+  const previousWaveField: WaveFieldNodes = {
+    phaseOffset: previousPhaseOffset,
+    timeSeconds: previousTimeSeconds,
+    timeScale: previousTimeScale,
+    crestSharpness: previousCrestSharpness,
+    blendOriginPhaseA: previousBlendOriginPhaseA,
+    blendOriginPhaseB: previousBlendOriginPhaseB,
+    bands: previousBandUniforms,
+  };
   const evaluatePeriodicField = (
     sampleX: WaveAxis,
     sampleZ: WaveAxis,
-    originPhaseOf: (band: (typeof bandUniforms)[number]) => WaveAxis,
+    originPhaseOf: (band: BandUniforms) => WaveAxis,
     viewDistance: ViewDistance,
     slopeFade: SlopeFade,
+    field: WaveFieldNodes,
   ) => {
-    const contributions = bandUniforms.map((band) => {
+    const contributions = field.bands.map((band) => {
       const phase = sampleX
         .mul(band.waveNumber)
         .mul(band.directionX)
         .add(sampleZ.mul(band.waveNumber).mul(band.directionZ))
-        .add(phaseOffset)
+        .add(field.phaseOffset)
         .add(originPhaseOf(band))
-        .sub(timeSeconds.mul(band.angularFrequency).mul(timeScale));
+        .sub(field.timeSeconds.mul(band.angularFrequency).mul(field.timeScale));
       const sine = sin(phase);
       const cosine = cos(phase);
-      const secondHarmonic = crestSharpness.mul(0.25);
+      const secondHarmonic = field.crestSharpness.mul(0.25);
       const wave = sine.sub(secondHarmonic.mul(sin(phase.mul(2))));
       const derivative = cosine.sub(
         secondHarmonic.mul(2).mul(cos(phase.mul(2))),
@@ -180,17 +228,21 @@ export function createSpectralBandRendering(
     };
   };
 
-  const blendWeightNode = (hostX: WaveAxis, hostZ: WaveAxis) => {
+  const blendWeightNode = (
+    hostX: WaveAxis,
+    hostZ: WaveAxis,
+    field: WaveFieldNodes,
+  ) => {
     const argumentA = hostX
       .mul(NON_PERIODIC_BLEND_K1)
       .add(hostZ.mul(NON_PERIODIC_BLEND_K2))
-      .add(phaseOffset)
-      .add(blendOriginPhaseA);
+      .add(field.phaseOffset)
+      .add(field.blendOriginPhaseA);
     const argumentB = hostX
       .mul(NON_PERIODIC_BLEND_K2)
       .sub(hostZ.mul(NON_PERIODIC_BLEND_K1).mul(0.7))
-      .add(phaseOffset.mul(1.3))
-      .add(blendOriginPhaseB);
+      .add(field.phaseOffset.mul(1.3))
+      .add(field.blendOriginPhaseB);
     const sineA = sin(argumentA);
     const sineB = sin(argumentB);
     const blendField = sineA.mul(sineB);
@@ -229,6 +281,7 @@ export function createSpectralBandRendering(
     hostZ: WaveAxis,
     viewDistance: ViewDistance,
     slopeFade: SlopeFade,
+    field: WaveFieldNodes,
   ) => {
     const primary = evaluatePeriodicField(
       hostX,
@@ -236,6 +289,7 @@ export function createSpectralBandRendering(
       (band) => band.originPhase,
       viewDistance,
       slopeFade,
+      field,
     );
     const rotated = rotatedDomain(hostX, hostZ);
     const secondary = evaluatePeriodicField(
@@ -244,8 +298,9 @@ export function createSpectralBandRendering(
       (band) => band.rotatedOriginPhase,
       viewDistance,
       slopeFade,
+      field,
     );
-    const blend = blendWeightNode(hostX, hostZ);
+    const blend = blendWeightNode(hostX, hostZ, field);
     const secondarySlopeX = secondary.slopeX
       .mul(NON_PERIODIC_ROTATION_COS)
       .add(secondary.slopeZ.mul(NON_PERIODIC_ROTATION_SIN));
@@ -280,8 +335,17 @@ export function createSpectralBandRendering(
     vertexSample.hostZ,
     vertexViewDistance,
     vertexSlopeFade,
+    currentWaveField,
   );
   const vertexHeight = vertexSurface.height.toVertexStage();
+  const previousVertexSurface = evaluateBlendedSurface(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    vertexViewDistance,
+    vertexSlopeFade,
+    previousWaveField,
+  );
+  const previousVertexHeight = previousVertexSurface.height.toVertexStage();
 
   const fragmentSample = createHostSample();
   const fragmentViewDistance = viewDistanceNode(
@@ -294,6 +358,7 @@ export function createSpectralBandRendering(
     fragmentSample.hostZ,
     fragmentViewDistance,
     fragmentSlopeFade,
+    currentWaveField,
   );
 
   const localNormal = vec3(
@@ -340,33 +405,37 @@ export function createSpectralBandRendering(
   const writeOriginPhases = (
     originXValue: number,
     originZValue: number,
+    field: WaveFieldNodes,
+    writeFarWhite: boolean,
   ): void => {
     const rotated = rotateOrigin(originXValue, originZValue);
-    blendOriginPhaseA.value = originSamplePhase(
+    field.blendOriginPhaseA.value = originSamplePhase(
       originXValue,
       originZValue,
       NON_PERIODIC_BLEND_K1,
       NON_PERIODIC_BLEND_K2,
     );
-    blendOriginPhaseB.value = originSamplePhase(
+    field.blendOriginPhaseB.value = originSamplePhase(
       originXValue,
       originZValue,
       NON_PERIODIC_BLEND_K2,
       -NON_PERIODIC_BLEND_K1 * 0.7,
     );
-    farWhiteOriginPhaseA.value = originSamplePhase(
-      originXValue,
-      originZValue,
-      FAR_WHITE_PRIMARY_X,
-      FAR_WHITE_PRIMARY_Z,
-    );
-    farWhiteOriginPhaseB.value = originSamplePhase(
-      originXValue,
-      originZValue,
-      FAR_WHITE_SECONDARY_X,
-      -FAR_WHITE_SECONDARY_Z,
-    );
-    for (const uniforms of bandUniforms) {
+    if (writeFarWhite) {
+      farWhiteOriginPhaseA.value = originSamplePhase(
+        originXValue,
+        originZValue,
+        FAR_WHITE_PRIMARY_X,
+        FAR_WHITE_PRIMARY_Z,
+      );
+      farWhiteOriginPhaseB.value = originSamplePhase(
+        originXValue,
+        originZValue,
+        FAR_WHITE_SECONDARY_X,
+        -FAR_WHITE_SECONDARY_Z,
+      );
+    }
+    for (const uniforms of field.bands) {
       uniforms.originPhase.value = originSamplePhase(
         originXValue,
         originZValue,
@@ -381,14 +450,21 @@ export function createSpectralBandRendering(
       );
     }
   };
-  const applySnapshot = (snapshot: OpenWaterRuntimeSnapshot): void => {
+  const writeWaveField = (
+    field: WaveFieldNodes,
+    snapshot: Pick<
+      OpenWaterRuntimeSnapshot,
+      "seed" | "timeSeconds" | "originX" | "originZ" | "artisticControls"
+    >,
+    writeFarWhite: boolean,
+  ): void => {
     const prepared = prepareSpectralBands(snapshot.artisticControls);
-    phaseOffset.value = spectralBandPhaseOffset(snapshot.seed);
-    timeSeconds.value = snapshot.timeSeconds;
-    timeScale.value = snapshot.artisticControls.timeScale;
-    crestSharpness.value = snapshot.artisticControls.crestSharpness;
-    for (let index = 0; index < bandUniforms.length; index += 1) {
-      const uniforms = bandUniforms[index];
+    field.phaseOffset.value = spectralBandPhaseOffset(snapshot.seed);
+    field.timeSeconds.value = snapshot.timeSeconds;
+    field.timeScale.value = snapshot.artisticControls.timeScale;
+    field.crestSharpness.value = snapshot.artisticControls.crestSharpness;
+    for (let index = 0; index < field.bands.length; index += 1) {
+      const uniforms = field.bands[index];
       const next = prepared[index];
       if (uniforms === undefined || next === undefined) {
         continue;
@@ -397,95 +473,103 @@ export function createSpectralBandRendering(
       uniforms.directionX.value = next.directionX;
       uniforms.directionZ.value = next.directionZ;
     }
-    writeOriginPhases(snapshot.originX, snapshot.originZ);
+    writeOriginPhases(snapshot.originX, snapshot.originZ, field, writeFarWhite);
   };
-  originX.onRenderUpdate(({ camera }) => {
-    if (camera === null) {
-      return originX.value;
+  type PresentedWaveField = Readonly<{
+    readonly seed: number;
+    readonly tick: number;
+    readonly timeSeconds: number;
+    readonly originX: number;
+    readonly originZ: number;
+    readonly simulationResetRevision: number;
+    readonly cameraCutRevision: number;
+    readonly seaStateCutRevision: number;
+    readonly artisticControls: ArtisticControls;
+  }>;
+  let desiredControls = INITIAL_ARTISTIC_CONTROLS;
+  let desiredSeaStateCutRevision = 0;
+  let committed: PresentedWaveField | null = null;
+  let pending: PresentedWaveField | null = null;
+  const shouldResetWaveHistory = (current: PresentedWaveField): boolean =>
+    committed === null ||
+    committed.seed !== current.seed ||
+    committed.simulationResetRevision !== current.simulationResetRevision ||
+    committed.originX !== current.originX ||
+    committed.originZ !== current.originZ ||
+    current.timeSeconds < committed.timeSeconds ||
+    current.tick < committed.tick ||
+    committed.cameraCutRevision !== current.cameraCutRevision ||
+    committed.seaStateCutRevision !== current.seaStateCutRevision;
+  class WaveFieldPresentationNode extends Node {
+    constructor() {
+      super("void");
+      this.updateBeforeType = NodeUpdateType.RENDER;
+      this.updateAfterType = NodeUpdateType.RENDER;
     }
-    snapClipmapToCamera(camera, originX, originZ, innerCellMetres);
-    return originX.value;
-  });
-  originZ.onRenderUpdate(({ camera }) => {
-    if (camera === null) {
-      return originZ.value;
+
+    override updateBefore(frame: { readonly camera: unknown }): undefined {
+      const state = readHostSimulationState(simulation);
+      const presentationState = readHostPresentationState(presentation);
+      const current: PresentedWaveField = {
+        seed: state.seed,
+        tick: state.tick,
+        timeSeconds: state.timeSeconds,
+        originX: state.originX,
+        originZ: state.originZ,
+        simulationResetRevision: state.simulationResetRevision,
+        cameraCutRevision: presentationState.cameraCutRevision,
+        seaStateCutRevision: desiredSeaStateCutRevision,
+        artisticControls: desiredControls,
+      };
+      const previous = shouldResetWaveHistory(current) ? current : committed;
+      writeWaveField(currentWaveField, current, true);
+      writeWaveField(previousWaveField, previous ?? current, false);
+      const camera = frame.camera;
+      if (
+        camera !== null &&
+        typeof camera === "object" &&
+        "updateMatrixWorld" in camera &&
+        "matrixWorld" in camera
+      ) {
+        snapClipmapToCamera(
+          camera as {
+            updateMatrixWorld(): void;
+            readonly matrixWorld: { readonly elements: ArrayLike<number> };
+          },
+          originX,
+          originZ,
+          innerCellMetres,
+        );
+      }
+      pending = current;
     }
-    snapClipmapToCamera(camera, originX, originZ, innerCellMetres);
-    return originZ.value;
-  });
-  phaseOffset.onRenderUpdate(() =>
-    spectralBandPhaseOffset(readHostSimulationState(simulation).seed),
-  );
-  timeSeconds.onRenderUpdate(
-    () => readHostSimulationState(simulation).timeSeconds,
-  );
-  blendOriginPhaseA.onRenderUpdate(() => {
-    const state = readHostSimulationState(simulation);
-    return originSamplePhase(
-      state.originX,
-      state.originZ,
-      NON_PERIODIC_BLEND_K1,
-      NON_PERIODIC_BLEND_K2,
-    );
-  });
-  blendOriginPhaseB.onRenderUpdate(() => {
-    const state = readHostSimulationState(simulation);
-    return originSamplePhase(
-      state.originX,
-      state.originZ,
-      NON_PERIODIC_BLEND_K2,
-      -NON_PERIODIC_BLEND_K1 * 0.7,
-    );
-  });
-  farWhiteOriginPhaseA.onRenderUpdate(() => {
-    const state = readHostSimulationState(simulation);
-    return originSamplePhase(
-      state.originX,
-      state.originZ,
-      FAR_WHITE_PRIMARY_X,
-      FAR_WHITE_PRIMARY_Z,
-    );
-  });
-  farWhiteOriginPhaseB.onRenderUpdate(() => {
-    const state = readHostSimulationState(simulation);
-    return originSamplePhase(
-      state.originX,
-      state.originZ,
-      FAR_WHITE_SECONDARY_X,
-      -FAR_WHITE_SECONDARY_Z,
-    );
-  });
-  for (const uniforms of bandUniforms) {
-    uniforms.originPhase.onRenderUpdate(() => {
-      const state = readHostSimulationState(simulation);
-      return originSamplePhase(
-        state.originX,
-        state.originZ,
-        uniforms.waveNumber * uniforms.directionX.value,
-        uniforms.waveNumber * uniforms.directionZ.value,
-      );
-    });
-    uniforms.rotatedOriginPhase.onRenderUpdate(() => {
-      const state = readHostSimulationState(simulation);
-      const rotated = rotateOrigin(state.originX, state.originZ);
-      return originSamplePhase(
-        rotated.x,
-        rotated.z,
-        uniforms.waveNumber * uniforms.directionX.value,
-        uniforms.waveNumber * uniforms.directionZ.value,
-      );
-    });
+
+    override updateAfter(): undefined {
+      if (pending !== null) {
+        committed = pending;
+        pending = null;
+      }
+    }
   }
+  const presentationNode = new WaveFieldPresentationNode();
+  const positionNode = Fn(() => {
+    nodeObject(presentationNode).toStack();
+    positionPrevious.assign(
+      vec3(vertexSample.hostX, previousVertexHeight, vertexSample.hostZ),
+    );
+    return vec3(vertexSample.hostX, vertexHeight, vertexSample.hostZ);
+  })();
   const sink: RuntimeStateSink = Object.freeze({
     synchronize(snapshot: OpenWaterRuntimeSnapshot): void {
-      applySnapshot(snapshot);
+      desiredControls = snapshot.artisticControls;
+      desiredSeaStateCutRevision = snapshot.seaStateCutRevision;
     },
   });
 
   return Object.freeze({
     originX,
     originZ,
-    positionNode: vec3(vertexSample.hostX, vertexHeight, vertexSample.hostZ),
+    positionNode,
     normalNode: highpModelNormalViewMatrix.mul(localNormal).normalize(),
     worldNormalNode: localNormal,
     viewDirectionNode: viewDirection,

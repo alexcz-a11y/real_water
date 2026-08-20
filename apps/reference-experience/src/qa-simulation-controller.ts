@@ -8,7 +8,8 @@ export interface QaHostSimulationController extends HostSimulationAdapter {
 }
 
 export function createQaHostSimulationController(): QaHostSimulationController {
-  let state = freezeState(0, 0, 0, 0);
+  let simulationResetRevision = 0;
+  let state = freezeState(0, 0, 0, 0, simulationResetRevision);
   return Object.freeze({
     snapshot: () => state,
     reset(seed: number): HostSimulationState {
@@ -17,7 +18,8 @@ export function createQaHostSimulationController(): QaHostSimulationController {
           "QA simulation seeds must be unsigned 32-bit integers.",
         );
       }
-      state = freezeState(seed, 0, 0, 0);
+      simulationResetRevision += 1;
+      state = freezeState(seed, 0, 0, 0, simulationResetRevision);
       return state;
     },
     advance(ticks: number): HostSimulationState {
@@ -35,6 +37,7 @@ export function createQaHostSimulationController(): QaHostSimulationController {
         state.tick + ticks,
         state.originX,
         state.originZ,
+        simulationResetRevision,
       );
       return state;
     },
@@ -42,7 +45,13 @@ export function createQaHostSimulationController(): QaHostSimulationController {
       if (!Number.isFinite(originX) || !Number.isFinite(originZ)) {
         throw new RangeError("QA origin must be finite.");
       }
-      state = freezeState(state.seed, state.tick, originX, originZ);
+      state = freezeState(
+        state.seed,
+        state.tick,
+        originX,
+        originZ,
+        simulationResetRevision,
+      );
       return state;
     },
   });
@@ -53,6 +62,7 @@ function freezeState(
   tick: number,
   originX: number,
   originZ: number,
+  simulationResetRevision: number,
 ): HostSimulationState {
   return Object.freeze({
     seed,
@@ -61,5 +71,6 @@ function freezeState(
     paused: false,
     originX,
     originZ,
+    simulationResetRevision,
   });
 }

@@ -12,7 +12,7 @@ export const QUALITY_PROFILE_SCHEMA = "real-water/quality-profile" as const;
  *
  * @public
  */
-export const QUALITY_PROFILE_VERSION = 1 as const;
+export const QUALITY_PROFILE_VERSION = 2 as const;
 
 /**
  * Built-in structural configurations for the minimal-water surface.
@@ -41,6 +41,21 @@ export interface QualityProfileSurface {
 }
 
 /**
+ * Native temporal policy pinned by every supported Quality Profile.
+ *
+ * @public
+ */
+export interface QualityProfileTemporal {
+  readonly mode: "TRAA";
+  readonly renderScale: 1;
+  readonly resolutionPolicy: "drawing-buffer-exact";
+  readonly taau: false;
+  readonly dynamicResolution: false;
+  readonly frameGeneration: false;
+  readonly msaaSamples: 0;
+}
+
+/**
  * A closed, versioned structural configuration prepared by the Readiness Gate.
  *
  * @public
@@ -51,6 +66,7 @@ export interface QualityProfile {
   readonly id: MinimalWaterQualityProfileId;
   readonly profileHash: string;
   readonly surface: QualityProfileSurface;
+  readonly temporal: QualityProfileTemporal;
 }
 
 /**
@@ -72,19 +88,29 @@ interface SupportedQualityProfile {
 }
 
 // Each static hash is the SHA-256 digest of the profile's canonical JSON,
-// excluding profileHash and preserving the public field order.
+// excluding profileHash and preserving the public field order:
+// schema, version, id, surface, temporal.
+const NATIVE_TEMPORAL: QualityProfileTemporal = Object.freeze({
+  mode: "TRAA",
+  renderScale: 1,
+  resolutionPolicy: "drawing-buffer-exact",
+  taau: false,
+  dynamicResolution: false,
+  frameGeneration: false,
+  msaaSamples: 0,
+});
 const SUPPORTED_QUALITY_PROFILES: Readonly<
   Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:10dcb2e1e7b9e4cf47a49e6805329fd9a9906c198537934603b65a219c4f1f86",
+      "sha256:647ceaf12d769ddc4a95414593ca23131f3ec9a516a32341517609d4788cbc73",
     widthSegments: 128,
     heightSegments: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:a528f78e921767962db0afcf519aed7dbfed894e54284fcb7b2c7d21e93e1d0b",
+      "sha256:975a61a72c43c660866970618ee747db41fab60cd54d6cce6654edd7376b8ba3",
     widthSegments: 256,
     heightSegments: 256,
   }),
@@ -119,6 +145,7 @@ export function createMinimalWaterQualityProfile(
         heightSegments: supported.heightSegments,
       },
     },
+    temporal: NATIVE_TEMPORAL,
   });
 }
 
@@ -137,6 +164,7 @@ export function normalizeQualityProfile(
       "id",
       "profileHash",
       "surface",
+      "temporal",
     ]) ||
     !isSupportedProfileId(value.id)
   ) {
@@ -158,7 +186,24 @@ export function normalizeQualityProfile(
     value.surface.geometry.widthSegments !==
       supported.surface.geometry.widthSegments ||
     value.surface.geometry.heightSegments !==
-      supported.surface.geometry.heightSegments
+      supported.surface.geometry.heightSegments ||
+    !isRecord(value.temporal) ||
+    !hasExactKeys(value.temporal, [
+      "mode",
+      "renderScale",
+      "resolutionPolicy",
+      "taau",
+      "dynamicResolution",
+      "frameGeneration",
+      "msaaSamples",
+    ]) ||
+    value.temporal.mode !== supported.temporal.mode ||
+    value.temporal.renderScale !== supported.temporal.renderScale ||
+    value.temporal.resolutionPolicy !== supported.temporal.resolutionPolicy ||
+    value.temporal.taau !== supported.temporal.taau ||
+    value.temporal.dynamicResolution !== supported.temporal.dynamicResolution ||
+    value.temporal.frameGeneration !== supported.temporal.frameGeneration ||
+    value.temporal.msaaSamples !== supported.temporal.msaaSamples
   ) {
     throw new TypeError(
       "The Quality Profile does not match a supported structural configuration.",
@@ -199,6 +244,7 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
       ...profile.surface,
       geometry: Object.freeze({ ...profile.surface.geometry }),
     }),
+    temporal: Object.freeze({ ...profile.temporal }),
   });
 }
 

@@ -10,16 +10,23 @@ import {
 import { WebGPURenderer } from "three/webgpu";
 import {
   createMinimalWaterQualityProfile,
+  createStaticHostPresentationAdapter,
   createStaticHostSimulationAdapter,
   createThreeHostLifecycleAdapter,
   type HostLifecycleAdapter,
   type HostPreparationRequest,
   type MemoryHostScenario,
+  type PrewarmDrawingBuffer,
   type RealWaterLease,
   type WebGPUDeviceLoss,
 } from "real-water";
-import type { QaFrameSource, QaHarnessV4 } from "./qa-harness.js";
+import type { QaFrameSource, QaHarnessV5 } from "./qa-harness.js";
 import type * as QaHarnessModuleContract from "./qa-harness.js";
+import {
+  createReferenceHostPresentationController,
+  type ReferenceHostPresentationController,
+} from "./reference-presentation-controller.js";
+import { createReferenceHostSimulationController } from "./reference-simulation-controller.js";
 import { createReferenceEnvironmentAdapter } from "./reference-optical-inputs.js";
 import {
   startReferenceExperience,
@@ -35,11 +42,22 @@ if (mount === null) {
 const parameters = new URLSearchParams(window.location.search);
 const qaHarnessModule =
   import.meta.env.MODE === "test" ? await import("./qa-harness.js") : null;
-const hostSetup = createHostSetup(parameters, qaHarnessModule);
+const presentationFailureSink: {
+  report(cause: unknown): void;
+} = {
+  report() {},
+};
+const hostSetup = createHostSetup(parameters, qaHarnessModule, (cause) => {
+  presentationFailureSink.report(cause);
+});
 const referenceSession = startReferenceExperience(mount, {
   createHostAttempt: hostSetup.createHostAttempt,
+  initialDrawingBuffer: readPhysicalDrawingBuffer(),
   revealDelayFrames: readRevealFrames(parameters, qaHarnessModule !== null),
 });
+presentationFailureSink.report = (cause) => {
+  void referenceSession.reportPresentationFailure(cause);
+};
 let lifecycleRecoveryHandled = true;
 let disposal: Promise<void> | undefined;
 
@@ -65,11 +83,21 @@ const handlePageShow = (event: PageTransitionEvent): void => {
     recoverFromLifecycleSuspension();
   }
 };
+const handleViewportResize = (): void => {
+  const drawingBuffer = readPhysicalDrawingBuffer();
+  void referenceSession
+    .applyViewport({
+      drawingBufferWidth: drawingBuffer.width,
+      drawingBufferHeight: drawingBuffer.height,
+    })
+    .catch(() => {});
+};
 const session = Object.freeze({
   dispose(): Promise<void> {
     disposal ??= (async () => {
       window.removeEventListener("pagehide", handlePageHide);
       window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("resize", handleViewportResize);
       document.removeEventListener("freeze", markLifecycleSuspension);
       document.removeEventListener("resume", recoverFromLifecycleSuspension);
       await referenceSession.dispose();
@@ -80,6 +108,7 @@ const session = Object.freeze({
 
 window.addEventListener("pagehide", handlePageHide);
 window.addEventListener("pageshow", handlePageShow);
+window.addEventListener("resize", handleViewportResize);
 document.addEventListener("freeze", markLifecycleSuspension);
 document.addEventListener("resume", recoverFromLifecycleSuspension);
 
@@ -105,7 +134,9 @@ if (qaHarnessModule !== null && parameters.get("qa") === "1") {
 type QaHarnessModule = typeof QaHarnessModuleContract;
 
 interface ReferenceHostSetup {
-  readonly createHostAttempt: () => ReferenceHostAttempt;
+  readonly createHostAttempt: (
+    drawingBuffer: PrewarmDrawingBuffer,
+  ) => ReferenceHostAttempt;
   readonly frameSource: () => QaFrameSource | null;
   readonly synthesizeDeviceLoss?: () => void;
 }
@@ -113,6 +144,7 @@ interface ReferenceHostSetup {
 function createHostSetup(
   parameters: URLSearchParams,
   qaModule: QaHarnessModule | null,
+  onPresentationError?: (cause: unknown) => void,
 ): ReferenceHostSetup {
   if (
     qaModule !== null &&
@@ -165,10 +197,12 @@ function createHostSetup(
 
   let activeFrameSource: QaFrameSource | null = null;
   return {
-    createHostAttempt: () => {
+    createHostAttempt: (drawingBuffer: PrewarmDrawingBuffer) => {
       const created = createThreeReferenceHostAttempt(
         parameters,
         parameters.get("qa") === "1" ? qaModule : null,
+        drawingBuffer,
+        onPresentationError,
       );
       activeFrameSource = created.frameSource;
       return {
@@ -202,6 +236,7 @@ function createControllableMemoryHost(
     scenario,
     simulation: createStaticHostSimulationAdapter(),
     environment: createReferenceEnvironmentAdapter(),
+    presentation: createStaticHostPresentationAdapter(),
     stepDelayMs,
   });
   let resolveLoss: (loss: WebGPUDeviceLoss) => void = () => {};
@@ -256,6 +291,8 @@ interface CreatedThreeReferenceHostAttempt {
 function createThreeReferenceHostAttempt(
   parameters: URLSearchParams,
   qaModule: QaHarnessModule | null,
+  drawingBuffer: PrewarmDrawingBuffer,
+  onPresentationError?: (cause: unknown) => void,
 ): CreatedThreeReferenceHostAttempt {
   const renderer = new WebGPURenderer({
     forceWebGL: parameters.get("forceWebGL") === "1",
@@ -264,8 +301,8 @@ function createThreeReferenceHostAttempt(
   scene.background = new Color(0x031019);
   const seabed = addReferenceSeabed(scene);
 
-  const width = Math.max(1, window.innerWidth);
-  const height = Math.max(1, window.innerHeight);
+  const width = drawingBuffer.width;
+  const height = drawingBuffer.height;
   const camera = new PerspectiveCamera(50, width / height, 0.1, 4_000);
   camera.position.set(8, 6, 10);
   camera.lookAt(0, 0, 0);
@@ -276,7 +313,36 @@ function createThreeReferenceHostAttempt(
   renderer.setSize(width, height, false);
   let disposed = false;
   const qaSimulation = qaModule?.createQaHostSimulationController();
-  const simulation = qaSimulation ?? createStaticHostSimulationAdapter();
+  const qaPresentation = qaModule?.createQaHostPresentationController();
+  let referencePresentation: ReferenceHostPresentationController | undefined;
+  const referenceSimulation =
+    qaSimulation === undefined
+      ? createReferenceHostSimulationController()
+      : undefined;
+  let referenceSimulationStarted = false;
+  const presentation =
+    qaPresentation ??
+    (referencePresentation = createReferenceHostPresentationController({
+      ...(onPresentationError === undefined
+        ? {}
+        : { onError: onPresentationError }),
+      beforePresent: (timestamp) => {
+        const simulationController = referenceSimulation;
+        if (simulationController === undefined) {
+          return;
+        }
+        if (!referenceSimulationStarted) {
+          referenceSimulationStarted = true;
+          simulationController.start(timestamp);
+          return;
+        }
+        simulationController.beforePresent(timestamp);
+      },
+    }));
+  const simulation = qaSimulation ?? referenceSimulation;
+  if (simulation === undefined) {
+    throw new Error("The Reference Host Simulation Controller is unavailable.");
+  }
   const environment = createReferenceEnvironmentAdapter();
   const baseHost = createThreeHostLifecycleAdapter({
     renderer,
@@ -284,18 +350,20 @@ function createThreeReferenceHostAttempt(
     camera,
     simulation,
     environment,
+    presentation,
   });
   const frameSource =
-    (qaSimulation === undefined
+    qaSimulation === undefined || qaPresentation === undefined
       ? null
-      : qaModule?.createQaThreeFrameSource(
+      : (qaModule?.createQaThreeFrameSource(
           baseHost,
           renderer,
           scene,
           camera,
           qaSimulation,
           environment,
-        )) ?? null;
+          qaPresentation,
+        ) ?? null);
 
   return Object.freeze({
     frameSource,
@@ -303,7 +371,9 @@ function createThreeReferenceHostAttempt(
       host: frameSource?.host ?? baseHost,
       createReadyStage: (lease: RealWaterLease) => {
         frameSource?.bindLease(lease);
-        return createCanvasStage(renderer, lease);
+        const stage = createCanvasStage(renderer, lease);
+        referencePresentation?.start();
+        return stage;
       },
       dispose: () => {
         if (!disposed) {
@@ -406,6 +476,13 @@ function readDelay(value: string | null): number {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 2_000) : 80;
 }
 
+function readPhysicalDrawingBuffer(): PrewarmDrawingBuffer {
+  return Object.freeze({
+    width: Math.max(1, Math.floor(window.innerWidth)),
+    height: Math.max(1, Math.floor(window.innerHeight)),
+  });
+}
+
 function readRevealFrames(
   parameters: URLSearchParams,
   qaBuild: boolean,
@@ -422,6 +499,6 @@ function readRevealFrames(
 
 declare global {
   interface Window {
-    __REAL_WATER_QA__?: QaHarnessV4;
+    __REAL_WATER_QA__?: QaHarnessV5;
   }
 }

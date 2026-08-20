@@ -22,6 +22,15 @@ export interface ArtisticControls {
 }
 
 // @public
+export type ArtisticControlTransition = "continuous" | "sea-state-cut";
+
+// @public
+export interface ArtisticControlUpdateOptions {
+    // (undocumented)
+    readonly transition: ArtisticControlTransition;
+}
+
+// @public
 export interface ArtisticControlUpdateReceipt {
     // (undocumented)
     readonly artisticControls: ArtisticControls;
@@ -29,19 +38,29 @@ export interface ArtisticControlUpdateReceipt {
     readonly changed: boolean;
     // (undocumented)
     readonly revision: number;
+    // (undocumented)
+    readonly seaStateCutRevision: number;
+    // (undocumented)
+    readonly transition: ArtisticControlTransition;
 }
+
+// @public
+export function assertHostPresentationAdapter(presentation: HostPresentationAdapter): HostPresentationAdapter;
 
 // @public
 export function createMemoryHostLifecycleAdapter(options: MemoryHostLifecycleAdapterOptions): HostLifecycleAdapter;
 
 // @public
-export function createMinimalWaterPrewarmManifest(profile?: QualityProfile): PrewarmManifest;
+export function createMinimalWaterPrewarmManifest(profile?: QualityProfile, drawingBuffer?: PrewarmDrawingBuffer): PrewarmManifest;
 
 // @public
 export function createMinimalWaterQualityProfile(id?: MinimalWaterQualityProfileId): QualityProfile;
 
 // @public
 export function createStaticHostEnvironmentAdapter(reflection: HostEnvironmentReflectionResource, state: HostEnvironmentState): HostEnvironmentAdapter;
+
+// @public
+export function createStaticHostPresentationAdapter(): HostPresentationAdapter;
 
 // @public
 export function createStaticHostSimulationAdapter(): HostSimulationAdapter;
@@ -231,7 +250,55 @@ export type HostPreparationResult = Readonly<{
 export interface HostPreparedLease {
     dispose(): void | Promise<void>;
     readonly invalidated: Promise<WebGPUDeviceLoss>;
+    readonly presentation: HostPresentationAdapter;
     readonly simulation: HostSimulationAdapter;
+}
+
+// @public
+export interface HostPresentationAdapter {
+    // (undocumented)
+    bind(route: HostPresentationRoute): HostPresentationBinding;
+    // (undocumented)
+    snapshot(): HostPresentationState;
+}
+
+// @public
+export interface HostPresentationBinding {
+    // (undocumented)
+    dispose(): void;
+}
+
+// @public
+export interface HostPresentationRoute {
+    present(): Promise<HostPresentedFrame>;
+}
+
+// @public
+export interface HostPresentationState {
+    // (undocumented)
+    readonly cameraCutRevision: number;
+}
+
+// @public
+export interface HostPresentedFrame {
+    readonly cameraCutRevision: number;
+    readonly controlRevision: number;
+    readonly manifestHash: string;
+    readonly originRevision: number;
+    readonly presentationId: number;
+    readonly seaStateCutRevision: number;
+    readonly seed: number;
+    readonly simulationResetRevision: number;
+    readonly temporal: HostPresentedTemporal;
+    readonly tick: number;
+    readonly timeSeconds: number;
+}
+
+// @public
+export interface HostPresentedTemporal {
+    readonly historyEpoch: number;
+    readonly resetFrame: boolean;
+    readonly resetReason: HostTemporalResetReason | null;
 }
 
 // @public
@@ -256,10 +323,15 @@ export interface HostSimulationState {
     // (undocumented)
     readonly seed: number;
     // (undocumented)
+    readonly simulationResetRevision: number;
+    // (undocumented)
     readonly tick: number;
     // (undocumented)
     readonly timeSeconds: number;
 }
+
+// @public
+export type HostTemporalResetReason = "simulation-reset" | "camera-cut" | "origin-shift" | "sea-state-cut";
 
 // @public
 export interface HostTexture {
@@ -297,6 +369,8 @@ export const MAX_GAMEPLAY_QUERY_POINTS: 2048;
 export interface MemoryHostLifecycleAdapterOptions {
     // (undocumented)
     readonly environment: HostEnvironmentAdapter;
+    // (undocumented)
+    readonly presentation: HostPresentationAdapter;
     // (undocumented)
     readonly scenario?: MemoryHostScenario;
     // (undocumented)
@@ -344,9 +418,13 @@ export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
     // (undocumented)
     readonly artisticControls: ArtisticControls;
     // (undocumented)
+    readonly cameraCutRevision: number;
+    // (undocumented)
     readonly controlRevision: number;
     // (undocumented)
     readonly originRevision: number;
+    // (undocumented)
+    readonly seaStateCutRevision: number;
 }
 
 // @public
@@ -386,7 +464,7 @@ export interface PreparingStartupSnapshot {
 export const PREWARM_MANIFEST_SCHEMA: "real-water/prewarm";
 
 // @public
-export const PREWARM_MANIFEST_VERSION: 2;
+export const PREWARM_MANIFEST_VERSION: 3;
 
 // @public
 export interface PrewarmDeclaration {
@@ -404,6 +482,14 @@ export interface PrewarmDeclaration {
 export type PrewarmDeclarationKind = "resource" | "effect-state" | "conditional-route";
 
 // @public
+export interface PrewarmDrawingBuffer {
+    // (undocumented)
+    readonly height: number;
+    // (undocumented)
+    readonly width: number;
+}
+
+// @public
 export interface PrewarmEffectVariant {
     // (undocumented)
     readonly effectId: string;
@@ -415,6 +501,8 @@ export interface PrewarmEffectVariant {
 export interface PrewarmManifest {
     // (undocumented)
     readonly declarations: readonly PrewarmDeclaration[];
+    // (undocumented)
+    readonly drawingBuffer: PrewarmDrawingBuffer;
     // (undocumented)
     readonly effectVariants: readonly PrewarmEffectVariant[];
     // (undocumented)
@@ -433,6 +521,8 @@ export interface PrewarmManifest {
 
 // @public
 export interface PrewarmManifestIdentity {
+    // (undocumented)
+    readonly drawingBuffer: PrewarmDrawingBuffer;
     // (undocumented)
     readonly effectVariants: readonly PrewarmEffectVariant[];
     // (undocumented)
@@ -453,7 +543,7 @@ export interface PrewarmManifestIdentity {
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 1;
+export const QUALITY_PROFILE_VERSION: 2;
 
 // @public
 export interface QualityProfile {
@@ -465,6 +555,8 @@ export interface QualityProfile {
     readonly schema: typeof QUALITY_PROFILE_SCHEMA;
     // (undocumented)
     readonly surface: QualityProfileSurface;
+    // (undocumented)
+    readonly temporal: QualityProfileTemporal;
     // (undocumented)
     readonly version: typeof QUALITY_PROFILE_VERSION;
 }
@@ -486,6 +578,36 @@ export interface QualityProfileSurface {
     // (undocumented)
     readonly geometry: MinimalWaterGeometrySegments;
 }
+
+// @public
+export interface QualityProfileTemporal {
+    // (undocumented)
+    readonly dynamicResolution: false;
+    // (undocumented)
+    readonly frameGeneration: false;
+    // (undocumented)
+    readonly mode: "TRAA";
+    // (undocumented)
+    readonly msaaSamples: 0;
+    // (undocumented)
+    readonly renderScale: 1;
+    // (undocumented)
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly taau: false;
+}
+
+// @public
+export function readHostPresentationBinding(binding: HostPresentationBinding): HostPresentationBinding;
+
+// @public
+export function readHostPresentationRoute(route: HostPresentationRoute): HostPresentationRoute;
+
+// @public
+export function readHostPresentationState(presentation: HostPresentationAdapter): HostPresentationState;
+
+// @public
+export function readHostPresentedFrame(frame: HostPresentedFrame): HostPresentedFrame;
 
 // @public
 export interface ReadyStartupSnapshot {
@@ -529,7 +651,7 @@ export interface RealWaterRuntime {
     // (undocumented)
     queryGameplay(batch: GameplayQueryBatch): GameplayQueryResults;
     // (undocumented)
-    updateArtisticControls(controls: ArtisticControls): ArtisticControlUpdateReceipt;
+    updateArtisticControls(controls: ArtisticControls, options?: ArtisticControlUpdateOptions): ArtisticControlUpdateReceipt;
 }
 
 // @public
@@ -591,7 +713,31 @@ export interface RenderingCapabilities {
     // (undocumented)
     readonly backend: "core-webgpu";
     // (undocumented)
+    readonly temporal: RenderingCapabilitiesTemporal;
+    // (undocumented)
     readonly timestampQuery: boolean;
+}
+
+// @public
+export interface RenderingCapabilitiesTemporal {
+    // (undocumented)
+    readonly dynamicResolution: false;
+    // (undocumented)
+    readonly frameGeneration: false;
+    // (undocumented)
+    readonly mode: "TRAA";
+    // (undocumented)
+    readonly motionFormat: "rg16float";
+    // (undocumented)
+    readonly msaaSamples: 0;
+    // (undocumented)
+    readonly renderScale: 1;
+    // (undocumented)
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly stockThreeRevision: "185";
+    // (undocumented)
+    readonly taau: false;
 }
 
 // @public
@@ -649,6 +795,7 @@ export interface ThreeHostCamera {
 export interface ThreeHostLifecycleAdapterOptions {
     readonly camera: ThreeHostCamera;
     readonly environment: HostEnvironmentAdapter;
+    readonly presentation: HostPresentationAdapter;
     readonly renderer: ThreeHostRenderer;
     readonly scene: ThreeHostScene;
     readonly simulation: HostSimulationAdapter;

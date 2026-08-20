@@ -6,6 +6,12 @@
     },
     {
       "path": "./apps/reference-experience"
+    },
+    {
+      "path": "./apps/reference-experience/e2e/temporal-metrics"
+    },
+    {
+      "path": "./apps/reference-experience/e2e"
     }
   ]
 }

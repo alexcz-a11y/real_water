@@ -9,20 +9,25 @@ import {
 import type { WebGPURenderer } from "three/webgpu";
 import {
   type ArtisticControls,
+  type ArtisticControlUpdateOptions,
   type ArtisticControlUpdateReceipt,
   type HostEnvironmentState,
   type HostLifecycleAdapter,
   type HostPreparationRequest,
   type HostPreparationResult,
   type HostPreparedLease,
+  type PrewarmManifest,
   type RealWaterLease,
 } from "real-water";
 import {
   QA_FRAME_PREWARM_MANIFEST,
+  createBoundCoreDiagnosticsPrewarmReceipt,
   createQaFrameDriver,
   type QaFrameDriver,
   type QaFrameDriverCapture,
   type QaFramePrewarmReceipt,
+  type QaRendererDeviceInventory,
+  type QaTemporalResetReason,
 } from "./qa-frame-driver.js";
 import {
   QA_FRAME_CAPTURE_NAMES,
@@ -35,17 +40,21 @@ import {
 } from "./qa-frame-contract.js";
 import type { ReferenceExperienceSnapshot } from "./start-reference-experience.js";
 import type { QaHostSimulationController } from "./qa-simulation-controller.js";
+import type { QaHostPresentationController } from "./qa-presentation-controller.js";
 
 export { createMemoryHostLifecycleAdapter as createQaMemoryHostLifecycleAdapter } from "real-water";
 export { createQaHostSimulationController } from "./qa-simulation-controller.js";
 export type { QaHostSimulationController } from "./qa-simulation-controller.js";
+export { createQaHostPresentationController } from "./qa-presentation-controller.js";
+export type { QaHostPresentationController } from "./qa-presentation-controller.js";
+export type { QaTemporalResetReason } from "./qa-frame-driver.js";
 
 export const QA_HARNESS_SCHEMA = "real-water/qa-harness" as const;
-export const QA_HARNESS_VERSION = 4 as const;
+export const QA_HARNESS_VERSION = 5 as const;
 export const QA_HARNESS_FIXED_TICK_HZ = QA_FRAME_FIXED_TICK_HZ;
 export const QA_HARNESS_CAPTURE_NAMES = QA_FRAME_CAPTURE_NAMES;
 export const QA_CAPTURE_SCHEMA = "real-water/qa-capture" as const;
-export const QA_CAPTURE_VERSION = 4 as const;
+export const QA_CAPTURE_VERSION = 5 as const;
 
 export type QaCaptureName = QaFrameCaptureName;
 
@@ -63,6 +72,7 @@ export interface QaFrameStateReceiptV4 {
   readonly seed: number;
   readonly tick: number;
   readonly timeSeconds: number;
+  readonly simulationResetRevision: number;
   readonly originX: number;
   readonly originZ: number;
   readonly originRevision: number;
@@ -78,19 +88,49 @@ export interface QaOriginReceiptV4 {
   readonly originRevision: number;
 }
 
-export interface QaPresentationReceiptV4 extends QaFrameStateReceiptV4 {
+export type QaCameraTransition = "continuous" | "camera-cut";
+
+export interface QaCameraUpdateOptions {
+  readonly transition: QaCameraTransition;
+}
+
+export interface QaPresentedMotionStateV5 {
+  readonly tick: number;
+  readonly controlRevision: number;
+  readonly originRevision: number;
+  readonly cameraRevision: number;
+  readonly cameraCutRevision: number;
+  readonly seaStateCutRevision: number;
+}
+
+export interface QaMotionAssociationV5 {
+  readonly previous: QaPresentedMotionStateV5;
+  readonly current: QaPresentedMotionStateV5;
+}
+
+export interface QaTemporalReceiptV5 {
+  readonly historyEpoch: number;
+  readonly resetReason: QaTemporalResetReason | null;
+  readonly resetFrame: boolean;
+}
+
+export interface QaPresentationReceiptV5 extends QaFrameStateReceiptV4 {
   readonly generation: number;
   readonly presentationId: number;
   readonly manifestHash: string;
   readonly cameraRevision: number;
+  readonly cameraCutRevision: number;
   readonly controlRevision: number;
+  readonly seaStateCutRevision: number;
   readonly compileCount: number;
   readonly probeCount: number;
   readonly captureNames: typeof QA_HARNESS_CAPTURE_NAMES;
   readonly prewarm: QaFramePrewarmReceipt;
+  readonly motion: QaMotionAssociationV5;
+  readonly temporal: QaTemporalReceiptV5;
 }
 
-export interface QaCaptureV4 extends QaPresentationReceiptV4 {
+export interface QaCaptureV5 extends QaPresentationReceiptV5 {
   readonly schema: typeof QA_CAPTURE_SCHEMA;
   readonly version: typeof QA_CAPTURE_VERSION;
   readonly name: QaCaptureName;
@@ -101,9 +141,10 @@ export interface QaCaptureV4 extends QaPresentationReceiptV4 {
     | "rgba8unorm-srgb"
     | "r32float-linear-view"
     | "rgb32float-view-normal"
+    | "rg32float-ndc"
     | "r32float-optical";
   readonly elementType: "uint8" | "float32";
-  readonly components: 1 | 3 | 4;
+  readonly components: 1 | 2 | 3 | 4;
   readonly dataEncoding: "base64";
   readonly byteOrder: "not-applicable" | "little-endian";
   readonly data: string;
@@ -115,6 +156,7 @@ export interface QaFrameSource {
   lease(): RealWaterLease | null;
   bindLease(lease: RealWaterLease): void;
   setCamera(camera: QaCameraV1): void;
+  incrementCameraCut(): void;
   setOrigin(originX: number, originZ: number): void;
   setEnvironmentLighting(state: HostEnvironmentState): void;
   setHostSceneLightingDecoy(enabled: boolean): void;
@@ -142,7 +184,7 @@ export interface QaHarnessOptions {
   synthesizeDeviceLoss(): void;
 }
 
-export interface QaHarnessV4 {
+export interface QaHarnessV5 {
   readonly schema: typeof QA_HARNESS_SCHEMA;
   readonly version: typeof QA_HARNESS_VERSION;
   readonly fixedTickHz: typeof QA_HARNESS_FIXED_TICK_HZ;
@@ -150,15 +192,19 @@ export interface QaHarnessV4 {
   readonly prewarmManifest: typeof QA_FRAME_PREWARM_MANIFEST;
   reset(request: { readonly seed: number }): Promise<QaFrameStateReceiptV4>;
   advanceTicks(count: number): Promise<QaFrameStateReceiptV4>;
-  setCamera(camera: QaCameraV1): Promise<QaCameraReceiptV1>;
+  setCamera(
+    camera: QaCameraV1,
+    options: QaCameraUpdateOptions,
+  ): Promise<QaCameraReceiptV1>;
   setOrigin(origin: {
     readonly x: number;
     readonly z: number;
   }): Promise<QaOriginReceiptV4>;
-  present(): Promise<QaPresentationReceiptV4>;
-  capture(name: QaCaptureName): Promise<QaCaptureV4>;
+  present(): Promise<QaPresentationReceiptV5>;
+  capture(name: QaCaptureName): Promise<QaCaptureV5>;
   updateArtisticControls(
     controls: ArtisticControls,
+    options: ArtisticControlUpdateOptions,
   ): Promise<ArtisticControlUpdateReceipt>;
   updateEnvironmentLighting(
     state: HostEnvironmentState,
@@ -185,11 +231,12 @@ interface ActiveRecipe {
   pendingTicks: number;
   cameraRevision: number;
   cameraSet: boolean;
-  captures: ReadonlyMap<QaCaptureName, QaCaptureV4> | null;
-  presentation: QaPresentationReceiptV4 | null;
+  captures: ReadonlyMap<QaCaptureName, QaCaptureV5> | null;
+  presentation: QaPresentationReceiptV5 | null;
+  lastPresentedMotion: QaPresentedMotionStateV5 | null;
 }
 
-export function createQaHarness(options: QaHarnessOptions): QaHarnessV4 {
+export function createQaHarness(options: QaHarnessOptions): QaHarnessV5 {
   let active: ActiveRecipe | null = null;
   let queue = Promise.resolve();
 
@@ -208,7 +255,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV4 {
     active = null;
   };
 
-  const harness: QaHarnessV4 = {
+  const harness: QaHarnessV5 = {
     schema: QA_HARNESS_SCHEMA,
     version: QA_HARNESS_VERSION,
     fixedTickHz: QA_HARNESS_FIXED_TICK_HZ,
@@ -241,12 +288,14 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV4 {
           cameraSet: false,
           captures: null,
           presentation: null,
+          lastPresentedMotion: null,
         };
         const runtime = lease.inspectRuntime();
         return Object.freeze({
           seed: receipt.seed,
           tick: receipt.tick,
           timeSeconds: receipt.timeSeconds,
+          simulationResetRevision: receipt.simulationResetRevision,
           originX: 0,
           originZ: 0,
           originRevision: runtime.originRevision,
@@ -272,6 +321,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV4 {
           seed: recipe.seed,
           tick: recipe.tick,
           timeSeconds: recipe.tick / QA_HARNESS_FIXED_TICK_HZ,
+          simulationResetRevision: runtime.simulationResetRevision,
           originX: recipe.originX,
           originZ: recipe.originZ,
           originRevision: runtime.originRevision,
@@ -301,12 +351,16 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV4 {
         });
       });
     },
-    setCamera(camera) {
+    setCamera(camera, cameraOptions) {
       const normalized = normalizeCamera(camera);
+      const transition = readQaCameraUpdateOptions(cameraOptions);
       return enqueue(async () => {
         const recipe = requireActiveRecipe(active, options.frameSource());
         recipe.source.setCamera(normalized);
         recipe.cameraRevision += 1;
+        if (recipe.cameraSet && transition === "camera-cut") {
+          recipe.source.incrementCameraCut();
+        }
         recipe.cameraSet = true;
         recipe.captures = null;
         recipe.presentation = null;
@@ -337,8 +391,14 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV4 {
           runtime.seed !== frame.seed ||
           runtime.tick !== frame.tick ||
           runtime.timeSeconds !== frame.timeSeconds ||
+          runtime.simulationResetRevision !== frame.simulationResetRevision ||
+          runtime.controlRevision !== frame.controlRevision ||
+          runtime.originRevision !== frame.originRevision ||
+          runtime.cameraCutRevision !== frame.cameraCutRevision ||
+          runtime.seaStateCutRevision !== frame.seaStateCutRevision ||
           runtime.originX !== recipe.originX ||
-          runtime.originZ !== recipe.originZ
+          runtime.originZ !== recipe.originZ ||
+          frame.manifestHash !== recipe.driver.prewarm.core.manifestHash
         ) {
           throw qaError(
             "QA_INVALIDATED",
@@ -346,25 +406,47 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV4 {
           );
         }
         const generation = options.snapshot().generation;
+        const currentMotion = Object.freeze({
+          tick: frame.tick,
+          controlRevision: frame.controlRevision,
+          originRevision: frame.originRevision,
+          cameraRevision: recipe.cameraRevision,
+          cameraCutRevision: frame.cameraCutRevision,
+          seaStateCutRevision: frame.seaStateCutRevision,
+        });
+        const previousMotion = presentedMotionPrevious(
+          recipe.lastPresentedMotion,
+          currentMotion,
+          frame.temporal.resetFrame,
+        );
         const receipt = Object.freeze({
           seed: frame.seed,
           tick: frame.tick,
           timeSeconds: frame.timeSeconds,
+          simulationResetRevision: frame.simulationResetRevision,
           originX: runtime.originX,
           originZ: runtime.originZ,
           generation,
           presentationId: frame.presentationId,
           manifestHash: frame.manifestHash,
           cameraRevision: recipe.cameraRevision,
-          controlRevision: runtime.controlRevision,
+          cameraCutRevision: frame.cameraCutRevision,
+          controlRevision: frame.controlRevision,
+          seaStateCutRevision: frame.seaStateCutRevision,
           compileCount: frame.compileCount,
           probeCount: frame.probeCount,
-          originRevision: runtime.originRevision,
+          originRevision: frame.originRevision,
           captureNames: QA_HARNESS_CAPTURE_NAMES,
           prewarm: frame.prewarm,
+          motion: Object.freeze({
+            previous: previousMotion,
+            current: currentMotion,
+          }),
+          temporal: frame.temporal,
         });
         recipe.captures = cacheCaptures(frame.captures, receipt);
         recipe.presentation = receipt;
+        recipe.lastPresentedMotion = currentMotion;
         recipe.pendingTicks = 0;
         return receipt;
       });
@@ -383,10 +465,13 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV4 {
         return capture;
       });
     },
-    updateArtisticControls(controls) {
+    updateArtisticControls(controls, controlOptions) {
+      const transition = readArtisticControlUpdateOptions(controlOptions);
       return enqueue(async () => {
         const recipe = requireActiveRecipe(active, options.frameSource());
-        const receipt = recipe.lease.updateArtisticControls(controls);
+        const receipt = recipe.lease.updateArtisticControls(controls, {
+          transition,
+        });
         recipe.captures = null;
         recipe.presentation = null;
         return receipt;
@@ -494,9 +579,11 @@ export function createQaThreeFrameSource(
     setLighting(state: HostEnvironmentState): void;
     snapshot(): HostEnvironmentState;
   },
+  presentation: QaHostPresentationController,
 ): QaFrameSource {
   let activeDriver: QaFrameDriver | null = null;
   let activeLease: RealWaterLease | null = null;
+  let preparedPrewarm: PrewarmManifest | null = null;
   let lightingDecoy: {
     readonly light: DirectionalLight;
     readonly environment: DataTexture;
@@ -509,27 +596,17 @@ export function createQaThreeFrameSource(
       if (result.status !== "ready") {
         return result;
       }
-      let driver: QaFrameDriver;
-      try {
-        driver = await createQaFrameDriver({
-          renderer,
-          scene,
-          camera,
-          manifestHash: request.manifest.manifestHash,
-          signal: request.signal,
-          simulation,
-        });
-      } catch (cause) {
-        await Promise.resolve(result.lease.dispose()).catch(() => {});
-        throw cause;
-      }
-      const lease = observePreparedLease(result.lease, driver, (active) => {
-        activeDriver = active;
-        if (active === null) {
-          activeLease = null;
-        }
-      });
-      activeDriver = driver;
+      preparedPrewarm = request.manifest;
+      const lease = observePreparedLease(
+        result.lease,
+        () => activeDriver,
+        (active) => {
+          activeDriver = active;
+          if (active === null) {
+            activeLease = null;
+          }
+        },
+      );
       return Object.freeze({
         ...result,
         lease,
@@ -542,8 +619,21 @@ export function createQaThreeFrameSource(
     driver: () => activeDriver,
     lease: () => activeLease,
     bindLease(lease: RealWaterLease): void {
-      if (activeDriver === null) {
+      const prepared = preparedPrewarm;
+      if (prepared === null) {
         throw new Error("The QA frame source is not prepared.");
+      }
+      if (activeDriver === null) {
+        activeDriver = createQaFrameDriver({
+          diagnostics: presentation.diagnosticsRoute(),
+          manifestHash: prepared.manifestHash,
+          simulation,
+          prewarm: createBoundCoreDiagnosticsPrewarmReceipt(
+            prepared,
+            readRendererDeviceInventory(renderer),
+            lease.capabilities,
+          ),
+        });
       }
       activeLease = lease;
     },
@@ -557,6 +647,9 @@ export function createQaThreeFrameSource(
       camera.lookAt(...normalized.target);
       camera.updateProjectionMatrix();
       camera.updateMatrixWorld(true);
+    },
+    incrementCameraCut() {
+      presentation.incrementCameraCut();
     },
     setOrigin(originX: number, originZ: number) {
       simulation.setOrigin(originX, originZ);
@@ -621,7 +714,7 @@ function requirePreparedLease(lease: RealWaterLease | null): RealWaterLease {
 
 function observePreparedLease(
   lease: HostPreparedLease,
-  driver: QaFrameDriver,
+  currentDriver: () => QaFrameDriver | null,
   setActive: (driver: QaFrameDriver | null) => void,
 ): HostPreparedLease {
   let disposal: Promise<void> | undefined;
@@ -629,6 +722,7 @@ function observePreparedLease(
     ...lease,
     invalidated: lease.invalidated,
     dispose(): Promise<void> {
+      const driver = currentDriver();
       setActive(null);
       disposal ??= disposeFrameDriverAndLease(driver, lease);
       return disposal;
@@ -638,14 +732,16 @@ function observePreparedLease(
 }
 
 async function disposeFrameDriverAndLease(
-  driver: QaFrameDriver,
+  driver: QaFrameDriver | null,
   lease: HostPreparedLease,
 ): Promise<void> {
   let firstFailure: unknown;
-  try {
-    await driver.dispose();
-  } catch (cause) {
-    firstFailure = cause;
+  if (driver !== null) {
+    try {
+      await driver.dispose();
+    } catch (cause) {
+      firstFailure = cause;
+    }
   }
   try {
     await lease.dispose();
@@ -693,11 +789,83 @@ function requireActiveRecipe(
   return recipe;
 }
 
+function presentedMotionPrevious(
+  last: QaPresentedMotionStateV5 | null,
+  current: QaPresentedMotionStateV5,
+  resetFrame: boolean,
+): QaPresentedMotionStateV5 {
+  if (
+    last === null ||
+    resetFrame ||
+    last.originRevision !== current.originRevision ||
+    last.cameraCutRevision !== current.cameraCutRevision ||
+    last.seaStateCutRevision !== current.seaStateCutRevision ||
+    current.tick < last.tick
+  ) {
+    return current;
+  }
+  return last;
+}
+
+function readQaCameraUpdateOptions(
+  options: QaCameraUpdateOptions,
+): QaCameraTransition {
+  if (
+    options === null ||
+    typeof options !== "object" ||
+    Array.isArray(options) ||
+    Object.keys(options).length !== 1 ||
+    !Object.hasOwn(options, "transition")
+  ) {
+    throw qaError(
+      "QA_INVALID_ARGUMENT",
+      "QA camera updates require an explicit continuous or camera-cut transition.",
+    );
+  }
+  if (
+    options.transition !== "continuous" &&
+    options.transition !== "camera-cut"
+  ) {
+    throw qaError(
+      "QA_INVALID_ARGUMENT",
+      "QA camera updates require an explicit continuous or camera-cut transition.",
+    );
+  }
+  return options.transition;
+}
+
+function readArtisticControlUpdateOptions(
+  options: ArtisticControlUpdateOptions,
+): ArtisticControlUpdateOptions["transition"] {
+  if (
+    options === null ||
+    typeof options !== "object" ||
+    Array.isArray(options) ||
+    Object.keys(options).length !== 1 ||
+    !Object.hasOwn(options, "transition")
+  ) {
+    throw qaError(
+      "QA_INVALID_ARGUMENT",
+      "QA Artistic Control updates require an explicit continuous or sea-state-cut transition.",
+    );
+  }
+  if (
+    options.transition !== "continuous" &&
+    options.transition !== "sea-state-cut"
+  ) {
+    throw qaError(
+      "QA_INVALID_ARGUMENT",
+      "QA Artistic Control updates require an explicit continuous or sea-state-cut transition.",
+    );
+  }
+  return options.transition;
+}
+
 function cacheCaptures(
   captures: readonly QaFrameDriverCapture[],
-  receipt: QaPresentationReceiptV4,
-): ReadonlyMap<QaCaptureName, QaCaptureV4> {
-  const byName = new Map<QaCaptureName, QaCaptureV4>();
+  receipt: QaPresentationReceiptV5,
+): ReadonlyMap<QaCaptureName, QaCaptureV5> {
+  const byName = new Map<QaCaptureName, QaCaptureV5>();
   for (const name of QA_HARNESS_CAPTURE_NAMES) {
     const capture = captures.find((candidate) => candidate.name === name);
     if (capture === undefined) {
@@ -719,8 +887,8 @@ function cacheCaptures(
 
 function encodeCapture(
   capture: QaFrameDriverCapture,
-  receipt: QaPresentationReceiptV4,
-): QaCaptureV4 {
+  receipt: QaPresentationReceiptV5,
+): QaCaptureV5 {
   const shape = QA_FRAME_CAPTURE_SHAPES[capture.name];
   return Object.freeze({
     schema: QA_CAPTURE_SCHEMA,
@@ -863,6 +1031,68 @@ function assertCaptureName(name: QaCaptureName): void {
   }
 }
 
+const RENDERER_DEVICE_LIMIT_NAMES = [
+  "maxTextureDimension1D",
+  "maxTextureDimension2D",
+  "maxTextureDimension3D",
+  "maxTextureArrayLayers",
+  "maxBindGroups",
+  "maxBindingsPerBindGroup",
+  "maxDynamicUniformBuffersPerPipelineLayout",
+  "maxDynamicStorageBuffersPerPipelineLayout",
+  "maxSampledTexturesPerShaderStage",
+  "maxSamplersPerShaderStage",
+  "maxStorageBuffersPerShaderStage",
+  "maxStorageTexturesPerShaderStage",
+  "maxUniformBuffersPerShaderStage",
+  "maxUniformBufferBindingSize",
+  "maxStorageBufferBindingSize",
+  "minUniformBufferOffsetAlignment",
+  "minStorageBufferOffsetAlignment",
+  "maxVertexBuffers",
+  "maxBufferSize",
+  "maxVertexAttributes",
+  "maxVertexBufferArrayStride",
+  "maxInterStageShaderVariables",
+  "maxColorAttachments",
+  "maxColorAttachmentBytesPerSample",
+  "maxComputeWorkgroupStorageSize",
+  "maxComputeInvocationsPerWorkgroup",
+  "maxComputeWorkgroupSizeX",
+  "maxComputeWorkgroupSizeY",
+  "maxComputeWorkgroupSizeZ",
+  "maxComputeWorkgroupsPerDimension",
+] as const;
+
+function readRendererDeviceInventory(
+  renderer: WebGPURenderer,
+): QaRendererDeviceInventory | null {
+  const internals = renderer as unknown as {
+    readonly backend?: {
+      readonly device?: {
+        readonly features?: Iterable<string>;
+        readonly limits?: Readonly<Record<string, number | undefined>>;
+      };
+    };
+  };
+  const device = internals.backend?.device;
+  if (device === undefined) {
+    return null;
+  }
+  const features = [...(device.features ?? [])].sort();
+  const limits: Record<string, number> = {};
+  for (const name of RENDERER_DEVICE_LIMIT_NAMES) {
+    const value = device.limits?.[name];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      limits[name] = value;
+    }
+  }
+  return Object.freeze({
+    features: Object.freeze(features),
+    limits: Object.freeze(limits),
+  });
+}
+
 type QaErrorCode =
   | "QA_NOT_READY"
   | "QA_RESET_REQUIRED"
@@ -873,7 +1103,7 @@ type QaErrorCode =
   | "QA_INVALIDATED";
 
 function qaError(code: QaErrorCode, message: string): Error {
-  const error = new Error(`${code}: ${message}`);
+  const error = Object.assign(new Error(`${code}: ${message}`), { code });
   error.name = "QaHarnessError";
   return error;
 }

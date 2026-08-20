@@ -1,7 +1,29 @@
 import { createRequire } from "node:module";
 import { expect, test, type Page } from "@playwright/test";
+import { createMinimalWaterPrewarmManifest } from "real-water";
 
 const require = createRequire(import.meta.url);
+const DECLARED_STARTUP_ITEMS =
+  createMinimalWaterPrewarmManifest().declarations.length;
+const DECLARED_STARTUP_TOTAL = String(DECLARED_STARTUP_ITEMS);
+const COMPLETED_STARTUP_ITEM_SEQUENCE = Array.from(
+  { length: DECLARED_STARTUP_ITEMS + 1 },
+  (_, index) => index,
+);
+const PREPARING_STATUS_PATTERN = new RegExp(
+  `Preparation has not started|Completed (${COMPLETED_STARTUP_ITEM_SEQUENCE.join("|")}) of ${DECLARED_STARTUP_TOTAL}`,
+);
+const COMPLETED_STARTUP_ANNOUNCEMENT = new RegExp(
+  `^Completed ([0-9]+) of ${DECLARED_STARTUP_TOTAL}`,
+  "u",
+);
+const MEMORY_SUCCESS_RETRY_DELAY_MS = 180;
+const MEMORY_HOST_PREPARE_TURNS = DECLARED_STARTUP_ITEMS + 1;
+/** Async Loading Presenter + reveal allowance, not a performance gate. */
+const LOADING_PRESENTER_REVEAL_BUDGET_MS = 2_000;
+const MEMORY_SUCCESS_RETRY_PLACEHOLDER_TIMEOUT_MS =
+  MEMORY_HOST_PREPARE_TURNS * MEMORY_SUCCESS_RETRY_DELAY_MS +
+  LOADING_PRESENTER_REVEAL_BUDGET_MS;
 
 test("shows an accessible Loading Experience before an atomic ready reveal", async ({
   page,
@@ -18,7 +40,7 @@ test("shows an accessible Loading Experience before an atomic ready reveal", asy
     }),
   ).toBeVisible();
   await expect(page.getByRole("status")).toContainText(
-    /Preparation has not started|Completed ([0-9]|1[0-6]) of 16/,
+    PREPARING_STATUS_PATTERN,
   );
   await expect(page.getByRole("progressbar")).toHaveAccessibleName(
     "Preparation progress",
@@ -32,7 +54,7 @@ test("shows an accessible Loading Experience before an atomic ready reveal", asy
   );
   expect(
     announcements.findIndex((announcement) =>
-      announcement.startsWith("Completed 0 of 16"),
+      announcement.startsWith(`Completed 0 of ${DECLARED_STARTUP_TOTAL}`),
     ),
   ).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Cancel preparation" }).focus();
@@ -116,7 +138,9 @@ test("supports keyboard cancellation and a complete retry", async ({
   await expect(retry).toBeFocused();
   await page.keyboard.press("Enter");
 
-  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible({
+    timeout: MEMORY_SUCCESS_RETRY_PLACEHOLDER_TIMEOUT_MS,
+  });
 
   const announcements = await page.evaluate(() => {
     const state = globalThis as typeof globalThis & StartupRecorderState;
@@ -128,12 +152,10 @@ test("supports keyboard cancellation and a complete retry", async ({
   const retryProgress = announcements
     .slice(retryStart + 1)
     .flatMap((announcement) => {
-      const match = /^Completed ([0-9]+) of 16/u.exec(announcement);
+      const match = COMPLETED_STARTUP_ANNOUNCEMENT.exec(announcement);
       return match?.[1] === undefined ? [] : [Number(match[1])];
     });
-  expect(retryProgress).toEqual([
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-  ]);
+  expect(retryProgress).toEqual(COMPLETED_STARTUP_ITEM_SEQUENCE);
 });
 
 test("removes nonessential motion for reduced-motion users", async ({

@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import {
   SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
@@ -14,7 +16,7 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV4,
+  type QaHarnessV5,
 } from "../src/qa-harness.js";
 import { REFERENCE_ENVIRONMENT_LIGHTING } from "../src/reference-optical-inputs.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
@@ -26,8 +28,11 @@ import {
 import {
   attachRegressionAcceptance,
   coreManifestEvidence,
+  createPresentationFrameEvidence,
   isAdmittedOpticalScreenshotProfile,
   readOpticalScreenshotProfile,
+  regressionAcceptanceArtifacts,
+  sha256Buffer,
 } from "./regression-acceptance.js";
 
 const VIEWPORT = { width: 320, height: 180 } as const;
@@ -220,13 +225,13 @@ test("captures color, depth, normal, and optical intermediates", async ({
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV4 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV5 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
     await harness.reset({ seed: 0x4000_0000 });
     await harness.advanceTicks(24);
-    await harness.setCamera(camera);
+    await harness.setCamera(camera, { transition: "continuous" });
     const presentation = await harness.present();
     const captures = await Promise.all(
       harness.captureNames.map((name) => harness.capture(name)),
@@ -237,26 +242,24 @@ test("captures color, depth, normal, and optical intermediates", async ({
       versions: captures.map((capture) => capture.version),
       seed: presentation.seed,
       tick: presentation.tick,
+      timeSeconds: presentation.timeSeconds,
+      simulationResetRevision: presentation.simulationResetRevision,
+      presentationId: presentation.presentationId,
       manifestHash: presentation.manifestHash,
       depth: depth?.data,
       width: depth?.width,
       height: depth?.height,
       controlRevision: presentation.controlRevision,
-      qaPrewarm: {
-        schema: harness.prewarmManifest.schema,
-        version: harness.prewarmManifest.version,
-        id: harness.prewarmManifest.id,
-        declarations: harness.prewarmManifest.declarations,
-        captures: harness.prewarmManifest.captures,
-        rendererDevice: presentation.prewarm.rendererDevice,
-      },
+      qaPrewarm: presentation.prewarm,
     };
   }, DOWN_CAMERA);
 
   expect(result.names).toEqual([
     "final-color",
+    "current-color",
     "depth",
     "normal",
+    "motion-vector",
     "optical-fresnel",
     "optical-thickness",
     "optical-scattering",
@@ -265,7 +268,7 @@ test("captures color, depth, normal, and optical intermediates", async ({
     "optical-transmittance",
     "optical-glint",
   ]);
-  expect(result.versions.every((version) => version === 4)).toBe(true);
+  expect(result.versions.every((version) => version === 5)).toBe(true);
   expect(result.depth).toBeDefined();
   const downDepth = decodeFloat32(result.depth ?? "");
   expect(downDepth.every((value) => Number.isFinite(value))).toBe(true);
@@ -273,6 +276,15 @@ test("captures color, depth, normal, and optical intermediates", async ({
     downDepth.filter((value) => value > 5 && value < 20).length /
       downDepth.length,
   ).toBeGreaterThan(0.99);
+  attachScreenshotFrameReceipt(testInfo, "optical-nadir-refraction.png", {
+    seed: result.seed,
+    tick: result.tick,
+    timeSeconds: result.timeSeconds,
+    simulationResetRevision: result.simulationResetRevision,
+    presentationId: result.presentationId,
+    controlRevision: result.controlRevision,
+    manifestHash: result.manifestHash,
+  });
   const nadirSnapshot = await expectClippedCanvasSnapshot(
     page,
     testInfo,
@@ -285,8 +297,11 @@ test("captures color, depth, normal, and optical intermediates", async ({
     tick: result.tick,
     camera: DOWN_CAMERA,
     controlRevision: result.controlRevision,
-    coreManifest: coreManifestEvidence(result.manifestHash),
+    coreManifest: coreManifestEvidence(result.qaPrewarm.core),
     qaPrewarm: result.qaPrewarm,
+    captures: [
+      { width: result.qaPrewarm.width, height: result.qaPrewarm.height },
+    ],
     qaHarness: OPTICAL_QA_HARNESS,
     qaCapture: OPTICAL_QA_CAPTURE,
     artisticControls: SWELL_PRESET.artisticControls,
@@ -332,12 +347,12 @@ test("reports metric optical thickness from the Host 1m and 21m scene-depth fixt
       offAxisCamera,
       controls,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV4 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV5 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
       const presentThickness = async (camera: QaCameraV1) => {
-        await harness.setCamera(camera);
+        await harness.setCamera(camera, { transition: "continuous" });
         await harness.present();
         const thickness = await harness.capture("optical-thickness");
         return {
@@ -348,7 +363,9 @@ test("reports metric optical thickness from the Host 1m and 21m scene-depth fixt
       };
 
       await harness.reset({ seed: 0x4000_0000 });
-      await harness.updateArtisticControls(controls);
+      await harness.updateArtisticControls(controls, {
+        transition: "continuous",
+      });
       const down = await presentThickness(downCamera);
       const miss = await presentThickness(missCamera);
       const foreground = await presentThickness(foregroundCamera);
@@ -359,15 +376,20 @@ test("reports metric optical thickness from the Host 1m and 21m scene-depth fixt
       const offAxis = await presentThickness(offAxisCamera);
       await harness.setOrigin({ x: 80, z: 80 });
       const afterOrigin = await presentThickness(downCamera);
-      await harness.updateArtisticControls({
-        ...controls,
-        grazingReflection: 2,
-        environmentReflection: 2,
-        depthSeeThrough: 2,
-        depthColoring: 2,
-        inWaterGlow: 2,
-        crestGlow: 2,
-      });
+      await harness.updateArtisticControls(
+        {
+          ...controls,
+          grazingReflection: 2,
+          environmentReflection: 2,
+          depthSeeThrough: 2,
+          depthColoring: 2,
+          inWaterGlow: 2,
+          crestGlow: 2,
+        },
+        {
+          transition: "continuous",
+        },
+      );
       const extreme = await presentThickness(downCamera);
       return {
         down,
@@ -509,7 +531,7 @@ test("reports metric optical thickness from the Host 1m and 21m scene-depth fixt
 
 test("makes Fresnel, environment, refraction, absorption, scattering, and crest transmission art-directable", async ({
   page,
-}, testInfo) => {
+}) => {
   await openQaStage(page);
   const result = await page.evaluate(
     async ({
@@ -524,13 +546,13 @@ test("makes Fresnel, environment, refraction, absorption, scattering, and crest 
       nadirFrontlit,
       dark,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV4 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV5 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
 
       const capturePresented = async (camera: QaCameraV1) => {
-        await harness.setCamera(camera);
+        await harness.setCamera(camera, { transition: "continuous" });
         const presentation = await harness.present();
         const [
           color,
@@ -572,90 +594,124 @@ test("makes Fresnel, environment, refraction, absorption, scattering, and crest 
           height: color.height,
         };
       };
-      const presentWith = async (
+      const presentIsolated = async (
         camera: QaCameraV1,
         nextControls: ArtisticControls,
+        lighting: HostEnvironmentState = defaultLighting,
       ) => {
-        await harness.updateArtisticControls(nextControls);
-        return capturePresented(camera);
+        await harness.reset({ seed: 0x4000_0000 });
+        await harness.advanceTicks(24);
+        const appliedLighting =
+          await harness.updateEnvironmentLighting(lighting);
+        await harness.updateArtisticControls(nextControls, {
+          transition: "continuous",
+        });
+        return {
+          ...(await capturePresented(camera)),
+          lighting: appliedLighting,
+        };
       };
 
-      await harness.reset({ seed: 0x4000_0000 });
-      await harness.advanceTicks(24);
-      await harness.updateEnvironmentLighting(defaultLighting);
-
-      const fresnelOff = await presentWith(horizonCamera, {
+      const fresnelOff = await presentIsolated(horizonCamera, {
         ...swell,
         grazingReflection: 0,
       });
-      const fresnelOn = await presentWith(horizonCamera, {
+      const fresnelOn = await presentIsolated(horizonCamera, {
         ...swell,
         grazingReflection: 2,
       });
-      const environmentOff = await presentWith(horizonCamera, {
+      const environmentOff = await presentIsolated(horizonCamera, {
         ...swell,
         environmentReflection: 0,
       });
-      const environmentOn = await presentWith(horizonCamera, {
+      const environmentOn = await presentIsolated(horizonCamera, {
         ...swell,
         environmentReflection: 2,
       });
-      const refractionOff = await presentWith(downCamera, {
+      const refractionOff = await presentIsolated(downCamera, {
         ...swell,
         depthSeeThrough: 0,
       });
-      const refractionOn = await presentWith(downCamera, {
+      const refractionOn = await presentIsolated(downCamera, {
         ...swell,
         depthSeeThrough: 2,
       });
-      const absorptionOff = await presentWith(downCamera, {
+      const absorptionOff = await presentIsolated(downCamera, {
         ...swell,
         depthColoring: 0,
       });
-      const absorptionOn = await presentWith(downCamera, {
+      const absorptionOn = await presentIsolated(downCamera, {
         ...swell,
         depthColoring: 2,
       });
-      const scatteringOff = await presentWith(downCamera, {
+      const scatteringOff = await presentIsolated(downCamera, {
         ...swell,
         inWaterGlow: 0,
       });
-      const scatteringOn = await presentWith(downCamera, {
+      const scatteringOn = await presentIsolated(downCamera, {
         ...swell,
         inWaterGlow: 2,
       });
-      await harness.updateEnvironmentLighting(nadirBacklit);
-      const scatterBack = await capturePresented(downCamera);
-      await harness.updateEnvironmentLighting(nadirFrontlit);
-      const scatterFront = await capturePresented(downCamera);
-      await harness.updateEnvironmentLighting(dark);
-      const scatterDark = await capturePresented(downCamera);
-      await harness.updateEnvironmentLighting(defaultLighting);
-
-      await harness.updateEnvironmentLighting(backlit);
-      const crestOff = await presentWith(horizonCamera, {
-        ...swell,
-        crestGlow: 0,
-      });
-      const crestOn = await presentWith(horizonCamera, {
-        ...swell,
-        crestGlow: 2,
-      });
-      const darkLighting = await harness.updateEnvironmentLighting(dark);
-      const crestNoSun = await capturePresented(horizonCamera);
-      const frontLighting = await harness.updateEnvironmentLighting(frontlit);
-      const crestFront = await capturePresented(horizonCamera);
-      await harness.updateEnvironmentLighting(backlit);
-      const crestFlat = await presentWith(horizonCamera, {
-        ...flat,
-        crestGlow: 2,
-      });
-      const crestThin = await presentWith(horizonCamera, {
-        ...swell,
-        crestGlow: 2,
-      });
-      await harness.updateEnvironmentLighting(defaultLighting);
-      const horizonDefault = await presentWith(horizonCamera, swell);
+      const scatterBack = await presentIsolated(
+        downCamera,
+        swell,
+        nadirBacklit,
+      );
+      const scatterFront = await presentIsolated(
+        downCamera,
+        swell,
+        nadirFrontlit,
+      );
+      const scatterDark = await presentIsolated(downCamera, swell, dark);
+      const crestOff = await presentIsolated(
+        horizonCamera,
+        {
+          ...swell,
+          crestGlow: 0,
+        },
+        backlit,
+      );
+      const crestOn = await presentIsolated(
+        horizonCamera,
+        {
+          ...swell,
+          crestGlow: 2,
+        },
+        backlit,
+      );
+      const crestNoSun = await presentIsolated(
+        horizonCamera,
+        {
+          ...swell,
+          crestGlow: 2,
+        },
+        dark,
+      );
+      const crestFront = await presentIsolated(
+        horizonCamera,
+        {
+          ...swell,
+          crestGlow: 2,
+        },
+        frontlit,
+      );
+      const crestFlat = await presentIsolated(
+        horizonCamera,
+        {
+          ...flat,
+          crestGlow: 2,
+        },
+        backlit,
+      );
+      const crestThin = await presentIsolated(
+        horizonCamera,
+        {
+          ...swell,
+          crestGlow: 2,
+        },
+        backlit,
+      );
+      const horizonDefault = await presentIsolated(horizonCamera, swell);
 
       return {
         fresnelOff,
@@ -677,17 +733,10 @@ test("makes Fresnel, environment, refraction, absorption, scattering, and crest 
         crestFront,
         crestFlat,
         crestThin,
-        darkLighting,
-        frontLighting,
+        darkLighting: crestNoSun.lighting,
+        frontLighting: crestFront.lighting,
         horizonDefault,
-        qaPrewarm: {
-          schema: harness.prewarmManifest.schema,
-          version: harness.prewarmManifest.version,
-          id: harness.prewarmManifest.id,
-          declarations: harness.prewarmManifest.declarations,
-          captures: harness.prewarmManifest.captures,
-          rendererDevice: horizonDefault.presentation.prewarm.rendererDevice,
-        },
+        qaPrewarm: horizonDefault.presentation.prewarm,
       };
     },
     {
@@ -883,8 +932,11 @@ test("makes Fresnel, environment, refraction, absorption, scattering, and crest 
   expectPreservedSurface(result.crestOff, result.crestOn);
   expect(result.darkLighting.sunIntensity).toBe(0);
   expect(result.frontLighting.sunDirectionX).toBe(-1);
-  expect(result.crestNoSun.controlRevision).toBe(
-    result.crestOn.controlRevision,
+  expect(result.crestNoSun.presentation.seed).toBe(
+    result.crestOn.presentation.seed,
+  );
+  expect(result.crestNoSun.presentation.tick).toBe(
+    result.crestOn.presentation.tick,
   );
   expect(Math.max(...crestNoSunValues)).toBeLessThan(1e-5);
   expect(percentile99(crestNoSunValues)).toBeLessThan(1e-5);
@@ -892,15 +944,100 @@ test("makes Fresnel, environment, refraction, absorption, scattering, and crest 
   expect(crestOn).toBeGreaterThan(crestFront + 0.01);
   expect(crestThin).toBeGreaterThan(crestFlat + 0.01);
   expect(crestOn).toBeGreaterThan(crestNoSun + 0.01);
+});
 
-  await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV4 | undefined;
-    if (harness === undefined) {
-      throw new Error("QA Harness is unavailable.");
+test("captures an isolated stock-TRAA horizon golden after eight prime presents", async ({
+  page,
+}, testInfo) => {
+  await openQaStage(page);
+  const result = await page.evaluate(
+    async ({ camera, swell, lighting }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV5 | undefined;
+      if (harness === undefined) {
+        throw new Error("QA Harness is unavailable.");
+      }
+      await harness.reset({ seed: 0x4000_0000 });
+      await harness.advanceTicks(24);
+      await harness.updateEnvironmentLighting(lighting);
+      await harness.updateArtisticControls(swell, {
+        transition: "continuous",
+      });
+      await harness.setCamera(camera, { transition: "continuous" });
+      for (let prime = 0; prime < 8; prime += 1) {
+        await harness.present();
+      }
+      const presentation = await harness.present();
+      const current = await harness.capture("current-color");
+      const finalColor = await harness.capture("final-color");
+      const glint = await harness.capture("optical-glint");
+      return {
+        presentation,
+        current: current.data,
+        final: finalColor.data,
+        glint: glint.data,
+        qaPrewarm: presentation.prewarm,
+      };
+    },
+    {
+      camera: HORIZON_CAMERA,
+      swell: SWELL_CONTROLS,
+      lighting: REFERENCE_ENVIRONMENT_LIGHTING,
+    },
+  );
+
+  const current = decodeUint8(result.current);
+  const finalColor = decodeUint8(result.final);
+  expect(current.length).toBe(finalColor.length);
+  expect(current.length).toBe(VIEWPORT.width * VIEWPORT.height * 4);
+  const diff = new Uint8Array(current.length);
+  let rgbDiffCoverage = 0;
+  for (let index = 0; index < current.length; index += 4) {
+    const dr = Math.abs((current[index] ?? 0) - (finalColor[index] ?? 0));
+    const dg = Math.abs(
+      (current[index + 1] ?? 0) - (finalColor[index + 1] ?? 0),
+    );
+    const db = Math.abs(
+      (current[index + 2] ?? 0) - (finalColor[index + 2] ?? 0),
+    );
+    diff[index] = dr;
+    diff[index + 1] = dg;
+    diff[index + 2] = db;
+    if (dr > 0 || dg > 0 || db > 0) {
+      rgbDiffCoverage += 1;
     }
-    await harness.setCamera(camera);
-    await harness.present();
-  }, HORIZON_CAMERA);
+  }
+  const digest = (bytes: Uint8Array): string =>
+    `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+  const currentDigest = digest(current);
+  const finalDigest = digest(finalColor);
+  const glintDigest = digest(decodeUint8(result.glint));
+  const diffDigest = digest(diff);
+  expect(currentDigest).not.toBe(finalDigest);
+  expect(rgbDiffCoverage).toBeGreaterThan(0);
+
+  const receipt = {
+    name: "optical-horizon-glint-crest.png",
+    seed: result.presentation.seed,
+    tick: result.presentation.tick,
+    timeSeconds: result.presentation.timeSeconds,
+    simulationResetRevision: result.presentation.simulationResetRevision,
+    presentationId: result.presentation.presentationId,
+    historyEpoch: result.presentation.temporal.historyEpoch,
+    resetReason: result.presentation.temporal.resetReason,
+    controlRevision: result.presentation.controlRevision,
+    manifestHash: result.presentation.manifestHash,
+    currentDigest,
+    finalDigest,
+    glintDigest,
+    diffDigest,
+    rgbDiffCoverage,
+  };
+  console.log(`screenshot-frame-receipt ${JSON.stringify(receipt)}`);
+  testInfo.annotations.push({
+    type: "screenshot-frame-receipt",
+    description: JSON.stringify(receipt),
+  });
+
   const horizonSnapshot = await expectClippedCanvasSnapshot(
     page,
     testInfo,
@@ -908,15 +1045,48 @@ test("makes Fresnel, environment, refraction, absorption, scattering, and crest 
     HORIZON_WATER_CLIP,
     result.qaPrewarm.rendererDevice,
   );
+  const artifacts = regressionAcceptanceArtifacts(testInfo);
+  const baselineSnapshotSha256 = sha256Buffer(
+    await readFile(testInfo.snapshotPath("optical-horizon-glint-crest.png")),
+  );
   const horizonEvidence = await attachRegressionAcceptance(testInfo, page, {
-    seed: result.horizonDefault.presentation.seed,
-    tick: result.horizonDefault.presentation.tick,
+    seed: result.presentation.seed,
+    tick: result.presentation.tick,
     camera: HORIZON_CAMERA,
-    controlRevision: result.horizonDefault.presentation.controlRevision,
-    coreManifest: coreManifestEvidence(
-      result.horizonDefault.presentation.manifestHash,
-    ),
+    controlRevision: result.presentation.controlRevision,
+    coreManifest: coreManifestEvidence(result.qaPrewarm.core),
     qaPrewarm: result.qaPrewarm,
+    captures: [
+      { width: result.qaPrewarm.width, height: result.qaPrewarm.height },
+    ],
+    presentationFrame: createPresentationFrameEvidence({
+      presentationId: result.presentation.presentationId,
+      historyEpoch: result.presentation.temporal.historyEpoch,
+      resetReason: result.presentation.temporal.resetReason,
+      resetFrame: result.presentation.temporal.resetFrame,
+      simulationResetRevision: result.presentation.simulationResetRevision,
+      seed: result.presentation.seed,
+      tick: result.presentation.tick,
+      timeSeconds: result.presentation.timeSeconds,
+      controlRevision: result.presentation.controlRevision,
+      cameraCutRevision: result.presentation.cameraCutRevision,
+      seaStateCutRevision: result.presentation.seaStateCutRevision,
+      originRevision: result.presentation.originRevision,
+      manifestHash: result.presentation.manifestHash,
+      camera: HORIZON_CAMERA,
+      clip: HORIZON_WATER_CLIP,
+      snapshotName: "optical-horizon-glint-crest.png",
+      pngAttachmentName: artifacts.pngFileName,
+      pngAttachmentPath: artifacts.pngRelativePath,
+      pngAttachmentContentType: "image/png",
+      screenshotPng: horizonSnapshot.png,
+      baselineSnapshotSha256,
+      currentDigest,
+      finalDigest,
+      glintDigest,
+      diffDigest,
+      rgbDiffCoverage,
+    }),
     qaHarness: OPTICAL_QA_HARNESS,
     qaCapture: OPTICAL_QA_CAPTURE,
     artisticControls: SWELL_CONTROLS,
@@ -941,6 +1111,7 @@ test("makes Fresnel, environment, refraction, absorption, scattering, and crest 
           "The upper canvas is empty sky; the clip is the sea surface below the horizon, where glint and crest live.",
       },
     },
+    screenshotPng: horizonSnapshot.png,
   });
   expect(horizonEvidence.qaCapture).toEqual(OPTICAL_QA_CAPTURE);
   expect(horizonEvidence.environment).toEqual({
@@ -949,17 +1120,73 @@ test("makes Fresnel, environment, refraction, absorption, scattering, and crest 
   });
 });
 
+test("replays 32 paused continuous-control presents with live stock jitter", async ({
+  page,
+}) => {
+  await openQaStage(page);
+  const result = await page.evaluate(
+    async ({ camera, swell }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV5 | undefined;
+      if (harness === undefined) {
+        throw new Error("QA Harness is unavailable.");
+      }
+      const runRecipe = async () => {
+        await harness.reset({ seed: 0x4000_0000 });
+        await harness.updateArtisticControls(swell, {
+          transition: "continuous",
+        });
+        await harness.setCamera(camera, { transition: "continuous" });
+        const frames: Array<{
+          readonly resetFrame: boolean;
+          readonly data: string;
+        }> = [];
+        for (let index = 0; index < 32; index += 1) {
+          await harness.updateArtisticControls(swell, {
+            transition: "continuous",
+          });
+          const presentation = await harness.present();
+          const color = await harness.capture("current-color");
+          frames.push({
+            resetFrame: presentation.temporal.resetFrame,
+            data: color.data,
+          });
+        }
+        return frames;
+      };
+      const first = await runRecipe();
+      const replay = await runRecipe();
+      return { first, replay };
+    },
+    { camera: HORIZON_CAMERA, swell: SWELL_CONTROLS },
+  );
+
+  expect(result.first).toHaveLength(32);
+  expect(result.first[0]?.resetFrame).toBe(true);
+  expect(new Set(result.first.map((frame) => frame.data)).size).toBeGreaterThan(
+    1,
+  );
+  expect(result.replay.map((frame) => frame.data)).toEqual(
+    result.first.map((frame) => frame.data),
+  );
+});
+
 test("ignores Host scene environment and lights and follows only the Environment Adapter", async ({
   page,
 }) => {
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ camera, lighting }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV4 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV5 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
-      const captureNamed = async () => {
+      const presentAligned = async () => {
+        await harness.reset({ seed: 0x4000_0000 });
+        await harness.setCamera(camera, { transition: "continuous" });
+        await harness.present();
+        await harness.reset({ seed: 0x4000_0000 });
+        await harness.advanceTicks(24);
+        await harness.setCamera(camera, { transition: "continuous" });
         const presentation = await harness.present();
         const captures = await Promise.all(
           harness.captureNames.map((name) => harness.capture(name)),
@@ -976,18 +1203,17 @@ test("ignores Host scene environment and lights and follows only the Environment
       };
 
       await harness.reset({ seed: 0x4000_0000 });
-      await harness.advanceTicks(24);
-      await harness.setCamera(camera);
-      const baseline = await captureNamed();
-      await harness.setHostSceneLightingDecoy(true);
-      const decoy = await captureNamed();
       await harness.setHostSceneLightingDecoy(false);
-      const cleared = await captureNamed();
+      const baseline = await presentAligned();
+      await harness.setHostSceneLightingDecoy(true);
+      const decoy = await presentAligned();
+      await harness.setHostSceneLightingDecoy(false);
+      const cleared = await presentAligned();
       await harness.updateEnvironmentLighting({
         ...lighting,
         environmentIntensity: 0,
       });
-      const adapted = await captureNamed();
+      const adapted = await presentAligned();
       return { baseline, decoy, cleared, adapted };
     },
     {
@@ -996,7 +1222,7 @@ test("ignores Host scene environment and lights and follows only the Environment
     },
   );
 
-  expect(Object.keys(result.baseline.captures)).toHaveLength(10);
+  expect(Object.keys(result.baseline.captures)).toHaveLength(12);
   expect(result.decoy.captures).toEqual(result.baseline.captures);
   expect(result.cleared.captures).toEqual(result.baseline.captures);
   expect(result.decoy.compileCount).toBe(result.baseline.compileCount);
@@ -1017,13 +1243,13 @@ test("updates glint from a hot sun angular radius without re-preparing", async (
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ camera, lighting, wideSun }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV4 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV5 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
       await harness.reset({ seed: 0x4000_0000 });
       await harness.advanceTicks(24);
-      await harness.setCamera(camera);
+      await harness.setCamera(camera, { transition: "continuous" });
       const firstPresentation = await harness.present();
       const firstGlint = await harness.capture("optical-glint");
       const updated = await harness.updateEnvironmentLighting(wideSun);
@@ -1061,6 +1287,27 @@ test("updates glint from a hot sun angular radius without re-preparing", async (
   expect(result.secondGlint).not.toBe(result.firstGlint);
 });
 
+function attachScreenshotFrameReceipt(
+  testInfo: TestInfo,
+  name: string,
+  receipt: {
+    readonly seed: number;
+    readonly tick: number;
+    readonly timeSeconds: number;
+    readonly simulationResetRevision: number;
+    readonly presentationId: number;
+    readonly controlRevision: number;
+    readonly manifestHash: string;
+  },
+): void {
+  const serialized = JSON.stringify({ name, ...receipt });
+  console.log(`screenshot-frame-receipt ${serialized}`);
+  testInfo.annotations.push({
+    type: "screenshot-frame-receipt",
+    description: serialized,
+  });
+}
+
 async function expectClippedCanvasSnapshot(
   page: Page,
   testInfo: TestInfo,
@@ -1072,7 +1319,12 @@ async function expectClippedCanvasSnapshot(
     readonly height: number;
   },
   rendererDevice: unknown,
-): Promise<{ readonly asserted: boolean; readonly authoritative: boolean }> {
+): Promise<{
+  readonly asserted: boolean;
+  readonly authoritative: boolean;
+  readonly png: Buffer;
+  readonly pngSha256: string;
+}> {
   const box = await page.locator("canvas").boundingBox();
   if (box === null) {
     throw new Error("The reference canvas has no layout box.");
@@ -1090,6 +1342,7 @@ async function expectClippedCanvasSnapshot(
   });
   expect(png.readUInt32BE(16)).toBe(clip.width);
   expect(png.readUInt32BE(20)).toBe(clip.height);
+  const pngSha256 = sha256Buffer(png);
   const profile = await readOpticalScreenshotProfile(
     page,
     testInfo,
@@ -1100,12 +1353,12 @@ async function expectClippedCanvasSnapshot(
       type: "optical-screenshot-profile",
       description: `Screenshot assertion is not authoritative for ${name}; running ${profile.cpuModel} / ${profile.os} ${profile.osRelease} / Chrome ${profile.chromeVersion} / ${profile.powerState} / lowpowermode=${String(profile.lowPowerMode)} / rendererDevice=${profile.rendererDeviceFingerprint ?? "null"} / headless=${String(profile.headless)} is not the admitted Apple M5 / Darwin 27.0.0 / AC / lowpowermode=0 / headless Chrome 151.0.7922.169 / rendererDevice sha256:6ee054fd1f40dd96953cf1c3be499df39dd40c603c7817e8abadaa5d0f08a2b5 profile.`,
     });
-    return { asserted: false, authoritative: false };
+    return { asserted: false, authoritative: false, png, pngSha256 };
   }
   expect(png).toMatchSnapshot(name, {
     maxDiffPixelRatio: REGION_SNAPSHOT_MAX_DIFF_PIXEL_RATIO,
   });
-  return { asserted: true, authoritative: true };
+  return { asserted: true, authoritative: true, png, pngSha256 };
 }
 
 function percentile99(values: readonly number[]): number {

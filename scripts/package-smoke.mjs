@@ -69,6 +69,16 @@ try {
   if (!existsSync(importPath) || !existsSync(typesPath)) {
     throw new Error("The packed root export is missing built code or types.");
   }
+  const diagnosticsExport = packedPackage.exports["./diagnostics"];
+  if (
+    diagnosticsExport === undefined ||
+    !existsSync(join(packageRoot, diagnosticsExport.import)) ||
+    !existsSync(join(packageRoot, diagnosticsExport.types))
+  ) {
+    throw new Error(
+      "The packed diagnostics subpath is missing built code or types.",
+    );
+  }
 
   for (const mapName of ["index.js.map", "index.d.ts.map"]) {
     const mapPath = join(packageRoot, "dist", mapName);
@@ -94,6 +104,10 @@ try {
     "createMemoryHostLifecycleAdapter",
     "SUPPORTED_HOST_ENVIRONMENT_REFLECTION",
     "createStaticHostEnvironmentAdapter",
+    "assertHostPresentationAdapter",
+    "createStaticHostPresentationAdapter",
+    "readHostPresentationRoute",
+    "readHostPresentedFrame",
     "createSupportedHostEnvironmentReflection",
     "PREWARM_MANIFEST_VERSION",
     "createMinimalWaterPrewarmManifest",
@@ -113,17 +127,28 @@ try {
     '  "hostEnvironmentReflectionWorkPlanFingerprint",',
     '  "SUPPORTED_HOST_ENVIRONMENT_WORK_PLAN_FINGERPRINT",',
     '  "ThreeHostTexture",',
+    '  "MEMORY_TEST_PREWARM_DRAWING_BUFFER",',
+    '  "DEFAULT_MEMORY_PREWARM_DRAWING_BUFFER",',
+    '  "DIAGNOSTICS_CAPTURE_NAMES",',
+    '  "DIAGNOSTICS_CAPTURE_SHAPES",',
+    '  "readHostDiagnosticsRoute",',
+    '  "readHostDiagnosticsPresentRequest",',
+    '  "readHostDiagnosticsPresentedFrame",',
     "];",
     "for (const name of leakedHelpers) {",
     '  if (name in realWater) throw new Error("Internal helper leaked onto the public Interface: " + name);',
     "}",
     'const profile = realWater.createMinimalWaterQualityProfile("minimal-high-detail");',
-    "const manifest = realWater.createMinimalWaterPrewarmManifest(profile);",
+    'if (profile.temporal.resolutionPolicy !== "drawing-buffer-exact") throw new Error("Packed Quality Profile is missing drawing-buffer-exact resolutionPolicy.");',
+    'if (profile.temporal.mode !== "TRAA" || profile.temporal.taau !== false || profile.temporal.msaaSamples !== 0) throw new Error("Packed Quality Profile temporal policy drifted.");',
+    "const manifest = realWater.createMinimalWaterPrewarmManifest(profile, { width: 320, height: 180 });",
+    'if (manifest.declarations.length !== 30) throw new Error("Packed Prewarm Manifest work count drifted.");',
     'const environmentFingerprint = manifest.declarations.find((declaration) => declaration.id === "water-environment-radiance")?.fingerprint;',
     'if (typeof environmentFingerprint !== "string") throw new Error("Packed manifest is missing environment radiance.");',
     "const descriptor = realWater.SUPPORTED_HOST_ENVIRONMENT_REFLECTION;",
-    'if (realWater.PREWARM_MANIFEST_VERSION !== 2) throw new Error("Packed Prewarm Manifest version must be 2.");',
-    'if (manifest.version !== 2) throw new Error("Packed manifest version must be 2.");',
+    'if (realWater.PREWARM_MANIFEST_VERSION !== 3) throw new Error("Packed Prewarm Manifest version must be 3.");',
+    'if (manifest.version !== 3) throw new Error("Packed manifest version must be 3.");',
+    'if (manifest.drawingBuffer.width !== 320 || manifest.drawingBuffer.height !== 180) throw new Error("Packed Memory-test drawing buffer drifted.");',
     'if (JSON.stringify(manifest.environmentReflection) !== JSON.stringify(descriptor)) throw new Error("Packed manifest is missing the canonical environment reflection.");',
     "const encoded = JSON.stringify({ identity: descriptor.identity, fingerprint: descriptor.fingerprint, width: descriptor.width, height: descriptor.height, format: descriptor.format, type: descriptor.type, colorSpace: descriptor.colorSpace });",
     'const { createHash } = await import("node:crypto");',
@@ -138,10 +163,13 @@ try {
     "const run = realWater.prepareRealWater({",
     "  manifest,",
     "  loading: { present() {} },",
-    "  host: realWater.createMemoryHostLifecycleAdapter({ simulation: realWater.createStaticHostSimulationAdapter(), environment, stepDelayMs: 0 }),",
+    "  host: realWater.createMemoryHostLifecycleAdapter({ simulation: realWater.createStaticHostSimulationAdapter(), environment, presentation: realWater.createStaticHostPresentationAdapter(), stepDelayMs: 0 }),",
     "});",
     "const lease = await run.ready;",
     'if (lease.capabilities.gameplay.maxQueryPointsPerTick !== 2048) throw new Error("Packed Gameplay Query capacity is incorrect.");',
+    "const temporal = lease.capabilities.rendering.temporal;",
+    'if (temporal.mode !== "TRAA" || temporal.renderScale !== 1 || temporal.resolutionPolicy !== "drawing-buffer-exact" || temporal.taau !== false || temporal.dynamicResolution !== false || temporal.frameGeneration !== false || temporal.msaaSamples !== 0 || temporal.motionFormat !== "rg16float" || temporal.stockThreeRevision !== "185") throw new Error("Packed ready temporal capabilities drifted.");',
+    'if (!Object.isFrozen(temporal)) throw new Error("Packed ready temporal capabilities are mutable.");',
     "const queryResults = { heights: new Float32Array(1), normals: new Float32Array(3), velocities: new Float32Array(3), foam: new Float32Array(1), ticks: new Float64Array(1), controlRevisions: new Float64Array(1), snapshotAges: new Uint8Array(1) };",
     "lease.updateArtisticControls({ ...lease.inspectRuntime().artisticControls, waveStrength: 2 });",
     "const returnedResults = lease.queryGameplay({ count: 1, positions: new Float32Array(3), results: queryResults });",
@@ -163,6 +191,13 @@ try {
     '  if (!(error instanceof realWater.RealWaterRuntimeError) || error.code !== "RUNTIME_INVALIDATED") throw error;',
     "}",
     "await lease.dispose();",
+    'const diagnostics = await import("real-water/diagnostics");',
+    'if (!Array.isArray(diagnostics.DIAGNOSTICS_CAPTURE_NAMES) || diagnostics.DIAGNOSTICS_CAPTURE_NAMES.length !== 12) throw new Error("Packed diagnostics capture names drifted.");',
+    'if (typeof diagnostics.readHostDiagnosticsRoute !== "function") throw new Error("Packed diagnostics reader is missing.");',
+    'if (typeof diagnostics.readHostDiagnosticsPresentedFrame !== "function") throw new Error("Packed diagnostics frame reader is missing.");',
+    'if ("HostPresentedFrame" in diagnostics) throw new Error("Re-exported presentation types must stay type-only on the diagnostics subpath.");',
+    'if ("DIAGNOSTICS_CAPTURE_NAMES" in realWater) throw new Error("Diagnostics DTOs leaked onto the root Interface.");',
+    'if ("HostDiagnosticsPresentedFrame" in realWater) throw new Error("Diagnostics DTOs leaked onto the root Interface.");',
   ].join("\n");
   execFileSync(
     process.execPath,
@@ -176,7 +211,8 @@ try {
   writeFileSync(
     join(consumerRoot, "index.mts"),
     [
-      'import { createMemoryHostLifecycleAdapter, createMinimalWaterPrewarmManifest, createMinimalWaterQualityProfile, createStaticHostEnvironmentAdapter, createSupportedHostEnvironmentReflection, createStaticHostSimulationAdapter, prepareRealWater, type GameplayQueryResults, type QualityProfile } from "real-water";',
+      'import { createMemoryHostLifecycleAdapter, createMinimalWaterPrewarmManifest, createMinimalWaterQualityProfile, createStaticHostEnvironmentAdapter, createStaticHostPresentationAdapter, createSupportedHostEnvironmentReflection, createStaticHostSimulationAdapter, prepareRealWater, type GameplayQueryResults, type QualityProfile, type RealWaterLease } from "real-water";',
+      'import { DIAGNOSTICS_CAPTURE_NAMES, readHostDiagnosticsRoute, type DiagnosticsCaptureBase, type HostPresentedFrame, type HostPresentedTemporal, type HostPresentationRoute } from "real-water/diagnostics";',
       "const profile: QualityProfile = createMinimalWaterQualityProfile();",
       "const manifest = createMinimalWaterPrewarmManifest(profile);",
       "const environment = createStaticHostEnvironmentAdapter(createSupportedHostEnvironmentReflection(), {",
@@ -187,9 +223,23 @@ try {
       "const run = prepareRealWater({",
       "  manifest,",
       "  loading: { present() {} },",
-      "  host: createMemoryHostLifecycleAdapter({ simulation: createStaticHostSimulationAdapter(), environment, stepDelayMs: 0 }),",
+      "  host: createMemoryHostLifecycleAdapter({ simulation: createStaticHostSimulationAdapter(), environment, presentation: createStaticHostPresentationAdapter(), stepDelayMs: 0 }),",
       "});",
-      "void run.ready.then((lease) => { const results: GameplayQueryResults = { heights: new Float32Array(1), normals: new Float32Array(3), velocities: new Float32Array(3), foam: new Float32Array(1), ticks: new Float64Array(1), controlRevisions: new Float64Array(1), snapshotAges: new Uint8Array(1) }; lease.queryGameplay({ count: 1, positions: new Float32Array(3), results }); return lease.invalidateForLongSuspension(); });",
+      "const names: typeof DIAGNOSTICS_CAPTURE_NAMES = DIAGNOSTICS_CAPTURE_NAMES;",
+      'const captureBase: DiagnosticsCaptureBase = { width: 320, height: 180, origin: "top-left" };',
+      "void names;",
+      "void captureBase;",
+      "void readHostDiagnosticsRoute;",
+      "type Presented = HostPresentedFrame;",
+      "type Temporal = HostPresentedTemporal;",
+      "type Route = HostPresentationRoute;",
+      "const _temporal: Temporal | undefined = undefined;",
+      "void _temporal;",
+      "const _presented: Presented | undefined = undefined;",
+      "const _route: Route | undefined = undefined;",
+      "void _presented;",
+      "void _route;",
+      "void run.ready.then((lease: RealWaterLease) => { const results: GameplayQueryResults = { heights: new Float32Array(1), normals: new Float32Array(3), velocities: new Float32Array(3), foam: new Float32Array(1), ticks: new Float64Array(1), controlRevisions: new Float64Array(1), snapshotAges: new Uint8Array(1) }; lease.queryGameplay({ count: 1, positions: new Float32Array(3), results }); return lease.invalidateForLongSuspension(); });",
     ].join("\n"),
   );
   writeFileSync(

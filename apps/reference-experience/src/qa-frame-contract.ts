@@ -1,80 +1,17 @@
+import {
+  DIAGNOSTICS_CAPTURE_NAMES,
+  DIAGNOSTICS_CAPTURE_SHAPES,
+  isDiagnosticsCaptureName,
+  type DiagnosticsCaptureName,
+} from "real-water/diagnostics";
+
 export const QA_FRAME_FIXED_TICK_HZ = 60 as const;
 
-export const QA_FRAME_CAPTURE_NAMES = Object.freeze([
-  "final-color",
-  "depth",
-  "normal",
-  "optical-fresnel",
-  "optical-thickness",
-  "optical-scattering",
-  "optical-environment-reflection",
-  "optical-crest-transmission",
-  "optical-transmittance",
-  "optical-glint",
-] as const);
+export const QA_FRAME_CAPTURE_NAMES = DIAGNOSTICS_CAPTURE_NAMES;
+export type QaFrameCaptureName = DiagnosticsCaptureName;
+export const QA_FRAME_CAPTURE_SHAPES = DIAGNOSTICS_CAPTURE_SHAPES;
 
-export type QaFrameCaptureName = (typeof QA_FRAME_CAPTURE_NAMES)[number];
-
-export const QA_FRAME_CAPTURE_SHAPES = Object.freeze({
-  "final-color": Object.freeze({
-    format: "rgba8unorm-srgb" as const,
-    elementType: "uint8" as const,
-    components: 4 as const,
-  }),
-  "depth": Object.freeze({
-    format: "r32float-linear-view" as const,
-    elementType: "float32" as const,
-    components: 1 as const,
-  }),
-  "normal": Object.freeze({
-    format: "rgb32float-view-normal" as const,
-    elementType: "float32" as const,
-    components: 3 as const,
-  }),
-  "optical-fresnel": Object.freeze({
-    format: "r32float-optical" as const,
-    elementType: "float32" as const,
-    components: 1 as const,
-  }),
-  "optical-thickness": Object.freeze({
-    format: "r32float-optical" as const,
-    elementType: "float32" as const,
-    components: 1 as const,
-  }),
-  "optical-scattering": Object.freeze({
-    format: "r32float-optical" as const,
-    elementType: "float32" as const,
-    components: 1 as const,
-  }),
-  "optical-environment-reflection": Object.freeze({
-    format: "r32float-optical" as const,
-    elementType: "float32" as const,
-    components: 1 as const,
-  }),
-  "optical-crest-transmission": Object.freeze({
-    format: "r32float-optical" as const,
-    elementType: "float32" as const,
-    components: 1 as const,
-  }),
-  "optical-transmittance": Object.freeze({
-    format: "r32float-optical" as const,
-    elementType: "float32" as const,
-    components: 1 as const,
-  }),
-  "optical-glint": Object.freeze({
-    format: "r32float-optical" as const,
-    elementType: "float32" as const,
-    components: 1 as const,
-  }),
-});
-
-const CAPTURE_NAME_SET = new Set<string>(QA_FRAME_CAPTURE_NAMES);
-
-export function isQaFrameCaptureName(
-  value: unknown,
-): value is QaFrameCaptureName {
-  return typeof value === "string" && CAPTURE_NAME_SET.has(value);
-}
+export const isQaFrameCaptureName = isDiagnosticsCaptureName;
 
 export function isQaFrameSeed(value: number): boolean {
   return Number.isInteger(value) && value >= 0 && value <= 0xffff_ffff;
@@ -89,10 +26,11 @@ export const CORE_WEBGPU_MAX_COLOR_ATTACHMENT_BYTES_PER_SAMPLE = 32;
 export type QaScenePassColorAttachmentFormat =
   "rgba16float" | "r32float" | "rg16float" | "rgba8unorm" | "rg8unorm";
 
-// Scene-pass color attachments only. qa-final-color-target is the blit, not MRT.
+// Scene-pass color attachments only. Core final color is the blit, not MRT.
 export const QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS = Object.freeze([
   "rgba16float",
   "r32float",
+  "rg16float",
   "rg16float",
   "rgba16float",
   "rg8unorm",

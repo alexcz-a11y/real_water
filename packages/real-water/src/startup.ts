@@ -19,7 +19,19 @@ import {
   type HostSimulationAdapter,
   type RealWaterRuntime,
 } from "./runtime.js";
+import type { HostPresentationAdapter } from "./presentation.js";
+import {
+  readHostPresentationBinding,
+  readHostPresentationRoute,
+  type HostPresentationBinding,
+} from "./presentation.js";
 import { runtimeStateSink } from "./internal/runtime-state-bridge.js";
+import {
+  activatePreparedPresentationRoute,
+  connectPreparedPresentationRoute,
+  createPresentationBindSession,
+  unbindPreparedPresentationRoute,
+} from "./internal/presentation-route-bridge.js";
 
 /**
  * Truthful completed-work accounting for one preparation run.
@@ -176,6 +188,9 @@ export interface HostPreparedLease {
   /** Host-owned authoritative time and seed source for the ready runtime. */
   readonly simulation: HostSimulationAdapter;
 
+  /** Host-owned presentation cut revisions for the ready runtime. */
+  readonly presentation: HostPresentationAdapter;
+
   /**
    * Releases only resources created for Real Water. The method may be called
    * more than once and must be safe for the Adapter to observe once.
@@ -315,6 +330,7 @@ export function prepareRealWater(
   let currentIdentity: PrewarmManifestIdentity | null = null;
   let currentProgress: StartupProgress | null = null;
   let pendingHostLease: HostPreparedLease | null = null;
+  let pendingPublicLease: RealWaterLease | null = null;
   let publishedLease = false;
   let preparationDeviceLoss: WebGPUDeviceLoss | undefined;
 
@@ -608,6 +624,12 @@ export function prepareRealWater(
       }
 
       phase = "readiness-gate";
+      pendingPublicLease = createLease(
+        manifest,
+        identity,
+        result.capabilities,
+        hostLease,
+      );
       await present({
         status: "ready",
         sequence: sequence++,
@@ -616,15 +638,9 @@ export function prepareRealWater(
       });
 
       terminal = true;
-      const lease = createLease(
-        manifest,
-        identity,
-        result.capabilities,
-        hostLease,
-      );
       publishedLease = true;
       pendingHostLease = null;
-      return lease;
+      return pendingPublicLease;
     } catch (cause) {
       const error = normalizeStartupError(
         cause,
@@ -634,7 +650,11 @@ export function prepareRealWater(
       );
       terminal = true;
 
-      if (pendingHostLease !== null && !publishedLease) {
+      if (pendingPublicLease !== null && !publishedLease) {
+        await pendingPublicLease.dispose();
+        pendingPublicLease = null;
+        pendingHostLease = null;
+      } else if (pendingHostLease !== null && !publishedLease) {
         await disposeHostLease(pendingHostLease);
         pendingHostLease = null;
       }
@@ -881,8 +901,34 @@ function createLease(
       }
     },
     hostLease.simulation,
+    hostLease.presentation,
     runtimeStateSink(hostLease),
   );
+  const bindSession = createPresentationBindSession(
+    connectPreparedPresentationRoute(hostLease, () => runtime.inspectRuntime()),
+  );
+  let presentationBinding: HostPresentationBinding;
+  try {
+    presentationBinding = readHostPresentationBinding(
+      hostLease.presentation.bind(readHostPresentationRoute(bindSession.route)),
+    );
+    if (bindSession.presentedDuringBind) {
+      throw new Error("Host Presentation bind must not call present().");
+    }
+  } catch (cause) {
+    throw new RealWaterStartupError({
+      code: "HOST_PROTOCOL_VIOLATION",
+      phase: "readiness-gate",
+      retryable: false,
+      message:
+        cause instanceof Error
+          ? cause.message
+          : "Host Presentation bind failed.",
+      cause,
+    });
+  }
+  activatePreparedPresentationRoute(hostLease);
+  bindSession.activate();
 
   return Object.freeze({
     ...runtime,
@@ -947,6 +993,12 @@ function createLease(
     dispose(): Promise<void> {
       if (terminalState === "active") {
         terminalState = "disposed";
+      }
+      unbindPreparedPresentationRoute(hostLease);
+      try {
+        presentationBinding.dispose();
+      } catch {
+        // Host binding disposal must not block Core resource teardown.
       }
       disposal ??= Promise.resolve().then(() => hostLease.dispose());
       return disposal;

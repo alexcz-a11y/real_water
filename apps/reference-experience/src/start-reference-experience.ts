@@ -9,6 +9,7 @@ import {
   type HostPreparedLease,
   type MinimalWaterQualityProfileId,
   type PreparationRun,
+  type PrewarmDrawingBuffer,
   type PrewarmManifest,
   type QualityProfile,
   type RealWaterLease,
@@ -23,7 +24,10 @@ export interface ReferenceHostAttempt {
 }
 
 export interface StartReferenceExperienceOptions {
-  readonly createHostAttempt: () => ReferenceHostAttempt;
+  readonly createHostAttempt: (
+    drawingBuffer: PrewarmDrawingBuffer,
+  ) => ReferenceHostAttempt;
+  readonly initialDrawingBuffer: PrewarmDrawingBuffer;
   readonly initialQualityProfile?: QualityProfile;
   readonly revealDelayFrames?: number;
 }
@@ -35,11 +39,22 @@ export interface ReferenceExperienceSnapshot {
   readonly manifestHash: string;
   readonly qualityProfileId: MinimalWaterQualityProfileId;
   readonly state: "loading" | "ready" | "failed" | "disposed";
+  readonly viewport: {
+    readonly drawingBufferWidth: number;
+    readonly drawingBufferHeight: number;
+  };
+}
+
+export interface ReferenceViewport {
+  readonly drawingBufferWidth: number;
+  readonly drawingBufferHeight: number;
 }
 
 export interface ReferenceExperienceSession {
   applyQualityProfile(profile: QualityProfile): Promise<void>;
+  applyViewport(viewport: ReferenceViewport): Promise<void>;
   signalLongSuspension(): Promise<void>;
+  reportPresentationFailure(cause: unknown): Promise<void>;
   snapshot(): ReferenceExperienceSnapshot;
   dispose(): Promise<void>;
 }
@@ -69,15 +84,23 @@ interface TransitionRequest {
 }
 
 type TransitionReason =
-  "initial" | "quality-profile" | "long-suspension" | "device-loss" | "retry";
+  | "initial"
+  | "quality-profile"
+  | "viewport"
+  | "long-suspension"
+  | "device-loss"
+  | "retry"
+  | "presentation-failure";
 
 export function startReferenceExperience(
   mount: Element,
   options: StartReferenceExperienceOptions,
 ): ReferenceExperienceSession {
+  let desiredDrawingBuffer = options.initialDrawingBuffer;
   const initialManifest = createMinimalWaterPrewarmManifest(
     options.initialQualityProfile ??
       createMinimalWaterQualityProfile("minimal"),
+    desiredDrawingBuffer,
   );
   let activeAttempt: ActiveAttempt | null = null;
   let activePresenter: DomLoadingPresenter | null = null;
@@ -172,7 +195,7 @@ export function startReferenceExperience(
 
     let attempt: ReferenceHostAttempt;
     try {
-      attempt = options.createHostAttempt();
+      attempt = options.createHostAttempt(request.manifest.drawingBuffer);
     } catch (cause) {
       await presentApplicationFailure(
         request,
@@ -438,15 +461,84 @@ export function startReferenceExperience(
     applyQualityProfile(profile: QualityProfile): Promise<void> {
       // Derivation validates the complete structural input before desired state
       // or the visible Reference Experience is mutated.
-      const manifest = createMinimalWaterPrewarmManifest(profile);
+      const manifest = createMinimalWaterPrewarmManifest(
+        profile,
+        desiredDrawingBuffer,
+      );
       if (manifest.manifestHash === desiredManifest.manifestHash) {
         return latestTransition;
       }
       return scheduleTransition(manifest, "quality-profile");
     },
+    applyViewport(viewport: ReferenceViewport): Promise<void> {
+      const drawingBuffer = {
+        width: viewport.drawingBufferWidth,
+        height: viewport.drawingBufferHeight,
+      };
+      const manifest = createMinimalWaterPrewarmManifest(
+        desiredManifest.qualityProfile,
+        drawingBuffer,
+      );
+      if (
+        manifest.drawingBuffer.width === desiredDrawingBuffer.width &&
+        manifest.drawingBuffer.height === desiredDrawingBuffer.height
+      ) {
+        return latestTransition;
+      }
+      desiredDrawingBuffer = manifest.drawingBuffer;
+      return scheduleTransition(manifest, "viewport");
+    },
     signalLongSuspension(): Promise<void> {
       activeAttempt?.lease?.invalidateForLongSuspension();
       return scheduleTransition(desiredManifest, "long-suspension");
+    },
+    reportPresentationFailure(cause: unknown): Promise<void> {
+      if (disposed) {
+        return Promise.resolve();
+      }
+      const startedRevision = revision;
+      const startedGeneration = generation;
+      const operation = transitionQueue.then(async () => {
+        if (
+          disposed ||
+          revision !== startedRevision ||
+          generation !== startedGeneration
+        ) {
+          return;
+        }
+        const requestRevision = ++revision;
+        state = "loading";
+        concealActiveStage(
+          transitionCancellationReason("presentation-failure"),
+        );
+        const presenter = createPresenter();
+        const request: TransitionRequest = {
+          manifest: desiredManifest,
+          presenter,
+          revision: requestRevision,
+        };
+        try {
+          await retireActiveAttempt();
+        } catch (cleanupCause) {
+          await presentApplicationFailure(
+            request,
+            "The failed Reference host could not be retired safely.",
+            cleanupCause,
+          );
+          return;
+        }
+        if (!isCurrent(request)) {
+          return;
+        }
+        await presentApplicationFailure(
+          request,
+          "Core presentation failed. The Reference Experience remains hidden.",
+          cause,
+        );
+      });
+      transitionQueue = operation.catch(() => {});
+      latestTransition = operation;
+      return operation;
     },
     snapshot(): ReferenceExperienceSnapshot {
       return Object.freeze({
@@ -454,6 +546,10 @@ export function startReferenceExperience(
         manifestHash: desiredManifest.manifestHash,
         qualityProfileId: desiredManifest.qualityProfile.id,
         state,
+        viewport: Object.freeze({
+          drawingBufferWidth: desiredDrawingBuffer.width,
+          drawingBufferHeight: desiredDrawingBuffer.height,
+        }),
       });
     },
     dispose(): Promise<void> {
@@ -533,12 +629,16 @@ function transitionCancellationReason(reason: TransitionReason): string {
       return "Initial Reference Experience preparation started.";
     case "quality-profile":
       return "A newer Quality Profile replaced this preparation.";
+    case "viewport":
+      return "A newer drawing buffer replaced this preparation.";
     case "long-suspension":
       return "A confirmed long suspension requires complete preparation.";
     case "device-loss":
       return "WebGPU device loss requires complete preparation.";
     case "retry":
       return "The Loading Experience requested a fresh preparation.";
+    case "presentation-failure":
+      return "Core presentation failed; the ready canvas is retired.";
   }
 }
 

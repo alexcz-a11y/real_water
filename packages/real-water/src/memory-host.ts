@@ -7,6 +7,8 @@ import type {
 import type { HostSimulationAdapter } from "./runtime.js";
 import type { HostEnvironmentAdapter } from "./environment.js";
 import { assertHostEnvironmentMatchesManifest } from "./environment.js";
+import type { HostPresentationAdapter } from "./presentation.js";
+import { assertHostPresentationAdapter } from "./presentation.js";
 import {
   coreWebGPULimits,
   evaluateRenderingCapability,
@@ -55,6 +57,7 @@ export interface MemoryHostLifecycleAdapterOptions {
   readonly scenario?: MemoryHostScenario;
   readonly simulation: HostSimulationAdapter;
   readonly environment: HostEnvironmentAdapter;
+  readonly presentation: HostPresentationAdapter;
   readonly stepDelayMs?: number;
 }
 
@@ -67,11 +70,17 @@ export interface MemoryHostLifecycleAdapterOptions {
 export function createMemoryHostLifecycleAdapter(
   options: MemoryHostLifecycleAdapterOptions,
 ): HostLifecycleAdapter {
+  if (options.presentation === undefined) {
+    throw new TypeError(
+      "The Memory Host Adapter requires a Host Presentation Adapter.",
+    );
+  }
   if (options.environment === undefined) {
     throw new TypeError(
       "The Memory Host Adapter requires a Host Environment Adapter.",
     );
   }
+  assertHostPresentationAdapter(options.presentation);
   const scenario = options.scenario ?? { kind: "success" };
   const stepDelayMs = normalizeDelay(options.stepDelayMs);
 
@@ -156,7 +165,10 @@ export function createMemoryHostLifecycleAdapter(
       return {
         status: "ready" as const,
         capabilities: capability.capabilities,
-        lease: createMemoryPreparedLease(options.simulation),
+        lease: createMemoryPreparedLease(
+          options.simulation,
+          options.presentation,
+        ),
       };
     },
   });
@@ -176,6 +188,7 @@ function normalizeDelay(candidate: number | undefined): number {
 
 function createMemoryPreparedLease(
   simulation: HostSimulationAdapter,
+  presentation: HostPresentationAdapter,
 ): HostPreparedLease {
   let disposal: Promise<void> | undefined;
   const invalidated = new Promise<WebGPUDeviceLoss>(() => {});
@@ -183,6 +196,7 @@ function createMemoryPreparedLease(
   return Object.freeze({
     invalidated,
     simulation,
+    presentation,
     dispose(): Promise<void> {
       disposal ??= Promise.resolve();
       return disposal;

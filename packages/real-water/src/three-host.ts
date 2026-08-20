@@ -12,6 +12,8 @@ import type {
 } from "./startup.js";
 import type { HostSimulationAdapter } from "./runtime.js";
 import type { HostEnvironmentAdapter } from "./environment.js";
+import type { HostPresentationAdapter } from "./presentation.js";
+import { assertHostPresentationAdapter } from "./presentation.js";
 import {
   assertHostEnvironmentMatchesManifest,
   assertHostEnvironmentTextureMatchesDescriptor,
@@ -72,6 +74,11 @@ export interface ThreeHostLifecycleAdapterOptions {
    * `scene.environment` or guesses sun, sky, or weather.
    */
   readonly environment: HostEnvironmentAdapter;
+  /**
+   * Explicit Host-owned Presentation Adapter. Real Water never inspects
+   * camera matrices for presentation cuts.
+   */
+  readonly presentation: HostPresentationAdapter;
 }
 
 /**
@@ -82,6 +89,12 @@ export interface ThreeHostLifecycleAdapterOptions {
 export function createThreeHostLifecycleAdapter(
   options: ThreeHostLifecycleAdapterOptions,
 ): HostLifecycleAdapter {
+  if (options.presentation === undefined) {
+    throw new TypeError(
+      "The Three Host Adapter requires a Host Presentation Adapter.",
+    );
+  }
+  assertHostPresentationAdapter(options.presentation);
   const simulation = options.simulation;
   return Object.freeze({
     async prepare(request: HostPreparationRequest) {
@@ -145,6 +158,7 @@ export function createThreeHostLifecycleAdapter(
           invalidated: capabilityInspection.invalidated,
           simulation,
           environment: options.environment,
+          presentation: options.presentation,
         });
         let prewarm: PrewarmOutcome;
         try {
@@ -244,6 +258,14 @@ function assertNativeHostObjects(
   if (options.camera.isPerspectiveCamera !== true) {
     throw new TypeError(
       "The Three Host Adapter requires a perspective camera for the basic optical path.",
+    );
+  }
+  const view = (
+    options.camera as { readonly view?: { readonly enabled?: boolean } | null }
+  ).view;
+  if (view !== null && view !== undefined && view.enabled === true) {
+    throw new Error(
+      "The Three Host Adapter refuses a camera that already has a tiled view offset.",
     );
   }
 }
