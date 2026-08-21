@@ -3,6 +3,7 @@ import {
   DirectionalLight,
   Fog,
   SRGBColorSpace,
+  type Object3D,
   type PerspectiveCamera,
   type Scene,
 } from "three";
@@ -41,6 +42,31 @@ import {
 import type { ReferenceExperienceSnapshot } from "./start-reference-experience.js";
 import type { QaHostSimulationController } from "./qa-simulation-controller.js";
 import type { QaHostPresentationController } from "./qa-presentation-controller.js";
+import {
+  QA_PLANAR_REFLECTION_FIXTURE_NAME,
+  applyQaPlanarReflectionFixtureEnabled,
+  applyQaPlanarReflectionFixtureHotColor,
+  readQaPlanarReflectionFixture,
+  type QaPlanarReflectionFixtureHotColor,
+  type QaPlanarReflectionFixtureState,
+} from "./qa-planar-reflection-fixture.js";
+import {
+  QA_CURRENT_SSR_FIXTURE_NAME,
+  applyQaCurrentSsrFixtureEnabled,
+  applyQaCurrentSsrFixtureHotColor,
+  readQaCurrentSsrFixture,
+  type QaCurrentSsrFixtureHotColor,
+  type QaCurrentSsrFixtureState,
+} from "./qa-current-ssr-fixture.js";
+
+export type {
+  QaPlanarReflectionFixtureHotColor,
+  QaPlanarReflectionFixtureState,
+} from "./qa-planar-reflection-fixture.js";
+export type {
+  QaCurrentSsrFixtureHotColor,
+  QaCurrentSsrFixtureState,
+} from "./qa-current-ssr-fixture.js";
 
 export { createMemoryHostLifecycleAdapter as createQaMemoryHostLifecycleAdapter } from "real-water";
 export { createQaHostSimulationController } from "./qa-simulation-controller.js";
@@ -50,11 +76,11 @@ export type { QaHostPresentationController } from "./qa-presentation-controller.
 export type { QaTemporalResetReason } from "./qa-frame-driver.js";
 
 export const QA_HARNESS_SCHEMA = "real-water/qa-harness" as const;
-export const QA_HARNESS_VERSION = 5 as const;
+export const QA_HARNESS_VERSION = 8 as const;
 export const QA_HARNESS_FIXED_TICK_HZ = QA_FRAME_FIXED_TICK_HZ;
 export const QA_HARNESS_CAPTURE_NAMES = QA_FRAME_CAPTURE_NAMES;
 export const QA_CAPTURE_SCHEMA = "real-water/qa-capture" as const;
-export const QA_CAPTURE_VERSION = 5 as const;
+export const QA_CAPTURE_VERSION = 8 as const;
 
 export type QaCaptureName = QaFrameCaptureName;
 
@@ -114,7 +140,7 @@ export interface QaTemporalReceiptV5 {
   readonly resetFrame: boolean;
 }
 
-export interface QaPresentationReceiptV5 extends QaFrameStateReceiptV4 {
+export interface QaPresentationReceiptV8 extends QaFrameStateReceiptV4 {
   readonly generation: number;
   readonly presentationId: number;
   readonly manifestHash: string;
@@ -130,7 +156,7 @@ export interface QaPresentationReceiptV5 extends QaFrameStateReceiptV4 {
   readonly temporal: QaTemporalReceiptV5;
 }
 
-export interface QaCaptureV5 extends QaPresentationReceiptV5 {
+export interface QaCaptureV8 extends QaPresentationReceiptV8 {
   readonly schema: typeof QA_CAPTURE_SCHEMA;
   readonly version: typeof QA_CAPTURE_VERSION;
   readonly name: QaCaptureName;
@@ -142,7 +168,14 @@ export interface QaCaptureV5 extends QaPresentationReceiptV5 {
     | "r32float-linear-view"
     | "rgb32float-view-normal"
     | "rg32float-ndc"
-    | "r32float-optical";
+    | "r32float-optical"
+    | "rgb32float-linear-ssr"
+    | "r32float-ssr-roughness"
+    | "rgb32float-linear-reflection-base"
+    | "rgb32float-linear-ssr-composite"
+    | "rgb32float-linear-ssr-history"
+    | "r32float-ssr-history-frame-weight"
+    | "rgb32float-linear-ssr-history-input";
   readonly elementType: "uint8" | "float32";
   readonly components: 1 | 2 | 3 | 4;
   readonly dataEncoding: "base64";
@@ -160,6 +193,17 @@ export interface QaFrameSource {
   setOrigin(originX: number, originZ: number): void;
   setEnvironmentLighting(state: HostEnvironmentState): void;
   setHostSceneLightingDecoy(enabled: boolean): void;
+  setHostSceneForegroundFixture(visible: boolean): void;
+  setHostScenePlanarReflectionFixture(enabled: boolean): void;
+  setHostScenePlanarReflectionFixtureHotColor(
+    hotColor: QaPlanarReflectionFixtureHotColor,
+  ): void;
+  readHostScenePlanarReflectionFixture(): QaPlanarReflectionFixtureState;
+  setHostSceneCurrentSsrFixture(enabled: boolean): void;
+  setHostSceneCurrentSsrFixtureHotColor(
+    hotColor: QaCurrentSsrFixtureHotColor,
+  ): void;
+  readHostSceneCurrentSsrFixture(): QaCurrentSsrFixtureState;
   readEnvironmentLighting(): HostEnvironmentState;
 }
 
@@ -184,7 +228,7 @@ export interface QaHarnessOptions {
   synthesizeDeviceLoss(): void;
 }
 
-export interface QaHarnessV5 {
+export interface QaHarnessV8 {
   readonly schema: typeof QA_HARNESS_SCHEMA;
   readonly version: typeof QA_HARNESS_VERSION;
   readonly fixedTickHz: typeof QA_HARNESS_FIXED_TICK_HZ;
@@ -200,8 +244,8 @@ export interface QaHarnessV5 {
     readonly x: number;
     readonly z: number;
   }): Promise<QaOriginReceiptV4>;
-  present(): Promise<QaPresentationReceiptV5>;
-  capture(name: QaCaptureName): Promise<QaCaptureV5>;
+  present(): Promise<QaPresentationReceiptV8>;
+  capture(name: QaCaptureName): Promise<QaCaptureV8>;
   updateArtisticControls(
     controls: ArtisticControls,
     options: ArtisticControlUpdateOptions,
@@ -210,6 +254,17 @@ export interface QaHarnessV5 {
     state: HostEnvironmentState,
   ): Promise<HostEnvironmentState>;
   setHostSceneLightingDecoy(enabled: boolean): Promise<void>;
+  setHostSceneForegroundFixture(visible: boolean): Promise<void>;
+  setHostScenePlanarReflectionFixture(enabled: boolean): Promise<void>;
+  setHostScenePlanarReflectionFixtureHotColor(
+    hotColor: QaPlanarReflectionFixtureHotColor,
+  ): Promise<void>;
+  readHostScenePlanarReflectionFixture(): Promise<QaPlanarReflectionFixtureState>;
+  setHostSceneCurrentSsrFixture(enabled: boolean): Promise<void>;
+  setHostSceneCurrentSsrFixtureHotColor(
+    hotColor: QaCurrentSsrFixtureHotColor,
+  ): Promise<void>;
+  readHostSceneCurrentSsrFixture(): Promise<QaCurrentSsrFixtureState>;
   queryGameplay(
     point: readonly [number, number, number],
   ): Promise<QaGameplayQueryV4>;
@@ -231,12 +286,12 @@ interface ActiveRecipe {
   pendingTicks: number;
   cameraRevision: number;
   cameraSet: boolean;
-  captures: ReadonlyMap<QaCaptureName, QaCaptureV5> | null;
-  presentation: QaPresentationReceiptV5 | null;
+  captures: ReadonlyMap<QaCaptureName, QaCaptureV8> | null;
+  presentation: QaPresentationReceiptV8 | null;
   lastPresentedMotion: QaPresentedMotionStateV5 | null;
 }
 
-export function createQaHarness(options: QaHarnessOptions): QaHarnessV5 {
+export function createQaHarness(options: QaHarnessOptions): QaHarnessV8 {
   let active: ActiveRecipe | null = null;
   let queue = Promise.resolve();
 
@@ -255,7 +310,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV5 {
     active = null;
   };
 
-  const harness: QaHarnessV5 = {
+  const harness: QaHarnessV8 = {
     schema: QA_HARNESS_SCHEMA,
     version: QA_HARNESS_VERSION,
     fixedTickHz: QA_HARNESS_FIXED_TICK_HZ,
@@ -494,6 +549,60 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV5 {
         recipe.presentation = null;
       });
     },
+    setHostSceneForegroundFixture(visible) {
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        recipe.source.setHostSceneForegroundFixture(visible);
+        recipe.captures = null;
+        recipe.presentation = null;
+      });
+    },
+    setHostScenePlanarReflectionFixture(enabled) {
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        recipe.source.setHostScenePlanarReflectionFixture(enabled);
+        recipe.captures = null;
+        recipe.presentation = null;
+      });
+    },
+    setHostScenePlanarReflectionFixtureHotColor(hotColor) {
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        recipe.source.setHostScenePlanarReflectionFixtureHotColor(hotColor);
+        recipe.captures = null;
+        recipe.presentation = null;
+      });
+    },
+    readHostScenePlanarReflectionFixture() {
+      return enqueue(async () =>
+        requireFrameSource(
+          options.frameSource(),
+        ).readHostScenePlanarReflectionFixture(),
+      );
+    },
+    setHostSceneCurrentSsrFixture(enabled) {
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        recipe.source.setHostSceneCurrentSsrFixture(enabled);
+        recipe.captures = null;
+        recipe.presentation = null;
+      });
+    },
+    setHostSceneCurrentSsrFixtureHotColor(hotColor) {
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        recipe.source.setHostSceneCurrentSsrFixtureHotColor(hotColor);
+        recipe.captures = null;
+        recipe.presentation = null;
+      });
+    },
+    readHostSceneCurrentSsrFixture() {
+      return enqueue(async () =>
+        requireFrameSource(
+          options.frameSource(),
+        ).readHostSceneCurrentSsrFixture(),
+      );
+    },
     queryGameplay(point) {
       const normalized = normalizeVector(point, "Gameplay Query point");
       return enqueue(async () => {
@@ -696,6 +805,47 @@ export function createQaThreeFrameSource(
       }
       lightingDecoy = null;
     },
+    setHostSceneForegroundFixture(visible: boolean) {
+      const fixture = scene.getObjectByName(
+        "Reference foreground scene-depth fixture",
+      );
+      if (fixture !== undefined) {
+        fixture.visible = visible;
+      }
+    },
+    setHostScenePlanarReflectionFixture(enabled: boolean) {
+      applyQaPlanarReflectionFixtureEnabled(
+        requirePlanarReflectionFixture(scene),
+        enabled,
+      );
+    },
+    setHostScenePlanarReflectionFixtureHotColor(
+      hotColor: QaPlanarReflectionFixtureHotColor,
+    ) {
+      applyQaPlanarReflectionFixtureHotColor(
+        requirePlanarReflectionFixture(scene),
+        hotColor,
+      );
+    },
+    readHostScenePlanarReflectionFixture() {
+      return readQaPlanarReflectionFixture(
+        requirePlanarReflectionFixture(scene),
+      );
+    },
+    setHostSceneCurrentSsrFixture(enabled: boolean) {
+      applyQaCurrentSsrFixtureEnabled(requireCurrentSsrFixture(scene), enabled);
+    },
+    setHostSceneCurrentSsrFixtureHotColor(
+      hotColor: QaCurrentSsrFixtureHotColor,
+    ) {
+      applyQaCurrentSsrFixtureHotColor(
+        requireCurrentSsrFixture(scene),
+        hotColor,
+      );
+    },
+    readHostSceneCurrentSsrFixture() {
+      return readQaCurrentSsrFixture(requireCurrentSsrFixture(scene));
+    },
     readEnvironmentLighting() {
       return environmentLighting.snapshot();
     },
@@ -761,6 +911,22 @@ function requireFrameSource(source: QaFrameSource | null): QaFrameSource {
     );
   }
   return source;
+}
+
+function requirePlanarReflectionFixture(scene: Scene): Object3D {
+  const fixture = scene.getObjectByName(QA_PLANAR_REFLECTION_FIXTURE_NAME);
+  if (fixture === undefined) {
+    throw new Error("The Reference planar reflection fixture is missing.");
+  }
+  return fixture;
+}
+
+function requireCurrentSsrFixture(scene: Scene): Object3D {
+  const fixture = scene.getObjectByName(QA_CURRENT_SSR_FIXTURE_NAME);
+  if (fixture === undefined) {
+    throw new Error("The Reference current-frame SSR fixture is missing.");
+  }
+  return fixture;
 }
 
 function requirePreparedDriver(driver: QaFrameDriver | null): QaFrameDriver {
@@ -863,9 +1029,9 @@ function readArtisticControlUpdateOptions(
 
 function cacheCaptures(
   captures: readonly QaFrameDriverCapture[],
-  receipt: QaPresentationReceiptV5,
-): ReadonlyMap<QaCaptureName, QaCaptureV5> {
-  const byName = new Map<QaCaptureName, QaCaptureV5>();
+  receipt: QaPresentationReceiptV8,
+): ReadonlyMap<QaCaptureName, QaCaptureV8> {
+  const byName = new Map<QaCaptureName, QaCaptureV8>();
   for (const name of QA_HARNESS_CAPTURE_NAMES) {
     const capture = captures.find((candidate) => candidate.name === name);
     if (capture === undefined) {
@@ -887,8 +1053,8 @@ function cacheCaptures(
 
 function encodeCapture(
   capture: QaFrameDriverCapture,
-  receipt: QaPresentationReceiptV5,
-): QaCaptureV5 {
+  receipt: QaPresentationReceiptV8,
+): QaCaptureV8 {
   const shape = QA_FRAME_CAPTURE_SHAPES[capture.name];
   return Object.freeze({
     schema: QA_CAPTURE_SCHEMA,

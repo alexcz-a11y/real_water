@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   WATER_PRESET_SCHEMA,
   WATER_PRESET_VERSION,
+  createMinimalWaterQualityProfile,
   type ArtisticControls,
   type HostEnvironmentReflectionDescriptor,
   type HostEnvironmentState,
@@ -959,10 +960,11 @@ export function readRegressionAcceptanceEvidence(
       "Regression acceptance coreManifest.hash disagrees with the Core identity.",
     );
   }
-  const qaPrewarm = readQaPrewarmV4(value.qaPrewarmManifest, coreIdentity);
+  const qaPrewarm = readQaPrewarmV6(value.qaPrewarmManifest, coreIdentity);
   const temporalPolicy = readReadyCapabilities(
     qaPrewarm.capabilities,
-    coreIdentity.qualityProfile.temporal,
+    createMinimalWaterQualityProfile(coreIdentity.qualityProfile.id),
+    coreIdentity.drawingBuffer,
   ).rendering.temporal;
   if (canonicalJson(value.temporalPolicy) !== canonicalJson(temporalPolicy)) {
     throw new Error(
@@ -1663,20 +1665,20 @@ function evaluateMetricPolicy(
   return true;
 }
 
-function readQaPrewarmV4(
+function readQaPrewarmV6(
   value: unknown,
   coreIdentity: QaBoundCoreManifestIdentity,
 ): QaFramePrewarmReceipt {
   if (!isRecord(value) || !hasExactKeys(value, QA_PREWARM_KEYS)) {
-    throw new TypeError("Regression acceptance requires QA prewarm v4.");
+    throw new TypeError("Regression acceptance requires QA prewarm v7.");
   }
   if (
     !isRecord(value.manifest) ||
     value.manifest.schema !== QA_FRAME_PREWARM_MANIFEST.schema ||
-    value.manifest.version !== 4 ||
+    value.manifest.version !== QA_FRAME_PREWARM_MANIFEST.version ||
     value.manifest.id !== QA_FRAME_PREWARM_MANIFEST.id
   ) {
-    throw new Error("Regression acceptance requires QA prewarm v4.");
+    throw new Error("Regression acceptance requires QA prewarm v7.");
   }
   if (
     canonicalJson(value.manifest.captures) !==
@@ -1685,11 +1687,11 @@ function readQaPrewarmV4(
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.coreDeclarations)
   ) {
     throw new Error(
-      "Regression acceptance requires the exact QA v4 12-name capture mapping.",
+      "Regression acceptance requires the exact QA v7 23-name capture mapping.",
     );
   }
-  if (QA_FRAME_PREWARM_MANIFEST.captures.length !== 12) {
-    throw new Error("QA v4 capture contract must name exactly 12 outputs.");
+  if (QA_FRAME_PREWARM_MANIFEST.captures.length !== 23) {
+    throw new Error("QA v7 capture contract must name exactly 23 outputs.");
   }
   const core = readQaBoundCoreManifestIdentity(value.core);
   if (core.manifestHash !== coreIdentity.manifestHash) {
@@ -1699,7 +1701,8 @@ function readQaPrewarmV4(
   }
   const capabilities = readReadyCapabilities(
     value.capabilities,
-    core.qualityProfile.temporal,
+    createMinimalWaterQualityProfile(core.qualityProfile.id),
+    core.drawingBuffer,
   );
   if (
     value.width !== core.drawingBuffer.width ||

@@ -32,8 +32,56 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
       dynamicResolution: false,
       frameGeneration: false,
       msaaSamples: 0,
+      updateCadence: "host-present",
       motionFormat: "rg16float",
       stockThreeRevision: "185",
+    },
+    reflection: {
+      environment: { source: "host-adapter" },
+      planar: {
+        width: 320,
+        height: 180,
+        format: "rgba8unorm-srgb",
+        samples: 0,
+      },
+      ssr: {
+        width: 320,
+        height: 180,
+        rawFormat: "rgba16float",
+        compositeFormat: "rgba16float",
+        samples: 0,
+        mode: "current-frame",
+        history: {
+          width: 320,
+          height: 180,
+          historyFormat: "rgba16float",
+          resolveFormat: "rgba16float",
+          inputFormat: "rgba16float",
+          captureFormat: "rgba16float",
+          maxFrames: 32,
+          mode: "temporal-reproject-specular",
+          accumulate: true,
+          hitPointReprojection: true,
+          normalFormat: "packed-rgba16float",
+          resetDomains: [
+            "simulation-reset",
+            "camera-cut",
+            "origin-shift",
+            "sea-state-cut",
+          ] as const,
+          updateCadence: "host-present",
+        },
+        updateCadence: "host-present",
+        missFallbackPriority: ["planar", "host-adapter"],
+        blur: {
+          width: 320,
+          height: 180,
+          format: "rgba16float",
+          mipCount: 5,
+          blurQuality: 2,
+          enabled: true,
+        },
+      },
     },
   },
   gameplay: {
@@ -46,7 +94,11 @@ function createCapture(
   width: number,
   height: number,
 ): HostDiagnosticsPresentedFrame["outputs"][number] {
-  if (name === "final-color" || name === "current-color") {
+  if (
+    name === "final-color" ||
+    name === "current-color" ||
+    name === "planar-color"
+  ) {
     return {
       name,
       format: "rgba8unorm-srgb",
@@ -54,6 +106,76 @@ function createCapture(
       height,
       origin: "top-left",
       data: new Uint8Array(width * height * 4),
+    };
+  }
+  if (name === "ssr-color") {
+    return {
+      name,
+      format: "rgb32float-linear-ssr",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height * 3),
+    };
+  }
+  if (name === "reflection-base-color") {
+    return {
+      name,
+      format: "rgb32float-linear-reflection-base",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height * 3),
+    };
+  }
+  if (name === "ssr-composite-color") {
+    return {
+      name,
+      format: "rgb32float-linear-ssr-composite",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height * 3),
+    };
+  }
+  if (name === "ssr-history-color") {
+    return {
+      name,
+      format: "rgb32float-linear-ssr-history",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height * 3),
+    };
+  }
+  if (name === "ssr-history-frame-weight") {
+    return {
+      name,
+      format: "r32float-ssr-history-frame-weight",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "ssr-history-input-color") {
+    return {
+      name,
+      format: "rgb32float-linear-ssr-history-input",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height * 3),
+    };
+  }
+  if (name === "ssr-roughness") {
+    return {
+      name,
+      format: "r32float-ssr-roughness",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
     };
   }
   if (name === "depth") {
@@ -153,8 +275,8 @@ function coreFrame(
 }
 
 describe("QA frame driver Core association", () => {
-  it("publishes a v4 capture-contract mapped to actual Core declaration IDs", () => {
-    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(4);
+  it("publishes a v7 capture-contract mapped to actual Core declaration IDs", () => {
+    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(7);
     expect(QA_FRAME_PREWARM_MANIFEST.coreDeclarations).toEqual(
       QA_TO_CORE_DECLARATION_IDS,
     );
@@ -191,9 +313,15 @@ describe("QA frame driver Core association", () => {
       "water-optical-factors-target",
       "water-optical-diagnostics-b",
       "water-optical-diagnostics-a",
+      "water-planar-reflection-target",
+      "water-ssr-raw-target",
+      "water-ssr-composite-target",
+      "water-render-target",
+      "water-ssr-history-resolved-capture-target",
+      "water-ssr-history-beauty-target",
     ]);
-    expect(receipt.progress.completedWork).toBe(8);
-    expect(receipt.progress.totalWork).toBe(8);
+    expect(receipt.progress.completedWork).toBe(14);
+    expect(receipt.progress.totalWork).toBe(14);
   });
 
   it("rejects a Core manifest that is missing a mapped declaration", () => {

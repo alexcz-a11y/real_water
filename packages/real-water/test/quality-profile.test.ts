@@ -27,11 +27,62 @@ const NATIVE_TEMPORAL = Object.freeze({
   dynamicResolution: false as const,
   frameGeneration: false as const,
   msaaSamples: 0 as const,
+  updateCadence: "host-present" as const,
+});
+const NATIVE_SSR_HISTORY = Object.freeze({
+  mode: "temporal-reproject-specular" as const,
+  accumulate: true as const,
+  hitPointReprojection: true as const,
+  maxFrames: 32 as const,
+  historyFormat: "rgba16float" as const,
+  resolveFormat: "rgba16float" as const,
+  inputFormat: "rgba16float" as const,
+  captureFormat: "rgba16float" as const,
+  normalFormat: "packed-rgba16float" as const,
+  resetDomains: Object.freeze([
+    "simulation-reset",
+    "camera-cut",
+    "origin-shift",
+    "sea-state-cut",
+  ] as const),
+  updateCadence: "host-present" as const,
+});
+const NATIVE_SSR = Object.freeze({
+  mode: "current-frame" as const,
+  history: NATIVE_SSR_HISTORY,
+  updateCadence: "host-present" as const,
+  stochastic: false as const,
+  reflectNonMetals: false as const,
+  binaryRefine: true as const,
+  quality: 0.5 as const,
+  maxDistance: 48 as const,
+  thickness: 0.35 as const,
+  resolutionPolicy: "drawing-buffer-exact" as const,
+  resolutionScale: 1 as const,
+  samples: 0 as const,
+  rawFormat: "rgba16float" as const,
+  compositeFormat: "rgba16float" as const,
+  blurFormat: "rgba16float" as const,
+  blurResolutionPolicy: "drawing-buffer-exact" as const,
+  mipCount: 5 as const,
+  blurQuality: 2 as const,
+  blurRoute: "enabled" as const,
+  screenEdgeFade: 0.08 as const,
+  roughnessCutoff: 0.5 as const,
+});
+const NATIVE_REFLECTION = Object.freeze({
+  environment: Object.freeze({ source: "host-adapter" as const }),
+  planar: Object.freeze({
+    resolutionPolicy: "drawing-buffer-exact" as const,
+    format: "rgba8unorm-srgb" as const,
+    samples: 0 as const,
+  }),
+  ssr: NATIVE_SSR,
 });
 const MINIMAL_PROFILE_HASH =
-  "sha256:647ceaf12d769ddc4a95414593ca23131f3ec9a516a32341517609d4788cbc73";
+  "sha256:3ec933fa8238e5bfd50608dc451d8354374c8337e49c793f191a3ad86cdf67b2";
 const HIGH_DETAIL_PROFILE_HASH =
-  "sha256:975a61a72c43c660866970618ee747db41fab60cd54d6cce6654edd7376b8ba3";
+  "sha256:d61edd12017f4b8adfe9878fa2c116fd9831b1681ce8b52c5e474e012ad94886";
 const MEMORY_PREWARM_DRAWING_BUFFER = Object.freeze({
   width: 320,
   height: 180,
@@ -46,13 +97,13 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-scene-depth":
     "sha256:b1c0600e109f08f14c72d84ac848e85a64d47d69daf0406aa966911a0872a169",
   "water-render-target":
-    "sha256:154cbf47d199c3e5501bb9bf1fb30a862c6bf3b770caa1a759f55fb14fea34e9",
+    "sha256:e6249a83e55512d997edbe3d8a2ce16875b2abc1f721bb48834a7281a419a262",
   "water-motion-vectors":
     "sha256:22d81a8fcf82eb4c38c70f64cbdd809d308218ae003cff43d3d0e4495c532026",
   "water-inverse-linear-depth":
-    "sha256:8c437e59eb9f4c22921b61c6d5bb39af290007a27e424b1916e934175743cc4c",
+    "sha256:fbf21f1edb1ad428145d3bcbe2a95a8d46ed4ecc1b171ece1c527e02297f8e44",
   "water-view-normal":
-    "sha256:c9c8dc85087bbbf6c696e4aed1efe7796b22d6eabb9d25b6e7f1fd12ed256577",
+    "sha256:9202e800870f86fd41deba3fbec57a3a94469cce59e3c93eea5513c006345bb5",
   "water-optical-factors-target":
     "sha256:17bb803da6968b516f2ea1f286d25d6e8aa0b2eda5bc9ba118cc0e4bdb18e5ec",
   "water-optical-diagnostics-a":
@@ -68,11 +119,59 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-traa-resolve-jitter":
     "sha256:ba8bdc48d2842afd8f4f620e5296fce9bde9055047e4de7d593eec83dce25733",
   "water-render-route":
-    "sha256:02a2ef11bb80777f29a294b21601b96fefa73a10f1a531bb9427067e5f326772",
+    "sha256:42b6254fad454c6b5b415b997c96a14c78e7bf1b1473c28a2d7fe5ab90b4c579",
   "water-current-color-conversion":
-    "sha256:c3ccd110aed4171e0e15c0bdde797b266ed744751a437ae54ea1ec157f8dcb14",
+    "sha256:ea19f958120b52c05d673abcec39db3aa8ca7157f326d5d4449a4faa0457c57c",
   "water-named-output-routes":
-    "sha256:aa21153732af519ab15fdd5e9f46311d2e9f4c8096b9f35bd26bb561d18e5139",
+    "sha256:ac7175ab7f59205e4aefef72d46d2b68cfe4dc256db66788de2466d2d67dcf3a",
+  "water-ssr-raw-target":
+    "sha256:5229f76bc28be7b7aa032fadcb3adabfada2202dde29a88f499d16fac9ba659f",
+  "water-ssr-blur-target":
+    "sha256:7de03a661f8f354b4936ce102689f719ec015d4fa9e56a01c9ac09521d790cb1",
+  "water-ssr-composite-target":
+    "sha256:e9e8d713d8c38ada27f083c3c3cca0698ea4df327b40e247450e0f3d0420b336",
+  "water-ssr-route":
+    "sha256:1a331354906edd1886eccf37a780586db70fa5d9326e29b65ef66f690f10dcee",
+  "water-ssr-blur-copy-route":
+    "sha256:0be4df8ca02cbf5d130d34c54d9fa60713d07cd1370eccc81c5c9bfef7b2ffb9",
+  "water-ssr-blur-route":
+    "sha256:12c33037a77f9494ee861a6b56807f479afdc0e68ce7cc46477dca3509fe92c3",
+  "water-ssr-composite-route":
+    "sha256:ff8885aece4baf4f604f40783c8b641c5338d5bea1d8f79ac3bb0e5d5dc5b893",
+  "water-ssr-probe":
+    "sha256:ee3f19cd28ba2891f410f0467b7ff688e477aa40926f72812e71a2932bc71104",
+  "water-ssr-history-target":
+    "sha256:01163977af38992ab615fb739c87de571568fe8e5d8b2abb4c0814f8e4f69159",
+  "water-ssr-history-resolve-target":
+    "sha256:668109307d81e0f44bb3b88df15cb4214ca818eead92cdcd79927a8543881b26",
+  "water-ssr-history-beauty-target":
+    "sha256:80863d1535f37527febcfa90f24e8c8d1cf5c3f2cbde6daf11730f028691aa8f",
+  "water-ssr-history-beauty-route":
+    "sha256:1fcc820049c348593edbe52c246d3201e5acd5f667fdf135fa1baf4529aaf5bb",
+  "water-ssr-history-resolved-capture-target":
+    "sha256:fb768c5c2f3ed1b26274913eeaa7185d686db9f4a01f4b88abb13fa2b59d562f",
+  "water-ssr-history-resolved-copy-route":
+    "sha256:cbd5fc2889a202ba3ebd2e514ea9e58379f5d3491339a6edae6fda3c2b5b4d0d",
+  "water-ssr-history-previous-depth":
+    "sha256:4a5523625b107bd68d4da4805bf1b76d73fdd9349ca1759449091a8ca1548aee",
+  "water-ssr-history-previous-normal":
+    "sha256:e06ddd63eec10a66ab84d8ad7a5d45712bfb4657f87dc4dfa59f8c84301ab065",
+  "water-ssr-history-seed-route":
+    "sha256:a795d239b5301dd3ffa64fd58a1ba3698244349ec7a4449851ee2ad3d074bd52",
+  "water-ssr-history-resolve-route":
+    "sha256:4b2e56c27d2a86a5c7896f9c8be33eaa45b2890c6b70347007e32ad06195584b",
+  "water-ssr-history-accumulate-route":
+    "sha256:f20d52a23de875e18cf3f589f5d68f83357423af3f0ba268f2c377539b51e075",
+  "water-ssr-history-reset-route":
+    "sha256:0795e123827f5cf11776dddba1b8585fb9a8b3bbea8dc1877375708d53ed2b94",
+  "water-ssr-history-probe":
+    "sha256:42eac93d1c673fe058eb09c61f470083df6b7afa3683328e788656732491a2e6",
+  "water-planar-reflection-target":
+    "sha256:380ced36a62272cecd356b28c02587cb24d24d7390b6d79ac5051cad272a52ba",
+  "water-planar-reflection-route":
+    "sha256:57c74219c5e33c9f5e063c0de85dc833ca8bef39dc73c3224d59b678dec658d4",
+  "water-planar-reflection-probe":
+    "sha256:f203f71435dfe40d3d14d3b19b853fd13f8338aba138c1eee29400570074311e",
   "water-completion-probe":
     "sha256:c4e77fab97a18b547bf0053649e772e8faf9ce0dd58958136d531ecfca9ab89f",
   "water-main-camera-guard":
@@ -97,6 +196,30 @@ const DRAWING_BUFFER_BOUND_IDS = [
   "water-named-output-routes",
   "water-completion-probe",
   "water-main-camera-guard",
+  "water-planar-reflection-target",
+  "water-planar-reflection-route",
+  "water-planar-reflection-probe",
+  "water-ssr-raw-target",
+  "water-ssr-blur-target",
+  "water-ssr-composite-target",
+  "water-ssr-route",
+  "water-ssr-blur-copy-route",
+  "water-ssr-blur-route",
+  "water-ssr-composite-route",
+  "water-ssr-probe",
+  "water-ssr-history-target",
+  "water-ssr-history-resolve-target",
+  "water-ssr-history-beauty-target",
+  "water-ssr-history-beauty-route",
+  "water-ssr-history-resolved-capture-target",
+  "water-ssr-history-resolved-copy-route",
+  "water-ssr-history-previous-depth",
+  "water-ssr-history-previous-normal",
+  "water-ssr-history-seed-route",
+  "water-ssr-history-resolve-route",
+  "water-ssr-history-accumulate-route",
+  "water-ssr-history-reset-route",
+  "water-ssr-history-probe",
 ] as const;
 
 function sha256Identifier(value: string): string {
@@ -149,6 +272,31 @@ const CORE_PREWARM_DECLARATION_IDS = [
   "water-spectral-band-ripple",
   "water-material",
   "water-optical-route",
+  "water-planar-reflection-target",
+  "water-planar-reflection-route",
+  "water-planar-environment-fallback",
+  "water-planar-reflection-probe",
+  "water-ssr-raw-target",
+  "water-ssr-blur-target",
+  "water-ssr-composite-target",
+  "water-ssr-route",
+  "water-ssr-blur-copy-route",
+  "water-ssr-blur-route",
+  "water-ssr-composite-route",
+  "water-ssr-probe",
+  "water-ssr-history-target",
+  "water-ssr-history-resolve-target",
+  "water-ssr-history-beauty-target",
+  "water-ssr-history-beauty-route",
+  "water-ssr-history-resolved-capture-target",
+  "water-ssr-history-resolved-copy-route",
+  "water-ssr-history-previous-depth",
+  "water-ssr-history-previous-normal",
+  "water-ssr-history-seed-route",
+  "water-ssr-history-resolve-route",
+  "water-ssr-history-accumulate-route",
+  "water-ssr-history-reset-route",
+  "water-ssr-history-probe",
   "water-render-route",
   "water-procedural-motion",
   "water-motion-vectors",
@@ -174,10 +322,10 @@ describe("Quality Profiles", () => {
     const minimal = createMinimalWaterQualityProfile();
     const highDetail = createMinimalWaterQualityProfile("minimal-high-detail");
 
-    expect(QUALITY_PROFILE_VERSION).toBe(2);
+    expect(QUALITY_PROFILE_VERSION).toBe(5);
     expect(minimal).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 2,
+      version: 5,
       id: "minimal",
       profileHash: MINIMAL_PROFILE_HASH,
       surface: {
@@ -187,10 +335,11 @@ describe("Quality Profiles", () => {
         },
       },
       temporal: NATIVE_TEMPORAL,
+      reflection: NATIVE_REFLECTION,
     });
     expect(highDetail).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 2,
+      version: 5,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
       surface: {
@@ -200,12 +349,19 @@ describe("Quality Profiles", () => {
         },
       },
       temporal: NATIVE_TEMPORAL,
+      reflection: NATIVE_REFLECTION,
     });
     expect(createMinimalWaterQualityProfile()).toEqual(minimal);
     expect(Object.isFrozen(minimal)).toBe(true);
     expect(Object.isFrozen(minimal.surface)).toBe(true);
     expect(Object.isFrozen(minimal.surface.geometry)).toBe(true);
     expect(Object.isFrozen(minimal.temporal)).toBe(true);
+    expect(Object.isFrozen(minimal.reflection)).toBe(true);
+    expect(Object.isFrozen(minimal.reflection.planar)).toBe(true);
+    expect(Object.isFrozen(minimal.reflection.ssr)).toBe(true);
+    expect(minimal.reflection.ssr.history).toEqual(NATIVE_SSR_HISTORY);
+    expect(Object.isFrozen(minimal.reflection.ssr.history)).toBe(true);
+    expect(minimal.reflection.ssr.mode).toBe("current-frame");
     expect(Object.isFrozen(highDetail)).toBe(true);
     expect(() => {
       (minimal.surface.geometry as { widthSegments: number }).widthSegments =
@@ -228,7 +384,7 @@ describe("Quality Profiles", () => {
     expect(normalized).not.toBe(candidate);
     expect(identity).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 2,
+      version: 5,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
     });
@@ -360,6 +516,120 @@ describe("Quality Profiles", () => {
         return rest;
       })(),
     ],
+    [
+      "missing reflection",
+      (() => {
+        const profile = createMinimalWaterQualityProfile() as QualityProfile & {
+          reflection?: unknown;
+        };
+        const rest = { ...profile };
+        Reflect.deleteProperty(rest, "reflection");
+        return rest;
+      })(),
+    ],
+    [
+      "ssr history claimed",
+      {
+        ...createMinimalWaterQualityProfile(),
+        reflection: {
+          ...NATIVE_REFLECTION,
+          ssr: { ...NATIVE_SSR, history: true },
+        },
+      },
+    ],
+    [
+      "ssr history false",
+      {
+        ...createMinimalWaterQualityProfile(),
+        reflection: {
+          ...NATIVE_REFLECTION,
+          ssr: { ...NATIVE_SSR, history: false },
+        },
+      },
+    ],
+    [
+      "stale v4",
+      {
+        ...createMinimalWaterQualityProfile(),
+        version: 4,
+      },
+    ],
+    [
+      "ssr history extra field",
+      {
+        ...createMinimalWaterQualityProfile(),
+        reflection: {
+          ...NATIVE_REFLECTION,
+          ssr: {
+            ...NATIVE_SSR,
+            history: { ...NATIVE_SSR_HISTORY, requestReset: true },
+          },
+        },
+      },
+    ],
+    [
+      "ssr history missing input format",
+      {
+        ...createMinimalWaterQualityProfile(),
+        reflection: {
+          ...NATIVE_REFLECTION,
+          ssr: {
+            ...NATIVE_SSR,
+            history: {
+              mode: NATIVE_SSR_HISTORY.mode,
+              accumulate: NATIVE_SSR_HISTORY.accumulate,
+              hitPointReprojection: NATIVE_SSR_HISTORY.hitPointReprojection,
+              maxFrames: NATIVE_SSR_HISTORY.maxFrames,
+              historyFormat: NATIVE_SSR_HISTORY.historyFormat,
+              resolveFormat: NATIVE_SSR_HISTORY.resolveFormat,
+              normalFormat: NATIVE_SSR_HISTORY.normalFormat,
+              resetDomains: NATIVE_SSR_HISTORY.resetDomains,
+              updateCadence: NATIVE_SSR_HISTORY.updateCadence,
+            },
+          },
+        },
+      },
+    ],
+    [
+      "ssr extra field",
+      {
+        ...createMinimalWaterQualityProfile(),
+        reflection: {
+          ...NATIVE_REFLECTION,
+          ssr: { ...NATIVE_SSR, setHistory: true },
+        },
+      },
+    ],
+    [
+      "ssr stochastic claimed",
+      {
+        ...createMinimalWaterQualityProfile(),
+        reflection: {
+          ...NATIVE_REFLECTION,
+          ssr: { ...NATIVE_SSR, stochastic: true },
+        },
+      },
+    ],
+    [
+      "missing ssr",
+      {
+        ...createMinimalWaterQualityProfile(),
+        reflection: {
+          environment: NATIVE_REFLECTION.environment,
+          planar: NATIVE_REFLECTION.planar,
+        },
+      },
+    ],
+    [
+      "planar samples drift",
+      {
+        ...createMinimalWaterQualityProfile(),
+        reflection: {
+          ...NATIVE_REFLECTION,
+          planar: { ...NATIVE_REFLECTION.planar, samples: 4 },
+        },
+      },
+    ],
   ])("fails closed on %s", (_name, candidate) => {
     expect(() =>
       normalizeQualityProfile(candidate as unknown as QualityProfile),
@@ -404,10 +674,16 @@ describe("Quality Profile manifests", () => {
     ]);
     expect(minimal.effectVariants).toEqual(SUPPORTED_EFFECT_VARIANTS);
     expect(minimal.qualityProfile.temporal).toEqual(NATIVE_TEMPORAL);
-    expect(minimal.qualityProfile.version).toBe(2);
+    expect(minimal.qualityProfile.reflection).toEqual(NATIVE_REFLECTION);
+    expect(minimal.qualityProfile.version).toBe(5);
     expect(minimal.declarations.map(({ id }) => id)).toEqual([
       ...CORE_PREWARM_DECLARATION_IDS,
     ]);
+    expect(
+      minimal.declarations.find(
+        (declaration) => declaration.id === "water-named-output-routes",
+      )?.label,
+    ).toBe("Twenty-three named diagnostics output routes");
     expect(
       Object.fromEntries(
         minimal.declarations
@@ -450,7 +726,8 @@ describe("Quality Profile manifests", () => {
       },
       "water-traa-reset-route": {
         kind: "conditional-route",
-        label: "No-allocation TRAA reset route",
+        label:
+          "No-allocation TRAA and dedicated SSR history reset (shared Host domain)",
       },
     });
     expect(highDetail.declarations.map(({ id }) => id)).toEqual(
@@ -476,7 +753,7 @@ describe("Quality Profile manifests", () => {
         "Viewport pre-water scene color (viewportSharedTexture)",
       "water-scene-depth": "Viewport opaque scene depth (viewportDepthTexture)",
       "water-optical-route":
-        "Basic optical composition route (projected refraction, RGB Beer-Lambert, perspective camera)",
+        "Basic optical composition route (planar+environment fallback, projected refraction, RGB Beer-Lambert, perspective camera)",
     });
     const highDetailClipmap = highDetail.declarations.find(
       (declaration) => declaration.id === "water-clipmap",
@@ -510,7 +787,7 @@ describe("Quality Profile manifests", () => {
       "water-material":
         "sha256:0a8c1aaa649d6a28ff0565d73cf0cf6e45acf14135c54e5162fbc7fbe0c7e386",
       "water-optical-route":
-        "sha256:d223bdd7539e1d31659f03fa18a8e8e8784fde725f9fce9d499f33f48dcf1e63",
+        "sha256:f24789707811ecec877cb42335cd5d2f1ba2325c6e31644ec35d59dd724b0027",
       "water-traa-reset-route":
         "sha256:e4a59425b89a6138d620200a8404be90b74fd8d20a5da54fbefb259a3b4dd9ab",
       "water-hidden-stabilization":

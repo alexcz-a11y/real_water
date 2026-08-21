@@ -8,6 +8,9 @@ export type {
   MinimalWaterQualityProfileId,
   QualityProfile,
   QualityProfileIdentity,
+  QualityProfileReflection,
+  QualityProfileReflectionSsr,
+  QualityProfileReflectionSsrHistory,
   QualityProfileSurface,
   QualityProfileTemporal,
 } from "./quality-profile.js";
@@ -30,6 +33,10 @@ export type {
   GameplayCapabilities,
   RealWaterCapabilities,
   RenderingCapabilities,
+  RenderingCapabilitiesReflection,
+  RenderingCapabilitiesReflectionSsr,
+  RenderingCapabilitiesReflectionSsrBlur,
+  RenderingCapabilitiesReflectionSsrHistory,
   RenderingCapabilitiesTemporal,
 } from "./capabilities.js";
 export { MAX_GAMEPLAY_QUERY_POINTS } from "./capabilities.js";

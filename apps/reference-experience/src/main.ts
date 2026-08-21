@@ -20,7 +20,15 @@ import {
   type RealWaterLease,
   type WebGPUDeviceLoss,
 } from "real-water";
-import type { QaFrameSource, QaHarnessV5 } from "./qa-harness.js";
+import type { QaFrameSource, QaHarnessV8 } from "./qa-harness.js";
+import {
+  createQaPlanarReflectionFixture,
+  disposeQaPlanarReflectionFixture,
+} from "./qa-planar-reflection-fixture.js";
+import {
+  createQaCurrentSsrFixture,
+  disposeQaCurrentSsrFixture,
+} from "./qa-current-ssr-fixture.js";
 import type * as QaHarnessModuleContract from "./qa-harness.js";
 import {
   createReferenceHostPresentationController,
@@ -299,7 +307,7 @@ function createThreeReferenceHostAttempt(
   });
   const scene = new Scene();
   scene.background = new Color(0x031019);
-  const seabed = addReferenceSeabed(scene);
+  const seabed = addReferenceSeabed(scene, qaModule !== null);
 
   const width = drawingBuffer.width;
   const height = drawingBuffer.height;
@@ -414,7 +422,10 @@ function createCanvasStage(
   return stage;
 }
 
-function addReferenceSeabed(scene: Scene): { dispose(): void } {
+function addReferenceSeabed(
+  scene: Scene,
+  qaFixtures = false,
+): { dispose(): void } {
   const fixtureColor = new MeshBasicMaterial({ color: new Color(0x0a505a) });
   const shallow = new Mesh(new PlaneGeometry(16, 20), fixtureColor);
   shallow.name = "Reference 1m scene-depth fixture";
@@ -431,7 +442,15 @@ function addReferenceSeabed(scene: Scene): { dispose(): void } {
   foreground.name = "Reference foreground scene-depth fixture";
   foreground.rotation.x = -Math.PI / 2;
   foreground.position.set(-20, 6, -40);
+  const planar = qaFixtures ? createQaPlanarReflectionFixture() : null;
+  const currentSsr = qaFixtures ? createQaCurrentSsrFixture() : null;
   scene.add(shallow, deep, foreground);
+  if (planar !== null) {
+    scene.add(planar);
+  }
+  if (currentSsr !== null) {
+    scene.add(currentSsr);
+  }
   return Object.freeze({
     dispose(): void {
       scene.remove(shallow, deep, foreground);
@@ -440,6 +459,12 @@ function addReferenceSeabed(scene: Scene): { dispose(): void } {
       foreground.geometry.dispose();
       fixtureColor.dispose();
       foreground.material.dispose();
+      if (planar !== null) {
+        disposeQaPlanarReflectionFixture(planar);
+      }
+      if (currentSsr !== null) {
+        disposeQaCurrentSsrFixture(currentSsr);
+      }
     },
   });
 }
@@ -499,6 +524,6 @@ function readRevealFrames(
 
 declare global {
   interface Window {
-    __REAL_WATER_QA__?: QaHarnessV5;
+    __REAL_WATER_QA__?: QaHarnessV8;
   }
 }

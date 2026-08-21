@@ -42,7 +42,8 @@ export interface HostPresentationState {
 }
 
 /**
- * Why Core reset TRAA history for one presented frame.
+ * Why Core reset TRAA and dedicated SSR TemporalReproject history for one
+ * presented frame. Both histories share this Host domain.
  *
  * Continuous tick, camera, and Artistic Control updates do not emit a reason.
  * `initial` is omitted until a live route actually emits it.
@@ -58,11 +59,11 @@ export type HostTemporalResetReason =
  * @public
  */
 export interface HostPresentedTemporal {
-  /** Monotonic TRAA history epoch. Increments only on a successful reset. */
+  /** Monotonic TRAA and SSR history epoch. Increments only on a successful reset. */
   readonly historyEpoch: number;
-  /** Why Core reset TRAA history, or `null` when history continued. */
+  /** Why Core reset TRAA and SSR history, or `null` when history continued. */
   readonly resetReason: HostTemporalResetReason | null;
-  /** `true` when this present reset TRAA history. */
+  /** `true` when this present reset TRAA and SSR history. */
   readonly resetFrame: boolean;
 }
 
@@ -93,7 +94,7 @@ export interface HostPresentedFrame {
   readonly cameraCutRevision: number;
   /** Host sea-state-cut revision at present time. */
   readonly seaStateCutRevision: number;
-  /** TRAA history epoch and reset association for this present. */
+  /** TRAA and dedicated SSR history epoch and reset association for this present. */
   readonly temporal: HostPresentedTemporal;
 }
 

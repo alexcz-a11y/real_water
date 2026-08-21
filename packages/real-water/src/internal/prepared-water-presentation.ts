@@ -1,10 +1,9 @@
 import {
+  Color,
   DataUtils,
-  FloatType,
   HalfFloatType,
   LinearSRGBColorSpace,
   type Matrix4,
-  RedFormat,
   RGBAFormat,
   RGFormat,
   RenderPipeline,
@@ -16,10 +15,10 @@ import {
   type Scene,
 } from "three/webgpu";
 import {
-  linearDepth,
   mrt,
   normalView,
   output,
+  packNormalToRGB,
   pass,
   texture,
   vec4,
@@ -33,6 +32,7 @@ import {
   type DiagnosticsCaptureName,
   type DiagnosticsMotionVectorCapture,
   type DiagnosticsOpticalScalarCapture,
+  type DiagnosticsSsrRoughnessCapture,
   type HostDiagnosticsPresentRequest,
   type HostDiagnosticsPresentedFrame,
   type HostDiagnosticsRoute,
@@ -43,6 +43,7 @@ import type {
   HostTemporalResetReason,
 } from "../presentation.js";
 import type { OpenWaterRuntimeSnapshot } from "../runtime.js";
+import { unpackPackedViewNormalRgb } from "../ssr.js";
 import { installHostDiagnosticsRoute } from "./diagnostics-route-bridge.js";
 import type { HostPresentationRouteBridge } from "./presentation-route-bridge.js";
 import {
@@ -52,13 +53,25 @@ import {
   type TraaJitterAdapter,
 } from "./traa-r185.js";
 import {
-  INVERSE_LINEAR_DEPTH_ATTACHMENT,
+  createPlanarReflectionPass,
+  type PlanarReflectionPass,
+} from "./reflection-stack.js";
+import {
   MOTION_VECTORS_ATTACHMENT,
   OPTICAL_DIAGNOSTICS_A_ATTACHMENT,
   OPTICAL_DIAGNOSTICS_B_ATTACHMENT,
   OPTICAL_FACTORS_ATTACHMENT,
   VIEW_NORMAL_ATTACHMENT,
 } from "./water-optics-rendering.js";
+import { assertRendererCopyTextureToTexture } from "./ssr-temporal-reproject.js";
+import {
+  assertCurrentFrameSsrPreparedSize,
+  createCurrentFrameSsrStack,
+  disposeCurrentFrameSsrStack,
+  renderCurrentFrameSsr,
+  renderCurrentFrameSsrHistory,
+  type CurrentFrameSsrStack,
+} from "./ssr-stack.js";
 
 export const PREWARM_HISTORY_EPOCH = 1;
 export const HIDDEN_STABILIZATION_FRAME_COUNT = 8;
@@ -66,8 +79,7 @@ export const HIDDEN_STABILIZATION_FRAME_COUNT = 8;
 const CORE_WEBGPU_MAX_COLOR_ATTACHMENT_BYTES_PER_SAMPLE = 32;
 const CORE_SCENE_PASS_COLOR_ATTACHMENT_FORMATS = [
   "rgba16float",
-  "r32float",
-  "rg16float",
+  "rgba16float",
   "rg16float",
   "rgba16float",
   "rg8unorm",
@@ -91,12 +103,14 @@ export interface PreparedWaterPresentationResources {
   readonly currentColorTarget: RenderTarget;
   readonly finalColorTarget: RenderTarget;
   readonly scenePass: ReturnType<typeof pass>;
+  readonly ssr: CurrentFrameSsrStack;
   readonly inverseLinearDepthTextureIndex: number;
   readonly viewNormalTextureIndex: number;
   readonly motionVectorsTextureIndex: number;
   readonly opticalFactorsTextureIndex: number;
   readonly opticalDiagnosticsATextureIndex: number;
   readonly opticalDiagnosticsBTextureIndex: number;
+  readonly planar: PlanarReflectionPass;
   readonly width: number;
   readonly height: number;
   readonly counters: PresentationReadinessCounters;
@@ -142,6 +156,7 @@ function constructPreparedWaterPresentationResources(
   readonly resources: PreparedWaterPresentationResources;
   readonly partial: PartialPreparedWaterPresentationResources;
 } {
+  assertRendererCopyTextureToTexture(renderer);
   const counters: PresentationReadinessCounters = {
     compileCount: 0,
     probeCount: 0,
@@ -156,8 +171,7 @@ function constructPreparedWaterPresentationResources(
   scenePass.setMRT(
     mrt({
       output,
-      [INVERSE_LINEAR_DEPTH_ATTACHMENT]: linearDepth().oneMinus(),
-      [VIEW_NORMAL_ATTACHMENT]: vec4(normalView.x, normalView.y, 0, 1),
+      [VIEW_NORMAL_ATTACHMENT]: vec4(packNormalToRGB(normalView), 1),
       [MOTION_VECTORS_ATTACHMENT]: velocity,
       [OPTICAL_FACTORS_ATTACHMENT]: vec4(0, 0, 0, 1),
       [OPTICAL_DIAGNOSTICS_A_ATTACHMENT]: vec4(0, 0, 0, 1),
@@ -167,18 +181,12 @@ function constructPreparedWaterPresentationResources(
   const outputTexture = scenePass.getTexture("output");
   outputTexture.format = RGBAFormat;
   outputTexture.type = HalfFloatType;
-  const inverseLinearDepthTexture = scenePass.getTexture(
-    INVERSE_LINEAR_DEPTH_ATTACHMENT,
-  );
-  inverseLinearDepthTexture.format = RedFormat;
-  inverseLinearDepthTexture.type = FloatType;
   const viewNormalTexture = scenePass.getTexture(VIEW_NORMAL_ATTACHMENT);
-  viewNormalTexture.format = RGFormat;
+  viewNormalTexture.format = RGBAFormat;
   viewNormalTexture.type = HalfFloatType;
   const motionVectorsTexture = scenePass.getTexture(MOTION_VECTORS_ATTACHMENT);
   motionVectorsTexture.format = RGFormat;
   motionVectorsTexture.type = HalfFloatType;
-  scenePass.getTextureNode(MOTION_VECTORS_ATTACHMENT);
   const opticalFactorsTexture = scenePass.getTexture(
     OPTICAL_FACTORS_ATTACHMENT,
   );
@@ -198,17 +206,30 @@ function constructPreparedWaterPresentationResources(
   opticalDiagnosticsBTexture.colorSpace = LinearSRGBColorSpace;
   assertCoreScenePassColorByteBudget(scenePass.renderTarget.textures);
 
-  const beauty = scenePass.getTextureNode("output");
-  const depth = scenePass.getTextureNode("depth");
-  const actualMotion = scenePass.getTextureNode(MOTION_VECTORS_ATTACHMENT);
   const resetUniform = createTraaResetUniform();
   partial.resetUniform = resetUniform;
+  const ssr = createCurrentFrameSsrStack(
+    renderer,
+    scenePass,
+    camera,
+    drawingBuffer,
+    {
+      viewNormal: viewNormalTexture,
+      opticalFactors: opticalFactorsTexture,
+      motionVectors: motionVectorsTexture,
+    },
+  );
+  partial.ssr = ssr;
   const traaNode = traa(
-    beauty,
-    depth,
-    createResettableVelocityTextureNode(actualMotion, resetUniform),
+    vec4(texture(ssr.compositeTarget.texture).rgb, texture(outputTexture).a),
+    texture(scenePass.getTexture("depth")),
+    createResettableVelocityTextureNode(
+      texture(motionVectorsTexture),
+      resetUniform,
+    ),
     camera,
   );
+  traaNode.updateBeforeType = "render";
   partial.traaNode = traaNode;
   const jitterAdapter = createTraaJitterAdapter(traaNode);
   partial.jitterAdapter = jitterAdapter;
@@ -238,7 +259,7 @@ function constructPreparedWaterPresentationResources(
   currentColorTarget.texture.name = "Real Water current color";
   const currentColorPipeline = new RenderPipeline(
     renderer,
-    texture(scenePass.getTexture("output")),
+    vec4(texture(ssr.compositeTarget.texture).rgb, texture(outputTexture).a),
   );
   partial.currentColorPipeline = currentColorPipeline;
   const presentationPipeline = new RenderPipeline(
@@ -247,6 +268,8 @@ function constructPreparedWaterPresentationResources(
   );
   partial.presentationPipeline = presentationPipeline;
   presentationPipeline.outputColorTransform = false;
+  const planar = createPlanarReflectionPass(camera, drawingBuffer);
+  partial.planar = planar;
 
   const resources: PreparedWaterPresentationResources = {
     presentationPipeline,
@@ -258,10 +281,8 @@ function constructPreparedWaterPresentationResources(
     currentColorTarget,
     finalColorTarget,
     scenePass,
-    inverseLinearDepthTextureIndex: textureIndex(
-      scenePass.renderTarget,
-      INVERSE_LINEAR_DEPTH_ATTACHMENT,
-    ),
+    ssr,
+    inverseLinearDepthTextureIndex: 0,
     viewNormalTextureIndex: textureIndex(
       scenePass.renderTarget,
       VIEW_NORMAL_ATTACHMENT,
@@ -282,6 +303,7 @@ function constructPreparedWaterPresentationResources(
       scenePass.renderTarget,
       OPTICAL_DIAGNOSTICS_B_ATTACHMENT,
     ),
+    planar,
     width: drawingBuffer.width,
     height: drawingBuffer.height,
     counters,
@@ -291,16 +313,22 @@ function constructPreparedWaterPresentationResources(
 
 export async function compileAndPrimePreparedWaterPresentation(
   renderer: Renderer,
+  scene: Scene,
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
   signal: AbortSignal,
 ): Promise<void> {
   throwIfAborted(signal);
   resources.counters.compileCount += 1;
+  await resources.planar.prime(renderer, scene, camera);
+  resources.counters.sceneRenderCount += 1;
+  throwIfAborted(signal);
+  resources.counters.compileCount += 1;
   await resources.scenePass.compileAsync(renderer);
   throwIfAborted(signal);
+  resources.ssr.ensureGraphPrepared(renderer);
   resources.resetUniform.value = 1;
-  renderTemporalFrame(renderer, camera, resources);
+  renderTemporalFrame(renderer, scene, camera, resources);
   resources.resetUniform.value = 0;
   renderCurrentColorConversion(renderer, resources);
   await probeNamedOutputRoutes(renderer, resources);
@@ -309,12 +337,13 @@ export async function compileAndPrimePreparedWaterPresentation(
 
 export function renderHiddenStabilizationFrames(
   renderer: Renderer,
+  scene: Scene,
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
   signal: AbortSignal,
 ): void {
   for (let frame = 0; frame < HIDDEN_STABILIZATION_FRAME_COUNT; frame += 1) {
-    renderTemporalFrame(renderer, camera, resources);
+    renderTemporalFrame(renderer, scene, camera, resources);
     throwIfAborted(signal);
   }
 }
@@ -330,11 +359,12 @@ export async function probePreparedCompletion(
 
 export async function renderMainCameraGuard(
   renderer: Renderer,
+  scene: Scene,
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
   signal: AbortSignal,
 ): Promise<void> {
-  renderTemporalFrame(renderer, camera, resources);
+  renderTemporalFrame(renderer, scene, camera, resources);
   renderCurrentColorConversion(renderer, resources);
   renderer.setRenderTarget(null);
   resources.presentationPipeline.render();
@@ -392,7 +422,7 @@ export function createPresentationRouteBridge(
         resources.jitterAdapter.realign();
       }
       temporalSceneStarted = true;
-      renderTemporalFrame(renderer, camera, resources);
+      renderTemporalFrame(renderer, scene, camera, resources);
       if (accepted.outputs.includes("current-color")) {
         renderCurrentColorConversion(renderer, resources);
       }
@@ -510,6 +540,8 @@ export function disposePreparedWaterPresentationResources(
   resources.currentColorTarget.dispose();
   resources.finalColorTarget.dispose();
   resources.scenePass.dispose();
+  disposeCurrentFrameSsrStack(resources.ssr);
+  resources.planar.dispose();
 }
 
 export function disposePartialPreparedWaterPresentationResources(
@@ -523,6 +555,12 @@ export function disposePartialPreparedWaterPresentationResources(
     () => resources.currentColorTarget?.dispose(),
     () => resources.finalColorTarget?.dispose(),
     () => resources.scenePass?.dispose(),
+    () => {
+      if (resources.ssr !== undefined) {
+        disposeCurrentFrameSsrStack(resources.ssr);
+      }
+    },
+    () => resources.planar?.dispose(),
   ];
   for (const dispose of disposals) {
     try {
@@ -603,20 +641,53 @@ function toRootPresentedFrame(
 
 function renderTemporalFrame(
   renderer: Renderer,
+  scene: Scene,
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
 ): void {
+  const actual = readDrawingBufferSize(renderer);
+  if (actual.width !== resources.width || actual.height !== resources.height) {
+    throw new Error(
+      "The Three Host drawing buffer does not match the Prewarm Manifest.",
+    );
+  }
   assertNativeTraaCamera(camera);
+  resources.planar.render(renderer, scene, camera);
+  if (resources.planar.hasOutput.value === 1) {
+    resources.counters.sceneRenderCount += 1;
+  }
   const cameraState = captureCameraProjection(camera);
+  resources.jitterAdapter.applyCurrentJitter(resources.width, resources.height);
+  resources.ssr.syncCamera(camera);
   resources.jitterAdapter.beginTemporalRender();
   let succeeded = false;
   try {
     try {
+      renderer.setRenderTarget(resources.currentColorTarget);
+      resources.ssr.sceneTriggerPipeline.render();
+      resources.counters.sceneRenderCount += 1;
+      renderCurrentFrameSsr(renderer, resources.ssr);
+      const historyHostState = captureHostState(renderer, scene, camera);
+      try {
+        renderCurrentFrameSsrHistory(
+          renderer,
+          resources.ssr,
+          resources.resetUniform.value > 0.5,
+        );
+      } finally {
+        restoreHostState(renderer, scene, camera, historyHostState);
+      }
+      renderer.setRenderTarget(resources.ssr.compositeTarget);
+      resources.ssr.compositePipeline.render();
+      assertCurrentFrameSsrPreparedSize(resources.ssr);
+      renderer.setRenderTarget(resources.ssr.depthConversionTarget);
+      resources.ssr.depthConversionPipeline.render();
+      resources.jitterAdapter.clearHostCameraViewOffset(camera);
       renderer.setRenderTarget(resources.finalColorTarget);
       resources.temporalPipeline.render();
-      resources.counters.sceneRenderCount += 1;
       succeeded = true;
     } catch (cause) {
+      resources.jitterAdapter.clearHostCameraViewOffset(camera);
       restoreVelocityProjection();
       throw cause;
     }
@@ -663,8 +734,20 @@ async function probeNamedOutputRoutes(
   await probeCompletedFrame(
     renderer,
     resources,
-    resources.scenePass.renderTarget,
+    resources.ssr.depthConversionTarget,
     resources.inverseLinearDepthTextureIndex,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.ssr.ssrNode.getRenderTarget(),
+  );
+  await probeCompletedFrame(renderer, resources, resources.ssr.compositeTarget);
+  await probeCompletedFrame(renderer, resources, resources.ssr.beautyTarget);
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.ssr.historyResolvedTarget,
   );
   await probeCompletedFrame(
     renderer,
@@ -696,6 +779,7 @@ async function probeNamedOutputRoutes(
     resources.scenePass.renderTarget,
     resources.opticalDiagnosticsBTextureIndex,
   );
+  await probeCompletedFrame(renderer, resources, resources.planar.target);
 }
 
 async function probeCompletedFrame(
@@ -751,7 +835,7 @@ async function readNamedOutput(
     }
     case "depth": {
       const raw = await renderer.readRenderTargetPixelsAsync(
-        resources.scenePass.renderTarget,
+        resources.ssr.depthConversionTarget,
         0,
         0,
         resources.width,
@@ -812,13 +896,21 @@ async function readNamedOutput(
       ) {
         const source = pixel * channels;
         const destination = pixel * 3;
-        const reconstructed = reconstructFrontFacingViewNormal(
+        const unpacked = unpackPackedViewNormalRgb([
           DataUtils.fromHalfFloat(packed[source] ?? 0),
           DataUtils.fromHalfFloat(packed[source + 1] ?? 0),
-        );
-        data[destination] = reconstructed[0];
-        data[destination + 1] = reconstructed[1];
-        data[destination + 2] = reconstructed[2];
+          DataUtils.fromHalfFloat(packed[source + 2] ?? 0),
+        ]);
+        const length = Math.hypot(unpacked[0], unpacked[1], unpacked[2]);
+        if (length === 0) {
+          data[destination] = 0;
+          data[destination + 1] = 0;
+          data[destination + 2] = 1;
+        } else {
+          data[destination] = unpacked[0] / length;
+          data[destination + 1] = unpacked[1] / length;
+          data[destination + 2] = unpacked[2] / length;
+        }
       }
       return Object.freeze({
         name,
@@ -887,6 +979,28 @@ async function readNamedOutput(
         resources.opticalFactorsTextureIndex,
         2,
       );
+    case "planar-color":
+      return readPlanarColorCapture(renderer, resources);
+    case "planar-target-alpha":
+      return readPlanarTargetAlphaCapture(renderer, resources);
+    case "ssr-hit":
+      return readSsrHitCapture(renderer, resources);
+    case "ssr-confidence":
+      return readSsrConfidenceCapture(renderer, resources);
+    case "ssr-color":
+      return readSsrColorCapture(renderer, resources);
+    case "ssr-roughness":
+      return readSsrRoughnessCapture(renderer, resources);
+    case "reflection-base-color":
+      return readReflectionBaseColorCapture(renderer, resources);
+    case "ssr-composite-color":
+      return readSsrCompositeColorCapture(renderer, resources);
+    case "ssr-history-color":
+      return readSsrHistoryColorCapture(renderer, resources);
+    case "ssr-history-frame-weight":
+      return readSsrHistoryFrameWeightCapture(renderer, resources);
+    case "ssr-history-input-color":
+      return readSsrHistoryInputColorCapture(renderer, resources);
   }
 }
 
@@ -957,6 +1071,444 @@ async function readMotionVectorCapture(
     height: resources.height,
     origin: "top-left",
     format: DIAGNOSTICS_CAPTURE_SHAPES["motion-vector"].format,
+    data,
+  });
+}
+
+async function readPlanarColorCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.planar.target,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint8Array)) {
+    throw new TypeError("planar-color readback did not return RGBA8 data.");
+  }
+  return Object.freeze({
+    name: "planar-color",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["planar-color"].format,
+    data: compactRows(raw, resources.width, resources.height, 4),
+  });
+}
+
+async function readPlanarTargetAlphaCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.planar.target,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint8Array)) {
+    throw new TypeError(
+      "planar-target-alpha readback did not return RGBA8 data.",
+    );
+  }
+  const packed = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height);
+  const hasOutput = resources.planar.hasOutput.value;
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    const alpha = (packed[pixel * 4 + 3] ?? 0) / 255;
+    data[pixel] = hasOutput * alpha;
+  }
+  return Object.freeze({
+    name: "planar-target-alpha",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["planar-target-alpha"].format,
+    data,
+  });
+}
+
+async function readSsrRawPixels(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<Float32Array> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.ssr.ssrNode.getRenderTarget(),
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array) && !(raw instanceof Float32Array)) {
+    throw new TypeError(
+      "SSR raw readback did not return Float16 or Float32 data.",
+    );
+  }
+  const channels = inferReadbackChannels(
+    raw.length,
+    resources.width,
+    resources.height,
+  );
+  const packed =
+    raw instanceof Uint16Array
+      ? compactRows(raw, resources.width, resources.height, channels)
+      : compactRows(raw, resources.width, resources.height, channels);
+  const data = new Float32Array(resources.width * resources.height * 4);
+  for (let pixel = 0; pixel < resources.width * resources.height; pixel += 1) {
+    const source = pixel * channels;
+    const destination = pixel * 4;
+    if (raw instanceof Uint16Array) {
+      data[destination] = DataUtils.fromHalfFloat(packed[source] ?? 0);
+      data[destination + 1] = DataUtils.fromHalfFloat(packed[source + 1] ?? 0);
+      data[destination + 2] = DataUtils.fromHalfFloat(packed[source + 2] ?? 0);
+      data[destination + 3] = DataUtils.fromHalfFloat(packed[source + 3] ?? 0);
+    } else {
+      data[destination] = packed[source] ?? 0;
+      data[destination + 1] = packed[source + 1] ?? 0;
+      data[destination + 2] = packed[source + 2] ?? 0;
+      data[destination + 3] = packed[source + 3] ?? 0;
+    }
+  }
+  return data;
+}
+
+async function readSsrHitCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsOpticalScalarCapture> {
+  const raw = await readSsrRawPixels(renderer, resources);
+  const data = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    data[pixel] = (raw[pixel * 4 + 3] ?? 0) > 0 ? 1 : 0;
+  }
+  return Object.freeze({
+    name: "ssr-hit",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["ssr-hit"].format,
+    data,
+  });
+}
+
+async function readSsrConfidenceCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsOpticalScalarCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.ssr.compositeTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array) && !(raw instanceof Float32Array)) {
+    throw new TypeError(
+      "SSR confidence readback did not return Float16 or Float32 data.",
+    );
+  }
+  const channels = inferReadbackChannels(
+    raw.length,
+    resources.width,
+    resources.height,
+  );
+  const packed = compactRows(raw, resources.width, resources.height, channels);
+  const data = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    const value =
+      raw instanceof Uint16Array
+        ? DataUtils.fromHalfFloat(packed[pixel * channels + 3] ?? 0)
+        : (packed[pixel * channels + 3] ?? 0);
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new TypeError(
+        "SSR confidence readback must be finite and inside [0, 1].",
+      );
+    }
+    data[pixel] = value;
+  }
+  return Object.freeze({
+    name: "ssr-confidence",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["ssr-confidence"].format,
+    data,
+  });
+}
+
+async function readPackedLinearRgb(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+  renderTarget: RenderTarget,
+  textureIndex: number,
+  label: string,
+): Promise<Float32Array> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    renderTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+    textureIndex,
+  );
+  if (!(raw instanceof Uint16Array) && !(raw instanceof Float32Array)) {
+    throw new TypeError(
+      `${label} readback did not return Float16 or Float32 data.`,
+    );
+  }
+  const channels = inferReadbackChannels(
+    raw.length,
+    resources.width,
+    resources.height,
+  );
+  const packed = compactRows(raw, resources.width, resources.height, channels);
+  const data = new Float32Array(resources.width * resources.height * 3);
+  for (let pixel = 0; pixel < resources.width * resources.height; pixel += 1) {
+    const source = pixel * channels;
+    const destination = pixel * 3;
+    const red =
+      raw instanceof Uint16Array
+        ? DataUtils.fromHalfFloat(packed[source] ?? 0)
+        : (packed[source] ?? 0);
+    const green =
+      raw instanceof Uint16Array
+        ? DataUtils.fromHalfFloat(packed[source + 1] ?? 0)
+        : (packed[source + 1] ?? 0);
+    const blue =
+      raw instanceof Uint16Array
+        ? DataUtils.fromHalfFloat(packed[source + 2] ?? 0)
+        : (packed[source + 2] ?? 0);
+    if (
+      !Number.isFinite(red) ||
+      !Number.isFinite(green) ||
+      !Number.isFinite(blue)
+    ) {
+      throw new TypeError(`${label} readback contained a non-finite sample.`);
+    }
+    data[destination] = red;
+    data[destination + 1] = green;
+    data[destination + 2] = blue;
+  }
+  return data;
+}
+
+async function readReflectionBaseColorCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsCapture> {
+  const data = await readPackedLinearRgb(
+    renderer,
+    resources,
+    resources.scenePass.renderTarget,
+    scenePassOutputTextureIndex(resources),
+    "Reflection base color",
+  );
+  return Object.freeze({
+    name: "reflection-base-color",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["reflection-base-color"].format,
+    data,
+  });
+}
+
+async function readSsrCompositeColorCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsCapture> {
+  const data = await readPackedLinearRgb(
+    renderer,
+    resources,
+    resources.ssr.compositeTarget,
+    0,
+    "SSR composite color",
+  );
+  return Object.freeze({
+    name: "ssr-composite-color",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["ssr-composite-color"].format,
+    data,
+  });
+}
+
+async function readSsrHistoryColorCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsCapture> {
+  const data = await readPackedLinearRgb(
+    renderer,
+    resources,
+    resources.ssr.historyResolvedTarget,
+    0,
+    "SSR history color",
+  );
+  return Object.freeze({
+    name: "ssr-history-color",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["ssr-history-color"].format,
+    data,
+  });
+}
+
+async function readSsrHistoryFrameWeightCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.ssr.historyResolvedTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array) && !(raw instanceof Float32Array)) {
+    throw new TypeError(
+      "SSR history frame-weight readback did not return Float16 or Float32 data.",
+    );
+  }
+  const channels = inferReadbackChannels(
+    raw.length,
+    resources.width,
+    resources.height,
+  );
+  const packed = compactRows(raw, resources.width, resources.height, channels);
+  const data = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    const value =
+      raw instanceof Uint16Array
+        ? DataUtils.fromHalfFloat(packed[pixel * channels + 3] ?? 0)
+        : (packed[pixel * channels + 3] ?? 0);
+    if (!Number.isFinite(value)) {
+      throw new TypeError(
+        "SSR history frame-weight readback contained a non-finite sample.",
+      );
+    }
+    data[pixel] = value;
+  }
+  return Object.freeze({
+    name: "ssr-history-frame-weight",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["ssr-history-frame-weight"].format,
+    data,
+  });
+}
+
+async function readSsrHistoryInputColorCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsCapture> {
+  const data = await readPackedLinearRgb(
+    renderer,
+    resources,
+    resources.ssr.beautyTarget,
+    0,
+    "SSR history input color",
+  );
+  return Object.freeze({
+    name: "ssr-history-input-color",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["ssr-history-input-color"].format,
+    data,
+  });
+}
+
+function scenePassOutputTextureIndex(
+  resources: PreparedWaterPresentationResources,
+): number {
+  const outputTexture = resources.scenePass.getTexture("output");
+  const index =
+    resources.scenePass.renderTarget.textures.indexOf(outputTexture);
+  if (index < 0) {
+    throw new Error("The prepared scene-pass output attachment is missing.");
+  }
+  return index;
+}
+
+async function readSsrColorCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsCapture> {
+  const raw = await readSsrRawPixels(renderer, resources);
+  const data = new Float32Array(resources.width * resources.height * 3);
+  for (let pixel = 0; pixel < resources.width * resources.height; pixel += 1) {
+    const source = pixel * 4;
+    const destination = pixel * 3;
+    const red = raw[source] ?? 0;
+    const green = raw[source + 1] ?? 0;
+    const blue = raw[source + 2] ?? 0;
+    if (
+      !Number.isFinite(red) ||
+      !Number.isFinite(green) ||
+      !Number.isFinite(blue)
+    ) {
+      throw new TypeError("SSR color readback contained a non-finite sample.");
+    }
+    data[destination] = red;
+    data[destination + 1] = green;
+    data[destination + 2] = blue;
+  }
+  return Object.freeze({
+    name: "ssr-color",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["ssr-color"].format,
+    data,
+  });
+}
+
+async function readSsrRoughnessCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsSsrRoughnessCapture> {
+  const raw = await readAttachmentPixels(
+    renderer,
+    resources,
+    resources.viewNormalTextureIndex,
+  );
+  if (!(raw instanceof Uint16Array) && !(raw instanceof Float32Array)) {
+    throw new TypeError(
+      "SSR roughness readback did not return Float16 or Float32 data.",
+    );
+  }
+  const channels = inferReadbackChannels(
+    raw.length,
+    resources.width,
+    resources.height,
+  );
+  const packed = compactRows(raw, resources.width, resources.height, channels);
+  const data = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    const value =
+      raw instanceof Uint16Array
+        ? DataUtils.fromHalfFloat(packed[pixel * channels + 3] ?? 0)
+        : (packed[pixel * channels + 3] ?? 0);
+    if (!Number.isFinite(value)) {
+      throw new TypeError(
+        "SSR roughness readback contained a non-finite sample.",
+      );
+    }
+    data[pixel] = value;
+  }
+  return Object.freeze({
+    name: "ssr-roughness",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["ssr-roughness"].format,
     data,
   });
 }
@@ -1160,7 +1712,7 @@ function inferReadbackChannels(
   width: number,
   height: number,
 ): 2 | 4 {
-  for (const channels of [2, 4] as const) {
+  for (const channels of [4, 2] as const) {
     try {
       resolvePaddedRowLength(dataLength, width, height, channels);
       return channels;
@@ -1171,18 +1723,6 @@ function inferReadbackChannels(
   throw new RangeError(
     "Packed attachment readback did not match an RG or RGBA row layout.",
   );
-}
-
-function reconstructFrontFacingViewNormal(
-  x: number,
-  y: number,
-): readonly [number, number, number] {
-  const z = Math.sqrt(Math.max(0, 1 - x * x - y * y));
-  const length = Math.hypot(x, y, z);
-  if (length === 0) {
-    return [0, 0, 1];
-  }
-  return [x / length, y / length, z / length];
 }
 
 function assertCoreScenePassColorByteBudget(
@@ -1232,9 +1772,6 @@ function colorAttachmentFormat(texture: {
   readonly format: number;
   readonly type: number;
 }): (typeof CORE_SCENE_PASS_COLOR_ATTACHMENT_FORMATS)[number] {
-  if (texture.format === RedFormat && texture.type === FloatType) {
-    return "r32float";
-  }
   if (texture.format === RGFormat && texture.type === HalfFloatType) {
     return "rg16float";
   }
@@ -1280,8 +1817,16 @@ interface HostState {
   readonly activeMipmapLevel: number;
   readonly mrt: ReturnType<Renderer["getMRT"]>;
   readonly toneMapping: Renderer["toneMapping"];
+  readonly toneMappingExposure: number;
   readonly outputColorSpace: Renderer["outputColorSpace"];
   readonly autoClear: boolean;
+  readonly clearColor: Color;
+  readonly clearAlpha: number;
+  readonly renderObjectFunction: ReturnType<
+    Renderer["getRenderObjectFunction"]
+  >;
+  readonly scissorTest: boolean;
+  readonly pixelRatio: number;
   readonly transparent: boolean;
   readonly opaque: boolean;
   readonly contextNode: Renderer["contextNode"];
@@ -1319,7 +1864,7 @@ function restoreCameraProjection(
 ): void {
   camera.aspect = state.aspect;
   if (state.view === null) {
-    camera.clearViewOffset();
+    camera.view = null;
   } else {
     camera.view = { ...state.view };
   }
@@ -1339,8 +1884,32 @@ export function captureHostState(
     activeMipmapLevel: renderer.getActiveMipmapLevel(),
     mrt: renderer.getMRT(),
     toneMapping: renderer.toneMapping,
+    toneMappingExposure:
+      typeof renderer.toneMappingExposure === "number"
+        ? renderer.toneMappingExposure
+        : 1,
     outputColorSpace: renderer.outputColorSpace,
     autoClear: renderer.autoClear,
+    clearColor:
+      typeof renderer.getClearColor === "function"
+        ? renderer.getClearColor(new Color())
+        : new Color(),
+    clearAlpha:
+      typeof renderer.getClearAlpha === "function"
+        ? renderer.getClearAlpha()
+        : 1,
+    renderObjectFunction:
+      typeof renderer.getRenderObjectFunction === "function"
+        ? renderer.getRenderObjectFunction()
+        : null,
+    scissorTest:
+      typeof renderer.getScissorTest === "function"
+        ? renderer.getScissorTest()
+        : false,
+    pixelRatio:
+      typeof renderer.getPixelRatio === "function"
+        ? renderer.getPixelRatio()
+        : 1,
     transparent: renderer.transparent,
     opaque: renderer.opaque,
     contextNode: renderer.contextNode,
@@ -1368,8 +1937,21 @@ export function restoreHostState(
   );
   renderer.setMRT(state.mrt);
   renderer.toneMapping = state.toneMapping;
+  renderer.toneMappingExposure = state.toneMappingExposure;
   renderer.outputColorSpace = state.outputColorSpace;
   renderer.autoClear = state.autoClear;
+  if (typeof renderer.setClearColor === "function") {
+    renderer.setClearColor(state.clearColor, state.clearAlpha);
+  }
+  if (typeof renderer.setRenderObjectFunction === "function") {
+    renderer.setRenderObjectFunction(state.renderObjectFunction);
+  }
+  if (typeof renderer.setScissorTest === "function") {
+    renderer.setScissorTest(state.scissorTest);
+  }
+  if (typeof renderer.setPixelRatio === "function") {
+    renderer.setPixelRatio(state.pixelRatio);
+  }
   renderer.transparent = state.transparent;
   renderer.opaque = state.opaque;
   renderer.contextNode = state.contextNode;

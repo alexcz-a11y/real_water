@@ -36,11 +36,22 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
   "optical-crest-transmission": "water-optical-diagnostics-a",
   "optical-transmittance": "water-optical-diagnostics-a",
   "optical-glint": "water-optical-factors-target",
+  "planar-color": "water-planar-reflection-target",
+  "planar-target-alpha": "water-planar-reflection-target",
+  "ssr-hit": "water-ssr-raw-target",
+  "ssr-confidence": "water-ssr-composite-target",
+  "ssr-color": "water-ssr-raw-target",
+  "ssr-roughness": "water-view-normal",
+  "reflection-base-color": "water-render-target",
+  "ssr-composite-color": "water-ssr-composite-target",
+  "ssr-history-color": "water-ssr-history-resolved-capture-target",
+  "ssr-history-frame-weight": "water-ssr-history-resolved-capture-target",
+  "ssr-history-input-color": "water-ssr-history-beauty-target",
 } as const);
 
 export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
   schema: "real-water/qa-frame-prewarm" as const,
-  version: 4 as const,
+  version: 7 as const,
   id: "reference-qa-frame" as const,
   captures: Object.freeze([
     Object.freeze({
@@ -57,7 +68,7 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       name: "normal" as const,
-      preparedFormat: "rg16float-view-normal" as const,
+      preparedFormat: "rgba16float-view-normal" as const,
     }),
     Object.freeze({
       name: "motion-vector" as const,
@@ -91,6 +102,50 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
       name: "optical-glint" as const,
       preparedFormat: "rgba16float-optical-factors" as const,
     }),
+    Object.freeze({
+      name: "planar-color" as const,
+      preparedFormat: "rgba8unorm-srgb" as const,
+    }),
+    Object.freeze({
+      name: "planar-target-alpha" as const,
+      preparedFormat: "rgba8unorm-srgb" as const,
+    }),
+    Object.freeze({
+      name: "ssr-hit" as const,
+      preparedFormat: "rgba16float-ssr-raw" as const,
+    }),
+    Object.freeze({
+      name: "ssr-confidence" as const,
+      preparedFormat: "rgba16float-ssr-composite" as const,
+    }),
+    Object.freeze({
+      name: "ssr-color" as const,
+      preparedFormat: "rgba16float-ssr-raw" as const,
+    }),
+    Object.freeze({
+      name: "ssr-roughness" as const,
+      preparedFormat: "rgba16float-view-normal" as const,
+    }),
+    Object.freeze({
+      name: "reflection-base-color" as const,
+      preparedFormat: "rgba16float-scene-output" as const,
+    }),
+    Object.freeze({
+      name: "ssr-composite-color" as const,
+      preparedFormat: "rgba16float-ssr-composite" as const,
+    }),
+    Object.freeze({
+      name: "ssr-history-color" as const,
+      preparedFormat: "rgba16float-ssr-history-resolve" as const,
+    }),
+    Object.freeze({
+      name: "ssr-history-frame-weight" as const,
+      preparedFormat: "rgba16float-ssr-history-resolve" as const,
+    }),
+    Object.freeze({
+      name: "ssr-history-input-color" as const,
+      preparedFormat: "rgba16float-ssr-history-beauty" as const,
+    }),
   ]),
   coreDeclarations: QA_TO_CORE_DECLARATION_IDS,
 });
@@ -111,6 +166,12 @@ export interface QaFrameDriverFinalColorCapture extends QaFrameDriverCaptureBase
 
 export interface QaFrameDriverCurrentColorCapture extends QaFrameDriverCaptureBase {
   readonly name: "current-color";
+  readonly format: "rgba8unorm-srgb";
+  readonly data: Uint8Array;
+}
+
+export interface QaFrameDriverPlanarColorCapture extends QaFrameDriverCaptureBase {
+  readonly name: "planar-color";
   readonly format: "rgba8unorm-srgb";
   readonly data: Uint8Array;
 }
@@ -141,14 +202,67 @@ export interface QaFrameDriverOpticalScalarCapture extends QaFrameDriverCaptureB
     | "optical-environment-reflection"
     | "optical-crest-transmission"
     | "optical-transmittance"
-    | "optical-glint";
+    | "optical-glint"
+    | "planar-target-alpha"
+    | "ssr-hit"
+    | "ssr-confidence";
   readonly format: "r32float-optical";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverSsrColorCapture extends QaFrameDriverCaptureBase {
+  readonly name: "ssr-color";
+  readonly format: "rgb32float-linear-ssr";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverSsrRoughnessCapture extends QaFrameDriverCaptureBase {
+  readonly name: "ssr-roughness";
+  readonly format: "r32float-ssr-roughness";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverReflectionBaseColorCapture extends QaFrameDriverCaptureBase {
+  readonly name: "reflection-base-color";
+  readonly format: "rgb32float-linear-reflection-base";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverSsrCompositeColorCapture extends QaFrameDriverCaptureBase {
+  readonly name: "ssr-composite-color";
+  readonly format: "rgb32float-linear-ssr-composite";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverSsrHistoryColorCapture extends QaFrameDriverCaptureBase {
+  readonly name: "ssr-history-color";
+  readonly format: "rgb32float-linear-ssr-history";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverSsrHistoryFrameWeightCapture extends QaFrameDriverCaptureBase {
+  readonly name: "ssr-history-frame-weight";
+  readonly format: "r32float-ssr-history-frame-weight";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverSsrHistoryInputColorCapture extends QaFrameDriverCaptureBase {
+  readonly name: "ssr-history-input-color";
+  readonly format: "rgb32float-linear-ssr-history-input";
   readonly data: Float32Array;
 }
 
 export type QaFrameDriverCapture =
   | QaFrameDriverFinalColorCapture
   | QaFrameDriverCurrentColorCapture
+  | QaFrameDriverPlanarColorCapture
+  | QaFrameDriverSsrColorCapture
+  | QaFrameDriverSsrRoughnessCapture
+  | QaFrameDriverReflectionBaseColorCapture
+  | QaFrameDriverSsrCompositeColorCapture
+  | QaFrameDriverSsrHistoryColorCapture
+  | QaFrameDriverSsrHistoryFrameWeightCapture
+  | QaFrameDriverSsrHistoryInputColorCapture
   | QaFrameDriverDepthCapture
   | QaFrameDriverNormalCapture
   | QaFrameDriverMotionVectorCapture
@@ -351,7 +465,8 @@ export function createBoundCoreDiagnosticsPrewarmReceipt(
     core,
     capabilities: readReadyCapabilities(
       capabilities,
-      core.qualityProfile.temporal,
+      coreManifest.qualityProfile,
+      coreManifest.drawingBuffer,
     ),
     width,
     height,

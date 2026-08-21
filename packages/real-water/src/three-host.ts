@@ -29,6 +29,12 @@ const activeRenderers = new WeakSet<object>();
  */
 export interface ThreeHostRenderer {
   init(): Promise<unknown>;
+  /**
+   * Required Host copy used by TemporalReproject accumulate and the
+   * dedicated SSR history diagnostics capture. Missing this method fails
+   * closed at prepare.
+   */
+  copyTextureToTexture(source: object, destination: object): unknown;
 }
 
 /**
@@ -131,7 +137,10 @@ export function createThreeHostLifecycleAdapter(
         }
         throwIfAborted(request.signal);
         assertHostEnvironment(options.environment, request.manifest);
-        const capability = evaluateRenderingCapability(observation);
+        const capability = evaluateRenderingCapability(
+          observation,
+          request.manifest.drawingBuffer,
+        );
         if (capability.status !== "supported") {
           return capability;
         }
@@ -250,6 +259,11 @@ function createExclusiveLease(
 function assertNativeHostObjects(
   options: ThreeHostLifecycleAdapterOptions,
 ): void {
+  if (typeof options.renderer.copyTextureToTexture !== "function") {
+    throw new TypeError(
+      "The Host renderer must expose copyTextureToTexture for TemporalReproject history.",
+    );
+  }
   if (options.scene.isScene !== true || options.camera.isCamera !== true) {
     throw new TypeError(
       "The Three Host Adapter requires a native Three Scene and Camera.",
@@ -266,6 +280,16 @@ function assertNativeHostObjects(
   if (view !== null && view !== undefined && view.enabled === true) {
     throw new Error(
       "The Three Host Adapter refuses a camera that already has a tiled view offset.",
+    );
+  }
+  const reversedDepthBuffer = (
+    options.renderer as { readonly reversedDepthBuffer?: boolean }
+  ).reversedDepthBuffer;
+  const reversedDepth = (options.camera as { readonly reversedDepth?: boolean })
+    .reversedDepth;
+  if (reversedDepthBuffer === true || reversedDepth === true) {
+    throw new Error(
+      "The Three Host Adapter refuses reverse-Z; this slice does not support reversedDepthBuffer or camera.reversedDepth.",
     );
   }
 }

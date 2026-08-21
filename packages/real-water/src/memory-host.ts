@@ -126,6 +126,7 @@ export function createMemoryHostLifecycleAdapter(
                     scenario.kind === "success" &&
                     scenario.timestampQuery === true,
                 },
+        request.manifest.drawingBuffer,
       );
       if (capability.status !== "supported") {
         return capability;

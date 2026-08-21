@@ -28,8 +28,56 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
       dynamicResolution: false,
       frameGeneration: false,
       msaaSamples: 0,
+      updateCadence: "host-present",
       motionFormat: "rg16float",
       stockThreeRevision: "185",
+    },
+    reflection: {
+      environment: { source: "host-adapter" },
+      planar: {
+        width: 320,
+        height: 180,
+        format: "rgba8unorm-srgb",
+        samples: 0,
+      },
+      ssr: {
+        width: 320,
+        height: 180,
+        rawFormat: "rgba16float",
+        compositeFormat: "rgba16float",
+        samples: 0,
+        mode: "current-frame",
+        history: {
+          width: 320,
+          height: 180,
+          historyFormat: "rgba16float",
+          resolveFormat: "rgba16float",
+          inputFormat: "rgba16float",
+          captureFormat: "rgba16float",
+          maxFrames: 32,
+          mode: "temporal-reproject-specular",
+          accumulate: true,
+          hitPointReprojection: true,
+          normalFormat: "packed-rgba16float",
+          resetDomains: [
+            "simulation-reset",
+            "camera-cut",
+            "origin-shift",
+            "sea-state-cut",
+          ] as const,
+          updateCadence: "host-present",
+        },
+        updateCadence: "host-present",
+        missFallbackPriority: ["planar", "host-adapter"],
+        blur: {
+          width: 320,
+          height: 180,
+          format: "rgba16float",
+          mipCount: 5,
+          blurQuality: 2,
+          enabled: true,
+        },
+      },
     },
   },
   gameplay: {
@@ -188,7 +236,8 @@ describe("Ready capabilities", () => {
   it("records the actual lease temporal fields including motionFormat and stockThreeRevision", () => {
     const temporal = readReadyCapabilities(
       READY_CAPABILITIES,
-      CORE.qualityProfile.temporal,
+      CORE.qualityProfile,
+      CORE.drawingBuffer,
     ).rendering.temporal;
     expect(temporal).toEqual({
       ...NATIVE_REGRESSION_TEMPORAL_POLICY,
@@ -210,9 +259,118 @@ describe("Ready capabilities", () => {
             },
           },
         },
-        CORE.qualityProfile.temporal,
+        CORE.qualityProfile,
+        CORE.drawingBuffer,
       ),
     ).toThrowError(/Quality Profile temporal/i);
+  });
+
+  it("rejects planar dimensions that disagree with the Core drawing buffer", () => {
+    expect(() =>
+      readReadyCapabilities(
+        {
+          ...READY_CAPABILITIES,
+          rendering: {
+            ...READY_CAPABILITIES.rendering,
+            reflection: {
+              ...READY_CAPABILITIES.rendering.reflection,
+              planar: {
+                ...READY_CAPABILITIES.rendering.reflection.planar,
+                width: 384,
+                height: 216,
+              },
+            },
+          },
+        },
+        CORE.qualityProfile,
+        CORE.drawingBuffer,
+      ),
+    ).toThrowError(/drawing buffer/i);
+  });
+
+  it("rejects a reflection layer that disagrees with the Quality Profile", () => {
+    expect(() =>
+      readReadyCapabilities(
+        {
+          ...READY_CAPABILITIES,
+          rendering: {
+            ...READY_CAPABILITIES.rendering,
+            reflection: {
+              ...READY_CAPABILITIES.rendering.reflection,
+              planar: {
+                ...READY_CAPABILITIES.rendering.reflection.planar,
+                samples: 4,
+              },
+            },
+          },
+        },
+        CORE.qualityProfile,
+        CORE.drawingBuffer,
+      ),
+    ).toThrowError(/Quality Profile reflection/i);
+  });
+
+  it("rejects a reflection format that disagrees with the Quality Profile", () => {
+    expect(() =>
+      readReadyCapabilities(
+        {
+          ...READY_CAPABILITIES,
+          rendering: {
+            ...READY_CAPABILITIES.rendering,
+            reflection: {
+              ...READY_CAPABILITIES.rendering.reflection,
+              planar: {
+                ...READY_CAPABILITIES.rendering.reflection.planar,
+                format: "rgba16float",
+              },
+            },
+          },
+        } as unknown,
+        CORE.qualityProfile,
+        CORE.drawingBuffer,
+      ),
+    ).toThrowError(/Quality Profile reflection/i);
+  });
+
+  it("rejects current-frame SSR history=true", () => {
+    expect(() =>
+      readReadyCapabilities(
+        {
+          ...READY_CAPABILITIES,
+          rendering: {
+            ...READY_CAPABILITIES.rendering,
+            reflection: {
+              ...READY_CAPABILITIES.rendering.reflection,
+              ssr: {
+                ...READY_CAPABILITIES.rendering.reflection.ssr,
+                history: true,
+              },
+            },
+          },
+        } as unknown,
+        CORE.qualityProfile,
+        CORE.drawingBuffer,
+      ),
+    ).toThrowError(/history/i);
+  });
+
+  it("rejects an environment source that disagrees with the Quality Profile", () => {
+    expect(() =>
+      readReadyCapabilities(
+        {
+          ...READY_CAPABILITIES,
+          rendering: {
+            ...READY_CAPABILITIES.rendering,
+            reflection: {
+              ...READY_CAPABILITIES.rendering.reflection,
+              environment: { source: "scene-environment" },
+            },
+          },
+        } as unknown,
+        CORE.qualityProfile,
+        CORE.drawingBuffer,
+      ),
+    ).toThrowError(/host-adapter/i);
   });
 });
 
@@ -252,6 +410,7 @@ describe("Native temporal policy constant", () => {
       dynamicResolution: false,
       frameGeneration: false,
       msaaSamples: 0,
+      updateCadence: "host-present",
     });
     expect(NATIVE_REGRESSION_TEMPORAL_POLICY).not.toHaveProperty(
       "motionFormat",

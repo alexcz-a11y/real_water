@@ -2,11 +2,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { cpus, release } from "node:os";
 import { resolve } from "node:path";
 import type { Page, TestInfo } from "@playwright/test";
-import type {
-  ArtisticControls,
-  HostEnvironmentReflectionDescriptor,
-  HostEnvironmentState,
-  WaterPresetIdentity,
+import {
+  createMinimalWaterQualityProfile,
+  type ArtisticControls,
+  type HostEnvironmentReflectionDescriptor,
+  type HostEnvironmentState,
+  type WaterPresetIdentity,
 } from "real-water";
 import type { QaCameraV1 } from "../src/qa-harness.js";
 import type { QaFramePrewarmReceipt } from "../src/qa-frame-driver.js";
@@ -153,9 +154,10 @@ export async function attachRegressionAcceptance(
   assertNativeTemporalPolicy(coreIdentity.qualityProfile.temporal);
   const capabilities = readReadyCapabilities(
     details.qaPrewarm.capabilities,
-    coreIdentity.qualityProfile.temporal,
+    createMinimalWaterQualityProfile(coreIdentity.qualityProfile.id),
+    coreIdentity.drawingBuffer,
   );
-  assertQaPrewarmV4(details.qaPrewarm);
+  assertQaPrewarmV6(details.qaPrewarm);
   const [userAgent, hardwareConcurrency, drawingBuffer, navigatorGpuAdapter] =
     await Promise.all([
       page.evaluate(() => navigator.userAgent),
@@ -352,23 +354,23 @@ function chromeVersionFromUserAgent(userAgent: string): string {
   return /(?:Chrome|Chromium)\/([\d.]+)/u.exec(userAgent)?.[1] ?? userAgent;
 }
 
-function assertQaPrewarmV4(prewarm: QaFramePrewarmReceipt): void {
+function assertQaPrewarmV6(prewarm: QaFramePrewarmReceipt): void {
   if (
     prewarm.manifest.schema !== QA_FRAME_PREWARM_MANIFEST.schema ||
-    prewarm.manifest.version !== 4 ||
+    prewarm.manifest.version !== QA_FRAME_PREWARM_MANIFEST.version ||
     prewarm.manifest.id !== QA_FRAME_PREWARM_MANIFEST.id
   ) {
-    throw new Error("Regression acceptance requires QA prewarm v4.");
+    throw new Error("Regression acceptance requires QA prewarm v7.");
   }
   if (
     canonicalJson(prewarm.manifest.captures) !==
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.captures) ||
     canonicalJson(prewarm.manifest.coreDeclarations) !==
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.coreDeclarations) ||
-    QA_FRAME_PREWARM_MANIFEST.captures.length !== 12
+    QA_FRAME_PREWARM_MANIFEST.captures.length !== 23
   ) {
     throw new Error(
-      "Regression acceptance requires the exact QA v4 12-name capture mapping.",
+      "Regression acceptance requires the exact QA v7 23-name capture mapping.",
     );
   }
   if (prewarm.rendererDevice === null || prewarm.rendererDevice === undefined) {

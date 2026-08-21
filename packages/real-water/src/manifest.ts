@@ -150,6 +150,31 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   spectralBandRipple: "water-spectral-band-ripple",
   material: "water-material",
   opticalRoute: "water-optical-route",
+  planarReflectionTarget: "water-planar-reflection-target",
+  planarReflectionRoute: "water-planar-reflection-route",
+  planarEnvironmentFallback: "water-planar-environment-fallback",
+  planarReflectionProbe: "water-planar-reflection-probe",
+  ssrRawTarget: "water-ssr-raw-target",
+  ssrBlurTarget: "water-ssr-blur-target",
+  ssrCompositeTarget: "water-ssr-composite-target",
+  ssrRoute: "water-ssr-route",
+  ssrBlurCopyRoute: "water-ssr-blur-copy-route",
+  ssrBlurRoute: "water-ssr-blur-route",
+  ssrCompositeRoute: "water-ssr-composite-route",
+  ssrHistoryTarget: "water-ssr-history-target",
+  ssrHistoryResolveTarget: "water-ssr-history-resolve-target",
+  ssrHistoryBeautyTarget: "water-ssr-history-beauty-target",
+  ssrHistoryBeautyRoute: "water-ssr-history-beauty-route",
+  ssrHistoryResolvedCaptureTarget: "water-ssr-history-resolved-capture-target",
+  ssrHistoryResolvedCopyRoute: "water-ssr-history-resolved-copy-route",
+  ssrHistoryPreviousDepth: "water-ssr-history-previous-depth",
+  ssrHistoryPreviousNormal: "water-ssr-history-previous-normal",
+  ssrHistorySeedRoute: "water-ssr-history-seed-route",
+  ssrHistoryResolveRoute: "water-ssr-history-resolve-route",
+  ssrHistoryAccumulateRoute: "water-ssr-history-accumulate-route",
+  ssrHistoryResetRoute: "water-ssr-history-reset-route",
+  ssrHistoryProbe: "water-ssr-history-probe",
+  ssrProbe: "water-ssr-probe",
   renderRoute: "water-render-route",
   proceduralMotion: "water-procedural-motion",
   motionVectors: "water-motion-vectors",
@@ -199,6 +224,30 @@ const DRAWING_BUFFER_BOUND_DECLARATION_IDS: ReadonlySet<string> = new Set([
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.completionProbe,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.mainCameraGuard,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.planarReflectionTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.planarReflectionRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.planarReflectionProbe,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrRawTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrBlurTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrCompositeTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrBlurCopyRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrBlurRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrCompositeRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResolveTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryBeautyTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryBeautyRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResolvedCaptureTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResolvedCopyRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryPreviousDepth,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryPreviousNormal,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistorySeedRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResolveRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryAccumulateRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResetRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryProbe,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrProbe,
 ]);
 const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
@@ -231,9 +280,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderTarget,
     kind: "resource",
-    label: "Minimal water 7-attachment MRT (32 bytes/sample)",
+    label: "Minimal water 6-attachment MRT (32 bytes/sample)",
     fingerprint:
-      "sha256:154cbf47d199c3e5501bb9bf1fb30a862c6bf3b770caa1a759f55fb14fea34e9",
+      "sha256:e6249a83e55512d997edbe3d8a2ce16875b2abc1f721bb48834a7281a419a262",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.clipmap,
@@ -281,16 +330,216 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalRoute,
     kind: "effect-state",
     label:
-      "Basic optical composition route (projected refraction, RGB Beer-Lambert, perspective camera)",
+      "Basic optical composition route (planar+environment fallback, projected refraction, RGB Beer-Lambert, perspective camera)",
     fingerprint:
-      "sha256:d223bdd7539e1d31659f03fa18a8e8e8784fde725f9fce9d499f33f48dcf1e63",
+      "sha256:f24789707811ecec877cb42335cd5d2f1ba2325c6e31644ec35d59dd724b0027",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.planarReflectionTarget,
+    kind: "resource",
+    label:
+      "Planar reflection color+target-alpha occupancy (RGBA8 sRGB, samples 0, drawing-buffer-exact)",
+    fingerprint:
+      "sha256:380ced36a62272cecd356b28c02587cb24d24d7390b6d79ac5051cad272a52ba",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.planarReflectionRoute,
+    kind: "conditional-route",
+    label:
+      "Horizontal XZ planar reflection route (oblique clip, water hidden, no bounce)",
+    fingerprint:
+      "sha256:57c74219c5e33c9f5e063c0de85dc833ca8bef39dc73c3224d59b678dec658d4",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.planarEnvironmentFallback,
+    kind: "effect-state",
+    label:
+      "Explicit environment fallback for planar miss (Host Adapter radiance)",
+    fingerprint:
+      "sha256:5c87e9ee57fb714b882e29e6dcf43b74d35953cffaecb0b4f0c15123d403b5e0",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.planarReflectionProbe,
+    kind: "conditional-route",
+    label: "GPU completion probe of the planar reflection target",
+    fingerprint:
+      "sha256:f203f71435dfe40d3d14d3b19b853fd13f8338aba138c1eee29400570074311e",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrRawTarget,
+    kind: "resource",
+    label:
+      "Stock r185 current-frame SSR raw target (RGBA16F, samples 0, drawing-buffer-exact)",
+    fingerprint:
+      "sha256:5229f76bc28be7b7aa032fadcb3adabfada2202dde29a88f499d16fac9ba659f",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrBlurTarget,
+    kind: "resource",
+    label:
+      "Stock r185 current-frame SSR roughness blur target (RGBA16F, 5 mip slots, drawing-buffer-exact, not history)",
+    fingerprint:
+      "sha256:7de03a661f8f354b4936ce102689f719ec015d4fa9e56a01c9ac09521d790cb1",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrCompositeTarget,
+    kind: "resource",
+    label:
+      "Current-frame SSR composite (RGBA16F RGB pre-TRAA, A ssrConfidence, drawing-buffer-exact)",
+    fingerprint:
+      "sha256:e9e8d713d8c38ada27f083c3c3cca0698ea4df327b40e247450e0f3d0420b336",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrRoute,
+    kind: "conditional-route",
+    label:
+      "Stock r185 non-stochastic current-frame SSR (host-present cadence, water-mask metalness, spatial blur, dedicated TemporalReproject history, no scene.environment)",
+    fingerprint:
+      "sha256:1a331354906edd1886eccf37a780586db70fa5d9326e29b65ef66f690f10dcee",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrBlurCopyRoute,
+    kind: "conditional-route",
+    label:
+      "Stock r185 SSR blur base-mip copy (roughnessNode present, blurQuality 2)",
+    fingerprint:
+      "sha256:0be4df8ca02cbf5d130d34c54d9fa60713d07cd1370eccc81c5c9bfef7b2ffb9",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrBlurRoute,
+    kind: "conditional-route",
+    label:
+      "Stock r185 current-frame spatial SSR blur (4 mip passes, blurQuality 2, not history)",
+    fingerprint:
+      "sha256:12c33037a77f9494ee861a6b56807f479afdc0e68ce7cc46477dca3509fe92c3",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrCompositeRoute,
+    kind: "conditional-route",
+    label:
+      "Explicit current-frame SSR compose over planar+environment base (history candidate, black-hit current, minimum-error fresnel overlay)",
+    fingerprint:
+      "sha256:ff8885aece4baf4f604f40783c8b641c5338d5bea1d8f79ac3bb0e5d5dc5b893",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrProbe,
+    kind: "conditional-route",
+    label:
+      "GPU completion probe of SSR raw, composite, and TemporalReproject resolved history; stock roughness blur mips complete transitively after hidden frames",
+    fingerprint:
+      "sha256:ee3f19cd28ba2891f410f0467b7ff688e477aa40926f72812e71a2932bc71104",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryTarget,
+    kind: "resource",
+    label:
+      "Stock r185 TemporalReproject history (RGBA16F, accumulate, drawing-buffer-exact)",
+    fingerprint:
+      "sha256:01163977af38992ab615fb739c87de571568fe8e5d8b2abb4c0814f8e4f69159",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResolveTarget,
+    kind: "resource",
+    label:
+      "Stock r185 TemporalReproject resolve (RGBA16F, drawing-buffer-exact, getTextureNode)",
+    fingerprint:
+      "sha256:668109307d81e0f44bb3b88df15cb4214ca818eead92cdcd79927a8543881b26",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryBeautyTarget,
+    kind: "resource",
+    label:
+      "SSR TemporalReproject beauty input (RGBA16F, drawing-buffer-exact, blurred RGB + raw worldDistance A)",
+    fingerprint:
+      "sha256:80863d1535f37527febcfa90f24e8c8d1cf5c3f2cbde6daf11730f028691aa8f",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryBeautyRoute,
+    kind: "conditional-route",
+    label:
+      "SSR TemporalReproject beauty blit (host-present, stock blur RGB + raw A)",
+    fingerprint:
+      "sha256:1fcc820049c348593edbe52c246d3201e5acd5f667fdf135fa1baf4529aaf5bb",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResolvedCaptureTarget,
+    kind: "resource",
+    label:
+      "SSR TemporalReproject resolved diagnostics copy (RGBA16F, drawing-buffer-exact)",
+    fingerprint:
+      "sha256:fb768c5c2f3ed1b26274913eeaa7185d686db9f4a01f4b88abb13fa2b59d562f",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResolvedCopyRoute,
+    kind: "conditional-route",
+    label:
+      "SSR TemporalReproject resolved copyTextureToTexture (host-present, required)",
+    fingerprint:
+      "sha256:cbd5fc2889a202ba3ebd2e514ea9e58379f5d3491339a6edae6fda3c2b5b4d0d",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryPreviousDepth,
+    kind: "resource",
+    label:
+      "Stock r185 TemporalReproject previous depth (copied from main depth, drawing-buffer-exact)",
+    fingerprint:
+      "sha256:4a5523625b107bd68d4da4805bf1b76d73fdd9349ca1759449091a8ca1548aee",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryPreviousNormal,
+    kind: "resource",
+    label:
+      "Stock r185 TemporalReproject previous packed normal (RGBA16F, drawing-buffer-exact)",
+    fingerprint:
+      "sha256:e06ddd63eec10a66ab84d8ad7a5d45712bfb4657f87dc4dfa59f8c84301ab065",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistorySeedRoute,
+    kind: "conditional-route",
+    label:
+      "Stock r185 TemporalReproject seed (host-present, first size or reset)",
+    fingerprint:
+      "sha256:a795d239b5301dd3ffa64fd58a1ba3698244349ec7a4449851ee2ad3d074bd52",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResolveRoute,
+    kind: "conditional-route",
+    label:
+      "Stock r185 TemporalReproject specular resolve (host-present, no FRAME)",
+    fingerprint:
+      "sha256:4b2e56c27d2a86a5c7896f9c8be33eaa45b2890c6b70347007e32ad06195584b",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryAccumulateRoute,
+    kind: "conditional-route",
+    label:
+      "Stock r185 TemporalReproject accumulate copy (resolve into history)",
+    fingerprint:
+      "sha256:f20d52a23de875e18cf3f589f5d68f83357423af3f0ba268f2c377539b51e075",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResetRoute,
+    kind: "conditional-route",
+    label:
+      "Shared Host-domain SSR history reset (velocity sentinel, same present as TRAA)",
+    fingerprint:
+      "sha256:0795e123827f5cf11776dddba1b8585fb9a8b3bbea8dc1877375708d53ed2b94",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryProbe,
+    kind: "conditional-route",
+    label:
+      "GPU completion probe of TemporalReproject beauty input and resolved diagnostics copy",
+    fingerprint:
+      "sha256:42eac93d1c673fe058eb09c61f470083df6b7afa3683328e788656732491a2e6",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
     kind: "conditional-route",
-    label: "One scene MRT through stock TRAA with optional current-color",
+    label:
+      "Planar aux, one jittered main MRT, current-frame SSR, dedicated TemporalReproject history, explicit compose, then stock TRAA",
     fingerprint:
-      "sha256:02a2ef11bb80777f29a294b21601b96fefa73a10f1a531bb9427067e5f326772",
+      "sha256:42b6254fad454c6b5b415b997c96a14c78e7bf1b1473c28a2d7fe5ab90b4c579",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.proceduralMotion,
@@ -310,16 +559,18 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.inverseLinearDepth,
     kind: "resource",
-    label: "Inverse-linear view depth (R32F, drawing-buffer-exact)",
+    label:
+      "QA inverse-linear view depth conversion (R32F, independent of main MRT, drawing-buffer-exact)",
     fingerprint:
-      "sha256:8c437e59eb9f4c22921b61c6d5bb39af290007a27e424b1916e934175743cc4c",
+      "sha256:fbf21f1edb1ad428145d3bcbe2a95a8d46ed4ecc1b171ece1c527e02297f8e44",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.viewNormal,
     kind: "resource",
-    label: "View-normal XY (RG16F, drawing-buffer-exact)",
+    label:
+      "Packed view-normal RGB (packNormalToRGB) + water roughness A (RGBA16F, drawing-buffer-exact)",
     fingerprint:
-      "sha256:c9c8dc85087bbbf6c696e4aed1efe7796b22d6eabb9d25b6e7f1fd12ed256577",
+      "sha256:9202e800870f86fd41deba3fbec57a3a94469cce59e3c93eea5513c006345bb5",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalFactorsTarget,
@@ -373,28 +624,30 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.traaResetRoute,
     kind: "conditional-route",
-    label: "No-allocation TRAA reset route",
+    label:
+      "No-allocation TRAA and dedicated SSR history reset (shared Host domain)",
     fingerprint:
       "sha256:e4a59425b89a6138d620200a8404be90b74fd8d20a5da54fbefb259a3b4dd9ab",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.currentColorConversion,
     kind: "conditional-route",
-    label: "Current-color conversion sampling the already-rendered output",
+    label:
+      "Current-color conversion sampling pre-TRAA SSR composite RGB with restored scene alpha",
     fingerprint:
-      "sha256:c3ccd110aed4171e0e15c0bdde797b266ed744751a437ae54ea1ec157f8dcb14",
+      "sha256:ea19f958120b52c05d673abcec39db3aa8ca7157f326d5d4449a4faa0457c57c",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
     kind: "conditional-route",
-    label: "Twelve named diagnostics output routes",
+    label: "Twenty-three named diagnostics output routes",
     fingerprint:
-      "sha256:aa21153732af519ab15fdd5e9f46311d2e9f4c8096b9f35bd26bb561d18e5139",
+      "sha256:ac7175ab7f59205e4aefef72d46d2b68cfe4dc256db66788de2466d2d67dcf3a",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.hiddenStabilization,
     kind: "effect-state",
-    label: "Eight hidden stabilization frames",
+    label: "Eight hidden TRAA and SSR history stabilization frames",
     fingerprint:
       "sha256:f35d6cdd70b97589e93e16f61bb2ecb684031f9681d47d324413e2617810c726",
   },

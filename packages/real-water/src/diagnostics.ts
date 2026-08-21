@@ -27,8 +27,14 @@ export type {
 } from "./presentation.js";
 
 /**
- * The twelve named diagnostic outputs. Names and CPU shapes match the QA
- * capture contract.
+ * The twenty-three named diagnostic outputs. Names and CPU shapes match the QA
+ * capture contract. Planar color and target-alpha occupancy are their own
+ * prepared target. `planar-confidence` is reserved for a future screen-space
+ * mask and is not a current capture. Current-frame SSR hit, confidence,
+ * linear raw color, water roughness, scene-pass reflection base, SSR
+ * composite color, TemporalReproject beauty input RGB, resolved history RGB,
+ * and inverse accumulated frame-count weight are included. History DTOs read
+ * the prepared beauty and resolved textures and do not invent CPU history.
  *
  * @public
  */
@@ -45,10 +51,21 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
   "optical-crest-transmission",
   "optical-transmittance",
   "optical-glint",
+  "planar-color",
+  "planar-target-alpha",
+  "ssr-hit",
+  "ssr-confidence",
+  "ssr-color",
+  "ssr-roughness",
+  "reflection-base-color",
+  "ssr-composite-color",
+  "ssr-history-color",
+  "ssr-history-frame-weight",
+  "ssr-history-input-color",
 ] as const);
 
 /**
- * One of the twelve named diagnostic CPU outputs.
+ * One of the twenty-three named diagnostic CPU outputs.
  *
  * @public
  */
@@ -120,6 +137,61 @@ export const DIAGNOSTICS_CAPTURE_SHAPES = Object.freeze({
     elementType: "float32" as const,
     components: 1 as const,
   }),
+  "planar-color": Object.freeze({
+    format: "rgba8unorm-srgb" as const,
+    elementType: "uint8" as const,
+    components: 4 as const,
+  }),
+  "planar-target-alpha": Object.freeze({
+    format: "r32float-optical" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "ssr-hit": Object.freeze({
+    format: "r32float-optical" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "ssr-confidence": Object.freeze({
+    format: "r32float-optical" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "ssr-color": Object.freeze({
+    format: "rgb32float-linear-ssr" as const,
+    elementType: "float32" as const,
+    components: 3 as const,
+  }),
+  "ssr-roughness": Object.freeze({
+    format: "r32float-ssr-roughness" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "reflection-base-color": Object.freeze({
+    format: "rgb32float-linear-reflection-base" as const,
+    elementType: "float32" as const,
+    components: 3 as const,
+  }),
+  "ssr-composite-color": Object.freeze({
+    format: "rgb32float-linear-ssr-composite" as const,
+    elementType: "float32" as const,
+    components: 3 as const,
+  }),
+  "ssr-history-color": Object.freeze({
+    format: "rgb32float-linear-ssr-history" as const,
+    elementType: "float32" as const,
+    components: 3 as const,
+  }),
+  "ssr-history-frame-weight": Object.freeze({
+    format: "r32float-ssr-history-frame-weight" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "ssr-history-input-color": Object.freeze({
+    format: "rgb32float-linear-ssr-history-input" as const,
+    elementType: "float32" as const,
+    components: 3 as const,
+  }),
 });
 
 const CAPTURE_NAME_SET = new Set<string>(DIAGNOSTICS_CAPTURE_NAMES);
@@ -188,6 +260,20 @@ export interface DiagnosticsCurrentColorCapture extends DiagnosticsCaptureBase {
 }
 
 /**
+ * Planar reflection color readback from the auxiliary target.
+ *
+ * @public
+ */
+export interface DiagnosticsPlanarColorCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "planar-color";
+  /** Packed sRGB8 format. */
+  readonly format: "rgba8unorm-srgb";
+  /** Tightly packed RGBA8 pixels. */
+  readonly data: Uint8Array;
+}
+
+/**
  * Linear-view depth readback.
  *
  * @public
@@ -243,10 +329,118 @@ export interface DiagnosticsOpticalScalarCapture extends DiagnosticsCaptureBase 
     | "optical-environment-reflection"
     | "optical-crest-transmission"
     | "optical-transmittance"
-    | "optical-glint";
+    | "optical-glint"
+    | "planar-target-alpha"
+    | "ssr-hit"
+    | "ssr-confidence";
   /** Packed optical scalar format. */
   readonly format: "r32float-optical";
   /** Tightly packed scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Water-origin roughness read from the view-normal attachment alpha.
+ *
+ * @public
+ */
+export interface DiagnosticsSsrRoughnessCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "ssr-roughness";
+  /** Packed roughness format. */
+  readonly format: "r32float-ssr-roughness";
+  /** Tightly packed roughness samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Current-frame raw SSR color readback. Linear RGB from the stock raw
+ * target. Black RGB with a raw hit is still a hit; do not treat RGB 0 as a
+ * miss.
+ *
+ * @public
+ */
+export interface DiagnosticsSsrColorCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "ssr-color";
+  /** Packed linear RGB format. */
+  readonly format: "rgb32float-linear-ssr";
+  /** Tightly packed linear RGB samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Same-frame scene-pass beauty RGB. Linear half-float scene output packed
+ * as Float32 RGB. This is the SSR compose base, not Host viewport scene
+ * color and not TRAA current-color.
+ *
+ * @public
+ */
+export interface DiagnosticsReflectionBaseColorCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "reflection-base-color";
+  /** Packed linear RGB format. */
+  readonly format: "rgb32float-linear-reflection-base";
+  /** Tightly packed linear RGB samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Same-frame SSR composite RGB. Linear half-float compose-target color
+ * packed as Float32 RGB. Confidence 0 must match reflection-base RGB.
+ *
+ * @public
+ */
+export interface DiagnosticsSsrCompositeColorCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "ssr-composite-color";
+  /** Packed linear RGB format. */
+  readonly format: "rgb32float-linear-ssr-composite";
+  /** Tightly packed linear RGB samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * TemporalReproject resolved history RGB. Linear Float32 from the public
+ * resolved texture (`getTextureNode().value`), not a CPU reconstruction.
+ *
+ * @public
+ */
+export interface DiagnosticsSsrHistoryColorCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "ssr-history-color";
+  /** Packed linear RGB format. */
+  readonly format: "rgb32float-linear-ssr-history";
+  /** Tightly packed linear RGB samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * TemporalReproject resolved alpha: r185 inverse accumulated frame count.
+ *
+ * @public
+ */
+export interface DiagnosticsSsrHistoryFrameWeightCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "ssr-history-frame-weight";
+  /** Packed inverse-frame-count format. */
+  readonly format: "r32float-ssr-history-frame-weight";
+  /** Tightly packed scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * TemporalReproject beauty input RGB. Linear Float32 from the prepared
+ * full-resolution beauty target, not a CPU reconstruction.
+ *
+ * @public
+ */
+export interface DiagnosticsSsrHistoryInputColorCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "ssr-history-input-color";
+  /** Packed linear RGB format. */
+  readonly format: "rgb32float-linear-ssr-history-input";
+  /** Tightly packed linear RGB samples. */
   readonly data: Float32Array;
 }
 
@@ -258,6 +452,14 @@ export interface DiagnosticsOpticalScalarCapture extends DiagnosticsCaptureBase 
 export type DiagnosticsCapture =
   | DiagnosticsFinalColorCapture
   | DiagnosticsCurrentColorCapture
+  | DiagnosticsPlanarColorCapture
+  | DiagnosticsSsrColorCapture
+  | DiagnosticsSsrRoughnessCapture
+  | DiagnosticsReflectionBaseColorCapture
+  | DiagnosticsSsrCompositeColorCapture
+  | DiagnosticsSsrHistoryColorCapture
+  | DiagnosticsSsrHistoryFrameWeightCapture
+  | DiagnosticsSsrHistoryInputColorCapture
   | DiagnosticsDepthCapture
   | DiagnosticsNormalCapture
   | DiagnosticsMotionVectorCapture
@@ -313,7 +515,7 @@ export interface HostDiagnosticsRoute {
 }
 
 /**
- * Confirms `value` is one of the twelve diagnostic capture names.
+ * Confirms `value` is one of the twenty-three diagnostic capture names.
  *
  * @public
  */

@@ -3,6 +3,7 @@ import {
   DataTexture,
   type PerspectiveCamera,
   Mesh,
+  NoBlending,
   NodeMaterial,
   type Renderer,
   type Scene,
@@ -183,6 +184,11 @@ export async function prepareMinimalWaterPlane(
       spectralBand,
       options.environment,
       waterTexture,
+      {
+        texture: createdPresentation.resources.planar.target.texture,
+        viewProjection: createdPresentation.resources.planar.viewProjection,
+        hasOutput: createdPresentation.resources.planar.hasOutput,
+      },
     );
     partial.opticalPath = opticalPath;
     material.positionNode = spectralBand.positionNode;
@@ -190,18 +196,22 @@ export async function prepareMinimalWaterPlane(
     material.colorNode = opticalPath.colorNode;
     material.mrtNode = opticalPath.mrtNode;
     material.transparent = true;
+    material.blending = NoBlending;
     const plane = new Mesh(geometry, material);
     partial.plane = plane;
     plane.name = "Real Water clipmap";
     plane.frustumCulled = false;
+    createdPresentation.resources.planar.bindWaterMesh(plane);
     scene.add(plane);
 
     throwIfAborted(options.request.signal);
     renderer.setRenderTarget(null);
     renderer.initTexture(waterTexture);
     renderer.initTexture(environmentRadiance);
+    renderer.initTexture(createdPresentation.resources.planar.target.texture);
     await compileAndPrimePreparedWaterPresentation(
       renderer,
+      scene,
       camera,
       createdPresentation.resources,
       options.request.signal,
@@ -219,6 +229,14 @@ export async function prepareMinimalWaterPlane(
       "spectralBandRipple",
       "material",
       "opticalRoute",
+      "planarReflectionTarget",
+      "planarReflectionRoute",
+      "planarEnvironmentFallback",
+      "planarReflectionProbe",
+      "ssrRawTarget",
+      "ssrCompositeTarget",
+      "ssrRoute",
+      "ssrCompositeRoute",
       "renderRoute",
       "proceduralMotion",
       "motionVectors",
@@ -238,11 +256,16 @@ export async function prepareMinimalWaterPlane(
 
     renderHiddenStabilizationFrames(
       renderer,
+      scene,
       camera,
       createdPresentation.resources,
       options.request.signal,
     );
     await completeDeclaredWork(options.request.progress, [
+      "ssrBlurTarget",
+      "ssrBlurCopyRoute",
+      "ssrBlurRoute",
+      "ssrProbe",
       "hiddenStabilization",
     ]);
 
@@ -251,10 +274,26 @@ export async function prepareMinimalWaterPlane(
       createdPresentation.resources,
       options.request.signal,
     );
-    await completeDeclaredWork(options.request.progress, ["completionProbe"]);
+    await completeDeclaredWork(options.request.progress, [
+      "ssrHistoryTarget",
+      "ssrHistoryResolveTarget",
+      "ssrHistoryBeautyTarget",
+      "ssrHistoryBeautyRoute",
+      "ssrHistoryResolvedCaptureTarget",
+      "ssrHistoryResolvedCopyRoute",
+      "ssrHistoryPreviousDepth",
+      "ssrHistoryPreviousNormal",
+      "ssrHistorySeedRoute",
+      "ssrHistoryResolveRoute",
+      "ssrHistoryAccumulateRoute",
+      "ssrHistoryResetRoute",
+      "ssrHistoryProbe",
+      "completionProbe",
+    ]);
 
     await renderMainCameraGuard(
       renderer,
+      scene,
       camera,
       createdPresentation.resources,
       options.request.signal,

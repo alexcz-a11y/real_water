@@ -29,8 +29,7 @@ export type QaScenePassColorAttachmentFormat =
 // Scene-pass color attachments only. Core final color is the blit, not MRT.
 export const QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS = Object.freeze([
   "rgba16float",
-  "r32float",
-  "rg16float",
+  "rgba16float",
   "rg16float",
   "rgba16float",
   "rg8unorm",

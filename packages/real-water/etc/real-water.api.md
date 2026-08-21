@@ -543,7 +543,7 @@ export interface PrewarmManifestIdentity {
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 2;
+export const QUALITY_PROFILE_VERSION: 5;
 
 // @public
 export interface QualityProfile {
@@ -551,6 +551,8 @@ export interface QualityProfile {
     readonly id: MinimalWaterQualityProfileId;
     // (undocumented)
     readonly profileHash: string;
+    // (undocumented)
+    readonly reflection: QualityProfileReflection;
     // (undocumented)
     readonly schema: typeof QUALITY_PROFILE_SCHEMA;
     // (undocumented)
@@ -571,6 +573,99 @@ export interface QualityProfileIdentity {
     readonly schema: typeof QUALITY_PROFILE_SCHEMA;
     // (undocumented)
     readonly version: typeof QUALITY_PROFILE_VERSION;
+}
+
+// @public
+export interface QualityProfileReflection {
+    // (undocumented)
+    readonly environment: {
+        readonly source: "host-adapter";
+    };
+    // (undocumented)
+    readonly planar: {
+        readonly resolutionPolicy: "drawing-buffer-exact";
+        readonly format: "rgba8unorm-srgb";
+        readonly samples: 0;
+    };
+    // (undocumented)
+    readonly ssr: QualityProfileReflectionSsr;
+}
+
+// @public
+export interface QualityProfileReflectionSsr {
+    // (undocumented)
+    readonly binaryRefine: true;
+    // (undocumented)
+    readonly blurFormat: "rgba16float";
+    // (undocumented)
+    readonly blurQuality: 2;
+    // (undocumented)
+    readonly blurResolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly blurRoute: "enabled";
+    // (undocumented)
+    readonly compositeFormat: "rgba16float";
+    // (undocumented)
+    readonly history: QualityProfileReflectionSsrHistory;
+    // (undocumented)
+    readonly maxDistance: 48;
+    // (undocumented)
+    readonly mipCount: 5;
+    // (undocumented)
+    readonly mode: "current-frame";
+    // (undocumented)
+    readonly quality: 0.5;
+    // (undocumented)
+    readonly rawFormat: "rgba16float";
+    // (undocumented)
+    readonly reflectNonMetals: false;
+    // (undocumented)
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly resolutionScale: 1;
+    // (undocumented)
+    readonly roughnessCutoff: 0.5;
+    // (undocumented)
+    readonly samples: 0;
+    // (undocumented)
+    readonly screenEdgeFade: 0.08;
+    // (undocumented)
+    readonly stochastic: false;
+    // (undocumented)
+    readonly thickness: 0.35;
+    // (undocumented)
+    readonly updateCadence: "host-present";
+}
+
+// @public
+export interface QualityProfileReflectionSsrHistory {
+    // (undocumented)
+    readonly accumulate: true;
+    // (undocumented)
+    readonly captureFormat: "rgba16float";
+    // (undocumented)
+    readonly historyFormat: "rgba16float";
+    // (undocumented)
+    readonly hitPointReprojection: true;
+    // (undocumented)
+    readonly inputFormat: "rgba16float";
+    // (undocumented)
+    readonly maxFrames: 32;
+    // (undocumented)
+    readonly mode: "temporal-reproject-specular";
+    // (undocumented)
+    readonly normalFormat: "packed-rgba16float";
+    // (undocumented)
+    readonly resetDomains: readonly [
+    "simulation-reset",
+    "camera-cut",
+    "origin-shift",
+    "sea-state-cut"
+    ];
+    // (undocumented)
+    readonly resolveFormat: "rgba16float";
+    // (undocumented)
+    readonly updateCadence: "host-present";
 }
 
 // @public
@@ -595,6 +690,8 @@ export interface QualityProfileTemporal {
     readonly resolutionPolicy: "drawing-buffer-exact";
     // (undocumented)
     readonly taau: false;
+    // (undocumented)
+    readonly updateCadence: "host-present";
 }
 
 // @public
@@ -713,9 +810,103 @@ export interface RenderingCapabilities {
     // (undocumented)
     readonly backend: "core-webgpu";
     // (undocumented)
+    readonly reflection: RenderingCapabilitiesReflection;
+    // (undocumented)
     readonly temporal: RenderingCapabilitiesTemporal;
     // (undocumented)
     readonly timestampQuery: boolean;
+}
+
+// @public
+export interface RenderingCapabilitiesReflection {
+    // (undocumented)
+    readonly environment: {
+        readonly source: "host-adapter";
+    };
+    // (undocumented)
+    readonly planar: {
+        readonly width: number;
+        readonly height: number;
+        readonly format: "rgba8unorm-srgb";
+        readonly samples: 0;
+    };
+    // (undocumented)
+    readonly ssr: RenderingCapabilitiesReflectionSsr;
+}
+
+// @public
+export interface RenderingCapabilitiesReflectionSsr {
+    // (undocumented)
+    readonly blur: RenderingCapabilitiesReflectionSsrBlur;
+    // (undocumented)
+    readonly compositeFormat: "rgba16float";
+    // (undocumented)
+    readonly height: number;
+    // (undocumented)
+    readonly history: RenderingCapabilitiesReflectionSsrHistory;
+    // (undocumented)
+    readonly missFallbackPriority: readonly ["planar", "host-adapter"];
+    // (undocumented)
+    readonly mode: "current-frame";
+    // (undocumented)
+    readonly rawFormat: "rgba16float";
+    // (undocumented)
+    readonly samples: 0;
+    // (undocumented)
+    readonly updateCadence: "host-present";
+    // (undocumented)
+    readonly width: number;
+}
+
+// @public
+export interface RenderingCapabilitiesReflectionSsrBlur {
+    // (undocumented)
+    readonly blurQuality: 2;
+    // (undocumented)
+    readonly enabled: true;
+    // (undocumented)
+    readonly format: "rgba16float";
+    // (undocumented)
+    readonly height: number;
+    // (undocumented)
+    readonly mipCount: 5;
+    // (undocumented)
+    readonly width: number;
+}
+
+// @public
+export interface RenderingCapabilitiesReflectionSsrHistory {
+    // (undocumented)
+    readonly accumulate: true;
+    // (undocumented)
+    readonly captureFormat: "rgba16float";
+    // (undocumented)
+    readonly height: number;
+    // (undocumented)
+    readonly historyFormat: "rgba16float";
+    // (undocumented)
+    readonly hitPointReprojection: true;
+    // (undocumented)
+    readonly inputFormat: "rgba16float";
+    // (undocumented)
+    readonly maxFrames: 32;
+    // (undocumented)
+    readonly mode: "temporal-reproject-specular";
+    // (undocumented)
+    readonly normalFormat: "packed-rgba16float";
+    // (undocumented)
+    readonly resetDomains: readonly [
+    "simulation-reset",
+    "camera-cut",
+    "origin-shift",
+    "sea-state-cut"
+    ];
+    // (undocumented)
+    readonly resolveFormat: "rgba16float";
+    // (undocumented)
+    readonly updateCadence: "host-present";
+    // (undocumented)
+    readonly width: number;
 }
 
 // @public
@@ -738,6 +929,8 @@ export interface RenderingCapabilitiesTemporal {
     readonly stockThreeRevision: "185";
     // (undocumented)
     readonly taau: false;
+    // (undocumented)
+    readonly updateCadence: "host-present";
 }
 
 // @public
@@ -803,6 +996,7 @@ export interface ThreeHostLifecycleAdapterOptions {
 
 // @public
 export interface ThreeHostRenderer {
+    copyTextureToTexture(source: object, destination: object): unknown;
     // (undocumented)
     init(): Promise<unknown>;
 }

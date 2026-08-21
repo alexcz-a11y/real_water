@@ -59,6 +59,7 @@ export type RenderingCapabilityDecision =
 
 export function evaluateRenderingCapability(
   observation: RenderingCapabilityObservation,
+  drawingBuffer?: Readonly<{ width: number; height: number }>,
 ): RenderingCapabilityDecision {
   if (observation.backend === "device-lost") {
     return Object.freeze({
@@ -122,9 +123,24 @@ export function evaluateRenderingCapability(
     });
   }
 
+  if (
+    drawingBuffer === undefined ||
+    !Number.isSafeInteger(drawingBuffer.width) ||
+    !Number.isSafeInteger(drawingBuffer.height) ||
+    drawingBuffer.width < 1 ||
+    drawingBuffer.height < 1
+  ) {
+    throw new TypeError(
+      "Supported Core WebGPU capabilities require the prepared drawing buffer.",
+    );
+  }
+
   return Object.freeze({
     status: "supported",
-    capabilities: createCoreWebGPUCapabilities(observation.timestampQuery),
+    capabilities: createCoreWebGPUCapabilities(
+      observation.timestampQuery,
+      drawingBuffer,
+    ),
   });
 }
 

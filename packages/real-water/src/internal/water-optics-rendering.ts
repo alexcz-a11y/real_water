@@ -1,17 +1,17 @@
-import { Vector3, type Texture } from "three/webgpu";
+import { type Matrix4, Vector3, type Texture } from "three/webgpu";
 import {
   cameraFar,
   cameraNear,
+  cameraPosition,
   cameraProjectionMatrix,
   cameraViewMatrix,
   equirectUV,
   exp,
   float,
-  linearDepth,
   max,
   mix,
+  packNormalToRGB,
   mrt,
-  normalView,
   perspectiveDepthToViewZ,
   positionView,
   refract,
@@ -22,6 +22,7 @@ import {
   step,
   texture,
   uniform,
+  vec2,
   vec3,
   vec4,
   velocity,
@@ -57,6 +58,11 @@ export function createWaterOpticsRendering(
   spectral: SpectralBandRendering,
   environment: HostEnvironmentAdapter,
   bodyColor: Texture,
+  planar: {
+    readonly texture: Texture;
+    readonly viewProjection: Matrix4;
+    readonly hasOutput: { value: number };
+  },
 ) {
   const initialEnvironment = readHostEnvironmentState(environment);
   const grazingReflection = uniform(
@@ -150,6 +156,46 @@ export function createWaterOpticsRendering(
   const environmentColor = environmentSample.rgb
     .mul(environmentReflection)
     .mul(environmentIntensity);
+  const planarViewProjection = uniform(planar.viewProjection)
+    .setName("planarViewProjection")
+    .setGroup(renderGroup);
+  const planarHasOutput = uniform(0)
+    .setName("planarHasOutput")
+    .setGroup(renderGroup);
+  planarHasOutput.onRenderUpdate(() => {
+    planarHasOutput.value = planar.hasOutput.value;
+  });
+  const planarWorldPosition = spectral.positionNode.toVarying(
+    "realWaterPlanarWorldPosition",
+  );
+  const planarClip = planarViewProjection.mul(vec4(planarWorldPosition, 1));
+  const planarNdc = planarClip.xy.div(max(planarClip.w, float(1e-4)));
+  const planarUvUnflipped = planarNdc.mul(0.5).add(0.5);
+  const planarSampleUV = vec2(
+    planarUvUnflipped.x,
+    float(1).sub(planarUvUnflipped.y),
+  );
+  const clipWPositive = float(1).sub(step(planarClip.w, float(0)));
+  const clipDepthValid = step(float(0), planarClip.z).mul(
+    step(planarClip.z, planarClip.w),
+  );
+  const uvValid = step(float(0), planarSampleUV.x)
+    .mul(step(planarSampleUV.x, float(1)))
+    .mul(step(float(0), planarSampleUV.y))
+    .mul(step(planarSampleUV.y, float(1)));
+  const projectionValid = clipWPositive.mul(clipDepthValid).mul(uvValid);
+  const facingPlane = step(float(1e-4), cameraPosition.y);
+  const planarSample = texture(planar.texture, planarSampleUV);
+  const planarConfidence = planarHasOutput
+    .mul(facingPlane)
+    .mul(projectionValid)
+    .mul(planarSample.a)
+    .clamp(0, 1);
+  const reflectedRadiance = mix(
+    environmentColor,
+    planarSample.rgb,
+    planarConfidence,
+  );
 
   const viewNormal = cameraViewMatrix.mul(vec4(worldNormal, 0)).xyz.normalize();
   const incident = positionView.xyz.normalize();
@@ -217,12 +263,12 @@ export function createWaterOpticsRendering(
     .clamp(0, 1);
   const crestLift = mix(
     transmitted.add(scattered),
-    environmentColor.add(sunColor.mul(0.22)),
+    reflectedRadiance.add(sunColor.mul(0.22)),
     crestNode.mul(0.5),
   );
   const reflected = mix(
     transmitted.add(scattered),
-    environmentColor,
+    reflectedRadiance,
     fresnelNode,
   );
   const opticalColor = mix(reflected, crestLift, crestNode.mul(0.35));
@@ -270,8 +316,10 @@ export function createWaterOpticsRendering(
   );
   const mrtNode = mrt({
     output: surfaceColor,
-    [INVERSE_LINEAR_DEPTH_ATTACHMENT]: linearDepth().oneMinus(),
-    [VIEW_NORMAL_ATTACHMENT]: vec4(normalView.x, normalView.y, 0, 1),
+    [VIEW_NORMAL_ATTACHMENT]: vec4(
+      packNormalToRGB(viewNormal),
+      spectral.roughnessNode,
+    ),
     [MOTION_VECTORS_ATTACHMENT]: velocity,
     [OPTICAL_FACTORS_ATTACHMENT]: factorsNode,
     [OPTICAL_DIAGNOSTICS_A_ATTACHMENT]: diagnosticsANode,

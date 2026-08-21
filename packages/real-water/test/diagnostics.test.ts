@@ -44,7 +44,7 @@ function createPresentedFrame(): HostPresentedFrame {
 }
 
 describe("real-water/diagnostics", () => {
-  it("publishes the twelve frozen CPU capture names and shapes only", () => {
+  it("publishes the twenty-three frozen CPU capture names and shapes only", () => {
     expect(DIAGNOSTICS_CAPTURE_NAMES).toEqual([
       "final-color",
       "current-color",
@@ -58,7 +58,66 @@ describe("real-water/diagnostics", () => {
       "optical-crest-transmission",
       "optical-transmittance",
       "optical-glint",
+      "planar-color",
+      "planar-target-alpha",
+      "ssr-hit",
+      "ssr-confidence",
+      "ssr-color",
+      "ssr-roughness",
+      "reflection-base-color",
+      "ssr-composite-color",
+      "ssr-history-color",
+      "ssr-history-frame-weight",
+      "ssr-history-input-color",
     ]);
+    expect(isDiagnosticsCaptureName("ssr-history")).toBe(false);
+    expect(isDiagnosticsCaptureName("ssr-history-color")).toBe(true);
+    expect(isDiagnosticsCaptureName("ssr-history-input-color")).toBe(true);
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["ssr-hit"]).toEqual({
+      format: "r32float-optical",
+      elementType: "float32",
+      components: 1,
+    });
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["ssr-confidence"]).toEqual({
+      format: "r32float-optical",
+      elementType: "float32",
+      components: 1,
+    });
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["ssr-color"]).toEqual({
+      format: "rgb32float-linear-ssr",
+      elementType: "float32",
+      components: 3,
+    });
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["ssr-roughness"]).toEqual({
+      format: "r32float-ssr-roughness",
+      elementType: "float32",
+      components: 1,
+    });
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["reflection-base-color"]).toEqual({
+      format: "rgb32float-linear-reflection-base",
+      elementType: "float32",
+      components: 3,
+    });
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["ssr-composite-color"]).toEqual({
+      format: "rgb32float-linear-ssr-composite",
+      elementType: "float32",
+      components: 3,
+    });
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["ssr-history-color"]).toEqual({
+      format: "rgb32float-linear-ssr-history",
+      elementType: "float32",
+      components: 3,
+    });
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["ssr-history-frame-weight"]).toEqual({
+      format: "r32float-ssr-history-frame-weight",
+      elementType: "float32",
+      components: 1,
+    });
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["ssr-history-input-color"]).toEqual({
+      format: "rgb32float-linear-ssr-history-input",
+      elementType: "float32",
+      components: 3,
+    });
     expect(Object.isFrozen(DIAGNOSTICS_CAPTURE_NAMES)).toBe(true);
     expect(Object.isFrozen(DIAGNOSTICS_CAPTURE_SHAPES)).toBe(true);
     expect(DIAGNOSTICS_CAPTURE_SHAPES["final-color"]).toEqual({

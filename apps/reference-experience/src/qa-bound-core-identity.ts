@@ -7,6 +7,7 @@ import {
   type PrewarmDrawingBuffer,
   type PrewarmEffectVariant,
   type PrewarmManifest,
+  type QualityProfile,
   type QualityProfileTemporal,
   type RealWaterCapabilities,
   type RenderingCapabilitiesTemporal,
@@ -40,6 +41,7 @@ export const NATIVE_REGRESSION_TEMPORAL_POLICY = Object.freeze({
   dynamicResolution: false as const,
   frameGeneration: false as const,
   msaaSamples: 0 as const,
+  updateCadence: "host-present" as const,
 });
 
 export type NativeRegressionTemporalPolicy =
@@ -77,12 +79,57 @@ const TEMPORAL_KEYS = [
   "dynamicResolution",
   "frameGeneration",
   "msaaSamples",
+  "updateCadence",
 ] as const;
 const CAPABILITIES_KEYS = ["rendering", "gameplay"] as const;
 const RENDERING_CAPABILITY_KEYS = [
   "backend",
   "timestampQuery",
   "temporal",
+  "reflection",
+] as const;
+const REFLECTION_CAPABILITY_KEYS = ["environment", "planar", "ssr"] as const;
+const REFLECTION_SSR_KEYS = [
+  "width",
+  "height",
+  "rawFormat",
+  "compositeFormat",
+  "samples",
+  "mode",
+  "history",
+  "updateCadence",
+  "missFallbackPriority",
+  "blur",
+] as const;
+const REFLECTION_SSR_BLUR_KEYS = [
+  "width",
+  "height",
+  "format",
+  "mipCount",
+  "blurQuality",
+  "enabled",
+] as const;
+const REFLECTION_SSR_HISTORY_KEYS = [
+  "width",
+  "height",
+  "historyFormat",
+  "resolveFormat",
+  "inputFormat",
+  "captureFormat",
+  "maxFrames",
+  "mode",
+  "accumulate",
+  "hitPointReprojection",
+  "normalFormat",
+  "resetDomains",
+  "updateCadence",
+] as const;
+const REFLECTION_ENVIRONMENT_KEYS = ["source"] as const;
+const REFLECTION_PLANAR_KEYS = [
+  "width",
+  "height",
+  "format",
+  "samples",
 ] as const;
 const GAMEPLAY_CAPABILITY_KEYS = ["maxQueryPointsPerTick"] as const;
 const CAPABILITIES_TEMPORAL_KEYS = [
@@ -135,7 +182,8 @@ export function createQaBoundCoreManifestIdentity(
 
 export function readReadyCapabilities(
   value: unknown,
-  profileTemporal: QualityProfileTemporal,
+  profile: Pick<QualityProfile, "temporal" | "reflection">,
+  drawingBuffer: PrewarmDrawingBuffer,
 ): RealWaterCapabilities {
   if (!isRecord(value) || !hasExactKeys(value, CAPABILITIES_KEYS)) {
     throw new TypeError(
@@ -147,7 +195,7 @@ export function readReadyCapabilities(
     !hasExactKeys(value.rendering, RENDERING_CAPABILITY_KEYS)
   ) {
     throw new TypeError(
-      "Ready capabilities.rendering must include backend, timestampQuery, and temporal.",
+      "Ready capabilities.rendering must include backend, timestampQuery, temporal, and reflection.",
     );
   }
   if (
@@ -175,7 +223,12 @@ export function readReadyCapabilities(
   }
   const temporal = readCapabilitiesTemporal(
     value.rendering.temporal,
-    profileTemporal,
+    profile.temporal,
+  );
+  const reflection = readCapabilitiesReflection(
+    value.rendering.reflection,
+    profile.reflection,
+    drawingBuffer,
   );
   return deepFreeze(
     deepClone({
@@ -183,6 +236,7 @@ export function readReadyCapabilities(
         backend: "core-webgpu" as const,
         timestampQuery: value.rendering.timestampQuery,
         temporal,
+        reflection,
       },
       gameplay: {
         maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
@@ -258,7 +312,8 @@ export function assertNativeTemporalPolicy(
     temporal.taau !== expected.taau ||
     temporal.dynamicResolution !== expected.dynamicResolution ||
     temporal.frameGeneration !== expected.frameGeneration ||
-    temporal.msaaSamples !== expected.msaaSamples
+    temporal.msaaSamples !== expected.msaaSamples ||
+    temporal.updateCadence !== expected.updateCadence
   ) {
     throw new Error(
       "Core Quality Profile temporal policy is not the Native TRAA drawing-buffer-exact contract.",
@@ -426,6 +481,276 @@ function readDeclaration(value: unknown, index: number): PrewarmDeclaration {
   };
 }
 
+function readCapabilitiesReflection(
+  value: unknown,
+  profileReflection: QualityProfile["reflection"],
+  drawingBuffer: PrewarmDrawingBuffer,
+): RealWaterCapabilities["rendering"]["reflection"] {
+  if (!isRecord(value) || !hasExactKeys(value, REFLECTION_CAPABILITY_KEYS)) {
+    throw new TypeError(
+      "Ready capabilities.rendering.reflection must include environment, planar, and ssr.",
+    );
+  }
+  if (
+    !isRecord(value.environment) ||
+    !hasExactKeys(value.environment, REFLECTION_ENVIRONMENT_KEYS) ||
+    value.environment.source !== "host-adapter"
+  ) {
+    throw new TypeError(
+      "Ready capabilities.rendering.reflection.environment.source must be host-adapter.",
+    );
+  }
+  if (
+    !isRecord(value.planar) ||
+    !hasExactKeys(value.planar, REFLECTION_PLANAR_KEYS)
+  ) {
+    throw new TypeError(
+      "Ready capabilities.rendering.reflection.planar must use the exact prepared target fields.",
+    );
+  }
+  const width = value.planar.width;
+  const height = value.planar.height;
+  if (
+    typeof width !== "number" ||
+    typeof height !== "number" ||
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    throw new RangeError(
+      "Ready capabilities.rendering.reflection.planar dimensions must be positive integers.",
+    );
+  }
+  if (width !== drawingBuffer.width || height !== drawingBuffer.height) {
+    throw new Error(
+      "Ready capabilities.rendering.reflection.planar dimensions must match the Core drawing buffer.",
+    );
+  }
+  if (
+    value.planar.format !== profileReflection.planar.format ||
+    value.planar.samples !== profileReflection.planar.samples ||
+    value.environment.source !== profileReflection.environment.source
+  ) {
+    throw new Error(
+      "Ready capabilities.rendering.reflection disagrees with the Quality Profile reflection layer.",
+    );
+  }
+  if (value.planar.format !== "rgba8unorm-srgb" || value.planar.samples !== 0) {
+    throw new Error(
+      "Ready capabilities.rendering.reflection.planar is not the prepared RGBA8 sRGB samples-0 target.",
+    );
+  }
+  const ssr = readCapabilitiesSsr(
+    value.ssr,
+    profileReflection.ssr,
+    drawingBuffer,
+  );
+  return {
+    environment: {
+      source: "host-adapter",
+    },
+    planar: {
+      width,
+      height,
+      format: "rgba8unorm-srgb",
+      samples: 0,
+    },
+    ssr,
+  };
+}
+
+function readCapabilitiesSsr(
+  value: unknown,
+  profileSsr: QualityProfile["reflection"]["ssr"],
+  drawingBuffer: PrewarmDrawingBuffer,
+): RealWaterCapabilities["rendering"]["reflection"]["ssr"] {
+  if (!isRecord(value) || !hasExactKeys(value, REFLECTION_SSR_KEYS)) {
+    throw new TypeError(
+      "Ready capabilities.rendering.reflection.ssr must use the exact current-frame fields.",
+    );
+  }
+  if (value.history === false || value.history === true) {
+    throw new Error(
+      "Ready capabilities.rendering.reflection.ssr.history must be the TemporalReproject policy.",
+    );
+  }
+  const width = value.width;
+  const height = value.height;
+  if (
+    typeof width !== "number" ||
+    typeof height !== "number" ||
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    throw new RangeError(
+      "Ready capabilities.rendering.reflection.ssr dimensions must be positive integers.",
+    );
+  }
+  if (width !== drawingBuffer.width || height !== drawingBuffer.height) {
+    throw new Error(
+      "Ready capabilities.rendering.reflection.ssr dimensions must match the Core drawing buffer.",
+    );
+  }
+  if (
+    value.rawFormat !== profileSsr.rawFormat ||
+    value.compositeFormat !== profileSsr.compositeFormat ||
+    value.samples !== profileSsr.samples ||
+    value.mode !== profileSsr.mode ||
+    value.updateCadence !== profileSsr.updateCadence
+  ) {
+    throw new Error(
+      "Ready capabilities.rendering.reflection.ssr disagrees with the Quality Profile reflection layer.",
+    );
+  }
+  if (
+    value.rawFormat !== "rgba16float" ||
+    value.compositeFormat !== "rgba16float" ||
+    value.samples !== 0 ||
+    value.mode !== "current-frame" ||
+    value.updateCadence !== "host-present"
+  ) {
+    throw new Error(
+      "Ready capabilities.rendering.reflection.ssr is not the prepared current-frame RGBA16F samples-0 target.",
+    );
+  }
+  if (
+    !Array.isArray(value.missFallbackPriority) ||
+    value.missFallbackPriority.length !== 2 ||
+    value.missFallbackPriority[0] !== "planar" ||
+    value.missFallbackPriority[1] !== "host-adapter"
+  ) {
+    throw new Error(
+      "Ready capabilities.rendering.reflection.ssr.missFallbackPriority must be planar then host-adapter.",
+    );
+  }
+  if (
+    !isRecord(value.blur) ||
+    !hasExactKeys(value.blur, REFLECTION_SSR_BLUR_KEYS)
+  ) {
+    throw new TypeError(
+      "Ready capabilities.rendering.reflection.ssr.blur must use the exact current-frame fields.",
+    );
+  }
+  const blurWidth = value.blur.width;
+  const blurHeight = value.blur.height;
+  if (
+    typeof blurWidth !== "number" ||
+    typeof blurHeight !== "number" ||
+    !Number.isSafeInteger(blurWidth) ||
+    !Number.isSafeInteger(blurHeight) ||
+    blurWidth !== width ||
+    blurHeight !== height
+  ) {
+    throw new RangeError(
+      "Ready capabilities.rendering.reflection.ssr.blur dimensions must match the SSR drawing buffer.",
+    );
+  }
+  if (
+    value.blur.format !== "rgba16float" ||
+    value.blur.mipCount !== 5 ||
+    value.blur.blurQuality !== 2 ||
+    value.blur.enabled !== true
+  ) {
+    throw new Error(
+      "Ready capabilities.rendering.reflection.ssr.blur is not the prepared RGBA16F 5-mip quality-2 target.",
+    );
+  }
+  const history = readCapabilitiesSsrHistory(
+    value.history,
+    profileSsr.history,
+    width,
+    height,
+  );
+  return {
+    width,
+    height,
+    rawFormat: "rgba16float",
+    compositeFormat: "rgba16float",
+    samples: 0,
+    mode: "current-frame",
+    history,
+    updateCadence: "host-present",
+    missFallbackPriority: ["planar", "host-adapter"],
+    blur: {
+      width,
+      height,
+      format: "rgba16float",
+      mipCount: 5,
+      blurQuality: 2,
+      enabled: true,
+    },
+  };
+}
+
+function readCapabilitiesSsrHistory(
+  value: unknown,
+  profileHistory: QualityProfile["reflection"]["ssr"]["history"],
+  width: number,
+  height: number,
+): RealWaterCapabilities["rendering"]["reflection"]["ssr"]["history"] {
+  if (!isRecord(value) || !hasExactKeys(value, REFLECTION_SSR_HISTORY_KEYS)) {
+    throw new TypeError(
+      "Ready capabilities.rendering.reflection.ssr.history must use the exact TemporalReproject fields.",
+    );
+  }
+  if (
+    value.width !== width ||
+    value.height !== height ||
+    value.historyFormat !== profileHistory.historyFormat ||
+    value.resolveFormat !== profileHistory.resolveFormat ||
+    value.inputFormat !== profileHistory.inputFormat ||
+    value.captureFormat !== profileHistory.captureFormat ||
+    value.maxFrames !== profileHistory.maxFrames ||
+    value.mode !== profileHistory.mode ||
+    value.accumulate !== profileHistory.accumulate ||
+    value.hitPointReprojection !== profileHistory.hitPointReprojection ||
+    value.normalFormat !== profileHistory.normalFormat ||
+    value.updateCadence !== profileHistory.updateCadence
+  ) {
+    throw new Error(
+      "Ready capabilities.rendering.reflection.ssr.history disagrees with the Quality Profile history policy.",
+    );
+  }
+  if (
+    !Array.isArray(value.resetDomains) ||
+    value.resetDomains.length !== profileHistory.resetDomains.length
+  ) {
+    throw new Error(
+      "Ready capabilities.rendering.reflection.ssr.history.resetDomains must match the shared Host reset domain.",
+    );
+  }
+  for (let index = 0; index < profileHistory.resetDomains.length; index += 1) {
+    if (value.resetDomains[index] !== profileHistory.resetDomains[index]) {
+      throw new Error(
+        "Ready capabilities.rendering.reflection.ssr.history.resetDomains must match the shared Host reset domain.",
+      );
+    }
+  }
+  return {
+    width,
+    height,
+    historyFormat: "rgba16float",
+    resolveFormat: "rgba16float",
+    inputFormat: "rgba16float",
+    captureFormat: "rgba16float",
+    maxFrames: 32,
+    mode: "temporal-reproject-specular",
+    accumulate: true,
+    hitPointReprojection: true,
+    normalFormat: "packed-rgba16float",
+    resetDomains: [
+      "simulation-reset",
+      "camera-cut",
+      "origin-shift",
+      "sea-state-cut",
+    ],
+    updateCadence: "host-present",
+  };
+}
+
 function readCapabilitiesTemporal(
   value: unknown,
   profileTemporal: QualityProfileTemporal,
@@ -443,7 +768,8 @@ function readCapabilitiesTemporal(
     value.taau !== profileTemporal.taau ||
     value.dynamicResolution !== profileTemporal.dynamicResolution ||
     value.frameGeneration !== profileTemporal.frameGeneration ||
-    value.msaaSamples !== profileTemporal.msaaSamples
+    value.msaaSamples !== profileTemporal.msaaSamples ||
+    value.updateCadence !== profileTemporal.updateCadence
   ) {
     throw new Error(
       "Ready capabilities.rendering.temporal disagrees with the Quality Profile temporal fields.",
@@ -467,6 +793,7 @@ function readCapabilitiesTemporal(
     dynamicResolution: false,
     frameGeneration: false,
     msaaSamples: 0,
+    updateCadence: "host-present",
     motionFormat: "rg16float",
     stockThreeRevision: "185",
   };
