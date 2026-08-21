@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { expect, test } from "@playwright/test";
+import { createMinimalWaterQualityProfile } from "real-water";
 import {
   CORE_WEBGPU_MAX_COLOR_ATTACHMENT_BYTES_PER_SAMPLE,
   QA_FRAME_CAPTURE_SHAPES,
@@ -9,6 +10,9 @@ import {
 import type { QaCameraV1, QaHarnessV8 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
+
+const COMPOSE_SSR_MAX_DISTANCE =
+  createMinimalWaterQualityProfile().reflection.ssr.maxDistance;
 
 const FIXED_CAMERA = {
   projection: "perspective" as const,
@@ -640,7 +644,11 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     if (shape.elementType === "float32") {
       const values = decodeFloat32(capture.data);
       expect(values).toHaveLength(pixelCount * shape.components);
-      if (
+      if (capture.name === "ssr-hit") {
+        expect(
+          values.every((value) => Number.isFinite(value) && value >= 0),
+        ).toBe(true);
+      } else if (
         capture.name === "motion-vector" ||
         capture.name === "ssr-color" ||
         capture.name === "reflection-base-color" ||
@@ -659,6 +667,26 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       }
     }
   }
+
+  const ssrHit = result.first.captures.find(
+    (capture) => capture.name === "ssr-hit",
+  );
+  const ssrConfidence = result.first.captures.find(
+    (capture) => capture.name === "ssr-confidence",
+  );
+  const hitDistances = decodeFloat32(ssrHit?.data ?? "");
+  const confidence = decodeFloat32(ssrConfidence?.data ?? "");
+  expect(hitDistances).toHaveLength(pixelCount);
+  expect(confidence).toHaveLength(pixelCount);
+  expect(
+    confidence.every((value, pixel) => {
+      if (!(value > 0)) {
+        return true;
+      }
+      const worldDistance = hitDistances[pixel] ?? Number.NaN;
+      return worldDistance > 0 && worldDistance <= COMPOSE_SSR_MAX_DISTANCE;
+    }),
+  ).toBe(true);
 
   const depth = result.first.captures.find(
     (capture) => capture.name === "depth",

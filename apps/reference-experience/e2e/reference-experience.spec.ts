@@ -17,10 +17,14 @@ const COMPLETED_STARTUP_ANNOUNCEMENT = new RegExp(
   `^Completed ([0-9]+) of ${DECLARED_STARTUP_TOTAL}`,
   "u",
 );
+const MEMORY_SUCCESS_DELAY_MS = 140;
 const MEMORY_SUCCESS_RETRY_DELAY_MS = 180;
 const MEMORY_HOST_PREPARE_TURNS = DECLARED_STARTUP_ITEMS + 1;
 /** Async Loading Presenter + reveal allowance, not a performance gate. */
 const LOADING_PRESENTER_REVEAL_BUDGET_MS = 2_000;
+const MEMORY_SUCCESS_PLACEHOLDER_TIMEOUT_MS =
+  MEMORY_HOST_PREPARE_TURNS * MEMORY_SUCCESS_DELAY_MS +
+  LOADING_PRESENTER_REVEAL_BUDGET_MS;
 const MEMORY_SUCCESS_RETRY_PLACEHOLDER_TIMEOUT_MS =
   MEMORY_HOST_PREPARE_TURNS * MEMORY_SUCCESS_RETRY_DELAY_MS +
   LOADING_PRESENTER_REVEAL_BUDGET_MS;
@@ -61,7 +65,9 @@ test("shows an accessible Loading Experience before an atomic ready reveal", asy
   await expectNoA11yViolations(page);
 
   const placeholder = page.getByTestId("reference-placeholder");
-  await expect(placeholder).toBeVisible();
+  await expect(placeholder).toBeVisible({
+    timeout: MEMORY_SUCCESS_PLACEHOLDER_TIMEOUT_MS,
+  });
   await expect(placeholder).toBeFocused();
   await expect(loading).toHaveCount(0);
   await expect(
