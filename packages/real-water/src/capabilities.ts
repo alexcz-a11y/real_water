@@ -46,6 +46,7 @@ export interface RenderingCapabilitiesReflectionSsrHistory {
   readonly resolveFormat: "rgba16float";
   readonly inputFormat: "rgba16float";
   readonly captureFormat: "rgba16float";
+  readonly resetVelocityFormat: "rg16float";
   readonly maxFrames: 32;
   readonly mode: "temporal-reproject-specular";
   readonly accumulate: true;
@@ -191,6 +192,7 @@ export function createCoreWebGPUCapabilities(
             resolveFormat: "rgba16float" as const,
             inputFormat: "rgba16float" as const,
             captureFormat: "rgba16float" as const,
+            resetVelocityFormat: "rg16float" as const,
             maxFrames: 32 as const,
             mode: "temporal-reproject-specular" as const,
             accumulate: true as const,

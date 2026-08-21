@@ -72,6 +72,7 @@ export interface QualityProfileReflectionSsrHistory {
   readonly resolveFormat: "rgba16float";
   readonly inputFormat: "rgba16float";
   readonly captureFormat: "rgba16float";
+  readonly resetVelocityFormat: "rg16float";
   readonly normalFormat: "packed-rgba16float";
   readonly resetDomains: readonly [
     "simulation-reset",
@@ -175,6 +176,7 @@ export const CURRENT_FRAME_SSR_HISTORY_POLICY: QualityProfileReflectionSsrHistor
     resolveFormat: "rgba16float",
     inputFormat: "rgba16float",
     captureFormat: "rgba16float",
+    resetVelocityFormat: "rg16float",
     normalFormat: "packed-rgba16float",
     resetDomains: Object.freeze([
       "simulation-reset",
@@ -239,13 +241,13 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:3ec933fa8238e5bfd50608dc451d8354374c8337e49c793f191a3ad86cdf67b2",
+      "sha256:9a75bfe19d0e81f51ee19908ce547b5a7abd49ab01dbe00feb234e3c95d23ec0",
     widthSegments: 128,
     heightSegments: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:d61edd12017f4b8adfe9878fa2c116fd9831b1681ce8b52c5e474e012ad94886",
+      "sha256:04b1d29617d1d2dd50f9d0f5b4f5dcd6ab6012cde62ae7e36ab0bba7be3061d8",
     widthSegments: 256,
     heightSegments: 256,
   }),
@@ -303,6 +305,7 @@ const SSR_HISTORY_KEYS = [
   "resolveFormat",
   "inputFormat",
   "captureFormat",
+  "resetVelocityFormat",
   "normalFormat",
   "resetDomains",
   "updateCadence",
@@ -460,6 +463,7 @@ function isSupportedSsrHistory(
     value.resolveFormat === supported.resolveFormat &&
     value.inputFormat === supported.inputFormat &&
     value.captureFormat === supported.captureFormat &&
+    value.resetVelocityFormat === supported.resetVelocityFormat &&
     value.normalFormat === supported.normalFormat &&
     value.updateCadence === supported.updateCadence
   );

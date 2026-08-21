@@ -116,6 +116,7 @@ const REFLECTION_SSR_HISTORY_KEYS = [
   "resolveFormat",
   "inputFormat",
   "captureFormat",
+  "resetVelocityFormat",
   "maxFrames",
   "mode",
   "accumulate",
@@ -703,6 +704,7 @@ function readCapabilitiesSsrHistory(
     value.resolveFormat !== profileHistory.resolveFormat ||
     value.inputFormat !== profileHistory.inputFormat ||
     value.captureFormat !== profileHistory.captureFormat ||
+    value.resetVelocityFormat !== profileHistory.resetVelocityFormat ||
     value.maxFrames !== profileHistory.maxFrames ||
     value.mode !== profileHistory.mode ||
     value.accumulate !== profileHistory.accumulate ||
@@ -736,6 +738,7 @@ function readCapabilitiesSsrHistory(
     resolveFormat: "rgba16float",
     inputFormat: "rgba16float",
     captureFormat: "rgba16float",
+    resetVelocityFormat: "rg16float",
     maxFrames: 32,
     mode: "temporal-reproject-specular",
     accumulate: true,

@@ -165,14 +165,16 @@ test("accumulates inverse frame weight on a static hit and stays bounded", async
       readonly hit: string;
       readonly confidence: string;
       readonly input: string;
+      readonly resetFrame: boolean;
     }> = [];
     for (let frame = 0; frame < 6; frame += 1) {
-      await harness.present();
+      const presented = await harness.present();
       samples.push({
         weight: (await harness.capture("ssr-history-frame-weight")).data,
         hit: (await harness.capture("ssr-hit")).data,
         confidence: (await harness.capture("ssr-confidence")).data,
         input: (await harness.capture("ssr-history-input-color")).data,
+        resetFrame: presented.temporal.resetFrame,
       });
     }
     return samples;
@@ -186,32 +188,49 @@ test("accumulates inverse frame weight on a static hit and stays bounded", async
   }
   const firstWeight = decodeFloat32(first.weight);
   const lastWeight = decodeFloat32(last.weight);
-  const hit = decodeFloat32(last.hit);
-  const confidence = decodeFloat32(last.confidence);
-  const input = decodeFloat32(last.input);
-  const valid: number[] = [];
-  for (let pixel = 0; pixel < hit.length; pixel += 1) {
+  const firstHit = decodeFloat32(first.hit);
+  const lastHit = decodeFloat32(last.hit);
+  const firstConfidence = decodeFloat32(first.confidence);
+  const lastConfidence = decodeFloat32(last.confidence);
+  const firstInput = decodeFloat32(first.input);
+  const lastInput = decodeFloat32(last.input);
+  const validHit = (
+    hit: Float32Array,
+    confidence: Float32Array,
+    input: Float32Array,
+    pixel: number,
+  ): boolean => {
     const inputRed = input[pixel * 3] ?? Number.NaN;
     const inputGreen = input[pixel * 3 + 1] ?? Number.NaN;
     const inputBlue = input[pixel * 3 + 2] ?? Number.NaN;
-    if (
+    return (
       (hit[pixel] ?? 0) > HALF_FLOAT_EPSILON &&
       (confidence[pixel] ?? 0) > HALF_FLOAT_EPSILON &&
       Number.isFinite(inputRed) &&
       Number.isFinite(inputGreen) &&
       Number.isFinite(inputBlue)
+    );
+  };
+  const stable: number[] = [];
+  for (let pixel = 0; pixel < lastHit.length; pixel += 1) {
+    if (
+      validHit(firstHit, firstConfidence, firstInput, pixel) &&
+      validHit(lastHit, lastConfidence, lastInput, pixel)
     ) {
-      valid.push(pixel);
+      stable.push(pixel);
     }
   }
-  expect(valid.length).toBeGreaterThan(0);
+  expect(first.resetFrame).toBe(true);
+  expect(last.resetFrame).toBe(false);
+  expect(stable.length).toBeGreaterThan(0);
+  const declined = stable.filter(
+    (pixel) =>
+      (lastWeight[pixel] ?? 1) < (firstWeight[pixel] ?? 0) - HALF_FLOAT_EPSILON,
+  );
+  expect(declined.length).toBeGreaterThan(0);
   expect(
-    valid.every(
-      (pixel) =>
-        (lastWeight[pixel] ?? 1) <
-        (firstWeight[pixel] ?? 0) - HALF_FLOAT_EPSILON,
-    ),
-  ).toBe(true);
+    Math.min(...declined.map((pixel) => lastWeight[pixel] ?? 1)),
+  ).toBeLessThan(1 - HALF_FLOAT_EPSILON);
   expect(lastWeight.every((value) => value >= 1 / 32 && value <= 1)).toBe(true);
 });
 

@@ -140,7 +140,8 @@ describe("current-frame SSR stack cleanup", () => {
           name.includes("SSR raw") ||
           name.includes("SSR composite") ||
           name.includes("SSR history beauty") ||
-          name.includes("SSR TemporalReproject resolved")
+          name.includes("SSR TemporalReproject resolved") ||
+          name.includes("SSR history reset velocity")
         );
       });
       expect(named.length).toBeGreaterThanOrEqual(2);
@@ -158,6 +159,13 @@ describe("current-frame SSR stack cleanup", () => {
       );
       expect(composite).toHaveLength(1);
       expect(composite[0]?.[1]).toBe(1);
+      const resetVelocity = named.filter(([target]) =>
+        String(
+          (target as { texture?: { name?: string } }).texture?.name ?? "",
+        ).includes("SSR history reset velocity"),
+      );
+      expect(resetVelocity).toHaveLength(1);
+      expect(resetVelocity[0]?.[1]).toBe(1);
     } finally {
       ThreeWebgpu.RenderTarget.prototype.dispose = originalDispose;
       pipelineFailure.remaining = 0;

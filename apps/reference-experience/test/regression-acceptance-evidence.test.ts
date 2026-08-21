@@ -109,6 +109,7 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
           resolveFormat: "rgba16float",
           inputFormat: "rgba16float",
           captureFormat: "rgba16float",
+          resetVelocityFormat: "rg16float",
           maxFrames: 32,
           mode: "temporal-reproject-specular",
           accumulate: true,

@@ -37,23 +37,24 @@ Issue #18 extended the coherent spectral runtime and deterministic QA
 foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly fifty-five work
+- the canonical minimal-water Prewarm Manifest declares exactly fifty-seven work
   units: a texture, Host equirect environment radiance, viewport scene color,
   viewport scene depth, 6-attachment MRT, camera-relative clipmap, four spectral
   bands, TSL NodeMaterial, optical route, planar reflection target/route,
   environment fallback, planar probe, current-frame SSR raw/blur/composite
   targets and routes plus probe, dedicated TemporalReproject history and resolve
   targets, beauty input target/route, resolved diagnostics copy target/route,
-  previous depth/normal, seed/resolve/accumulate/reset/probe routes, one Core
-  main scene render plus one auxiliary planar scene render when facing,
-  procedural motion, velocity, independent inverse-linear depth conversion,
-  packed view-normal RGB plus water roughness A, optical factors, optical
-  diagnostics A/B, Core final-color and current-color targets, stock TRAA
-  color+depth history, resolve/jitter route, shared no-allocation TRAA+SSR reset
-  route, current-color conversion, twenty-three named diagnostics output routes,
-  eight hidden temporal stabilization frames, named-output completion probes,
-  and main-camera guard frame. Version 3 binds the physical drawing buffer into
-  that work plan; a viewport change creates a new manifest and lease;
+  previous depth/normal, seed/resolve/accumulate/reset/probe routes,
+  reset-velocity target/route, one Core main scene render plus one auxiliary
+  planar scene render when facing, procedural motion, velocity, independent
+  inverse-linear depth conversion, packed view-normal RGB plus water roughness
+  A, optical factors, optical diagnostics A/B, Core final-color and
+  current-color targets, stock TRAA color+depth history, resolve/jitter route,
+  shared no-allocation TRAA+SSR reset route, current-color conversion,
+  twenty-three named diagnostics output routes, eight hidden temporal
+  stabilization frames, named-output completion probes, and main-camera guard
+  frame. Version 3 binds the physical drawing buffer into that work plan; a
+  viewport change creates a new manifest and lease;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
   restores their state after preparation, and never disposes them;
 - progress advances monotonically only when declared manifest work completes;

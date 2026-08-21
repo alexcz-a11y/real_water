@@ -36,6 +36,7 @@ function expectedSsrCapabilities(width: number, height: number) {
       resolveFormat: "rgba16float" as const,
       inputFormat: "rgba16float" as const,
       captureFormat: "rgba16float" as const,
+      resetVelocityFormat: "rg16float" as const,
       maxFrames: 32 as const,
       mode: "temporal-reproject-specular" as const,
       accumulate: true as const,

@@ -38,6 +38,7 @@ const NATIVE_SSR_HISTORY = Object.freeze({
   resolveFormat: "rgba16float" as const,
   inputFormat: "rgba16float" as const,
   captureFormat: "rgba16float" as const,
+  resetVelocityFormat: "rg16float" as const,
   normalFormat: "packed-rgba16float" as const,
   resetDomains: Object.freeze([
     "simulation-reset",
@@ -80,9 +81,9 @@ const NATIVE_REFLECTION = Object.freeze({
   ssr: NATIVE_SSR,
 });
 const MINIMAL_PROFILE_HASH =
-  "sha256:3ec933fa8238e5bfd50608dc451d8354374c8337e49c793f191a3ad86cdf67b2";
+  "sha256:9a75bfe19d0e81f51ee19908ce547b5a7abd49ab01dbe00feb234e3c95d23ec0";
 const HIGH_DETAIL_PROFILE_HASH =
-  "sha256:d61edd12017f4b8adfe9878fa2c116fd9831b1681ce8b52c5e474e012ad94886";
+  "sha256:04b1d29617d1d2dd50f9d0f5b4f5dcd6ab6012cde62ae7e36ab0bba7be3061d8";
 const MEMORY_PREWARM_DRAWING_BUFFER = Object.freeze({
   width: 320,
   height: 180,
@@ -163,7 +164,11 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-ssr-history-accumulate-route":
     "sha256:f20d52a23de875e18cf3f589f5d68f83357423af3f0ba268f2c377539b51e075",
   "water-ssr-history-reset-route":
-    "sha256:0795e123827f5cf11776dddba1b8585fb9a8b3bbea8dc1877375708d53ed2b94",
+    "sha256:6e7e0d18b96ff8db458090bdbe117bc95f302a51a9d1b55bfc6916eaf20ba78b",
+  "water-ssr-history-reset-velocity-target":
+    "sha256:ae0fedb85438f0e2219c04b0c688362e43f20519c0b35fa7a493228d44611a9f",
+  "water-ssr-history-reset-velocity-route":
+    "sha256:0eb74170734227ae0812e75df3cfcbd8a4bdceb09b3f62f97cabf97faa38403b",
   "water-ssr-history-probe":
     "sha256:42eac93d1c673fe058eb09c61f470083df6b7afa3683328e788656732491a2e6",
   "water-planar-reflection-target":
@@ -219,6 +224,8 @@ const DRAWING_BUFFER_BOUND_IDS = [
   "water-ssr-history-resolve-route",
   "water-ssr-history-accumulate-route",
   "water-ssr-history-reset-route",
+  "water-ssr-history-reset-velocity-target",
+  "water-ssr-history-reset-velocity-route",
   "water-ssr-history-probe",
 ] as const;
 
@@ -296,6 +303,8 @@ const CORE_PREWARM_DECLARATION_IDS = [
   "water-ssr-history-resolve-route",
   "water-ssr-history-accumulate-route",
   "water-ssr-history-reset-route",
+  "water-ssr-history-reset-velocity-target",
+  "water-ssr-history-reset-velocity-route",
   "water-ssr-history-probe",
   "water-render-route",
   "water-procedural-motion",
@@ -582,6 +591,31 @@ describe("Quality Profiles", () => {
               maxFrames: NATIVE_SSR_HISTORY.maxFrames,
               historyFormat: NATIVE_SSR_HISTORY.historyFormat,
               resolveFormat: NATIVE_SSR_HISTORY.resolveFormat,
+              normalFormat: NATIVE_SSR_HISTORY.normalFormat,
+              resetDomains: NATIVE_SSR_HISTORY.resetDomains,
+              updateCadence: NATIVE_SSR_HISTORY.updateCadence,
+            },
+          },
+        },
+      },
+    ],
+    [
+      "ssr history missing reset velocity format",
+      {
+        ...createMinimalWaterQualityProfile(),
+        reflection: {
+          ...NATIVE_REFLECTION,
+          ssr: {
+            ...NATIVE_SSR,
+            history: {
+              mode: NATIVE_SSR_HISTORY.mode,
+              accumulate: NATIVE_SSR_HISTORY.accumulate,
+              hitPointReprojection: NATIVE_SSR_HISTORY.hitPointReprojection,
+              maxFrames: NATIVE_SSR_HISTORY.maxFrames,
+              historyFormat: NATIVE_SSR_HISTORY.historyFormat,
+              resolveFormat: NATIVE_SSR_HISTORY.resolveFormat,
+              inputFormat: NATIVE_SSR_HISTORY.inputFormat,
+              captureFormat: NATIVE_SSR_HISTORY.captureFormat,
               normalFormat: NATIVE_SSR_HISTORY.normalFormat,
               resetDomains: NATIVE_SSR_HISTORY.resetDomains,
               updateCadence: NATIVE_SSR_HISTORY.updateCadence,

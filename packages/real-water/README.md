@@ -1,7 +1,7 @@
 # real-water
 
 This alpha package exposes versioned minimal-water Quality Profiles, their
-canonical fifty-five-unit Prewarm Manifests, versioned Calm, Swell, and Storm
+canonical fifty-seven-unit Prewarm Manifests, versioned Calm, Swell, and Storm
 Water Presets, the Startup and ready Runtime Interfaces, normalized Core WebGPU
 and Gameplay Query capabilities, structured errors, and Memory and Three r185
 Host Adapters.

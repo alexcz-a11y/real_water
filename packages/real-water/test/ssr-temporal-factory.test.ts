@@ -22,6 +22,7 @@ import { createTestEnvironmentAdapter } from "./test-host-environment.js";
 const factoryFailure = vi.hoisted(() => ({
   disposeCount: 0,
   stripHitPoint: false,
+  stripVelocityNode: false,
 }));
 
 vi.mock(
@@ -36,6 +37,7 @@ vi.mock(
         const node = actual.temporalReproject(...args) as {
           dispose: () => void;
           hitPointReprojection?: { value: boolean };
+          velocityNode?: { value: unknown };
         };
         const dispose = node.dispose.bind(node);
         node.dispose = () => {
@@ -44,6 +46,9 @@ vi.mock(
         };
         if (factoryFailure.stripHitPoint) {
           delete node.hitPointReprojection;
+        }
+        if (factoryFailure.stripVelocityNode) {
+          delete node.velocityNode;
         }
         return node;
       },
@@ -101,9 +106,45 @@ function createFactoryRenderer() {
 }
 
 describe("Specular TemporalReproject factory cleanup", () => {
+  it("disposes the stock node once when the public velocityNode shape is missing", async () => {
+    factoryFailure.disposeCount = 0;
+    factoryFailure.stripHitPoint = false;
+    factoryFailure.stripVelocityNode = true;
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    const radiance = new DataTexture(
+      createSupportedHostEnvironmentRadianceBytes(),
+      8,
+      4,
+    );
+    radiance.colorSpace = SRGBColorSpace;
+    radiance.wrapS = RepeatWrapping;
+    radiance.wrapT = ClampToEdgeWrapping;
+    radiance.magFilter = NearestFilter;
+    radiance.minFilter = NearestFilter;
+    radiance.generateMipmaps = false;
+    radiance.needsUpdate = true;
+    await expect(
+      prepareRealWater({
+        manifest: createMinimalWaterPrewarmManifest(),
+        loading: { present() {} },
+        host: createThreeHostLifecycleAdapter({
+          environment: createTestEnvironmentAdapter(radiance),
+          simulation: createStaticHostSimulationAdapter(),
+          presentation: createStaticHostPresentationAdapter(),
+          renderer: createFactoryRenderer(),
+          scene,
+          camera,
+        }),
+      }).ready,
+    ).rejects.toThrow(/velocityNode/);
+    expect(factoryFailure.disposeCount).toBe(1);
+  });
+
   it("disposes the stock node once when the public hitPointReprojection shape is missing", async () => {
     factoryFailure.disposeCount = 0;
     factoryFailure.stripHitPoint = true;
+    factoryFailure.stripVelocityNode = false;
     const scene = new Scene();
     const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
     const radiance = new DataTexture(

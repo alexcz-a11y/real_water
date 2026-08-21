@@ -663,6 +663,8 @@ export interface QualityProfileReflectionSsrHistory {
     "sea-state-cut"
     ];
     // (undocumented)
+    readonly resetVelocityFormat: "rg16float";
+    // (undocumented)
     readonly resolveFormat: "rgba16float";
     // (undocumented)
     readonly updateCadence: "host-present";
@@ -901,6 +903,8 @@ export interface RenderingCapabilitiesReflectionSsrHistory {
     "origin-shift",
     "sea-state-cut"
     ];
+    // (undocumented)
+    readonly resetVelocityFormat: "rg16float";
     // (undocumented)
     readonly resolveFormat: "rgba16float";
     // (undocumented)

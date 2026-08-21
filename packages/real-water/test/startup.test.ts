@@ -58,6 +58,7 @@ const TEST_REFLECTION_CAPABILITIES = Object.freeze({
       resolveFormat: "rgba16float" as const,
       inputFormat: "rgba16float" as const,
       captureFormat: "rgba16float" as const,
+      resetVelocityFormat: "rg16float" as const,
       maxFrames: 32 as const,
       mode: "temporal-reproject-specular" as const,
       accumulate: true as const,
@@ -917,7 +918,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 55,
+        totalWork: 57,
       },
     });
   });
@@ -1626,6 +1627,8 @@ describe("prepareRealWater", () => {
       "water-ssr-history-resolve-route",
       "water-ssr-history-accumulate-route",
       "water-ssr-history-reset-route",
+      "water-ssr-history-reset-velocity-target",
+      "water-ssr-history-reset-velocity-route",
       "water-ssr-history-probe",
       "water-render-route",
       "water-procedural-motion",

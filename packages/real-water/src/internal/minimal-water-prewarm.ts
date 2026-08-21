@@ -287,6 +287,8 @@ export async function prepareMinimalWaterPlane(
       "ssrHistoryResolveRoute",
       "ssrHistoryAccumulateRoute",
       "ssrHistoryResetRoute",
+      "ssrHistoryResetVelocityTarget",
+      "ssrHistoryResetVelocityRoute",
       "ssrHistoryProbe",
       "completionProbe",
     ]);

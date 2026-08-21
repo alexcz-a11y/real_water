@@ -173,6 +173,8 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   ssrHistoryResolveRoute: "water-ssr-history-resolve-route",
   ssrHistoryAccumulateRoute: "water-ssr-history-accumulate-route",
   ssrHistoryResetRoute: "water-ssr-history-reset-route",
+  ssrHistoryResetVelocityTarget: "water-ssr-history-reset-velocity-target",
+  ssrHistoryResetVelocityRoute: "water-ssr-history-reset-velocity-route",
   ssrHistoryProbe: "water-ssr-history-probe",
   ssrProbe: "water-ssr-probe",
   renderRoute: "water-render-route",
@@ -246,6 +248,8 @@ const DRAWING_BUFFER_BOUND_DECLARATION_IDS: ReadonlySet<string> = new Set([
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResolveRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryAccumulateRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResetRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResetVelocityTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResetVelocityRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryProbe,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrProbe,
 ]);
@@ -497,7 +501,7 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistorySeedRoute,
     kind: "conditional-route",
     label:
-      "Stock r185 TemporalReproject seed (host-present, first size or reset)",
+      "Stock r185 TemporalReproject seed (host-present, first prepared size only)",
     fingerprint:
       "sha256:a795d239b5301dd3ffa64fd58a1ba3698244349ec7a4449851ee2ad3d074bd52",
   },
@@ -521,9 +525,25 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResetRoute,
     kind: "conditional-route",
     label:
-      "Shared Host-domain SSR history reset (velocity sentinel, same present as TRAA)",
+      "Shared Host-domain SSR history reset (velocity sentinel, hitPointReprojection disabled, resolve reseed)",
     fingerprint:
-      "sha256:0795e123827f5cf11776dddba1b8585fb9a8b3bbea8dc1877375708d53ed2b94",
+      "sha256:6e7e0d18b96ff8db458090bdbe117bc95f302a51a9d1b55bfc6916eaf20ba78b",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResetVelocityTarget,
+    kind: "resource",
+    label:
+      "SSR TemporalReproject reset velocity (RG16F, vec4(4,4,0,0) sentinel, drawing-buffer-exact, prewarm once)",
+    fingerprint:
+      "sha256:ae0fedb85438f0e2219c04b0c688362e43f20519c0b35fa7a493228d44611a9f",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResetVelocityRoute,
+    kind: "conditional-route",
+    label:
+      "SSR TemporalReproject reset-velocity prepare (transform-free, host-present prewarm once, no ready redraw)",
+    fingerprint:
+      "sha256:0eb74170734227ae0812e75df3cfcbd8a4bdceb09b3f62f97cabf97faa38403b",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryProbe,

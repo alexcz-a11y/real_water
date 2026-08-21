@@ -82,6 +82,7 @@ const CORE_READY_REFLECTION = Object.freeze({
       resolveFormat: "rgba16float" as const,
       inputFormat: "rgba16float" as const,
       captureFormat: "rgba16float" as const,
+      resetVelocityFormat: "rg16float" as const,
       maxFrames: 32 as const,
       mode: "temporal-reproject-specular" as const,
       accumulate: true as const,
@@ -298,7 +299,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(
       renderer.compileAsync.mock.calls.some((call) => call[1] !== camera),
     ).toBe(true);
-    expect(renderer.render).toHaveBeenCalledTimes(127);
+    expect(renderer.render).toHaveBeenCalledTimes(128);
     expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
     const readbackTargets = renderer.readRenderTargetPixelsAsync.mock.calls.map(
       (call) =>
@@ -1358,7 +1359,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(lease).not.toHaveProperty("present");
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
     expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
-    expect(renderer.render).toHaveBeenCalledTimes(127);
+    expect(renderer.render).toHaveBeenCalledTimes(128);
     expect(presentation.route).toBeDefined();
 
     const first = readHostPresentedFrame(await presentation.present());
@@ -2919,6 +2920,38 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(renderer.copyTextureToTexture).toHaveBeenCalled();
     await presentation.present();
     await presentation.present();
+    expect(renderer.initRenderTarget).toHaveBeenCalledTimes(initsAtReady);
+    await lease.dispose();
+  });
+
+  it("prepares the reset velocity target once and does not redraw it after ready", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const countResetVelocityTargets = (): number =>
+      renderer.setRenderTarget.mock.calls.filter(([target]) =>
+        String(
+          (target as { texture?: { name?: string } } | null)?.texture?.name ??
+            "",
+        ).includes("reset velocity"),
+      ).length;
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        presentation,
+      }),
+    }).ready;
+    expect(countResetVelocityTargets()).toBe(1);
+    const initsAtReady = renderer.initRenderTarget.mock.calls.length;
+    const resetTargetsAtReady = countResetVelocityTargets();
+    await presentation.present();
+    await presentation.present();
+    expect(countResetVelocityTargets()).toBe(resetTargetsAtReady);
     expect(renderer.initRenderTarget).toHaveBeenCalledTimes(initsAtReady);
     await lease.dispose();
   });
