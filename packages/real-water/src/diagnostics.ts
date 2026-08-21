@@ -30,7 +30,8 @@ export type {
  * The twenty-three named diagnostic outputs. Names and CPU shapes match the QA
  * capture contract. Planar color and target-alpha occupancy are their own
  * prepared target. `planar-confidence` is reserved for a future screen-space
- * mask and is not a current capture. Current-frame SSR hit, confidence,
+ * mask and is not a current capture. Current-frame SSR hit (stock raw
+ * world-distance, 0 = miss), confidence,
  * linear raw color, water roughness, scene-pass reflection base, SSR
  * composite color, TemporalReproject beauty input RGB, resolved history RGB,
  * and inverse accumulated frame-count weight are included. History DTOs read

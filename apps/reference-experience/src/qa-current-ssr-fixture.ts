@@ -31,11 +31,16 @@ export interface QaCurrentSsrFixtureState {
 }
 
 const QA_CURRENT_SSR_WATER_PLANE_Y = 0;
-const CURRENT_SSR_FIXTURE_HALF_WIDTH = 32;
 const CURRENT_SSR_FIXTURE_HALF_HEIGHT = 24;
 const CURRENT_SSR_FIXTURE_CENTER_Y = 20;
-const CURRENT_SSR_FAR_WALL_Z = -8;
-const CURRENT_SSR_NEAR_WALL_Z = 240;
+
+export const QA_CURRENT_SSR_FIXTURE_BOUNDS = Object.freeze({
+  farWallZ: -8,
+  nearWallZ: 240,
+  halfWidth: 32,
+  minY: CURRENT_SSR_FIXTURE_CENTER_Y - CURRENT_SSR_FIXTURE_HALF_HEIGHT,
+  maxY: CURRENT_SSR_FIXTURE_CENTER_Y + CURRENT_SSR_FIXTURE_HALF_HEIGHT,
+});
 
 export function createQaCurrentSsrFixture(): Mesh {
   const mesh = new Mesh(
@@ -139,9 +144,9 @@ function requireCurrentSsrFixtureMesh(
 }
 
 function createCurrentSsrFixtureGeometry(): BufferGeometry {
-  const halfWidth = CURRENT_SSR_FIXTURE_HALF_WIDTH;
-  const y0 = CURRENT_SSR_FIXTURE_CENTER_Y - CURRENT_SSR_FIXTURE_HALF_HEIGHT;
-  const y1 = CURRENT_SSR_FIXTURE_CENTER_Y + CURRENT_SSR_FIXTURE_HALF_HEIGHT;
+  const halfWidth = QA_CURRENT_SSR_FIXTURE_BOUNDS.halfWidth;
+  const y0 = QA_CURRENT_SSR_FIXTURE_BOUNDS.minY;
+  const y1 = QA_CURRENT_SSR_FIXTURE_BOUNDS.maxY;
   const geometry = new BufferGeometry();
   geometry.setAttribute(
     "position",
@@ -149,28 +154,28 @@ function createCurrentSsrFixtureGeometry(): BufferGeometry {
       new Float32Array([
         -halfWidth,
         y0,
-        CURRENT_SSR_FAR_WALL_Z,
+        QA_CURRENT_SSR_FIXTURE_BOUNDS.farWallZ,
         halfWidth,
         y0,
-        CURRENT_SSR_FAR_WALL_Z,
+        QA_CURRENT_SSR_FIXTURE_BOUNDS.farWallZ,
         halfWidth,
         y1,
-        CURRENT_SSR_FAR_WALL_Z,
+        QA_CURRENT_SSR_FIXTURE_BOUNDS.farWallZ,
         -halfWidth,
         y1,
-        CURRENT_SSR_FAR_WALL_Z,
+        QA_CURRENT_SSR_FIXTURE_BOUNDS.farWallZ,
         -halfWidth,
         y0,
-        CURRENT_SSR_NEAR_WALL_Z,
+        QA_CURRENT_SSR_FIXTURE_BOUNDS.nearWallZ,
         halfWidth,
         y0,
-        CURRENT_SSR_NEAR_WALL_Z,
+        QA_CURRENT_SSR_FIXTURE_BOUNDS.nearWallZ,
         halfWidth,
         y1,
-        CURRENT_SSR_NEAR_WALL_Z,
+        QA_CURRENT_SSR_FIXTURE_BOUNDS.nearWallZ,
         -halfWidth,
         y1,
-        CURRENT_SSR_NEAR_WALL_Z,
+        QA_CURRENT_SSR_FIXTURE_BOUNDS.nearWallZ,
       ]),
       3,
     ),

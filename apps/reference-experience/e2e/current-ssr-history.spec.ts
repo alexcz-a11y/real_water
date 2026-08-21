@@ -54,6 +54,37 @@ function assertResetHistoryReseed(
   }
 }
 
+function linearRgbWithinHalfEpsilon(
+  left: readonly number[],
+  right: readonly number[],
+  pixel: number,
+): boolean {
+  return (
+    Math.abs((left[pixel * 3] ?? 0) - (right[pixel * 3] ?? 0)) <=
+      HALF_FLOAT_EPSILON &&
+    Math.abs((left[pixel * 3 + 1] ?? 0) - (right[pixel * 3 + 1] ?? 0)) <=
+      HALF_FLOAT_EPSILON &&
+    Math.abs((left[pixel * 3 + 2] ?? 0) - (right[pixel * 3 + 2] ?? 0)) <=
+      HALF_FLOAT_EPSILON
+  );
+}
+
+function magentaEnergy(color: readonly number[], pixel: number): number {
+  return (
+    (color[pixel * 3] ?? 0) +
+    (color[pixel * 3 + 2] ?? 0) -
+    (color[pixel * 3 + 1] ?? 0)
+  );
+}
+
+function isBlackRgb(color: readonly number[], pixel: number): boolean {
+  return (
+    Math.abs(color[pixel * 3] ?? 0) <= HALF_FLOAT_EPSILON &&
+    Math.abs(color[pixel * 3 + 1] ?? 0) <= HALF_FLOAT_EPSILON &&
+    Math.abs(color[pixel * 3 + 2] ?? 0) <= HALF_FLOAT_EPSILON
+  );
+}
+
 function assertStableHitWeightBelowOne(
   hit: Float32Array,
   weight: Float32Array,
@@ -269,7 +300,7 @@ test("keeps a black current hit instead of residual bright history", async ({
     .map((value, index) => ({ value, index }))
     .filter(
       ({ value, index }) =>
-        value === 1 &&
+        value > HALF_FLOAT_EPSILON &&
         (color[index * 3] ?? 1) < 1e-3 &&
         (color[index * 3 + 1] ?? 1) < 1e-3 &&
         (color[index * 3 + 2] ?? 1) < 1e-3,
@@ -313,66 +344,167 @@ test("rejects offscreen history ghosts: confidence 0 composite equals base", asy
   expect(composite).toEqual(base);
 });
 
-test("clears history residual after a one-frame fixture toggle reset", async ({
+test("rejects history residual after fixture disappear, continuous move, and restore", async ({
   page,
 }) => {
   await openQaStage(page);
-  const result = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
-    if (harness === undefined) {
-      throw new Error("QA Harness is unavailable.");
-    }
-    await harness.reset({ seed: 0x4000_0000 });
-    await harness.setCamera(cameraPose, { transition: "camera-cut" });
-    await harness.setHostSceneForegroundFixture(false);
-    await harness.setHostSceneCurrentSsrFixtureHotColor("magenta");
-    await harness.setHostSceneCurrentSsrFixture(true);
-    await harness.advanceTicks(16);
-    await harness.present();
-    await harness.setHostSceneCurrentSsrFixture(false);
-    const cleared = await harness.present();
-    const clearedConfidence = (await harness.capture("ssr-confidence")).data;
-    const clearedComposite = (await harness.capture("ssr-composite-color"))
-      .data;
-    const clearedBase = (await harness.capture("reflection-base-color")).data;
-    const clearedInput = (await harness.capture("ssr-history-input-color"))
-      .data;
-    const clearedHistory = (await harness.capture("ssr-history-color")).data;
-    const clearedWeight = (await harness.capture("ssr-history-frame-weight"))
-      .data;
-    await harness.setHostSceneCurrentSsrFixture(true);
-    const restored = await harness.present();
-    return {
-      clearedReset: cleared.temporal.resetFrame,
-      restoredReset: restored.temporal.resetFrame,
-      clearedConfidence,
-      clearedComposite,
-      clearedBase,
-      clearedInput,
-      clearedHistory,
-      clearedWeight,
-      restoredConfidence: (await harness.capture("ssr-confidence")).data,
-    };
-  }, HIT_CAMERA);
+  const result = await page.evaluate(
+    async ({ hitCamera, movedCamera }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+      if (harness === undefined) {
+        throw new Error("QA Harness is unavailable.");
+      }
+      const captureBuffers = async () => ({
+        hit: (await harness.capture("ssr-hit")).data,
+        confidence: (await harness.capture("ssr-confidence")).data,
+        composite: (await harness.capture("ssr-composite-color")).data,
+        base: (await harness.capture("reflection-base-color")).data,
+        input: (await harness.capture("ssr-history-input-color")).data,
+        history: (await harness.capture("ssr-history-color")).data,
+        weight: (await harness.capture("ssr-history-frame-weight")).data,
+      });
+      await harness.reset({ seed: 0x4000_0000 });
+      await harness.setCamera(hitCamera, { transition: "camera-cut" });
+      await harness.setHostSceneForegroundFixture(false);
+      await harness.setHostSceneCurrentSsrFixtureHotColor("magenta");
+      await harness.setHostSceneCurrentSsrFixture(true);
+      await harness.advanceTicks(16);
+      const primed = await harness.present();
+      const prime = await captureBuffers();
+      await harness.setHostSceneCurrentSsrFixture(false);
+      const cleared = await harness.present();
+      const disappeared = await captureBuffers();
+      await harness.setCamera(movedCamera, { transition: "continuous" });
+      const moved = await harness.present();
+      const vacated = await captureBuffers();
+      await harness.setHostSceneCurrentSsrFixture(true);
+      const restored = await harness.present();
+      return {
+        primedReset: primed.temporal.resetFrame,
+        clearedReset: cleared.temporal.resetFrame,
+        movedReset: moved.temporal.resetFrame,
+        restoredReset: restored.temporal.resetFrame,
+        prime,
+        disappeared,
+        vacated,
+        restored: await captureBuffers(),
+      };
+    },
+    {
+      hitCamera: HIT_CAMERA,
+      movedCamera: {
+        ...HIT_CAMERA,
+        position: [2, 12, 20] as const,
+      },
+    },
+  );
+  expect(result.primedReset).toBe(true);
   expect(result.clearedReset).toBe(false);
+  expect(result.movedReset).toBe(false);
   expect(result.restoredReset).toBe(false);
-  const confidence = decodeFloat32(result.clearedConfidence);
-  const composite = decodeFloat32(result.clearedComposite);
-  const base = decodeFloat32(result.clearedBase);
-  for (let pixel = 0; pixel < confidence.length; pixel += 1) {
-    if ((confidence[pixel] ?? 1) > HALF_FLOAT_EPSILON) {
+  const primeHit = decodeFloat32(result.prime.hit);
+  const primeConfidence = decodeFloat32(result.prime.confidence);
+  const primeHistory = decodeFloat32(result.prime.history);
+  const disappearedHit = decodeFloat32(result.disappeared.hit);
+  const disappearedConfidence = decodeFloat32(result.disappeared.confidence);
+  const disappearedComposite = decodeFloat32(result.disappeared.composite);
+  const disappearedBase = decodeFloat32(result.disappeared.base);
+  const disappearedInput = decodeFloat32(result.disappeared.input);
+  const disappearedHistory = decodeFloat32(result.disappeared.history);
+  const disappearedWeight = decodeFloat32(result.disappeared.weight);
+  const vacatedHit = decodeFloat32(result.vacated.hit);
+  const vacatedConfidence = decodeFloat32(result.vacated.confidence);
+  const vacatedComposite = decodeFloat32(result.vacated.composite);
+  const vacatedBase = decodeFloat32(result.vacated.base);
+  const vacatedInput = decodeFloat32(result.vacated.input);
+  const vacatedHistory = decodeFloat32(result.vacated.history);
+  const restoredHit = decodeFloat32(result.restored.hit);
+  const restoredConfidence = decodeFloat32(result.restored.confidence);
+  const restoredComposite = decodeFloat32(result.restored.composite);
+  const restoredBase = decodeFloat32(result.restored.base);
+  const restoredInput = decodeFloat32(result.restored.input);
+  const restoredHistory = decodeFloat32(result.restored.history);
+  const restoredWeight = decodeFloat32(result.restored.weight);
+  const disappearedVacated: number[] = [];
+  const movedVacated: number[] = [];
+  for (let pixel = 0; pixel < primeHit.length; pixel += 1) {
+    const primed =
+      (primeHit[pixel] ?? 0) > HALF_FLOAT_EPSILON &&
+      (primeConfidence[pixel] ?? 0) > HALF_FLOAT_EPSILON &&
+      magentaEnergy(primeHistory, pixel) > HALF_FLOAT_EPSILON;
+    if (!primed) {
+      continue;
+    }
+    if ((disappearedHit[pixel] ?? 1) <= HALF_FLOAT_EPSILON) {
+      disappearedVacated.push(pixel);
+    }
+    if ((vacatedHit[pixel] ?? 1) <= HALF_FLOAT_EPSILON) {
+      movedVacated.push(pixel);
+    }
+  }
+  for (const pixel of disappearedVacated) {
+    expect(disappearedConfidence[pixel] ?? 1).toBeLessThanOrEqual(
+      HALF_FLOAT_EPSILON,
+    );
+    expect(
+      linearRgbWithinHalfEpsilon(disappearedComposite, disappearedBase, pixel),
+    ).toBe(true);
+    expect(isBlackRgb(disappearedInput, pixel)).toBe(true);
+    expect(disappearedWeight[pixel] ?? 0).toBeGreaterThan(0);
+    expect(disappearedWeight[pixel] ?? 1).toBeLessThanOrEqual(1);
+  }
+  const disappearedHistoryResidual = disappearedVacated.filter(
+    (pixel) => !isBlackRgb(disappearedHistory, pixel),
+  ).length;
+  const movedHistoryResidual = movedVacated.filter(
+    (pixel) => !isBlackRgb(vacatedHistory, pixel),
+  ).length;
+  expect(
+    disappearedVacated.length,
+    `disappearedVacated=${disappearedVacated.length} historyResidual=${disappearedHistoryResidual}`,
+  ).toBeGreaterThan(0);
+  expect(
+    movedVacated.length,
+    `movedVacated=${movedVacated.length} historyResidual=${movedHistoryResidual}`,
+  ).toBeGreaterThan(0);
+  for (const pixel of movedVacated) {
+    expect(vacatedConfidence[pixel] ?? 1).toBeLessThanOrEqual(
+      HALF_FLOAT_EPSILON,
+    );
+    expect(
+      linearRgbWithinHalfEpsilon(vacatedComposite, vacatedBase, pixel),
+    ).toBe(true);
+    expect(isBlackRgb(vacatedInput, pixel)).toBe(true);
+  }
+  const restoredStillVacated = movedVacated.filter(
+    (pixel) => (restoredHit[pixel] ?? 1) <= HALF_FLOAT_EPSILON,
+  );
+  expect(restoredStillVacated.length).toBeGreaterThan(0);
+  for (const pixel of restoredStillVacated) {
+    expect(restoredConfidence[pixel] ?? 1).toBeLessThanOrEqual(
+      HALF_FLOAT_EPSILON,
+    );
+    expect(
+      linearRgbWithinHalfEpsilon(restoredComposite, restoredBase, pixel),
+    ).toBe(true);
+  }
+  for (let pixel = 0; pixel < restoredConfidence.length; pixel += 1) {
+    if ((restoredConfidence[pixel] ?? 1) > HALF_FLOAT_EPSILON) {
       continue;
     }
     expect(
-      Math.abs((composite[pixel * 3] ?? 0) - (base[pixel * 3] ?? 0)),
-    ).toBeLessThanOrEqual(HALF_FLOAT_EPSILON);
-    expect(
-      Math.abs((composite[pixel * 3 + 1] ?? 0) - (base[pixel * 3 + 1] ?? 0)),
-    ).toBeLessThanOrEqual(HALF_FLOAT_EPSILON);
-    expect(
-      Math.abs((composite[pixel * 3 + 2] ?? 0) - (base[pixel * 3 + 2] ?? 0)),
-    ).toBeLessThanOrEqual(HALF_FLOAT_EPSILON);
+      linearRgbWithinHalfEpsilon(restoredComposite, restoredBase, pixel),
+    ).toBe(true);
   }
+  expect(
+    restoredHit.some(
+      (value, pixel) =>
+        value > HALF_FLOAT_EPSILON &&
+        (restoredConfidence[pixel] ?? 0) > HALF_FLOAT_EPSILON &&
+        magentaEnergy(restoredInput, pixel) > HALF_FLOAT_EPSILON,
+    ),
+  ).toBe(true);
+  expect(restoredWeight.every((value) => value > 0 && value <= 1)).toBe(true);
 });
 
 test("camera-cut resets SSR history once and the next present is stable", async ({

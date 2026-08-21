@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Mesh, PerspectiveCamera, type MeshBasicMaterial } from "three";
 import {
+  QA_CURRENT_SSR_FIXTURE_BOUNDS,
   QA_CURRENT_SSR_FIXTURE_NAME,
   applyQaCurrentSsrFixtureEnabled,
   applyQaCurrentSsrFixtureHotColor,
@@ -10,6 +11,16 @@ import {
 } from "./qa-current-ssr-fixture.js";
 
 describe("QA current-frame SSR fixture", () => {
+  it("pins the FrontSide wall bounds used by hit-UV reconstruction", () => {
+    expect(QA_CURRENT_SSR_FIXTURE_BOUNDS).toEqual({
+      farWallZ: -8,
+      nearWallZ: 240,
+      halfWidth: 32,
+      minY: -4,
+      maxY: 44,
+    });
+  });
+
   it("stays visible and unculled while scale disables pixel output", () => {
     const fixture = createQaCurrentSsrFixture();
     expect(fixture.name).toBe(QA_CURRENT_SSR_FIXTURE_NAME);

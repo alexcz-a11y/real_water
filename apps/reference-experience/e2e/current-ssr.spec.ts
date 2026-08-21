@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createWaterPreset, type ArtisticControls } from "real-water";
+import {
+  createMinimalWaterQualityProfile,
+  createWaterPreset,
+  type ArtisticControls,
+} from "real-water";
+import { PerspectiveCamera, Vector3, Vector4 } from "three";
 import type {
   QaCameraV1,
   QaCurrentSsrFixtureHotColor,
@@ -270,6 +275,157 @@ function magentaEnergy(color: readonly number[], pixel: number): number {
   );
 }
 
+function isRawSsrHit(worldDistance: number): boolean {
+  return worldDistance > HALF_FLOAT_EPSILON;
+}
+
+function summarizeSsrHitDistances(values: readonly number[]): {
+  readonly length: number;
+  readonly min: number;
+  readonly max: number;
+  readonly nonfinite: number;
+  readonly negative: number;
+  readonly exactZero: number;
+  readonly subepsilon: number;
+  readonly subepsilonMin: number;
+  readonly subepsilonMax: number;
+  readonly belowComposeEpsilon: number;
+  readonly positiveHit: number;
+} {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let nonfinite = 0;
+  let negative = 0;
+  let exactZero = 0;
+  let subepsilon = 0;
+  let subepsilonMin = Number.POSITIVE_INFINITY;
+  let subepsilonMax = Number.NEGATIVE_INFINITY;
+  let belowComposeEpsilon = 0;
+  let positiveHit = 0;
+  for (const value of values) {
+    if (!Number.isFinite(value)) {
+      nonfinite += 1;
+      continue;
+    }
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+    if (value < 0) {
+      negative += 1;
+    } else if (value === 0) {
+      exactZero += 1;
+    } else if (value <= HALF_FLOAT_EPSILON) {
+      subepsilon += 1;
+      subepsilonMin = Math.min(subepsilonMin, value);
+      subepsilonMax = Math.max(subepsilonMax, value);
+      if (value < 1e-6) {
+        belowComposeEpsilon += 1;
+      }
+    } else {
+      positiveHit += 1;
+    }
+  }
+  return {
+    length: values.length,
+    min,
+    max,
+    nonfinite,
+    negative,
+    exactZero,
+    subepsilon,
+    subepsilonMin,
+    subepsilonMax,
+    belowComposeEpsilon,
+    positiveHit,
+  };
+}
+
+function viewZToPerspectiveDepth(
+  viewZ: number,
+  near: number,
+  far: number,
+): number {
+  return ((near + viewZ) * far) / ((far - near) * viewZ);
+}
+
+function createQaPerspectiveCamera(pose: QaCameraV1): PerspectiveCamera {
+  const camera = new PerspectiveCamera(
+    pose.verticalFovDegrees,
+    VIEWPORT.width / VIEWPORT.height,
+    pose.near,
+    pose.far,
+  );
+  camera.position.set(...pose.position);
+  camera.up.set(...pose.up);
+  camera.lookAt(...pose.target);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld(true);
+  return camera;
+}
+
+function reconstructViewPosition(
+  camera: PerspectiveCamera,
+  pixel: number,
+  linearViewDistance: number,
+): Vector3 {
+  const x = pixel % VIEWPORT.width;
+  const y = Math.floor(pixel / VIEWPORT.width);
+  const u = (x + 0.5) / VIEWPORT.width;
+  const v = 1 - (y + 0.5) / VIEWPORT.height;
+  const viewZ = -linearViewDistance;
+  const clip = new Vector4(
+    u * 2 - 1,
+    (1 - v) * 2 - 1,
+    viewZToPerspectiveDepth(viewZ, camera.near, camera.far),
+    1,
+  );
+  clip.applyMatrix4(camera.projectionMatrixInverse);
+  return new Vector3(clip.x / clip.w, clip.y / clip.w, clip.z / clip.w);
+}
+
+function projectViewToScreenUv(
+  camera: PerspectiveCamera,
+  viewPosition: Vector3,
+): { readonly u: number; readonly v: number } {
+  const clip = new Vector4(
+    viewPosition.x,
+    viewPosition.y,
+    viewPosition.z,
+    1,
+  ).applyMatrix4(camera.projectionMatrix);
+  return {
+    u: clip.x / clip.w / 2 + 0.5,
+    v: 1 - (clip.y / clip.w / 2 + 0.5),
+  };
+}
+
+function reconstructComposeHitUv(
+  camera: PerspectiveCamera,
+  pixel: number,
+  linearViewDistance: number,
+  viewNormal: readonly [number, number, number],
+  worldDistance: number,
+): { readonly u: number; readonly v: number } | null {
+  if (
+    !Number.isFinite(linearViewDistance) ||
+    !Number.isFinite(worldDistance) ||
+    worldDistance <= HALF_FLOAT_EPSILON
+  ) {
+    return null;
+  }
+  const viewPosition = reconstructViewPosition(
+    camera,
+    pixel,
+    linearViewDistance,
+  );
+  const viewIncident = viewPosition.clone().normalize();
+  const viewReflect = viewIncident
+    .clone()
+    .reflect(new Vector3(...viewNormal))
+    .normalize();
+  const hitView = viewPosition.addScaledVector(viewReflect, worldDistance);
+  return projectViewToScreenUv(camera, hitView);
+}
+
 function everyPixelRgbWithinHalfEpsilon(
   left: readonly number[],
   right: readonly number[],
@@ -401,7 +557,9 @@ test("overlays current-frame SSR hits over planar-plus-environment base without 
   const hitMotion = decodeFloat32(hit.motion);
   const pixels = waterPixels(missFresnel, hitFresnel);
   const confidenceHits = pixels.filter(
-    (index) => (hitConfidence[index] ?? 0) > 0 && (hitHit[index] ?? 0) === 1,
+    (index) =>
+      (hitConfidence[index] ?? 0) > 0 &&
+      (hitHit[index] ?? 0) > HALF_FLOAT_EPSILON,
   );
   const magentaEnergies = confidenceHits.map((index) => {
     const red = hitColor[index * 3] ?? 0;
@@ -464,13 +622,14 @@ test("overlays current-frame SSR hits over planar-plus-environment base without 
   expect(hitRoughness.every((value) => Number.isFinite(value))).toBe(true);
   expect(pixels.some((index) => luminance(missCurrent, index) > 8)).toBe(true);
   expect(pixels.some((index) => luminance(missFinal, index) > 8)).toBe(true);
-  expect(hitHit.some((value) => value === 1)).toBe(true);
+  expect(hitHit.some((value) => isRawSsrHit(value))).toBe(true);
   expect(hitConfidence.some((value) => value === 0)).toBe(true);
   expect(hitConfidence.some((value) => value > 0 && value < 1)).toBe(true);
-  if (missHit.some((value) => value === 1)) {
+  if (missHit.some((value) => value > HALF_FLOAT_EPSILON)) {
     expect(
       missHit.every(
-        (value, index) => value !== 1 || missConfidence[index] === 0,
+        (value, index) =>
+          value <= HALF_FLOAT_EPSILON || missConfidence[index] === 0,
       ),
     ).toBe(true);
   }
@@ -524,7 +683,7 @@ test("overlays current-frame SSR hits over planar-plus-environment base without 
   expect(
     centerWater.some(
       (index) =>
-        (hitHit[index] ?? 0) === 1 && (hitConfidence[index] ?? 0) === 0,
+        isRawSsrHit(hitHit[index] ?? 0) && (hitConfidence[index] ?? 0) === 0,
     ),
   ).toBe(true);
   expect(
@@ -561,7 +720,7 @@ test("keeps a black main-visible fixture as an SSR hit that darkens same-frame c
   const blackFresnel = decodeFloat32(black.fresnel);
   const pixels = waterPixels(disabledFresnel, blackFresnel);
   expect(black.fixture.hotColor).toBe("black");
-  expect(hits.some((value) => value === 1)).toBe(true);
+  expect(hits.some((value) => isRawSsrHit(value))).toBe(true);
   expect(confidence.some((value) => value > 0)).toBe(true);
   assertFiniteUnitInterval(confidence);
   expect(disabledOccupancy).toEqual(blackOccupancy);
@@ -573,7 +732,16 @@ test("keeps a black main-visible fixture as an SSR hit that darkens same-frame c
   ).toBe(true);
   expect(disabledPlanar).toEqual(blackPlanar);
   expect(disabledConfidence.every((value) => value === 0)).toBe(true);
-  expect(disabledHit.every((value) => value === 0 || value === 1)).toBe(true);
+  const disabledHitStats = summarizeSsrHitDistances(disabledHit);
+  console.log("DISABLED_HIT_STATS", disabledHitStats);
+  expect(
+    disabledHit.every(
+      (value) => value === 0 || (Number.isFinite(value) && value > 0),
+    ),
+    JSON.stringify(disabledHitStats),
+  ).toBe(true);
+  expect(disabledHitStats.nonfinite, JSON.stringify(disabledHitStats)).toBe(0);
+  expect(disabledHitStats.negative, JSON.stringify(disabledHitStats)).toBe(0);
   const darkened = pixels.filter((index) => (confidence[index] ?? 0) > 0);
   expect(darkened.length).toBeGreaterThan(0);
   expect(disabledBase.every((value) => Number.isFinite(value))).toBe(true);
@@ -594,7 +762,7 @@ test("keeps a black main-visible fixture as an SSR hit that darkens same-frame c
   ).toBe(true);
   expect(
     hits.some((value, index) => {
-      if (value !== 1) {
+      if (!isRawSsrHit(value)) {
         return false;
       }
       const red = color[index * 3] ?? 0;
@@ -650,12 +818,143 @@ test("returns confidence 0 for offscreen current-frame SSR misses", async ({
   ).toBe(true);
   expect(disabledEnv).toEqual(offscreenEnv);
   expect(disabledOccupancy).toEqual(offscreenOccupancy);
-  if (hits.some((value) => value === 1)) {
+  if (hits.some((value) => isRawSsrHit(value))) {
     expect(
-      hits.every((value, index) => value !== 1 || confidence[index] === 0),
+      hits.every(
+        (value, index) => !isRawSsrHit(value) || confidence[index] === 0,
+      ),
     ).toBe(true);
   }
   expect(offscreen.compileCount).toBe(disabled.compileCount);
+});
+
+test("tapers confidence and composite on a valid raw hit crossing the hit-UV fade band", async ({
+  page,
+}) => {
+  await openQaStage(page);
+  const hit = await presentCurrentSsrEvidence(page, true);
+  const ssr = createMinimalWaterQualityProfile().reflection.ssr;
+  const camera = createQaPerspectiveCamera(HIT_CAMERA);
+  const hits = decodeFloat32(hit.hit);
+  const confidence = decodeFloat32(hit.confidence);
+  const fresnel = decodeFloat32(hit.fresnel);
+  const roughness = decodeFloat32(hit.roughness);
+  const depth = decodeFloat32(hit.depth);
+  const normal = decodeFloat32(hit.normal);
+  const color = decodeFloat32(hit.color);
+  const base = decodeFloat32(hit.reflectionBase);
+  const composite = decodeFloat32(hit.ssrComposite);
+  const fade: number[] = [];
+  const interior: number[] = [];
+  const reconstructedOffscreen: number[] = [];
+  for (let pixel = 0; pixel < hits.length; pixel += 1) {
+    const worldDistance = hits[pixel] ?? 0;
+    if (!isRawSsrHit(worldDistance) || worldDistance > ssr.maxDistance) {
+      continue;
+    }
+    if ((fresnel[pixel] ?? 0) <= 0.001) {
+      continue;
+    }
+    if ((roughness[pixel] ?? 1) >= ssr.roughnessCutoff) {
+      continue;
+    }
+    if (magentaEnergy(color, pixel) <= HALF_FLOAT_EPSILON) {
+      continue;
+    }
+    const reconstructed = reconstructComposeHitUv(
+      camera,
+      pixel,
+      depth[pixel] ?? Number.NaN,
+      [
+        normal[pixel * 3] ?? Number.NaN,
+        normal[pixel * 3 + 1] ?? Number.NaN,
+        normal[pixel * 3 + 2] ?? Number.NaN,
+      ],
+      worldDistance,
+    );
+    if (reconstructed === null) {
+      continue;
+    }
+    const edgeDist = Math.min(
+      reconstructed.u,
+      1 - reconstructed.u,
+      reconstructed.v,
+      1 - reconstructed.v,
+    );
+    if (
+      reconstructed.u < 0 ||
+      reconstructed.u > 1 ||
+      reconstructed.v < 0 ||
+      reconstructed.v > 1
+    ) {
+      reconstructedOffscreen.push(pixel);
+      continue;
+    }
+    if (edgeDist < ssr.screenEdgeFade) {
+      fade.push(pixel);
+    } else {
+      interior.push(pixel);
+    }
+  }
+  expect(
+    fade.length,
+    `fade=${fade.length} interior=${interior.length} offscreen=${reconstructedOffscreen.length}`,
+  ).toBeGreaterThan(0);
+  expect(interior.length).toBeGreaterThan(0);
+  const fadeConfidence = fade.map((pixel) => confidence[pixel] ?? 0);
+  const interiorConfidence = interior.map((pixel) => confidence[pixel] ?? 0);
+  const fadePositive = fadeConfidence.filter(
+    (value) => value > HALF_FLOAT_EPSILON,
+  ).length;
+  const interiorPositive = interiorConfidence.filter(
+    (value) => value > HALF_FLOAT_EPSILON,
+  ).length;
+  expect(
+    fadeConfidence.some((value) => value > HALF_FLOAT_EPSILON),
+    `fade=${fade.length} fadePositive=${fadePositive} fadeMin=${Math.min(...fadeConfidence)} fadeMax=${Math.max(...fadeConfidence)} interior=${interior.length} interiorPositive=${interiorPositive} interiorMax=${Math.max(...interiorConfidence)}`,
+  ).toBe(true);
+  expect(
+    fadeConfidence.some(
+      (value) => value > HALF_FLOAT_EPSILON && value < 1 - HALF_FLOAT_EPSILON,
+    ),
+  ).toBe(true);
+  const fadeMean =
+    fadeConfidence.reduce((sum, value) => sum + value, 0) / fade.length;
+  const interiorMean =
+    interiorConfidence.reduce((sum, value) => sum + value, 0) / interior.length;
+  expect(
+    fadeMean,
+    `fadeMean=${fadeMean} interiorMean=${interiorMean}`,
+  ).toBeLessThan(interiorMean - HALF_FLOAT_EPSILON);
+  const fadeOverlay = fade.map((pixel) =>
+    Math.max(0, magentaEnergy(composite, pixel) - magentaEnergy(base, pixel)),
+  );
+  const interiorOverlay = interior.map((pixel) =>
+    Math.max(0, magentaEnergy(composite, pixel) - magentaEnergy(base, pixel)),
+  );
+  const fadeOverlayMean =
+    fadeOverlay.reduce((sum, value) => sum + value, 0) / fade.length;
+  const interiorOverlayMean =
+    interiorOverlay.reduce((sum, value) => sum + value, 0) / interior.length;
+  expect(fadeOverlay.some((value) => value > HALF_FLOAT_EPSILON)).toBe(true);
+  expect(
+    fadeOverlayMean,
+    `fadeOverlayMean=${fadeOverlayMean} interiorOverlayMean=${interiorOverlayMean} reconstructedOffscreen=${reconstructedOffscreen.length}`,
+  ).toBeLessThan(interiorOverlayMean - HALF_FLOAT_EPSILON);
+  console.log("SSR_HIT_UV_FADE", {
+    fade: fade.length,
+    interior: interior.length,
+    reconstructedOffscreen: reconstructedOffscreen.length,
+    fadePositive,
+    fadeMin: Math.min(...fadeConfidence),
+    fadeMax: Math.max(...fadeConfidence),
+    fadeMean,
+    interiorPositive,
+    interiorMax: Math.max(...interiorConfidence),
+    interiorMean,
+    fadeOverlayMean,
+    interiorOverlayMean,
+  });
 });
 
 test("updates raw SSR and TRAA final on the same JS task after a miss-to-hit present", async ({
@@ -700,7 +999,7 @@ test("updates raw SSR and TRAA final on the same JS task after a miss-to-hit pre
   const missFinal = decodeUint8(result.miss.finalColor);
   const hitFinal = decodeUint8(result.hit.finalColor);
   expect(missConfidence.every((value) => value === 0)).toBe(true);
-  expect(hitHit.some((value) => value === 1)).toBe(true);
+  expect(hitHit.some((value) => isRawSsrHit(value))).toBe(true);
   expect(hitConfidence.some((value) => value > 0)).toBe(true);
   expect(
     hitColor.some((value, index) => value !== (missColor[index] ?? 0)),
@@ -732,7 +1031,7 @@ test("gates far-water current-frame SSR confidence from the roughness attachment
     FAR_WATER_CAMERA.position[0],
     FAR_WATER_CAMERA.position[2],
   );
-  const rawHits = pixels.filter((index) => (hitHit[index] ?? 0) === 1);
+  const rawHits = pixels.filter((index) => isRawSsrHit(hitHit[index] ?? 0));
   const roughHits = rawHits.filter(
     (index) => (hitRoughness[index] ?? 0) >= ROUGHNESS_CUTOFF,
   );

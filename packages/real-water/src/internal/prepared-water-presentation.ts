@@ -1183,7 +1183,13 @@ async function readSsrHitCapture(
   const raw = await readSsrRawPixels(renderer, resources);
   const data = new Float32Array(resources.width * resources.height);
   for (let pixel = 0; pixel < data.length; pixel += 1) {
-    data[pixel] = (raw[pixel * 4 + 3] ?? 0) > 0 ? 1 : 0;
+    const distance = raw[pixel * 4 + 3] ?? 0;
+    if (!Number.isFinite(distance) || distance < 0) {
+      throw new TypeError(
+        "SSR hit readback must be a finite non-negative world-distance (0 = miss).",
+      );
+    }
+    data[pixel] = distance;
   }
   return Object.freeze({
     name: "ssr-hit",
