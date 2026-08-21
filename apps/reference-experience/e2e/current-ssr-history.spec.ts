@@ -423,7 +423,6 @@ test("rejects history residual after fixture disappear, continuous move, and res
   const restoredComposite = decodeFloat32(result.restored.composite);
   const restoredBase = decodeFloat32(result.restored.base);
   const restoredInput = decodeFloat32(result.restored.input);
-  const restoredHistory = decodeFloat32(result.restored.history);
   const restoredWeight = decodeFloat32(result.restored.weight);
   const disappearedVacated: number[] = [];
   const movedVacated: number[] = [];
