@@ -226,6 +226,13 @@ describe("Body Physics Adapter seam", () => {
     expect(lease.capabilities.gameplay).toEqual({
       maxAttachedBodies: 32,
       maxQueryPointsPerTick: 2_048,
+      maxActiveDisturbances: 128,
+      interactionField: {
+        radiusMetres: 48,
+        edgeFadeMetres: 8,
+        maxSnapshotAgeTicks: 1,
+        disturbanceKinds: ["radial-impact"],
+      },
     });
     expect(MAX_ATTACHED_BODIES).toBe(32);
 

@@ -12,11 +12,15 @@ import {
   type ArtisticControls,
   type ArtisticControlUpdateOptions,
   type ArtisticControlUpdateReceipt,
+  type DisturbanceBatch,
+  type DisturbanceSubmissionReceipt,
   type HostEnvironmentState,
   type HostLifecycleAdapter,
   type HostPreparationRequest,
   type HostPreparationResult,
   type HostPreparedLease,
+  type InteractionAnchor,
+  type InteractionAnchorUpdateReceipt,
   type PrewarmManifest,
   type RealWaterLease,
 } from "real-water";
@@ -76,11 +80,11 @@ export type { QaHostPresentationController } from "./qa-presentation-controller.
 export type { QaTemporalResetReason } from "./qa-frame-driver.js";
 
 export const QA_HARNESS_SCHEMA = "real-water/qa-harness" as const;
-export const QA_HARNESS_VERSION = 8 as const;
+export const QA_HARNESS_VERSION = 9 as const;
 export const QA_HARNESS_FIXED_TICK_HZ = QA_FRAME_FIXED_TICK_HZ;
 export const QA_HARNESS_CAPTURE_NAMES = QA_FRAME_CAPTURE_NAMES;
 export const QA_CAPTURE_SCHEMA = "real-water/qa-capture" as const;
-export const QA_CAPTURE_VERSION = 8 as const;
+export const QA_CAPTURE_VERSION = 9 as const;
 
 export type QaCaptureName = QaFrameCaptureName;
 
@@ -140,7 +144,7 @@ export interface QaTemporalReceiptV5 {
   readonly resetFrame: boolean;
 }
 
-export interface QaPresentationReceiptV8 extends QaFrameStateReceiptV4 {
+export interface QaPresentationReceiptV9 extends QaFrameStateReceiptV4 {
   readonly generation: number;
   readonly presentationId: number;
   readonly manifestHash: string;
@@ -156,7 +160,7 @@ export interface QaPresentationReceiptV8 extends QaFrameStateReceiptV4 {
   readonly temporal: QaTemporalReceiptV5;
 }
 
-export interface QaCaptureV8 extends QaPresentationReceiptV8 {
+export interface QaCaptureV9 extends QaPresentationReceiptV9 {
   readonly schema: typeof QA_CAPTURE_SCHEMA;
   readonly version: typeof QA_CAPTURE_VERSION;
   readonly name: QaCaptureName;
@@ -228,7 +232,7 @@ export interface QaHarnessOptions {
   synthesizeDeviceLoss(): void;
 }
 
-export interface QaHarnessV8 {
+export interface QaHarnessV9 {
   readonly schema: typeof QA_HARNESS_SCHEMA;
   readonly version: typeof QA_HARNESS_VERSION;
   readonly fixedTickHz: typeof QA_HARNESS_FIXED_TICK_HZ;
@@ -244,12 +248,18 @@ export interface QaHarnessV8 {
     readonly x: number;
     readonly z: number;
   }): Promise<QaOriginReceiptV4>;
-  present(): Promise<QaPresentationReceiptV8>;
-  capture(name: QaCaptureName): Promise<QaCaptureV8>;
+  present(): Promise<QaPresentationReceiptV9>;
+  capture(name: QaCaptureName): Promise<QaCaptureV9>;
   updateArtisticControls(
     controls: ArtisticControls,
     options: ArtisticControlUpdateOptions,
   ): Promise<ArtisticControlUpdateReceipt>;
+  updateInteractionAnchor(
+    anchor: InteractionAnchor,
+  ): Promise<InteractionAnchorUpdateReceipt>;
+  submitDisturbances(
+    batch: DisturbanceBatch,
+  ): Promise<DisturbanceSubmissionReceipt>;
   updateEnvironmentLighting(
     state: HostEnvironmentState,
   ): Promise<HostEnvironmentState>;
@@ -286,12 +296,12 @@ interface ActiveRecipe {
   pendingTicks: number;
   cameraRevision: number;
   cameraSet: boolean;
-  captures: ReadonlyMap<QaCaptureName, QaCaptureV8> | null;
-  presentation: QaPresentationReceiptV8 | null;
+  captures: ReadonlyMap<QaCaptureName, QaCaptureV9> | null;
+  presentation: QaPresentationReceiptV9 | null;
   lastPresentedMotion: QaPresentedMotionStateV5 | null;
 }
 
-export function createQaHarness(options: QaHarnessOptions): QaHarnessV8 {
+export function createQaHarness(options: QaHarnessOptions): QaHarnessV9 {
   let active: ActiveRecipe | null = null;
   let queue = Promise.resolve();
 
@@ -310,7 +320,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV8 {
     active = null;
   };
 
-  const harness: QaHarnessV8 = {
+  const harness: QaHarnessV9 = {
     schema: QA_HARNESS_SCHEMA,
     version: QA_HARNESS_VERSION,
     fixedTickHz: QA_HARNESS_FIXED_TICK_HZ,
@@ -527,6 +537,24 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV8 {
         const receipt = recipe.lease.updateArtisticControls(controls, {
           transition,
         });
+        recipe.captures = null;
+        recipe.presentation = null;
+        return receipt;
+      });
+    },
+    updateInteractionAnchor(anchor) {
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        const receipt = recipe.lease.updateInteractionAnchor(anchor);
+        recipe.captures = null;
+        recipe.presentation = null;
+        return receipt;
+      });
+    },
+    submitDisturbances(batch) {
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        const receipt = recipe.lease.submitDisturbances(batch);
         recipe.captures = null;
         recipe.presentation = null;
         return receipt;
@@ -1029,9 +1057,9 @@ function readArtisticControlUpdateOptions(
 
 function cacheCaptures(
   captures: readonly QaFrameDriverCapture[],
-  receipt: QaPresentationReceiptV8,
-): ReadonlyMap<QaCaptureName, QaCaptureV8> {
-  const byName = new Map<QaCaptureName, QaCaptureV8>();
+  receipt: QaPresentationReceiptV9,
+): ReadonlyMap<QaCaptureName, QaCaptureV9> {
+  const byName = new Map<QaCaptureName, QaCaptureV9>();
   for (const name of QA_HARNESS_CAPTURE_NAMES) {
     const capture = captures.find((candidate) => candidate.name === name);
     if (capture === undefined) {
@@ -1053,8 +1081,8 @@ function cacheCaptures(
 
 function encodeCapture(
   capture: QaFrameDriverCapture,
-  receipt: QaPresentationReceiptV8,
-): QaCaptureV8 {
+  receipt: QaPresentationReceiptV9,
+): QaCaptureV9 {
   const shape = QA_FRAME_CAPTURE_SHAPES[capture.name];
   return Object.freeze({
     schema: QA_CAPTURE_SCHEMA,

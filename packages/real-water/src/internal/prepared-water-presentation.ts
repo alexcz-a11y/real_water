@@ -341,9 +341,21 @@ export function renderHiddenStabilizationFrames(
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
   signal: AbortSignal,
+  resetFirstFrame = false,
 ): void {
   for (let frame = 0; frame < HIDDEN_STABILIZATION_FRAME_COUNT; frame += 1) {
-    renderTemporalFrame(renderer, scene, camera, resources);
+    const resetFrame = resetFirstFrame && frame === 0;
+    if (resetFrame) {
+      resources.resetUniform.value = 1;
+      resources.jitterAdapter.realign();
+    }
+    try {
+      renderTemporalFrame(renderer, scene, camera, resources);
+    } finally {
+      if (resetFrame) {
+        resources.resetUniform.value = 0;
+      }
+    }
     throwIfAborted(signal);
   }
 }

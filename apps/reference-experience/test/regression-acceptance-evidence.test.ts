@@ -140,6 +140,13 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
   gameplay: {
     maxAttachedBodies: MAX_ATTACHED_BODIES,
     maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
+    maxActiveDisturbances: 128,
+    interactionField: {
+      radiusMetres: 48,
+      edgeFadeMetres: 8,
+      maxSnapshotAgeTicks: 1,
+      disturbanceKinds: ["radial-impact"],
+    },
   },
 };
 const DEVICE = {

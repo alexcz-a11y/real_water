@@ -7,7 +7,7 @@ import {
   QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS,
   calculateColorAttachmentBytesPerSample,
 } from "../src/qa-frame-contract.js";
-import type { QaCameraV1, QaHarnessV8 } from "../src/qa-harness.js";
+import type { QaCameraV1, QaHarnessV9 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
 
@@ -53,6 +53,10 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       prewarmCaptures: harness.prewarmManifest.captures.map(
         ({ name, preparedFormat }) => ({ name, preparedFormat }),
       ),
+      interactionCommands: {
+        updateInteractionAnchor: typeof harness.updateInteractionAnchor,
+        submitDisturbances: typeof harness.submitDisturbances,
+      },
       frozen: Object.isFrozen(harness),
     };
   });
@@ -86,7 +90,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
   ).toBe(CORE_WEBGPU_MAX_COLOR_ATTACHMENT_BYTES_PER_SAMPLE);
   expect(contract).toEqual({
     schema: "real-water/qa-harness",
-    version: 8,
+    version: 9,
     fixedTickHz: 60,
     captureNames: [
       "final-color",
@@ -198,6 +202,10 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
         preparedFormat: "rgba16float-ssr-history-beauty",
       },
     ],
+    interactionCommands: {
+      updateInteractionAnchor: "function",
+      submitDisturbances: "function",
+    },
     frozen: true,
   });
 });
@@ -216,7 +224,7 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
     const harness = window.__REAL_WATER_QA__ as
-      | (QaHarnessV8 & {
+      | (QaHarnessV9 & {
           updateArtisticControls(
             controls: {
               readonly waveStrength: number;
@@ -374,7 +382,7 @@ test("presents camera-relative Open Water through the horizon", async ({
   await page.goto("/?qa=1&host=three");
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -430,7 +438,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -531,7 +539,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "ssr-history-input-color",
   ]);
   expect(result.first.captures.map(({ version }) => version)).toEqual([
-    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
   ]);
   expect(result.first.captures.map(({ format }) => format)).toEqual([
     "rgba8unorm-srgb",
@@ -616,7 +624,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       }),
     ),
   );
-  expect(result.first.captures.every((capture) => capture.version === 8)).toBe(
+  expect(result.first.captures.every((capture) => capture.version === 9)).toBe(
     true,
   );
   expect(result.changedTick.captures[0]?.data).not.toBe(
@@ -713,7 +721,7 @@ test("matches the visible WebGPU canvas RGB to the same-frame final-color captur
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }

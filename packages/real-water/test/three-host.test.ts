@@ -280,7 +280,17 @@ describe("createThreeHostLifecycleAdapter", () => {
     const lease = await run.ready;
 
     expect(lease.capabilities).toEqual({
-      gameplay: { maxAttachedBodies: 32, maxQueryPointsPerTick: 2_048 },
+      gameplay: {
+        maxAttachedBodies: 32,
+        maxQueryPointsPerTick: 2_048,
+        maxActiveDisturbances: 128,
+        interactionField: {
+          radiusMetres: 48,
+          edgeFadeMetres: 8,
+          maxSnapshotAgeTicks: 1,
+          disturbanceKinds: ["radial-impact"],
+        },
+      },
       rendering: {
         backend: "core-webgpu",
         timestampQuery: true,

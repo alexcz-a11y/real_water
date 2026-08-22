@@ -27,7 +27,7 @@ export const PREWARM_MANIFEST_SCHEMA = "real-water/prewarm" as const;
  *
  * @public
  */
-export const PREWARM_MANIFEST_VERSION = 3 as const;
+export const PREWARM_MANIFEST_VERSION = 4 as const;
 
 /**
  * Immutable physical drawing-buffer dimensions bound into a Prewarm Manifest.
@@ -144,6 +144,10 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   sceneDepth: "water-scene-depth",
   renderTarget: "water-render-target",
   clipmap: "water-clipmap",
+  localInteractionField: "water-local-interaction-field",
+  localInteractionBuffers: "water-local-interaction-buffers",
+  localInteractionRadialImpactRoute:
+    "water-local-interaction-radial-impact-route",
   spectralBandSwell: "water-spectral-band-swell",
   spectralBandWind: "water-spectral-band-wind",
   spectralBandChop: "water-spectral-band-chop",
@@ -294,6 +298,30 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     label: "Camera-relative Open Water clipmap",
     fingerprint:
       "sha256:61fcb210b4d47847c615ceaec5c83d943ab09fbd993708771ba19d63cf8189e9",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.localInteractionField,
+    kind: "effect-state",
+    label:
+      "Movable local interaction field (one anchor, 48m radius, 8m Hermite edge fade)",
+    fingerprint:
+      "sha256:cdf050c8eca5e1959e92c4c24a6e852ee1978418ee5fbae98f3633ea54426030",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.localInteractionBuffers,
+    kind: "resource",
+    label:
+      "Preallocated current/previous radial-impact uniform arrays (128 slots, two snapshot banks)",
+    fingerprint:
+      "sha256:f6f4066fb66bf262d908392d0571f15fdb9ae3c88d9e252c91c3422af90e578a",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.localInteractionRadialImpactRoute,
+    kind: "conditional-route",
+    label:
+      "Analytic radial-impact deformation and zero-or-one-tick local correction snapshot route",
+    fingerprint:
+      "sha256:14c091bcb991385050dc738b3f032e64cc654059db94b7edd4dfc4f8329e17bc",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandSwell,

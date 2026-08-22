@@ -2,6 +2,7 @@ import {
   createMinimalWaterPrewarmManifest,
   createMinimalWaterQualityProfile,
   MAX_ATTACHED_BODIES,
+  MAX_ACTIVE_DISTURBANCES,
   MAX_GAMEPLAY_QUERY_POINTS,
   type HostEnvironmentReflectionDescriptor,
   type PrewarmDeclaration,
@@ -136,6 +137,14 @@ const REFLECTION_PLANAR_KEYS = [
 const GAMEPLAY_CAPABILITY_KEYS = [
   "maxAttachedBodies",
   "maxQueryPointsPerTick",
+  "maxActiveDisturbances",
+  "interactionField",
+] as const;
+const INTERACTION_FIELD_CAPABILITY_KEYS = [
+  "radiusMetres",
+  "edgeFadeMetres",
+  "maxSnapshotAgeTicks",
+  "disturbanceKinds",
 ] as const;
 const CAPABILITIES_TEMPORAL_KEYS = [
   ...TEMPORAL_KEYS,
@@ -208,7 +217,7 @@ export function readReadyCapabilities(
     !hasExactKeys(value.gameplay, GAMEPLAY_CAPABILITY_KEYS)
   ) {
     throw new TypeError(
-      "Ready capabilities.gameplay must include the exact Body and Query capacities.",
+      "Ready capabilities.gameplay must include the exact Body, Query, Disturbance, and interaction-field limits.",
     );
   }
   if (value.rendering.backend !== "core-webgpu") {
@@ -231,6 +240,26 @@ export function readReadyCapabilities(
       "Ready capabilities.gameplay.maxAttachedBodies disagrees with Core.",
     );
   }
+  if (value.gameplay.maxActiveDisturbances !== MAX_ACTIVE_DISTURBANCES) {
+    throw new Error(
+      "Ready capabilities.gameplay.maxActiveDisturbances disagrees with Core.",
+    );
+  }
+  const interactionField = value.gameplay.interactionField;
+  if (
+    !isRecord(interactionField) ||
+    !hasExactKeys(interactionField, INTERACTION_FIELD_CAPABILITY_KEYS) ||
+    interactionField.radiusMetres !== 48 ||
+    interactionField.edgeFadeMetres !== 8 ||
+    interactionField.maxSnapshotAgeTicks !== 1 ||
+    !Array.isArray(interactionField.disturbanceKinds) ||
+    interactionField.disturbanceKinds.length !== 1 ||
+    interactionField.disturbanceKinds[0] !== "radial-impact"
+  ) {
+    throw new Error(
+      "Ready capabilities.gameplay.interactionField disagrees with Core.",
+    );
+  }
   const temporal = readCapabilitiesTemporal(
     value.rendering.temporal,
     profile.temporal,
@@ -251,6 +280,13 @@ export function readReadyCapabilities(
       gameplay: {
         maxAttachedBodies: MAX_ATTACHED_BODIES,
         maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
+        maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+        interactionField: {
+          radiusMetres: 48 as const,
+          edgeFadeMetres: 8 as const,
+          maxSnapshotAgeTicks: 1 as const,
+          disturbanceKinds: ["radial-impact" as const],
+        },
       },
     }),
   );

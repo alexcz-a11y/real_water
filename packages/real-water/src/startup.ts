@@ -932,6 +932,8 @@ function createLease(
 
   return Object.freeze({
     updateArtisticControls: runtime.updateArtisticControls,
+    updateInteractionAnchor: runtime.updateInteractionAnchor,
+    submitDisturbances: runtime.submitDisturbances,
     queryGameplay: runtime.queryGameplay,
     attachBody: runtime.attachBody,
     inspectRuntime: runtime.inspectRuntime,
