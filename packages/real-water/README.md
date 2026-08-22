@@ -2,9 +2,17 @@
 
 This alpha package exposes versioned minimal-water Quality Profiles, their
 canonical fifty-seven-unit Prewarm Manifests, versioned Calm, Swell, and Storm
-Water Presets, the Startup and ready Runtime Interfaces, normalized Core WebGPU
-and Gameplay Query capabilities, structured errors, and Memory and Three r185
-Host Adapters.
+Water Presets, Environment Presets, deterministic Showcase Presets, and a pure
+JSON import/export and migration codec. It also exposes the Startup and ready
+Runtime Interfaces, normalized Core WebGPU and Gameplay Query capabilities,
+structured errors, and Memory and Three r185 Host Adapters.
+
+`importPresetJson(...)` recognizes all four schema discriminators, validates
+current data, and migrates only exact historical Water and Quality snapshots.
+Invalid, unknown, unsupported, and future JSON is returned unchanged as a
+recovery result. `exportPresetJson(...)` emits validated current canonical JSON.
+The package performs no persistence; local record identity, display names, and
+browser storage belong to the private Reference Experience.
 
 The Three Adapter borrows the Host renderer, scene, main camera, and a Host
 Environment Adapter to prepare a TSL NodeMaterial, four coherent spectral wave
@@ -99,10 +107,12 @@ rewind, camera-cut, origin-shift, and sea-state-cut. The QA Harness forwards
 those same domain revisions through the bound Core diagnostics route; captured
 motion stays the authoritative RG16F AOV. The same Host state drives the
 prepared TSL vertex displacement and the CPU spectral evaluator. Calm, Swell,
-and Storm Water Presets are version 2 Artistic Control snapshots that include
-the optical controls; applying one updates existing uniforms without replacing
-geometry, nodes, materials, or pipelines. Version 1 presets are rejected instead
-of being silently reshaped.
+and Storm Water Presets are version 3 Artistic Control snapshots that include
+the optical controls and accept authored values within the Runtime ranges;
+applying one updates existing uniforms without replacing geometry, nodes,
+materials, or pipelines. The preset import seam explicitly migrates the exact
+known version 1 and version 2 built-ins while the current normalizer remains
+fail-closed.
 
 The prepared surface uses non-periodic spectral blending, camera-distance
 transitions from near geometry through middle normal detail into far slope and

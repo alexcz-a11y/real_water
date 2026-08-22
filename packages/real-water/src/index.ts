@@ -2,6 +2,9 @@ export {
   QUALITY_PROFILE_SCHEMA,
   QUALITY_PROFILE_VERSION,
   createMinimalWaterQualityProfile,
+  migrateQualityProfile,
+  normalizeQualityProfile,
+  qualityProfileIdentity,
 } from "./quality-profile.js";
 export type {
   MinimalWaterGeometrySegments,
@@ -136,13 +139,66 @@ export type {
 export {
   WATER_PRESET_SCHEMA,
   WATER_PRESET_VERSION,
+  createAuthoredWaterPreset,
   createWaterPreset,
+  migrateWaterPreset,
+  normalizeWaterPreset,
+  waterPresetIdentity,
 } from "./water-preset.js";
 export type {
   WaterPreset,
   WaterPresetId,
   WaterPresetIdentity,
 } from "./water-preset.js";
+
+export {
+  ENVIRONMENT_PRESET_SCHEMA,
+  ENVIRONMENT_PRESET_VERSION,
+  createAuthoredEnvironmentPreset,
+  createReferenceEnvironmentPreset,
+  environmentPresetIdentity,
+  migrateEnvironmentPreset,
+  normalizeEnvironmentPreset,
+} from "./environment-preset.js";
+export type {
+  EnvironmentPreset,
+  EnvironmentPresetAtmosphere,
+  EnvironmentPresetIdentity,
+  EnvironmentPresetSnapshot,
+  EnvironmentPresetWeather,
+} from "./environment-preset.js";
+
+export {
+  SHOWCASE_PRESET_SCHEMA,
+  SHOWCASE_PRESET_VERSION,
+  createAuthoredShowcasePreset,
+  createReferenceShowcasePreset,
+  migrateShowcasePreset,
+  normalizeShowcasePreset,
+  showcasePresetIdentity,
+} from "./showcase-preset.js";
+export type {
+  ShowcaseCameraKeyframe,
+  ShowcaseEventKeyframe,
+  ShowcasePreset,
+  ShowcasePresetAuthoring,
+  ShowcasePresetIdentity,
+  ShowcaseVector3,
+} from "./showcase-preset.js";
+
+export {
+  exportPresetJson,
+  importPresetJson,
+  normalizePreset,
+} from "./preset-codec.js";
+export type {
+  CurrentPresetImport,
+  MigratedPresetImport,
+  PresetDocument,
+  PresetImportResult,
+  PresetRecoveryReason,
+  RecoveryPresetImport,
+} from "./preset-codec.js";
 
 export { createMemoryHostLifecycleAdapter } from "./memory-host.js";
 export type {

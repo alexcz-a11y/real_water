@@ -284,6 +284,43 @@ test("applies a changed Quality Profile through a complete hidden preparation", 
   expect(readyFrame?.frame).toBeLessThan(revealFrame?.frame ?? 0);
 });
 
+test("re-enters the Loading Experience when the active Quality Profile is applied", async ({
+  page,
+}) => {
+  await page.goto("/?qa=1&host=memory&scenario=success&delay=10");
+  const placeholder = page.getByTestId("reference-placeholder");
+  await expect(placeholder).toBeVisible();
+
+  await page.evaluate(async () => {
+    const qa = window.__REAL_WATER_QA__;
+    if (qa === undefined) {
+      throw new Error("QA session is unavailable.");
+    }
+    await qa.applySecondQualityProfile();
+  });
+  await expect(placeholder).toBeVisible();
+  const before = await readQaSnapshot(page);
+
+  const concealedSynchronously = await page.evaluate(() => {
+    const qa = window.__REAL_WATER_QA__;
+    if (qa === undefined) {
+      throw new Error("QA session is unavailable.");
+    }
+    void qa.applySecondQualityProfile();
+    return (
+      document.querySelector('[data-testid="loading-experience"]') !== null &&
+      document.querySelector('[data-testid="reference-placeholder"]') === null
+    );
+  });
+
+  expect(concealedSynchronously).toBe(true);
+  await expect(page.getByTestId("loading-experience")).toBeVisible();
+  await expect(placeholder).toBeVisible();
+  const after = await readQaSnapshot(page);
+  expect(after.generation).toBe(before.generation + 1);
+  expect(after.manifestHash).toBe(before.manifestHash);
+});
+
 test("reprepares after long suspension without spending device recovery", async ({
   page,
 }) => {

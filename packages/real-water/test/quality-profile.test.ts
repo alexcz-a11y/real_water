@@ -5,6 +5,7 @@ import {
   QUALITY_PROFILE_VERSION,
   createMinimalWaterQualityProfile,
   getMinimalWaterGeometrySegments,
+  migrateQualityProfile,
   normalizeQualityProfile,
   qualityProfileIdentity,
   type QualityProfile,
@@ -84,6 +85,83 @@ const MINIMAL_PROFILE_HASH =
   "sha256:9a75bfe19d0e81f51ee19908ce547b5a7abd49ab01dbe00feb234e3c95d23ec0";
 const HIGH_DETAIL_PROFILE_HASH =
   "sha256:04b1d29617d1d2dd50f9d0f5b4f5dcd6ab6012cde62ae7e36ab0bba7be3061d8";
+const LEGACY_V1_PROFILE_VARIANTS = Object.freeze([
+  Object.freeze({
+    "minimal": Object.freeze({
+      profileHash:
+        "sha256:869ac714e56e70d4ffb37b75ff85432accba3caa2feb62946dc341eca66735ec",
+      segments: 1,
+    }),
+    "minimal-high-detail": Object.freeze({
+      profileHash:
+        "sha256:e76e54fc9cb01a477c3006634c5a1cf99bd96e605c6355ed2859241bcd2e6201",
+      segments: 2,
+    }),
+  }),
+  Object.freeze({
+    "minimal": Object.freeze({
+      profileHash:
+        "sha256:10dcb2e1e7b9e4cf47a49e6805329fd9a9906c198537934603b65a219c4f1f86",
+      segments: 128,
+    }),
+    "minimal-high-detail": Object.freeze({
+      profileHash:
+        "sha256:a528f78e921767962db0afcf519aed7dbfed894e54284fcb7b2c7d21e93e1d0b",
+      segments: 256,
+    }),
+  }),
+] as const);
+const LEGACY_V2_TEMPORAL = Object.freeze({
+  mode: "TRAA" as const,
+  renderScale: 1 as const,
+  resolutionPolicy: "drawing-buffer-exact" as const,
+  taau: false as const,
+  dynamicResolution: false as const,
+  frameGeneration: false as const,
+  msaaSamples: 0 as const,
+});
+const LEGACY_V2_PROFILES = Object.freeze({
+  "minimal": Object.freeze({
+    profileHash:
+      "sha256:647ceaf12d769ddc4a95414593ca23131f3ec9a516a32341517609d4788cbc73",
+    segments: 128,
+  }),
+  "minimal-high-detail": Object.freeze({
+    profileHash:
+      "sha256:975a61a72c43c660866970618ee747db41fab60cd54d6cce6654edd7376b8ba3",
+    segments: 256,
+  }),
+} as const);
+const LEGACY_PRE_RESET_SSR_HISTORY = Object.freeze({
+  mode: "temporal-reproject-specular" as const,
+  accumulate: true as const,
+  hitPointReprojection: true as const,
+  maxFrames: 32 as const,
+  historyFormat: "rgba16float" as const,
+  resolveFormat: "rgba16float" as const,
+  inputFormat: "rgba16float" as const,
+  captureFormat: "rgba16float" as const,
+  normalFormat: "packed-rgba16float" as const,
+  resetDomains: Object.freeze([
+    "simulation-reset",
+    "camera-cut",
+    "origin-shift",
+    "sea-state-cut",
+  ] as const),
+  updateCadence: "host-present" as const,
+});
+const LEGACY_PRE_RESET_PROFILES = Object.freeze({
+  "minimal": Object.freeze({
+    profileHash:
+      "sha256:3ec933fa8238e5bfd50608dc451d8354374c8337e49c793f191a3ad86cdf67b2",
+    segments: 128,
+  }),
+  "minimal-high-detail": Object.freeze({
+    profileHash:
+      "sha256:d61edd12017f4b8adfe9878fa2c116fd9831b1681ce8b52c5e474e012ad94886",
+    segments: 256,
+  }),
+} as const);
 const MEMORY_PREWARM_DRAWING_BUFFER = Object.freeze({
   width: 320,
   height: 180,
@@ -403,6 +481,178 @@ describe("Quality Profiles", () => {
     expect(Object.isFrozen(geometry)).toBe(true);
     expect(Object.isFrozen(normalized.temporal)).toBe(true);
     expect(normalized.temporal).toEqual(NATIVE_TEMPORAL);
+  });
+
+  it("migrates the current Quality Profile through strict normalization", () => {
+    const candidate = structuredClone(
+      createMinimalWaterQualityProfile("minimal-high-detail"),
+    );
+
+    const migrated = migrateQualityProfile(candidate);
+
+    expect(migrated).toEqual(
+      createMinimalWaterQualityProfile("minimal-high-detail"),
+    );
+    expect(migrated).not.toBe(candidate);
+    expect(Object.isFrozen(migrated)).toBe(true);
+  });
+
+  it("migrates both committed version 1 Quality Profile variants", () => {
+    for (const variant of LEGACY_V1_PROFILE_VARIANTS) {
+      for (const id of ["minimal", "minimal-high-detail"] as const) {
+        const legacy = variant[id];
+        const candidate = {
+          schema: QUALITY_PROFILE_SCHEMA,
+          version: 1,
+          id,
+          profileHash: legacy.profileHash,
+          surface: {
+            geometry: {
+              widthSegments: legacy.segments,
+              heightSegments: legacy.segments,
+            },
+          },
+        };
+
+        expect(migrateQualityProfile(candidate)).toEqual(
+          createMinimalWaterQualityProfile(id),
+        );
+      }
+    }
+  });
+
+  it("migrates the committed version 2 TRAA Quality Profiles", () => {
+    for (const id of ["minimal", "minimal-high-detail"] as const) {
+      const legacy = LEGACY_V2_PROFILES[id];
+      const candidate = {
+        schema: QUALITY_PROFILE_SCHEMA,
+        version: 2,
+        id,
+        profileHash: legacy.profileHash,
+        surface: {
+          geometry: {
+            widthSegments: legacy.segments,
+            heightSegments: legacy.segments,
+          },
+        },
+        temporal: LEGACY_V2_TEMPORAL,
+      };
+
+      expect(migrateQualityProfile(candidate)).toEqual(
+        createMinimalWaterQualityProfile(id),
+      );
+    }
+  });
+
+  it("migrates the committed pre-reset version 5 Quality Profiles", () => {
+    for (const id of ["minimal", "minimal-high-detail"] as const) {
+      const legacy = LEGACY_PRE_RESET_PROFILES[id];
+      const candidate = {
+        schema: QUALITY_PROFILE_SCHEMA,
+        version: 5,
+        id,
+        profileHash: legacy.profileHash,
+        surface: {
+          geometry: {
+            widthSegments: legacy.segments,
+            heightSegments: legacy.segments,
+          },
+        },
+        temporal: NATIVE_TEMPORAL,
+        reflection: {
+          ...NATIVE_REFLECTION,
+          ssr: {
+            ...NATIVE_SSR,
+            history: LEGACY_PRE_RESET_SSR_HISTORY,
+          },
+        },
+      };
+
+      expect(migrateQualityProfile(candidate)).toEqual(
+        createMinimalWaterQualityProfile(id),
+      );
+    }
+  });
+
+  it.each([
+    [
+      "unknown version 3",
+      { ...createMinimalWaterQualityProfile(), version: 3 },
+    ],
+    [
+      "unknown version 4",
+      { ...createMinimalWaterQualityProfile(), version: 4 },
+    ],
+    ["future version", { ...createMinimalWaterQualityProfile(), version: 6 }],
+    [
+      "version 1 hash tampering",
+      {
+        schema: QUALITY_PROFILE_SCHEMA,
+        version: 1,
+        id: "minimal",
+        profileHash: `sha256:${"0".repeat(64)}`,
+        surface: { geometry: { widthSegments: 1, heightSegments: 1 } },
+      },
+    ],
+    [
+      "version 1 variant mixing",
+      {
+        schema: QUALITY_PROFILE_SCHEMA,
+        version: 1,
+        id: "minimal",
+        profileHash: LEGACY_V1_PROFILE_VARIANTS[0].minimal.profileHash,
+        surface: { geometry: { widthSegments: 128, heightSegments: 128 } },
+      },
+    ],
+    [
+      "version 1 extra data",
+      {
+        schema: QUALITY_PROFILE_SCHEMA,
+        version: 1,
+        id: "minimal",
+        profileHash: LEGACY_V1_PROFILE_VARIANTS[0].minimal.profileHash,
+        surface: { geometry: { widthSegments: 1, heightSegments: 1 } },
+        temporal: LEGACY_V2_TEMPORAL,
+      },
+    ],
+    [
+      "version 2 temporal tampering",
+      {
+        schema: QUALITY_PROFILE_SCHEMA,
+        version: 2,
+        id: "minimal",
+        profileHash: LEGACY_V2_PROFILES.minimal.profileHash,
+        surface: { geometry: { widthSegments: 128, heightSegments: 128 } },
+        temporal: { ...LEGACY_V2_TEMPORAL, taau: true },
+      },
+    ],
+    [
+      "pre-reset version 5 history tampering",
+      {
+        schema: QUALITY_PROFILE_SCHEMA,
+        version: 5,
+        id: "minimal",
+        profileHash: LEGACY_PRE_RESET_PROFILES.minimal.profileHash,
+        surface: { geometry: { widthSegments: 128, heightSegments: 128 } },
+        temporal: NATIVE_TEMPORAL,
+        reflection: {
+          ...NATIVE_REFLECTION,
+          ssr: {
+            ...NATIVE_SSR,
+            history: { ...LEGACY_PRE_RESET_SSR_HISTORY, maxFrames: 31 },
+          },
+        },
+      },
+    ],
+    [
+      "current version 5 hash tampering",
+      {
+        ...createMinimalWaterQualityProfile(),
+        profileHash: `sha256:${"0".repeat(64)}`,
+      },
+    ],
+  ])("rejects %s instead of restoring by version or id", (_name, candidate) => {
+    expect(() => migrateQualityProfile(candidate)).toThrow(TypeError);
   });
 
   it.each([

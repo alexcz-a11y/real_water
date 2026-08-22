@@ -3,8 +3,16 @@
 Real Water is an ESM-only TypeScript Module for a reusable native Three.js Open
 Water Domain. The repository now includes a four-band, camera-relative Open
 Water Domain with a complete basic optical path, versioned Calm, Swell, and
-Storm Water Presets, one Host-driven floating sphere, and the prewarm, reveal,
-reprepare, and recovery path.
+Storm Water Presets, versioned Environment, Quality, and Showcase preset data,
+one Host-driven floating sphere, and the prewarm, reveal, reprepare, and
+recovery path.
+
+Ticket #34 adds a pure four-schema preset codec plus a Reference Experience
+local authoring library. Known Water and Quality history migrates explicitly;
+invalid, unknown, and future JSON remains available byte-for-byte for recovery.
+Copy and rename operate on local record metadata rather than semantic preset
+identities, and every explicit Quality Profile application re-enters the Loading
+Experience before a fresh readiness run.
 
 Issue #23 adds the first complete Gameplay Coupling tracer:
 
@@ -116,7 +124,7 @@ foundation:
   (Host-adapter environment, drawing-buffer-exact planar, current-frame SSR, and
   dedicated specular TemporalReproject history), and derive distinct manifest
   hashes and geometry structures;
-- applying a changed Quality Profile, or resuming after a confirmed long
+- applying any Quality Profile explicitly, or resuming after a confirmed long
   suspension, conceals the stage and repeats the complete Readiness Gate;
 - ready leases expose long-suspension and device-loss invalidation through the
   public Runtime Interface so Host Integrations can run the same policy;

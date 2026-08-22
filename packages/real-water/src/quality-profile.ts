@@ -253,6 +253,74 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
   }),
 });
 
+// Version 1 was committed with two different geometry layouts before the
+// schema acquired temporal and reflection policies. Both exact payloads remain
+// recoverable; their hashes are not aliases for partially matching data.
+const LEGACY_V1_QUALITY_PROFILES: readonly Readonly<
+  Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
+>[] = Object.freeze([
+  Object.freeze({
+    "minimal": Object.freeze({
+      profileHash:
+        "sha256:869ac714e56e70d4ffb37b75ff85432accba3caa2feb62946dc341eca66735ec",
+      widthSegments: 1,
+      heightSegments: 1,
+    }),
+    "minimal-high-detail": Object.freeze({
+      profileHash:
+        "sha256:e76e54fc9cb01a477c3006634c5a1cf99bd96e605c6355ed2859241bcd2e6201",
+      widthSegments: 2,
+      heightSegments: 2,
+    }),
+  }),
+  Object.freeze({
+    "minimal": Object.freeze({
+      profileHash:
+        "sha256:10dcb2e1e7b9e4cf47a49e6805329fd9a9906c198537934603b65a219c4f1f86",
+      widthSegments: 128,
+      heightSegments: 128,
+    }),
+    "minimal-high-detail": Object.freeze({
+      profileHash:
+        "sha256:a528f78e921767962db0afcf519aed7dbfed894e54284fcb7b2c7d21e93e1d0b",
+      widthSegments: 256,
+      heightSegments: 256,
+    }),
+  }),
+]);
+const LEGACY_V2_QUALITY_PROFILES: Readonly<
+  Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
+> = Object.freeze({
+  "minimal": Object.freeze({
+    profileHash:
+      "sha256:647ceaf12d769ddc4a95414593ca23131f3ec9a516a32341517609d4788cbc73",
+    widthSegments: 128,
+    heightSegments: 128,
+  }),
+  "minimal-high-detail": Object.freeze({
+    profileHash:
+      "sha256:975a61a72c43c660866970618ee747db41fab60cd54d6cce6654edd7376b8ba3",
+    widthSegments: 256,
+    heightSegments: 256,
+  }),
+});
+const LEGACY_PRE_RESET_V5_QUALITY_PROFILES: Readonly<
+  Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
+> = Object.freeze({
+  "minimal": Object.freeze({
+    profileHash:
+      "sha256:3ec933fa8238e5bfd50608dc451d8354374c8337e49c793f191a3ad86cdf67b2",
+    widthSegments: 128,
+    heightSegments: 128,
+  }),
+  "minimal-high-detail": Object.freeze({
+    profileHash:
+      "sha256:d61edd12017f4b8adfe9878fa2c116fd9831b1681ce8b52c5e474e012ad94886",
+    widthSegments: 256,
+    heightSegments: 256,
+  }),
+});
+
 const QUALITY_PROFILE_KEYS = [
   "schema",
   "version",
@@ -261,6 +329,26 @@ const QUALITY_PROFILE_KEYS = [
   "surface",
   "temporal",
   "reflection",
+] as const;
+const LEGACY_V1_QUALITY_PROFILE_KEYS = [
+  "schema",
+  "version",
+  "id",
+  "profileHash",
+  "surface",
+] as const;
+const LEGACY_V2_QUALITY_PROFILE_KEYS = [
+  ...LEGACY_V1_QUALITY_PROFILE_KEYS,
+  "temporal",
+] as const;
+const LEGACY_V2_TEMPORAL_KEYS = [
+  "mode",
+  "renderScale",
+  "resolutionPolicy",
+  "taau",
+  "dynamicResolution",
+  "frameGeneration",
+  "msaaSamples",
 ] as const;
 const TEMPORAL_KEYS = [
   "mode",
@@ -310,6 +398,9 @@ const SSR_HISTORY_KEYS = [
   "resetDomains",
   "updateCadence",
 ] as const;
+const LEGACY_PRE_RESET_SSR_HISTORY_KEYS = SSR_HISTORY_KEYS.filter(
+  (key) => key !== "resetVelocityFormat",
+);
 
 /**
  * Returns a supported minimal-water Quality Profile.
@@ -347,6 +438,8 @@ export function createMinimalWaterQualityProfile(
 
 /**
  * Validates and freezes a supported Quality Profile.
+ *
+ * @public
  */
 export function normalizeQualityProfile(
   candidate: QualityProfile,
@@ -413,7 +506,55 @@ export function normalizeQualityProfile(
 }
 
 /**
+ * Migrates a previously committed Quality Profile into the current schema.
+ *
+ * @public
+ */
+export function migrateQualityProfile(candidate: unknown): QualityProfile {
+  if (isRecord(candidate) && candidate.version === QUALITY_PROFILE_VERSION) {
+    try {
+      return normalizeQualityProfile(candidate as unknown as QualityProfile);
+    } catch {
+      if (
+        isSupportedProfileId(candidate.id) &&
+        matchesLegacyPreResetV5Profile(candidate, candidate.id)
+      ) {
+        return createMinimalWaterQualityProfile(candidate.id);
+      }
+      throw new TypeError("The Quality Profile cannot be migrated.");
+    }
+  }
+
+  if (
+    isRecord(candidate) &&
+    hasExactKeys(candidate, LEGACY_V1_QUALITY_PROFILE_KEYS) &&
+    candidate.schema === QUALITY_PROFILE_SCHEMA &&
+    candidate.version === 1 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV1Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
+    hasExactKeys(candidate, LEGACY_V2_QUALITY_PROFILE_KEYS) &&
+    candidate.schema === QUALITY_PROFILE_SCHEMA &&
+    candidate.version === 2 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacySurface(candidate, LEGACY_V2_QUALITY_PROFILES[candidate.id]) &&
+    matchesLegacyV2Temporal(candidate.temporal)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  throw new TypeError("The Quality Profile cannot be migrated.");
+}
+
+/**
  * Returns the immutable identity of a normalized Quality Profile.
+ *
+ * @public
  */
 export function qualityProfileIdentity(
   profile: QualityProfile,
@@ -467,6 +608,151 @@ function isSupportedSsrHistory(
     value.normalFormat === supported.normalFormat &&
     value.updateCadence === supported.updateCadence
   );
+}
+
+function matchesLegacySurface(
+  value: Record<string, unknown>,
+  supported: SupportedQualityProfile,
+): boolean {
+  return (
+    value.profileHash === supported.profileHash &&
+    isRecord(value.surface) &&
+    hasExactKeys(value.surface, ["geometry"]) &&
+    isRecord(value.surface.geometry) &&
+    hasExactKeys(value.surface.geometry, ["widthSegments", "heightSegments"]) &&
+    value.surface.geometry.widthSegments === supported.widthSegments &&
+    value.surface.geometry.heightSegments === supported.heightSegments
+  );
+}
+
+function matchesLegacyV1Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V1_QUALITY_PROFILES.some((variant) =>
+    matchesLegacySurface(value, variant[id]),
+  );
+}
+
+function matchesLegacyV2Temporal(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, LEGACY_V2_TEMPORAL_KEYS) &&
+    value.mode === "TRAA" &&
+    value.renderScale === 1 &&
+    value.resolutionPolicy === "drawing-buffer-exact" &&
+    value.taau === false &&
+    value.dynamicResolution === false &&
+    value.frameGeneration === false &&
+    value.msaaSamples === 0
+  );
+}
+
+function matchesLegacyPreResetV5Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return (
+    hasExactKeys(value, QUALITY_PROFILE_KEYS) &&
+    value.schema === QUALITY_PROFILE_SCHEMA &&
+    matchesLegacySurface(value, LEGACY_PRE_RESET_V5_QUALITY_PROFILES[id]) &&
+    matchesCurrentTemporal(value.temporal) &&
+    matchesLegacyPreResetReflection(value.reflection)
+  );
+}
+
+function matchesCurrentTemporal(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, TEMPORAL_KEYS) &&
+    value.mode === NATIVE_TEMPORAL.mode &&
+    value.renderScale === NATIVE_TEMPORAL.renderScale &&
+    value.resolutionPolicy === NATIVE_TEMPORAL.resolutionPolicy &&
+    value.taau === NATIVE_TEMPORAL.taau &&
+    value.dynamicResolution === NATIVE_TEMPORAL.dynamicResolution &&
+    value.frameGeneration === NATIVE_TEMPORAL.frameGeneration &&
+    value.msaaSamples === NATIVE_TEMPORAL.msaaSamples &&
+    value.updateCadence === NATIVE_TEMPORAL.updateCadence
+  );
+}
+
+function matchesLegacyPreResetReflection(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, REFLECTION_KEYS) &&
+    isRecord(value.environment) &&
+    hasExactKeys(value.environment, ["source"]) &&
+    value.environment.source === NATIVE_REFLECTION.environment.source &&
+    isRecord(value.planar) &&
+    hasExactKeys(value.planar, ["resolutionPolicy", "format", "samples"]) &&
+    value.planar.resolutionPolicy ===
+      NATIVE_REFLECTION.planar.resolutionPolicy &&
+    value.planar.format === NATIVE_REFLECTION.planar.format &&
+    value.planar.samples === NATIVE_REFLECTION.planar.samples &&
+    matchesLegacyPreResetSsr(value.ssr)
+  );
+}
+
+function matchesLegacyPreResetSsr(value: unknown): boolean {
+  const supported = NATIVE_REFLECTION.ssr;
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, SSR_KEYS) &&
+    matchesLegacyPreResetSsrHistory(value.history) &&
+    value.mode === supported.mode &&
+    value.updateCadence === supported.updateCadence &&
+    value.stochastic === supported.stochastic &&
+    value.reflectNonMetals === supported.reflectNonMetals &&
+    value.binaryRefine === supported.binaryRefine &&
+    value.quality === supported.quality &&
+    value.maxDistance === supported.maxDistance &&
+    value.thickness === supported.thickness &&
+    value.resolutionPolicy === supported.resolutionPolicy &&
+    value.resolutionScale === supported.resolutionScale &&
+    value.samples === supported.samples &&
+    value.rawFormat === supported.rawFormat &&
+    value.compositeFormat === supported.compositeFormat &&
+    value.blurFormat === supported.blurFormat &&
+    value.blurResolutionPolicy === supported.blurResolutionPolicy &&
+    value.mipCount === supported.mipCount &&
+    value.blurQuality === supported.blurQuality &&
+    value.blurRoute === supported.blurRoute &&
+    value.screenEdgeFade === supported.screenEdgeFade &&
+    value.roughnessCutoff === supported.roughnessCutoff
+  );
+}
+
+function matchesLegacyPreResetSsrHistory(value: unknown): boolean {
+  const supported = NATIVE_REFLECTION.ssr.history;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, LEGACY_PRE_RESET_SSR_HISTORY_KEYS) ||
+    !matchesResetDomains(value.resetDomains, supported.resetDomains)
+  ) {
+    return false;
+  }
+  return (
+    value.mode === supported.mode &&
+    value.accumulate === supported.accumulate &&
+    value.hitPointReprojection === supported.hitPointReprojection &&
+    value.maxFrames === supported.maxFrames &&
+    value.historyFormat === supported.historyFormat &&
+    value.resolveFormat === supported.resolveFormat &&
+    value.inputFormat === supported.inputFormat &&
+    value.captureFormat === supported.captureFormat &&
+    value.normalFormat === supported.normalFormat &&
+    value.updateCadence === supported.updateCadence
+  );
+}
+
+function matchesResetDomains(
+  value: unknown,
+  supported: QualityProfileReflectionSsrHistory["resetDomains"],
+): boolean {
+  if (!Array.isArray(value) || value.length !== supported.length) {
+    return false;
+  }
+  return supported.every((domain, index) => value[index] === domain);
 }
 
 function isSupportedSsrPolicy(

@@ -11,12 +11,182 @@ import { createTestEnvironmentAdapter } from "./test-host-environment.js";
 import {
   WATER_PRESET_SCHEMA,
   WATER_PRESET_VERSION,
+  createAuthoredWaterPreset,
+  migrateWaterPreset,
   normalizeWaterPreset,
   waterPresetIdentity,
   type WaterPreset,
 } from "../src/water-preset.js";
 
+const LEGACY_V2_BUILT_INS = [
+  {
+    schema: "real-water/water-preset",
+    version: 2,
+    id: "calm",
+    presetHash:
+      "sha256:7823cba17b46a26315541babfde3d3b7fda6a937794df7a32cbc3bf3d28df047",
+    artisticControls: {
+      waveStrength: 0.55,
+      swellDrama: 0.35,
+      directionality: 0.85,
+      choppiness: 0.25,
+      crestSharpness: 0.15,
+      microDetail: 0.4,
+      timeScale: 0.85,
+      grazingReflection: 0.7,
+      environmentReflection: 0.85,
+      depthSeeThrough: 0.95,
+      depthColoring: 0.4,
+      inWaterGlow: 0.35,
+      crestGlow: 0.25,
+    },
+  },
+  {
+    schema: "real-water/water-preset",
+    version: 2,
+    id: "swell",
+    presetHash:
+      "sha256:667f6dd3b383cc3909b98829ba6979aa99fe31b47996f7e806e4768feccad37b",
+    artisticControls: {
+      waveStrength: 1,
+      swellDrama: 1,
+      directionality: 0,
+      choppiness: 1,
+      crestSharpness: 0,
+      microDetail: 1,
+      timeScale: 1,
+      grazingReflection: 1,
+      environmentReflection: 1,
+      depthSeeThrough: 1,
+      depthColoring: 1,
+      inWaterGlow: 1,
+      crestGlow: 1,
+    },
+  },
+  {
+    schema: "real-water/water-preset",
+    version: 2,
+    id: "storm",
+    presetHash:
+      "sha256:85ff6bf8c652aaecb3d7aa3e3bf35c693264365c19cec1683c42fe2fb1164f9e",
+    artisticControls: {
+      waveStrength: 1.45,
+      swellDrama: 1.6,
+      directionality: 0.35,
+      choppiness: 1.7,
+      crestSharpness: 1.1,
+      microDetail: 1.5,
+      timeScale: 1.15,
+      grazingReflection: 1.15,
+      environmentReflection: 0.7,
+      depthSeeThrough: 0.4,
+      depthColoring: 1.55,
+      inWaterGlow: 1.45,
+      crestGlow: 1.6,
+    },
+  },
+] as const;
+
+const LEGACY_V1_BUILT_INS = [
+  {
+    schema: "real-water/water-preset",
+    version: 1,
+    id: "calm",
+    presetHash:
+      "sha256:46e77abd2ff1bc2db00440dab4634c935e56e36d624a0e5fc932c06c9c203069",
+    artisticControls: {
+      waveStrength: 0.55,
+      swellDrama: 0.35,
+      directionality: 0.85,
+      choppiness: 0.25,
+      crestSharpness: 0.15,
+      microDetail: 0.4,
+      timeScale: 0.85,
+    },
+  },
+  {
+    schema: "real-water/water-preset",
+    version: 1,
+    id: "swell",
+    presetHash:
+      "sha256:88703f2f6e7efb3ccba841230d4ac58dfe9c18bc57ea8969c1a7426cf3c3dc48",
+    artisticControls: {
+      waveStrength: 1,
+      swellDrama: 1,
+      directionality: 0,
+      choppiness: 1,
+      crestSharpness: 0,
+      microDetail: 1,
+      timeScale: 1,
+    },
+  },
+  {
+    schema: "real-water/water-preset",
+    version: 1,
+    id: "storm",
+    presetHash:
+      "sha256:07ef1822a50063f707e4a723e15f1eb0e0cb7310b4563a598d7225f7066fe956",
+    artisticControls: {
+      waveStrength: 1.45,
+      swellDrama: 1.6,
+      directionality: 0.35,
+      choppiness: 1.7,
+      crestSharpness: 1.1,
+      microDetail: 1.5,
+      timeScale: 1.15,
+    },
+  },
+] as const;
+
 describe("Water Presets", () => {
+  it("creates a current Water Preset from any legal Artistic Controls", () => {
+    const controls = {
+      ...createWaterPreset("storm").artisticControls,
+      waveStrength: 1.25,
+      directionality: 0.4,
+    };
+
+    const authored = createAuthoredWaterPreset("storm", controls);
+
+    expect(authored).toEqual({
+      schema: WATER_PRESET_SCHEMA,
+      version: 3,
+      id: "storm",
+      presetHash:
+        "sha256:a8ed886b6e83006c268b1f72308d7956b446b74c6caecc10e3def887266dde34",
+      artisticControls: controls,
+    });
+    expect(WATER_PRESET_VERSION).toBe(3);
+    expect(Object.isFrozen(authored)).toBe(true);
+    expect(Object.isFrozen(authored.artisticControls)).toBe(true);
+  });
+
+  it("rejects authored ids and Artistic Controls outside the runtime contract", () => {
+    const controls = createWaterPreset().artisticControls;
+
+    expect(() =>
+      createAuthoredWaterPreset("glassy" as never, controls),
+    ).toThrow("Unsupported Water Preset: glassy");
+    expect(() =>
+      createAuthoredWaterPreset("swell", {
+        ...controls,
+        directionality: 1.01,
+      }),
+    ).toThrow("directionality");
+    expect(() =>
+      createAuthoredWaterPreset("swell", {
+        ...controls,
+        waveStrength: Number.NaN,
+      }),
+    ).toThrow("waveStrength");
+    expect(() =>
+      createAuthoredWaterPreset("swell", {
+        ...controls,
+        foamAmount: 1,
+      } as unknown as WaterPreset["artisticControls"]),
+    ).toThrow("complete supported control set");
+  });
+
   it("creates versioned Calm, Swell, and Storm Artistic Control snapshots", () => {
     const calm = createWaterPreset("calm");
     const swell = createWaterPreset();
@@ -27,7 +197,7 @@ describe("Water Presets", () => {
       version: WATER_PRESET_VERSION,
       id: "swell",
       presetHash:
-        "sha256:667f6dd3b383cc3909b98829ba6979aa99fe31b47996f7e806e4768feccad37b",
+        "sha256:7a24dac40f64cf2d8bef944832c661adefb49883d2ad541c13eaeb91254f580c",
       artisticControls: {
         waveStrength: 1,
         swellDrama: 1,
@@ -45,9 +215,9 @@ describe("Water Presets", () => {
       },
     });
     expect(calm.id).toBe("calm");
-    expect(WATER_PRESET_VERSION).toBe(2);
+    expect(WATER_PRESET_VERSION).toBe(3);
     expect(calm.presetHash).toBe(
-      "sha256:7823cba17b46a26315541babfde3d3b7fda6a937794df7a32cbc3bf3d28df047",
+      "sha256:4e857b4e7b20f4d2317e62980ef769d7d7547bf5b7b3aa7e3394bc4e8518aae5",
     );
     expect(calm.artisticControls).toMatchObject({
       grazingReflection: 0.7,
@@ -59,7 +229,7 @@ describe("Water Presets", () => {
     });
     expect(storm.id).toBe("storm");
     expect(storm.presetHash).toBe(
-      "sha256:85ff6bf8c652aaecb3d7aa3e3bf35c693264365c19cec1683c42fe2fb1164f9e",
+      "sha256:6eb0e333bf6a5b3242002057c8380800eaa0b2aad7e4dacf39ffb73f408a5fe5",
     );
     expect(storm.artisticControls).toMatchObject({
       grazingReflection: 1.15,
@@ -88,10 +258,114 @@ describe("Water Presets", () => {
       version: WATER_PRESET_VERSION,
       id: "storm",
       presetHash:
-        "sha256:85ff6bf8c652aaecb3d7aa3e3bf35c693264365c19cec1683c42fe2fb1164f9e",
+        "sha256:6eb0e333bf6a5b3242002057c8380800eaa0b2aad7e4dacf39ffb73f408a5fe5",
     });
     expect(Object.isFrozen(normalized)).toBe(true);
     expect(Object.isFrozen(identity)).toBe(true);
+  });
+
+  it("strictly normalizes an authored current-version snapshot", () => {
+    const authored = createAuthoredWaterPreset("calm", {
+      ...createWaterPreset("calm").artisticControls,
+      choppiness: 0.75,
+      crestGlow: 0.6,
+    });
+    const candidate = structuredClone(authored);
+
+    const normalized = normalizeWaterPreset(candidate);
+
+    expect(normalized).toEqual(authored);
+    expect(normalized).not.toBe(candidate);
+    expect(normalized.artisticControls).not.toBe(candidate.artisticControls);
+    expect(Object.isFrozen(normalized)).toBe(true);
+    expect(Object.isFrozen(normalized.artisticControls)).toBe(true);
+  });
+
+  it("migrates a current Water Preset through strict normalization", () => {
+    const authored = createAuthoredWaterPreset("swell", {
+      ...createWaterPreset("swell").artisticControls,
+      swellDrama: 1.4,
+    });
+    const candidate = structuredClone(authored);
+
+    const migrated = migrateWaterPreset(candidate);
+
+    expect(migrated).toEqual(authored);
+    expect(migrated).not.toBe(candidate);
+    expect(Object.isFrozen(migrated)).toBe(true);
+    expect(Object.isFrozen(migrated.artisticControls)).toBe(true);
+  });
+
+  it.each(LEGACY_V2_BUILT_INS)(
+    "migrates the repository's v2 $id built-in snapshot",
+    (legacy) => {
+      const migrated = migrateWaterPreset(structuredClone(legacy));
+
+      expect(migrated).toEqual(createWaterPreset(legacy.id));
+      expect(migrated.version).toBe(3);
+      expect(Object.isFrozen(migrated)).toBe(true);
+      expect(Object.isFrozen(migrated.artisticControls)).toBe(true);
+    },
+  );
+
+  it.each(LEGACY_V1_BUILT_INS)(
+    "migrates the repository's v1 $id built-in snapshot",
+    (legacy) => {
+      const migrated = migrateWaterPreset(structuredClone(legacy));
+
+      expect(migrated).toEqual(createWaterPreset(legacy.id));
+      expect(migrated.version).toBe(3);
+      expect(Object.isFrozen(migrated)).toBe(true);
+      expect(Object.isFrozen(migrated.artisticControls)).toBe(true);
+    },
+  );
+
+  it.each([
+    [
+      "a future version",
+      {
+        ...createWaterPreset("storm"),
+        version: 4,
+      },
+    ],
+    [
+      "an unknown historical schema",
+      {
+        ...LEGACY_V2_BUILT_INS[0],
+        schema: "another-package/water-preset",
+      },
+    ],
+    [
+      "an unknown historical id",
+      {
+        ...LEGACY_V2_BUILT_INS[0],
+        id: "glassy",
+      },
+    ],
+    [
+      "a tampered v1 snapshot",
+      {
+        ...LEGACY_V1_BUILT_INS[2],
+        artisticControls: {
+          ...LEGACY_V1_BUILT_INS[2].artisticControls,
+          swellDrama: 1.5,
+        },
+      },
+    ],
+    [
+      "a hash-valid but non-built-in v2 snapshot",
+      {
+        ...LEGACY_V2_BUILT_INS[1],
+        presetHash:
+          "sha256:771e939564d626af7e9506f95d0e1f0b189b9c34c46885090a9a38f3bbd7ef00",
+        artisticControls: {
+          ...LEGACY_V2_BUILT_INS[1].artisticControls,
+          waveStrength: 1.2,
+        },
+      },
+    ],
+  ])("refuses to migrate %s", (_name, candidate) => {
+    expect(() => migrateWaterPreset(candidate)).toThrow();
   });
 
   it.each([
