@@ -1,7 +1,7 @@
 # real-water
 
 This alpha package exposes versioned minimal-water Quality Profiles, their
-canonical sixty-one-unit Prewarm Manifests, versioned Calm, Swell, and Storm
+canonical sixty-three-unit Prewarm Manifests, versioned Calm, Swell, and Storm
 Water Presets, the Startup and ready Runtime Interfaces, normalized Core WebGPU
 and Gameplay Query capabilities, structured errors, and Memory and Three r185
 Host Adapters.
@@ -34,19 +34,20 @@ hidden stabilization frames, performs completion readbacks of every named
 diagnostics output route and the main-camera guard frame, then blits the probed
 final color through a transform-free presentation pipeline. Progress advances
 only as manifest work completes. Optional `real-water/diagnostics` reads CPU
-DTOs from the same bound Core frame, including waterline coverage and the actual
-shared-reset rejection mask; QA does not own a second scene or TRAA. The Host
-must supply a perspective camera. The Reference Experience reveals the prepared
-canvas on the next refresh. The Host retains ownership of environment radiance
-and finite sun. The prepared radiance fingerprint is the Host verification
-credential: the SHA-256 of the canonical 8x4 RGBA8 sRGB pixels. Identity, size,
-format, type, and color space are structural and must agree with the borrowed
-Three texture. Texture bytes, sampler, and identity stay unchanged and alive
-through the lease; Core does not dispose the Host texture or read back its
-pixels. Scene-behind-water color and depth are sampled from the Host viewport
-after opaque geometry. Real Water never reads `scene.environment` or guesses sky
-or weather. The water material is an unlit public NodeMaterial whose color and
-MRT come from the same optical path.
+DTOs from the same bound Core frame, including waterline coverage and an
+on-demand full-screen GPU target driven by the actual shared TRAA/SSR reset
+uniform; QA does not own a second scene or TRAA. The Host must supply a
+perspective camera. The Reference Experience reveals the prepared canvas on the
+next refresh. The Host retains ownership of environment radiance and finite sun.
+The prepared radiance fingerprint is the Host verification credential: the
+SHA-256 of the canonical 8x4 RGBA8 sRGB pixels. Identity, size, format, type,
+and color space are structural and must agree with the borrowed Three texture.
+Texture bytes, sampler, and identity stay unchanged and alive through the lease;
+Core does not dispose the Host texture or read back its pixels.
+Scene-behind-water color and depth are sampled from the Host viewport after
+opaque geometry. Real Water never reads `scene.environment` or guesses sky or
+weather. The water material is an unlit public NodeMaterial whose color and MRT
+come from the same optical path.
 
 Each Prewarm Manifest is version 3 and binds an immutable drawing buffer. The
 factory hashes that complete work plan synchronously. Memory Host tests may omit
@@ -77,34 +78,35 @@ again. The Reference Experience performs one bounded automatic device rebuild
 and repeats preparation after a confirmed long suspension.
 
 Every Host explicitly supplies a Host Simulation Adapter as the authoritative
-source of seed, tick, simulation time, pause state, and Host-owned floating
-origin. Gameplay Query positions are in the current Host frame; the runtime
-samples Host-local coordinates plus wrapped origin phase so queries stay
-continuous across origin shifts, including large cumulative origins. The
-lightweight snapshot exposes a monotonic `originRevision` that starts at 0 from
-the verified Host origin at runtime creation and increments only when the Host
-origin actually changes. Spectral wave state, seed, tick, time, and Artistic
-Controls are retained. Every Host also supplies a Host Presentation Adapter as
-the authoritative source of camera-cut revisions and the bind seam for the
-receipt-only Core presentation route. `bind(route)` must only accept or store
-that route; it must not call `present()` or schedule a frame. Static Hosts
-publish revision 0 and return a no-op binding that does not retain or drive the
-route. The live Core route begins from the eight-frame prewarmed TRAA and SSR
-history, and Hosts that drive frames start their own scheduler after bind. The
-lightweight snapshot exposes `cameraCutRevision` from that Adapter and a
-monotonic `seaStateCutRevision` that increments only on an explicit
-`sea-state-cut` Artistic Control update, including when control values are
-unchanged. Continuous control updates change the current sea without advancing
-that cut revision. Core resets TRAA and dedicated SSR history on the same
-present for Host `simulationResetRevision` changes, seed change or tick/time
-rewind, camera-cut, origin-shift, and sea-state-cut. The QA Harness forwards
-those domains plus committed waterline crossings through the bound Core
-diagnostics route; captured motion stays the authoritative RG16F AOV. The same
-Host state drives the prepared TSL vertex displacement and the CPU spectral
-evaluator. Calm, Swell, and Storm Water Presets are version 2 Artistic Control
-snapshots that include the optical controls; applying one updates existing
-uniforms without replacing geometry, nodes, materials, or pipelines. Version 1
-presets are rejected instead of being silently reshaped.
+source of seed, tick, simulation time, pause state, one finite sea level in
+metres, and Host-owned floating origin. Gameplay Query positions are in the
+current Host frame; the runtime samples Host-local coordinates plus wrapped
+origin phase so queries stay continuous across origin shifts, including large
+cumulative origins. The lightweight snapshot exposes a monotonic
+`originRevision` that starts at 0 from the verified Host origin at runtime
+creation and increments only when the Host origin actually changes. Spectral
+wave state, seed, tick, time, and Artistic Controls are retained. Every Host
+also supplies a Host Presentation Adapter as the authoritative source of
+camera-cut revisions and the bind seam for the receipt-only Core presentation
+route. `bind(route)` must only accept or store that route; it must not call
+`present()` or schedule a frame. Static Hosts publish revision 0 and return a
+no-op binding that does not retain or drive the route. The live Core route
+begins from the eight-frame prewarmed TRAA and SSR history, and Hosts that drive
+frames start their own scheduler after bind. The lightweight snapshot exposes
+`cameraCutRevision` from that Adapter and a monotonic `seaStateCutRevision` that
+increments only on an explicit `sea-state-cut` Artistic Control update,
+including when control values are unchanged. Continuous control updates change
+the current sea without advancing that cut revision. Core resets TRAA and
+dedicated SSR history on the same present for Host `simulationResetRevision`
+changes, seed change or tick/time rewind, camera-cut, origin-shift, and
+sea-state-cut. The QA Harness forwards those domains plus committed waterline
+crossings through the bound Core diagnostics route; captured motion stays the
+authoritative RG16F AOV. The same Host state drives the prepared TSL vertex
+displacement and the CPU spectral evaluator. Calm, Swell, and Storm Water
+Presets are version 2 Artistic Control snapshots that include the optical
+controls; applying one updates existing uniforms without replacing geometry,
+nodes, materials, or pipelines. Version 1 presets are rejected instead of being
+silently reshaped.
 
 The prepared surface uses non-periodic spectral blending, camera-distance
 transitions from near geometry through middle normal detail into far slope and

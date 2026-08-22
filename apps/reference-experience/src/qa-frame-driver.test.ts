@@ -305,8 +305,8 @@ function coreFrame(
 }
 
 describe("QA frame driver Core association", () => {
-  it("publishes a v8 capture-contract mapped to actual Core declaration IDs", () => {
-    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(8);
+  it("publishes a v9 capture-contract mapped to actual Core declaration IDs", () => {
+    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(9);
     expect(QA_FRAME_PREWARM_MANIFEST.coreDeclarations).toEqual(
       QA_TO_CORE_DECLARATION_IDS,
     );
@@ -314,7 +314,7 @@ describe("QA frame driver Core association", () => {
       "water-optical-factors-target",
     );
     expect(QA_TO_CORE_DECLARATION_IDS["history-rejection"]).toBe(
-      "water-optical-factors-target",
+      "water-history-rejection-target",
     );
     expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(5, 7)).toEqual([
       {
@@ -323,7 +323,7 @@ describe("QA frame driver Core association", () => {
       },
       {
         name: "history-rejection",
-        preparedFormat: "rgba16float-history-rejection",
+        preparedFormat: "rgba8unorm-history-rejection",
       },
     ]);
     expect(JSON.stringify(QA_FRAME_PREWARM_MANIFEST)).not.toMatch(
@@ -357,6 +357,7 @@ describe("QA frame driver Core association", () => {
       "water-view-normal",
       "water-motion-vectors",
       "water-optical-factors-target",
+      "water-history-rejection-target",
       "water-optical-diagnostics-b",
       "water-optical-diagnostics-a",
       "water-planar-reflection-target",
@@ -366,8 +367,8 @@ describe("QA frame driver Core association", () => {
       "water-ssr-history-resolved-capture-target",
       "water-ssr-history-beauty-target",
     ]);
-    expect(receipt.progress.completedWork).toBe(14);
-    expect(receipt.progress.totalWork).toBe(14);
+    expect(receipt.progress.completedWork).toBe(15);
+    expect(receipt.progress.totalWork).toBe(15);
   });
 
   it("rejects a Core manifest that is missing a mapped declaration", () => {
@@ -408,6 +409,7 @@ describe("QA frame driver Core association", () => {
       seed: 0x4000_0000,
       tick: 0,
       timeSeconds: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 1,
     });
     const frame = await driver.present({

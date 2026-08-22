@@ -81,6 +81,7 @@ export interface RegressionAcceptanceScreenshot {
 export interface RegressionAcceptanceDetails {
   readonly seed: number;
   readonly tick: number;
+  readonly seaLevelMetres?: number;
   readonly camera: QaCameraV1;
   readonly controlRevision: number;
   readonly coreManifest: {
@@ -229,6 +230,7 @@ export async function attachRegressionAcceptance(
       asserted: screenshotAsserted,
       authoritative: screenshotAuthoritative,
     },
+    seaLevelMetres: details.seaLevelMetres ?? 0,
     seed: details.seed,
     tick: details.tick,
     camera: details.camera,
@@ -360,7 +362,7 @@ function assertQaPrewarmV8(prewarm: QaFramePrewarmReceipt): void {
     prewarm.manifest.version !== QA_FRAME_PREWARM_MANIFEST.version ||
     prewarm.manifest.id !== QA_FRAME_PREWARM_MANIFEST.id
   ) {
-    throw new Error("Regression acceptance requires QA prewarm v8.");
+    throw new Error("Regression acceptance requires QA prewarm v9.");
   }
   if (
     canonicalJson(prewarm.manifest.captures) !==
@@ -370,7 +372,7 @@ function assertQaPrewarmV8(prewarm: QaFramePrewarmReceipt): void {
     QA_FRAME_PREWARM_MANIFEST.captures.length !== 25
   ) {
     throw new Error(
-      "Regression acceptance requires the exact QA v8 25-name capture mapping.",
+      "Regression acceptance requires the exact QA v9 25-name capture mapping.",
     );
   }
   if (prewarm.rendererDevice === null || prewarm.rendererDevice === undefined) {

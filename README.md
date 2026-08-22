@@ -37,7 +37,7 @@ Issue #18 extended the coherent spectral runtime and deterministic QA
 foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly sixty-one work
+- the canonical minimal-water Prewarm Manifest declares exactly sixty-three work
   units: a texture, Host equirect environment radiance, viewport scene color,
   viewport scene depth, 6-attachment MRT, camera-relative clipmap, four spectral
   bands, double-sided TSL NodeMaterial, waterline/underside optical route,
@@ -49,13 +49,14 @@ foundation:
   seed/resolve/accumulate/reset/probe routes, reset-velocity target/route, one
   Core main scene render plus one auxiliary planar scene render when facing,
   procedural motion, velocity, independent inverse-linear depth conversion,
-  packed view-normal RGB plus water roughness A, optical factors, optical
-  diagnostics A/B, Core final-color and current-color targets, stock TRAA
-  color+depth history, resolve/jitter route, shared no-allocation TRAA+SSR reset
-  route, current-color conversion, twenty-five named diagnostics output routes,
-  eight hidden temporal stabilization frames, named-output completion probes,
-  and main-camera guard frame. Version 3 binds the physical drawing buffer into
-  that work plan; a viewport change creates a new manifest and lease;
+  packed view-normal RGB plus water roughness A, optical factors, a
+  diagnostics-only GPU history-rejection target/route, optical diagnostics A/B,
+  Core final-color and current-color targets, stock TRAA color+depth history,
+  resolve/jitter route, shared no-allocation TRAA+SSR reset route, current-color
+  conversion, twenty-five named diagnostics output routes, eight hidden temporal
+  stabilization frames, named-output completion probes, and main-camera guard
+  frame. Version 3 binds the physical drawing buffer into that work plan; a
+  viewport change creates a new manifest and lease;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
   restores their state after preparation, and never disposes them;
 - progress advances monotonically only when declared manifest work completes;
@@ -64,8 +65,8 @@ foundation:
 - the prepared TSL material displaces a camera-relative clipmap with four
   deterministic spectral wave bands;
 - every Host explicitly supplies a Host Simulation Adapter whose seed, tick,
-  time, pause state, and floating origin drive both rendering and the CPU
-  evaluator without any wall-clock read;
+  time, pause state, one finite sea level, and floating origin drive both
+  rendering and the CPU evaluator without any wall-clock read;
 - every Host also supplies a Host Presentation Adapter whose camera-cut revision
   is visible on the lightweight snapshot and whose `bind(route)` accepts the
   receipt-only Core presentation route without calling or scheduling

@@ -321,6 +321,8 @@ export interface HostSimulationState {
     // (undocumented)
     readonly paused: boolean;
     // (undocumented)
+    readonly seaLevelMetres: number;
+    // (undocumented)
     readonly seed: number;
     // (undocumented)
     readonly simulationResetRevision: number;

@@ -77,11 +77,11 @@ export type { QaHostPresentationController } from "./qa-presentation-controller.
 export type { QaTemporalResetReason } from "./qa-frame-driver.js";
 
 export const QA_HARNESS_SCHEMA = "real-water/qa-harness" as const;
-export const QA_HARNESS_VERSION = 9 as const;
+export const QA_HARNESS_VERSION = 10 as const;
 export const QA_HARNESS_FIXED_TICK_HZ = QA_FRAME_FIXED_TICK_HZ;
 export const QA_HARNESS_CAPTURE_NAMES = QA_FRAME_CAPTURE_NAMES;
 export const QA_CAPTURE_SCHEMA = "real-water/qa-capture" as const;
-export const QA_CAPTURE_VERSION = 9 as const;
+export const QA_CAPTURE_VERSION = 10 as const;
 
 export type QaCaptureName = QaFrameCaptureName;
 
@@ -102,6 +102,7 @@ export interface QaFrameStateReceiptV4 {
   readonly simulationResetRevision: number;
   readonly originX: number;
   readonly originZ: number;
+  readonly seaLevelMetres: number;
   readonly originRevision: number;
 }
 
@@ -113,6 +114,10 @@ export interface QaOriginReceiptV4 {
   readonly originX: number;
   readonly originZ: number;
   readonly originRevision: number;
+}
+
+export interface QaSeaLevelReceiptV9 {
+  readonly seaLevelMetres: number;
 }
 
 export type QaCameraTransition = "continuous" | "camera-cut";
@@ -195,6 +200,7 @@ export interface QaFrameSource {
   setCamera(camera: QaCameraV1): void;
   incrementCameraCut(): void;
   setOrigin(originX: number, originZ: number): void;
+  setSeaLevel(seaLevelMetres: number): void;
   setEnvironmentLighting(state: HostEnvironmentState): void;
   setHostSceneLightingDecoy(enabled: boolean): void;
   setHostSceneForegroundFixture(visible: boolean): void;
@@ -248,6 +254,9 @@ export interface QaHarnessV9 {
     readonly x: number;
     readonly z: number;
   }): Promise<QaOriginReceiptV4>;
+  setSeaLevel(seaLevel: {
+    readonly metres: number;
+  }): Promise<QaSeaLevelReceiptV9>;
   present(): Promise<QaPresentationReceiptV9>;
   capture(name: QaCaptureName): Promise<QaCaptureV9>;
   updateArtisticControls(
@@ -287,6 +296,7 @@ interface ActiveRecipe {
   tick: number;
   originX: number;
   originZ: number;
+  seaLevelMetres: number;
   pendingTicks: number;
   cameraRevision: number;
   cameraSet: boolean;
@@ -342,6 +352,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV9 {
           tick: receipt.tick,
           originX: 0,
           originZ: 0,
+          seaLevelMetres: 0,
           pendingTicks: 0,
           cameraRevision: 0,
           cameraSet: false,
@@ -357,6 +368,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV9 {
           simulationResetRevision: receipt.simulationResetRevision,
           originX: 0,
           originZ: 0,
+          seaLevelMetres: 0,
           originRevision: runtime.originRevision,
         });
       });
@@ -383,6 +395,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV9 {
           simulationResetRevision: runtime.simulationResetRevision,
           originX: recipe.originX,
           originZ: recipe.originZ,
+          seaLevelMetres: recipe.seaLevelMetres,
           originRevision: runtime.originRevision,
         });
       });
@@ -408,6 +421,23 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV9 {
           originZ: runtime.originZ,
           originRevision: runtime.originRevision,
         });
+      });
+    },
+    setSeaLevel(seaLevel) {
+      const seaLevelMetres = seaLevel.metres;
+      if (!Number.isFinite(seaLevelMetres)) {
+        return Promise.reject(
+          qaError("QA_INVALID_ARGUMENT", "The QA sea level must be finite."),
+        );
+      }
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        recipe.source.setSeaLevel(seaLevelMetres);
+        recipe.seaLevelMetres = seaLevelMetres;
+        recipe.captures = null;
+        recipe.presentation = null;
+        const runtime = recipe.lease.inspectRuntime();
+        return Object.freeze({ seaLevelMetres: runtime.seaLevelMetres });
       });
     },
     setCamera(camera, cameraOptions) {
@@ -457,6 +487,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV9 {
           runtime.seaStateCutRevision !== frame.seaStateCutRevision ||
           runtime.originX !== recipe.originX ||
           runtime.originZ !== recipe.originZ ||
+          runtime.seaLevelMetres !== recipe.seaLevelMetres ||
           frame.manifestHash !== recipe.driver.prewarm.core.manifestHash
         ) {
           throw qaError(
@@ -485,6 +516,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV9 {
           simulationResetRevision: frame.simulationResetRevision,
           originX: runtime.originX,
           originZ: runtime.originZ,
+          seaLevelMetres: runtime.seaLevelMetres,
           generation,
           presentationId: frame.presentationId,
           manifestHash: frame.manifestHash,
@@ -767,6 +799,9 @@ export function createQaThreeFrameSource(
     },
     setOrigin(originX: number, originZ: number) {
       simulation.setOrigin(originX, originZ);
+    },
+    setSeaLevel(seaLevelMetres: number) {
+      simulation.setSeaLevel(seaLevelMetres);
     },
     setEnvironmentLighting(state: HostEnvironmentState) {
       environmentLighting.setLighting(state);

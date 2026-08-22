@@ -271,6 +271,8 @@ export async function prepareMinimalWaterPlane(
       "inverseLinearDepth",
       "viewNormal",
       "opticalFactorsTarget",
+      "historyRejectionTarget",
+      "historyRejectionRoute",
       "opticalDiagnosticsA",
       "opticalDiagnosticsB",
       "finalColorTarget",

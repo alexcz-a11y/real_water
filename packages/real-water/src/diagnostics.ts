@@ -68,7 +68,7 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
 ] as const);
 
 /**
- * One of the twenty-three named diagnostic CPU outputs.
+ * One of the twenty-five named diagnostic CPU outputs.
  *
  * @public
  */
@@ -357,7 +357,8 @@ export interface DiagnosticsWaterlineCapture extends DiagnosticsCaptureBase {
 }
 
 /**
- * Per-water-sample temporal rejection for the presented frame.
+ * Full-frame shared-domain TRAA and SSR reset rejection for the presented
+ * frame. Stock per-pixel depth and disocclusion heuristics remain internal.
  *
  * @public
  */
@@ -595,7 +596,7 @@ export interface HostDiagnosticsRoute {
 }
 
 /**
- * Confirms `value` is one of the twenty-three diagnostic capture names.
+ * Confirms `value` is one of the twenty-five diagnostic capture names.
  *
  * @public
  */

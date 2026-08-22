@@ -107,7 +107,11 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-view-normal":
     "sha256:9202e800870f86fd41deba3fbec57a3a94469cce59e3c93eea5513c006345bb5",
   "water-optical-factors-target":
-    "sha256:39f3d54c99fdafb7810e81e455e986c72adc1114593e69cf629d106c025b90d9",
+    "sha256:a5e8e85cd5f940d0994f62131051afb9922d6aad02ae9c93327a4eb1f98d527c",
+  "water-history-rejection-target":
+    "sha256:2d61d9c6e0c778789600c7b8bd0b6c11171cdceb8d627d779c47924e2296f42c",
+  "water-history-rejection-route":
+    "sha256:26a2465bc403ca51bdc7a57eb42cd57c2c8c3439ac49641e56f551d8db0f9276",
   "water-optical-diagnostics-a":
     "sha256:17bc4d8de01c8456f0cabc9ef93cd4b42994b069a7392abca453116b57189758",
   "water-optical-diagnostics-b":
@@ -121,11 +125,11 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-traa-resolve-jitter":
     "sha256:ba8bdc48d2842afd8f4f620e5296fce9bde9055047e4de7d593eec83dce25733",
   "water-render-route":
-    "sha256:8a8d116937ea7500d3fd47ef4302a175b45037d2a07d46b58406b27a9b6cdf83",
+    "sha256:974bde5f14e522c41e95602549c44bfd945521af5136eb2f51a28c22cf91bb14",
   "water-current-color-conversion":
     "sha256:ea19f958120b52c05d673abcec39db3aa8ca7157f326d5d4449a4faa0457c57c",
   "water-named-output-routes":
-    "sha256:732b20511c0c7eeefb3382f87c28089c59d50a28b294cb91c5accf4beeb24a37",
+    "sha256:274528e7f9ad2119ff67f798754ac4868f97c68d7c73d1123794abbcdd01f52e",
   "water-ssr-raw-target":
     "sha256:5229f76bc28be7b7aa032fadcb3adabfada2202dde29a88f499d16fac9ba659f",
   "water-ssr-blur-target":
@@ -191,6 +195,8 @@ const DRAWING_BUFFER_BOUND_IDS = [
   "water-inverse-linear-depth",
   "water-view-normal",
   "water-optical-factors-target",
+  "water-history-rejection-target",
+  "water-history-rejection-route",
   "water-optical-diagnostics-a",
   "water-optical-diagnostics-b",
   "water-final-color-target",
@@ -317,6 +323,8 @@ const CORE_PREWARM_DECLARATION_IDS = [
   "water-inverse-linear-depth",
   "water-view-normal",
   "water-optical-factors-target",
+  "water-history-rejection-target",
+  "water-history-rejection-route",
   "water-optical-diagnostics-a",
   "water-optical-diagnostics-b",
   "water-final-color-target",
@@ -778,7 +786,7 @@ describe("Quality Profile manifests", () => {
       "water-procedural-motion": {
         kind: "effect-state",
         label:
-          "Previous presented wave-field positionPrevious (current clipmap XZ)",
+          "Previous presented wave-field positionPrevious (current clipmap XZ and Host sea level)",
       },
       "water-motion-vectors": {
         kind: "resource",
@@ -857,9 +865,9 @@ describe("Quality Profile manifests", () => {
       "water-environment-radiance":
         "sha256:3b4e72ce8470faf690ea64fa4f7e0e99c36517e5c93df2036bd80472021b777d",
       "water-material":
-        "sha256:98bffc4f09d94b123bed8621933347bed66935373c87d8bcf64e1b1574098cb2",
+        "sha256:39301b82d4bacdd626676794b41e2d97aca5a2d8847b20ad1c5874320438fa09",
       "water-optical-route":
-        "sha256:6fa9c97c9c661f1f5e1b0af7dea2f86018b8824bae0bf3bf00e3476dd38e8c53",
+        "sha256:7427b7bc29accbb1c84447771118b5edcf9199b070451b7047a59e5c25533f5c",
       "water-traa-reset-route":
         "sha256:3f32ddae6ca9dde0bcfedf7e8c12e2d7f8c1c71d5fb53de9e2fb4e958e660239",
       "water-hidden-stabilization":

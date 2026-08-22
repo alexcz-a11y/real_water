@@ -71,6 +71,7 @@ const DEFAULT_ARTISTIC_CONTROLS: ArtisticControls =
  * `originX` and `originZ` are the Host-owned floating-origin offset in metres.
  * Gameplay Query positions are in the current Host frame; the runtime evaluates
  * the Open Water Domain at `(x + originX, z + originZ)`.
+ * `seaLevelMetres` is the single horizontal Open Water Domain mean level.
  *
  * `simulationResetRevision` is a monotonic Host-authored reset hook. It starts
  * at 0 from adapter creation and increments on every explicit Host simulation
@@ -87,6 +88,7 @@ export interface HostSimulationState {
   readonly paused: boolean;
   readonly originX: number;
   readonly originZ: number;
+  readonly seaLevelMetres: number;
   readonly simulationResetRevision: number;
 }
 
@@ -303,6 +305,7 @@ export function createStaticHostSimulationAdapter(): HostSimulationAdapter {
     paused: true,
     originX: 0,
     originZ: 0,
+    seaLevelMetres: 0,
     simulationResetRevision: 0,
   });
   return Object.freeze({ snapshot: () => snapshot });
@@ -334,6 +337,9 @@ export function readHostSimulationState(
   }
   if (!Number.isFinite(state.originX) || !Number.isFinite(state.originZ)) {
     throw new RangeError("Open Water origin must be finite.");
+  }
+  if (!Number.isFinite(state.seaLevelMetres)) {
+    throw new RangeError("Open Water sea level must be finite metres.");
   }
   if (
     !Number.isSafeInteger(state.simulationResetRevision) ||
@@ -457,6 +463,7 @@ function readSnapshot(
     paused: state.paused,
     originX: state.originX,
     originZ: state.originZ,
+    seaLevelMetres: state.seaLevelMetres,
     simulationResetRevision: state.simulationResetRevision,
     artisticControls,
     controlRevision,

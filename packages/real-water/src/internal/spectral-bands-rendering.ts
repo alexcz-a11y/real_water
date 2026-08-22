@@ -65,6 +65,7 @@ export function createSpectralBandRendering(
   const originZ = uniform(0);
   const phaseOffset = uniform(0);
   const timeSeconds = uniform(0);
+  const seaLevelMetres = uniform(0);
   const timeScale = uniform(1);
   const crestSharpness = uniform(0);
   const blendOriginPhaseA = uniform(0);
@@ -90,6 +91,7 @@ export function createSpectralBandRendering(
   const previousBandUniforms = createBandUniforms();
   const previousPhaseOffset = uniform(0);
   const previousTimeSeconds = uniform(0);
+  const previousSeaLevelMetres = uniform(0);
   const previousTimeScale = uniform(1);
   const previousCrestSharpness = uniform(0);
   const previousBlendOriginPhaseA = uniform(0);
@@ -125,6 +127,7 @@ export function createSpectralBandRendering(
   type WaveFieldNodes = Readonly<{
     readonly phaseOffset: typeof phaseOffset;
     readonly timeSeconds: typeof timeSeconds;
+    readonly seaLevelMetres: typeof seaLevelMetres;
     readonly timeScale: typeof timeScale;
     readonly crestSharpness: typeof crestSharpness;
     readonly blendOriginPhaseA: typeof blendOriginPhaseA;
@@ -134,6 +137,7 @@ export function createSpectralBandRendering(
   const currentWaveField: WaveFieldNodes = {
     phaseOffset,
     timeSeconds,
+    seaLevelMetres,
     timeScale,
     crestSharpness,
     blendOriginPhaseA,
@@ -143,6 +147,7 @@ export function createSpectralBandRendering(
   const previousWaveField: WaveFieldNodes = {
     phaseOffset: previousPhaseOffset,
     timeSeconds: previousTimeSeconds,
+    seaLevelMetres: previousSeaLevelMetres,
     timeScale: previousTimeScale,
     crestSharpness: previousCrestSharpness,
     blendOriginPhaseA: previousBlendOriginPhaseA,
@@ -337,7 +342,9 @@ export function createSpectralBandRendering(
     vertexSlopeFade,
     currentWaveField,
   );
-  const vertexHeight = vertexSurface.height.toVertexStage();
+  const vertexHeight = vertexSurface.height
+    .add(currentWaveField.seaLevelMetres)
+    .toVertexStage();
   const previousVertexSurface = evaluateBlendedSurface(
     vertexSample.hostX,
     vertexSample.hostZ,
@@ -345,7 +352,9 @@ export function createSpectralBandRendering(
     vertexSlopeFade,
     previousWaveField,
   );
-  const previousVertexHeight = previousVertexSurface.height.toVertexStage();
+  const previousVertexHeight = previousVertexSurface.height
+    .add(previousWaveField.seaLevelMetres)
+    .toVertexStage();
 
   const fragmentSample = createHostSample();
   const fragmentViewDistance = viewDistanceNode(
@@ -454,13 +463,19 @@ export function createSpectralBandRendering(
     field: WaveFieldNodes,
     snapshot: Pick<
       OpenWaterRuntimeSnapshot,
-      "seed" | "timeSeconds" | "originX" | "originZ" | "artisticControls"
+      | "seed"
+      | "timeSeconds"
+      | "originX"
+      | "originZ"
+      | "seaLevelMetres"
+      | "artisticControls"
     >,
     writeFarWhite: boolean,
   ): void => {
     const prepared = prepareSpectralBands(snapshot.artisticControls);
     field.phaseOffset.value = spectralBandPhaseOffset(snapshot.seed);
     field.timeSeconds.value = snapshot.timeSeconds;
+    field.seaLevelMetres.value = snapshot.seaLevelMetres;
     field.timeScale.value = snapshot.artisticControls.timeScale;
     field.crestSharpness.value = snapshot.artisticControls.crestSharpness;
     for (let index = 0; index < field.bands.length; index += 1) {
@@ -481,6 +496,7 @@ export function createSpectralBandRendering(
     readonly timeSeconds: number;
     readonly originX: number;
     readonly originZ: number;
+    readonly seaLevelMetres: number;
     readonly simulationResetRevision: number;
     readonly cameraCutRevision: number;
     readonly seaStateCutRevision: number;
@@ -516,6 +532,7 @@ export function createSpectralBandRendering(
         timeSeconds: state.timeSeconds,
         originX: state.originX,
         originZ: state.originZ,
+        seaLevelMetres: state.seaLevelMetres,
         simulationResetRevision: state.simulationResetRevision,
         cameraCutRevision: presentationState.cameraCutRevision,
         seaStateCutRevision: desiredSeaStateCutRevision,

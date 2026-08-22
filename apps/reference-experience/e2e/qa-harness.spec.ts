@@ -86,7 +86,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
   ).toBe(CORE_WEBGPU_MAX_COLOR_ATTACHMENT_BYTES_PER_SAMPLE);
   expect(contract).toEqual({
     schema: "real-water/qa-harness",
-    version: 9,
+    version: 10,
     fixedTickHz: 60,
     captureNames: [
       "final-color",
@@ -116,7 +116,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "ssr-history-input-color",
     ],
     prewarmSchema: "real-water/qa-frame-prewarm",
-    prewarmVersion: 8,
+    prewarmVersion: 9,
     prewarmCoreDeclarations: {
       "final-color": "water-final-color-target",
       "current-color": "water-current-color-target",
@@ -124,7 +124,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "normal": "water-view-normal",
       "motion-vector": "water-motion-vectors",
       "waterline": "water-optical-factors-target",
-      "history-rejection": "water-optical-factors-target",
+      "history-rejection": "water-history-rejection-target",
       "optical-fresnel": "water-optical-factors-target",
       "optical-thickness": "water-optical-factors-target",
       "optical-scattering": "water-optical-diagnostics-b",
@@ -156,7 +156,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       },
       {
         name: "history-rejection",
-        preparedFormat: "rgba16float-history-rejection",
+        preparedFormat: "rgba8unorm-history-rejection",
       },
       {
         name: "optical-fresnel",
@@ -348,8 +348,8 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   expect(normalValues[normalIndex + 2]).toBeCloseTo(result.query.normal[1], 2);
   expect(result.after).toEqual(result.before);
   expect(result.presentation.prewarm.progress).toMatchObject({
-    completedWork: 14,
-    totalWork: 14,
+    completedWork: 15,
+    totalWork: 15,
   });
   const encodedRg8ByteLength = result.depth.width * result.depth.height * 4;
   for (const capture of [
@@ -506,8 +506,8 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       width: 320,
       height: 180,
       progress: {
-        completedWork: 14,
-        totalWork: 14,
+        completedWork: 15,
+        totalWork: 15,
       },
     },
   });
@@ -547,7 +547,8 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "ssr-history-input-color",
   ]);
   expect(result.first.captures.map(({ version }) => version)).toEqual([
-    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+    10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+    10, 10, 10, 10, 10, 10,
   ]);
   expect(result.first.captures.map(({ format }) => format)).toEqual([
     "rgba8unorm-srgb",
@@ -634,7 +635,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       }),
     ),
   );
-  expect(result.first.captures.every((capture) => capture.version === 9)).toBe(
+  expect(result.first.captures.every((capture) => capture.version === 10)).toBe(
     true,
   );
   expect(result.changedTick.captures[0]?.data).not.toBe(

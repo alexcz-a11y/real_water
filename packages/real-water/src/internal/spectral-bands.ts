@@ -342,7 +342,7 @@ export function writeSpectralBandQueries(
     const inverseNormalLength =
       1 / Math.hypot(surface.slopeX, 1, surface.slopeZ);
 
-    batch.results.heights[point] = surface.height;
+    batch.results.heights[point] = surface.height + state.seaLevelMetres;
     batch.results.normals[vectorIndex] = -surface.slopeX * inverseNormalLength;
     batch.results.normals[vectorIndex + 1] = inverseNormalLength;
     batch.results.normals[vectorIndex + 2] =

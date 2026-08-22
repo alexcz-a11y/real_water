@@ -48,6 +48,7 @@ function freezeState(tick: number): HostSimulationState {
     paused: false,
     originX: 0,
     originZ: 0,
+    seaLevelMetres: 0,
     simulationResetRevision: 0,
   });
 }

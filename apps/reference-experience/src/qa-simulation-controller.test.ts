@@ -11,6 +11,7 @@ describe("QA Host Simulation Controller", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
 
@@ -31,5 +32,12 @@ describe("QA Host Simulation Controller", () => {
     const shifted = simulation.setOrigin(4, -2);
     expect(shifted.originX).toBe(4);
     expect(shifted.simulationResetRevision).toBe(2);
+
+    const raised = simulation.setSeaLevel(4);
+    expect(raised.seaLevelMetres).toBe(4);
+    expect(simulation.advance(1).seaLevelMetres).toBe(4);
+    expect(simulation.setOrigin(0, 0).seaLevelMetres).toBe(4);
+    expect(() => simulation.setSeaLevel(Number.NaN)).toThrowError(/finite/i);
+    expect(simulation.reset(7).seaLevelMetres).toBe(0);
   });
 });

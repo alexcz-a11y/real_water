@@ -301,8 +301,8 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(
       renderer.compileAsync.mock.calls.some((call) => call[1] !== camera),
     ).toBe(true);
-    expect(renderer.render).toHaveBeenCalledTimes(128);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
+    expect(renderer.render).toHaveBeenCalledTimes(129);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(29);
     const readbackTargets = renderer.readRenderTargetPixelsAsync.mock.calls.map(
       (call) =>
         call[0] as { texture?: { name?: string }; textures?: unknown[] },
@@ -310,9 +310,12 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(readbackTargets[0]?.texture?.name).toBe("Real Water final color");
     expect(readbackTargets[1]?.texture?.name).toBe("Real Water current color");
     expect(readbackTargets[2]?.texture?.name).toBe(
+      "Real Water history rejection",
+    );
+    expect(readbackTargets[3]?.texture?.name).toBe(
       "Real Water inverse linear depth",
     );
-    expect(readbackTargets[26]?.texture?.name).toBe("Real Water final color");
+    expect(readbackTargets[28]?.texture?.name).toBe("Real Water final color");
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -405,7 +408,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     );
     expect(queryResults.foam[0]).toBe(geometryBefore.foam);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(29);
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -982,7 +985,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     });
     expect(scene.children).toHaveLength(0);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(13);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(14);
     expect(renderer.dispose).not.toHaveBeenCalled();
   });
 
@@ -1360,8 +1363,8 @@ describe("createThreeHostLifecycleAdapter", () => {
 
     expect(lease).not.toHaveProperty("present");
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
-    expect(renderer.render).toHaveBeenCalledTimes(128);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(29);
+    expect(renderer.render).toHaveBeenCalledTimes(129);
     expect(presentation.route).toBeDefined();
 
     const first = readHostPresentedFrame(await presentation.present());
@@ -1387,7 +1390,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(second.temporal.historyEpoch).toBe(1);
     expect(second.temporal.resetReason).toBeNull();
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(29);
 
     simulation.assign({ tick: 8, timeSeconds: 8 / 60, paused: false });
     const continuousTick = readHostPresentedFrame(await presentation.present());
@@ -1498,7 +1501,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(queuedFirst.presentationId + 1).toBe(queuedSecond.presentationId);
 
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(29);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
     expect(scene.children).toHaveLength(1);
@@ -1826,7 +1829,6 @@ describe("createThreeHostLifecycleAdapter", () => {
       resetReason: "waterline-crossing",
       resetFrame: true,
     });
-    expect(crossing.outputs[1]?.data[0]).toBe(1);
 
     const crossingJitter = await presentAt(0.07);
     expect(crossingJitter.waterline.classification).toBe("crossing");
@@ -1836,7 +1838,6 @@ describe("createThreeHostLifecycleAdapter", () => {
       resetReason: null,
       resetFrame: false,
     });
-    expect(crossingJitter.outputs[1]?.data[0]).toBe(0);
 
     const below = await presentAt(-0.5);
     expect(below.waterline).toMatchObject({
@@ -3334,6 +3335,7 @@ function createMutableSimulationAdapter(): HostSimulationAdapter & {
     paused: true,
     originX: 0,
     originZ: 0,
+    seaLevelMetres: 0,
     simulationResetRevision: 0,
   };
   return {

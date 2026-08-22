@@ -5,11 +5,12 @@ export interface QaHostSimulationController extends HostSimulationAdapter {
   reset(seed: number): HostSimulationState;
   advance(ticks: number): HostSimulationState;
   setOrigin(originX: number, originZ: number): HostSimulationState;
+  setSeaLevel(seaLevelMetres: number): HostSimulationState;
 }
 
 export function createQaHostSimulationController(): QaHostSimulationController {
   let simulationResetRevision = 0;
-  let state = freezeState(0, 0, 0, 0, simulationResetRevision);
+  let state = freezeState(0, 0, 0, 0, 0, simulationResetRevision);
   return Object.freeze({
     snapshot: () => state,
     reset(seed: number): HostSimulationState {
@@ -19,7 +20,7 @@ export function createQaHostSimulationController(): QaHostSimulationController {
         );
       }
       simulationResetRevision += 1;
-      state = freezeState(seed, 0, 0, 0, simulationResetRevision);
+      state = freezeState(seed, 0, 0, 0, 0, simulationResetRevision);
       return state;
     },
     advance(ticks: number): HostSimulationState {
@@ -37,6 +38,7 @@ export function createQaHostSimulationController(): QaHostSimulationController {
         state.tick + ticks,
         state.originX,
         state.originZ,
+        state.seaLevelMetres,
         simulationResetRevision,
       );
       return state;
@@ -50,6 +52,21 @@ export function createQaHostSimulationController(): QaHostSimulationController {
         state.tick,
         originX,
         originZ,
+        state.seaLevelMetres,
+        simulationResetRevision,
+      );
+      return state;
+    },
+    setSeaLevel(seaLevelMetres: number): HostSimulationState {
+      if (!Number.isFinite(seaLevelMetres)) {
+        throw new RangeError("QA sea level must be finite metres.");
+      }
+      state = freezeState(
+        state.seed,
+        state.tick,
+        state.originX,
+        state.originZ,
+        seaLevelMetres,
         simulationResetRevision,
       );
       return state;
@@ -62,6 +79,7 @@ function freezeState(
   tick: number,
   originX: number,
   originZ: number,
+  seaLevelMetres: number,
   simulationResetRevision: number,
 ): HostSimulationState {
   return Object.freeze({
@@ -71,6 +89,7 @@ function freezeState(
     paused: false,
     originX,
     originZ,
+    seaLevelMetres,
     simulationResetRevision,
   });
 }

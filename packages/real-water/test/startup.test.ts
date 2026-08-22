@@ -919,7 +919,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 61,
+        totalWork: 63,
       },
     });
   });
@@ -1641,6 +1641,8 @@ describe("prepareRealWater", () => {
       "water-inverse-linear-depth",
       "water-view-normal",
       "water-optical-factors-target",
+      "water-history-rejection-target",
+      "water-history-rejection-route",
       "water-optical-diagnostics-a",
       "water-optical-diagnostics-b",
       "water-final-color-target",

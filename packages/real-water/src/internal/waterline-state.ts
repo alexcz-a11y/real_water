@@ -13,7 +13,12 @@ export type WaterlineClassification = "above" | "crossing" | "below";
 
 export type WaterlineSampleState = Pick<
   OpenWaterRuntimeSnapshot,
-  "seed" | "timeSeconds" | "originX" | "originZ" | "artisticControls"
+  | "seed"
+  | "timeSeconds"
+  | "originX"
+  | "originZ"
+  | "seaLevelMetres"
+  | "artisticControls"
 >;
 
 export interface WaterlineFrameState {
@@ -58,7 +63,8 @@ export function createWaterlineStateController(): WaterlineStateController {
         state.artisticControls.crestSharpness,
         state.artisticControls.timeScale,
       );
-      const signedDistanceMetres = cameraWorldPosition.y - surface.height;
+      const surfaceHeightMetres = surface.height + state.seaLevelMetres;
+      const signedDistanceMetres = cameraWorldPosition.y - surfaceHeightMetres;
       const classification = classifyWaterline(
         signedDistanceMetres,
         discontinuous ? undefined : committed?.classification,
@@ -67,7 +73,7 @@ export function createWaterlineStateController(): WaterlineStateController {
         committed !== undefined && classification !== committed.classification;
       const frameState = Object.freeze({
         classification,
-        surfaceHeightMetres: surface.height,
+        surfaceHeightMetres,
         signedDistanceMetres,
         submersion: waterlineSubmersion(signedDistanceMetres),
         transitionRevision:
@@ -91,6 +97,7 @@ export function createInitialWaterlineSampleState(
     readonly timeSeconds: number;
     readonly originX: number;
     readonly originZ: number;
+    readonly seaLevelMetres: number;
   }>,
   artisticControls: ArtisticControls,
 ): WaterlineSampleState {
@@ -99,6 +106,7 @@ export function createInitialWaterlineSampleState(
     timeSeconds: state.timeSeconds,
     originX: state.originX,
     originZ: state.originZ,
+    seaLevelMetres: state.seaLevelMetres,
     artisticControls,
   });
 }

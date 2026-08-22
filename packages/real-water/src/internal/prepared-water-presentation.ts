@@ -104,6 +104,8 @@ export interface PreparedWaterPresentationResources {
   readonly traaNode: ReturnType<typeof traa>;
   readonly jitterAdapter: TraaJitterAdapter;
   readonly resetUniform: ReturnType<typeof createTraaResetUniform>;
+  readonly historyRejectionPipeline: RenderPipeline;
+  readonly historyRejectionTarget: RenderTarget;
   readonly currentColorTarget: RenderTarget;
   readonly finalColorTarget: RenderTarget;
   readonly scenePass: ReturnType<typeof pass>;
@@ -173,6 +175,8 @@ function constructPreparedWaterPresentationResources(
   };
   const waterline = { current: initialWaterline };
   partial.waterline = waterline;
+  const resetUniform = createTraaResetUniform();
+  partial.resetUniform = resetUniform;
   const scenePass = pass(scene, camera, { samples: 0 });
   partial.scenePass = scenePass;
   scenePass.updateBeforeType = "render";
@@ -216,8 +220,24 @@ function constructPreparedWaterPresentationResources(
   opticalDiagnosticsBTexture.colorSpace = LinearSRGBColorSpace;
   assertCoreScenePassColorByteBudget(scenePass.renderTarget.textures);
 
-  const resetUniform = createTraaResetUniform();
-  partial.resetUniform = resetUniform;
+  const historyRejectionTarget = new RenderTarget(
+    drawingBuffer.width,
+    drawingBuffer.height,
+    {
+      depthBuffer: false,
+      stencilBuffer: false,
+      type: UnsignedByteType,
+    },
+  );
+  partial.historyRejectionTarget = historyRejectionTarget;
+  historyRejectionTarget.texture.name = "Real Water history rejection";
+  const historyRejectionPipeline = new RenderPipeline(
+    renderer,
+    vec4(resetUniform, 0, 0, 1),
+  );
+  partial.historyRejectionPipeline = historyRejectionPipeline;
+  historyRejectionPipeline.outputColorTransform = false;
+
   const ssr = createCurrentFrameSsrStack(
     renderer,
     scenePass,
@@ -288,6 +308,8 @@ function constructPreparedWaterPresentationResources(
     traaNode,
     jitterAdapter,
     resetUniform,
+    historyRejectionPipeline,
+    historyRejectionTarget,
     currentColorTarget,
     finalColorTarget,
     scenePass,
@@ -340,6 +362,7 @@ export async function compileAndPrimePreparedWaterPresentation(
   resources.ssr.ensureGraphPrepared(renderer);
   resources.resetUniform.value = 1;
   renderTemporalFrame(renderer, scene, camera, resources);
+  renderHistoryRejection(renderer, resources);
   resources.resetUniform.value = 0;
   renderCurrentColorConversion(renderer, resources);
   await probeNamedOutputRoutes(renderer, resources);
@@ -448,6 +471,9 @@ export function createPresentationRouteBridge(
       renderTemporalFrame(renderer, scene, camera, resources);
       if (accepted.outputs.includes("current-color")) {
         renderCurrentColorConversion(renderer, resources);
+      }
+      if (accepted.outputs.includes("history-rejection")) {
+        renderHistoryRejection(renderer, resources);
       }
       renderer.setRenderTarget(null);
       resources.presentationPipeline.render();
@@ -559,6 +585,8 @@ export function disposePreparedWaterPresentationResources(
   resources: PreparedWaterPresentationResources,
 ): void {
   resources.presentationPipeline.dispose();
+  resources.historyRejectionPipeline.dispose();
+  resources.historyRejectionTarget.dispose();
   resources.currentColorPipeline.dispose();
   resources.temporalPipeline.dispose();
   resources.traaNode.dispose();
@@ -574,6 +602,8 @@ export function disposePartialPreparedWaterPresentationResources(
 ): void {
   const disposals = [
     () => resources.presentationPipeline?.dispose(),
+    () => resources.historyRejectionPipeline?.dispose(),
+    () => resources.historyRejectionTarget?.dispose(),
     () => resources.currentColorPipeline?.dispose(),
     () => resources.temporalPipeline?.dispose(),
     () => resources.traaNode?.dispose(),
@@ -735,6 +765,14 @@ function renderCurrentColorConversion(
   resources.currentColorPipeline.render();
 }
 
+function renderHistoryRejection(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): void {
+  renderer.setRenderTarget(resources.historyRejectionTarget);
+  resources.historyRejectionPipeline.render();
+}
+
 export function readDrawingBufferSize(renderer: Renderer): Readonly<{
   width: number;
   height: number;
@@ -761,6 +799,11 @@ async function probeNamedOutputRoutes(
 ): Promise<void> {
   await probeCompletedFrame(renderer, resources, resources.finalColorTarget);
   await probeCompletedFrame(renderer, resources, resources.currentColorTarget);
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.historyRejectionTarget,
+  );
   await probeCompletedFrame(
     renderer,
     resources,
@@ -954,8 +997,9 @@ async function readNamedOutput(
     case "motion-vector":
       return readMotionVectorCapture(renderer, resources);
     case "waterline":
+      return readWaterlineCapture(renderer, resources);
     case "history-rejection":
-      return readWaterlineCapture(renderer, resources, name);
+      return readHistoryRejectionCapture(renderer, resources);
     case "optical-fresnel":
       return readOpticalScalarCapture(
         renderer,
@@ -1111,7 +1155,6 @@ async function readMotionVectorCapture(
 async function readWaterlineCapture(
   renderer: Renderer,
   resources: PreparedWaterPresentationResources,
-  name: "waterline" | "history-rejection",
 ): Promise<DiagnosticsCapture> {
   const raw = await readAttachmentPixels(
     renderer,
@@ -1125,34 +1168,54 @@ async function readWaterlineCapture(
   }
   const rgba = compactRows(raw, resources.width, resources.height, 4);
   const data = new Float32Array(resources.width * resources.height);
-  const rejection =
-    name === "history-rejection" && resources.resetUniform.value > 0.5 ? 1 : 0;
   for (let pixel = 0; pixel < data.length; pixel += 1) {
     const coverage = DataUtils.fromHalfFloat(rgba[pixel * 4 + 3] ?? 0);
     if (!Number.isFinite(coverage) || coverage < 0 || coverage > 1) {
       throw new RangeError(
-        "Waterline coverage readback must contain finite normalized samples.",
+        "Waterline coverage readback must contain normalized samples.",
       );
     }
-    data[pixel] = coverage * (name === "history-rejection" ? rejection : 1);
+    data[pixel] = coverage;
   }
-  const base = {
+  return Object.freeze({
+    name: "waterline",
     width: resources.width,
     height: resources.height,
     origin: "top-left" as const,
+    format: DIAGNOSTICS_CAPTURE_SHAPES.waterline.format,
     data,
-  };
-  return name === "waterline"
-    ? Object.freeze({
-        ...base,
-        name: "waterline" as const,
-        format: DIAGNOSTICS_CAPTURE_SHAPES.waterline.format,
-      })
-    : Object.freeze({
-        ...base,
-        name: "history-rejection" as const,
-        format: DIAGNOSTICS_CAPTURE_SHAPES["history-rejection"].format,
-      });
+  });
+}
+
+async function readHistoryRejectionCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.historyRejectionTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint8Array)) {
+    throw new TypeError(
+      "History-rejection readback did not return RGBA8 data.",
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    data[pixel] = (rgba[pixel * 4] ?? 0) / 255;
+  }
+  return Object.freeze({
+    name: "history-rejection",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["history-rejection"].format,
+    data,
+  });
 }
 
 async function readPlanarColorCapture(

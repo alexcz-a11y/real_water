@@ -45,6 +45,7 @@ describe("ready Open Water runtime", () => {
       paused: true,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     expect(readHostSimulationState(adapter).simulationResetRevision).toBe(0);
@@ -57,6 +58,7 @@ describe("ready Open Water runtime", () => {
           paused: true,
           originX: 0,
           originZ: 0,
+          seaLevelMetres: 0,
           simulationResetRevision: -1,
         }),
       }),
@@ -80,6 +82,52 @@ describe("ready Open Water runtime", () => {
     await lease.dispose();
   });
 
+  it("keeps Gameplay Queries and snapshots coherent with Host sea level", async () => {
+    let seaLevelMetres = 0;
+    const simulation = {
+      snapshot: () => ({
+        seed: 0,
+        tick: 0,
+        timeSeconds: 0,
+        paused: false,
+        originX: 0,
+        originZ: 0,
+        seaLevelMetres,
+        simulationResetRevision: 0,
+      }),
+    };
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        simulation,
+        stepDelayMs: 0,
+      }),
+    }).ready;
+    const results: GameplayQueryResults = {
+      heights: new Float32Array(1),
+      normals: new Float32Array(3),
+      velocities: new Float32Array(3),
+      foam: new Float32Array(1),
+      ticks: new Float64Array(1),
+      controlRevisions: new Float64Array(1),
+      snapshotAges: new Uint8Array(1),
+    };
+    const query = () =>
+      lease.queryGameplay({
+        count: 1,
+        positions: new Float32Array(3),
+        results,
+      }).heights[0] ?? Number.NaN;
+
+    const baseline = query();
+    seaLevelMetres = 5;
+
+    expect(query()).toBeCloseTo(baseline + 5, 5);
+    expect(lease.inspectRuntime().seaLevelMetres).toBe(5);
+    await lease.dispose();
+  });
+
   it("fills caller-owned Gameplay Query results from the hot spectral state", async () => {
     let simulation = Object.freeze({
       seed: 0,
@@ -88,6 +136,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -181,6 +230,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     lease.queryGameplay({
@@ -222,6 +272,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -269,6 +320,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     expect(() =>
@@ -287,6 +339,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     expect(() =>
@@ -367,6 +420,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -408,6 +462,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 40,
       originZ: -12,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const shifted = lease.inspectRuntime();
@@ -446,6 +501,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 40,
       originZ: -12,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     expect(lease.inspectRuntime()).toMatchObject({
@@ -465,6 +521,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -483,6 +540,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 96,
       originZ: -24,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const firstInspect = lease.inspectRuntime();
@@ -500,6 +558,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 96,
       originZ: -24,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     expect(lease.inspectRuntime().originRevision).toBe(1);
@@ -515,6 +574,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: baselineOrigin,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -543,6 +603,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: baselineOrigin + 96,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const shifted = lease.inspectRuntime();
@@ -639,6 +700,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({

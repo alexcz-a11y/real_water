@@ -137,6 +137,7 @@ test("renders a stable non-black underside and bounds crossing rejection", async
 
   const belowWaterline = decodeFloat32(result.below.waterline);
   const belowRejection = decodeFloat32(result.below.rejection);
+  const crossingRejection = decodeFloat32(result.crossing.rejection);
   const stableRejection = decodeFloat32(result.stableBelow.rejection);
   const belowFresnel = decodeFloat32(result.below.fresnel);
   const belowPlanar = decodeFloat32(result.below.planar);
@@ -157,6 +158,8 @@ test("renders a stable non-black underside and bounds crossing rejection", async
         2 ** -10,
     ),
   ).toBe(true);
+  expect(belowRejection.every((value) => value === 1)).toBe(true);
+  expect(crossingRejection.every((value) => value === 1)).toBe(true);
   expect(stableRejection.every((value) => value === 0)).toBe(true);
   expect(
     Math.max(...waterPixels.map((pixel) => belowFresnel[pixel] ?? 0)),
@@ -245,6 +248,105 @@ test("renders a stable non-black underside and bounds crossing rejection", async
       {
         width: result.below.presentation.prewarm.width,
         height: result.below.presentation.prewarm.height,
+      },
+    ],
+    qaHarness: {
+      schema: QA_HARNESS_SCHEMA,
+      version: QA_HARNESS_VERSION,
+    },
+    qaCapture: {
+      schema: QA_CAPTURE_SCHEMA,
+      version: QA_CAPTURE_VERSION,
+      names: QA_HARNESS_CAPTURE_NAMES,
+    },
+    artisticControls: WATERLINE_CONTROLS,
+  });
+});
+
+test("keeps rendering, queries, and classification coherent at a nonzero sea level", async ({
+  page,
+}, testInfo) => {
+  await openQaStage(page);
+  const result = await page.evaluate(
+    async ({ controls, seed, tick }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
+      if (harness === undefined) {
+        throw new Error("QA Harness is unavailable.");
+      }
+      await harness.reset({ seed });
+      await harness.advanceTicks(tick);
+      await harness.updateArtisticControls(controls, {
+        transition: "continuous",
+      });
+      await harness.setSeaLevel({ metres: 4 });
+      const downCamera = {
+        projection: "perspective" as const,
+        position: [0.7, 12, 0] as const,
+        target: [0.7, 4, 0] as const,
+        up: [0, 0, -1] as const,
+        verticalFovDegrees: 40,
+        near: 0.1,
+        far: 100,
+      } satisfies QaCameraV1;
+      await harness.setCamera(downCamera, { transition: "continuous" });
+      const above = await harness.present();
+      const depth = await harness.capture("depth");
+      const query = await harness.queryGameplay([0.7, 0, 0]);
+      const belowCamera = {
+        ...downCamera,
+        position: [0.7, query.height - 0.5, 0] as const,
+        target: [0.7, query.height, -6] as const,
+        up: [0, 1, 0] as const,
+      } satisfies QaCameraV1;
+      await harness.setCamera(belowCamera, { transition: "camera-cut" });
+      const below = await harness.present();
+      return {
+        above,
+        below,
+        downCamera,
+        depth: depth.data,
+        width: depth.width,
+        height: depth.height,
+        query,
+      };
+    },
+    { controls: WATERLINE_CONTROLS, seed: SEED, tick: TICK },
+  );
+
+  const depth = decodeFloat32(result.depth);
+  const center =
+    Math.floor(result.height / 2) * result.width + Math.floor(result.width / 2);
+  const renderedHeight = result.downCamera.position[1] - (depth[center] ?? NaN);
+  expect(result.query.height).toBeGreaterThan(4);
+  expect(renderedHeight).toBeCloseTo(result.query.height, 1);
+  expect(result.above).toMatchObject({
+    seaLevelMetres: 4,
+    waterline: {
+      classification: "above",
+    },
+  });
+  expect(result.above.waterline.surfaceHeightMetres).toBeCloseTo(
+    result.query.height,
+    5,
+  );
+  expect(result.below).toMatchObject({
+    seaLevelMetres: 4,
+    waterline: { classification: "below", submersion: 1 },
+    temporal: { resetReason: "camera-cut", resetFrame: true },
+  });
+
+  await attachRegressionAcceptance(testInfo, page, {
+    seed: result.above.seed,
+    tick: result.above.tick,
+    seaLevelMetres: 4,
+    camera: result.downCamera,
+    controlRevision: result.above.controlRevision,
+    coreManifest: coreManifestEvidence(result.above.prewarm.core),
+    qaPrewarm: result.above.prewarm,
+    captures: [
+      {
+        width: result.above.prewarm.width,
+        height: result.above.prewarm.height,
       },
     ],
     qaHarness: {
@@ -418,14 +520,8 @@ test("replays repeated crossings and treats a teleport as one camera-cut reset",
     resetReason: null,
     resetFrame: false,
   });
-  const teleportWaterline = decodeFloat32(result.teleportedAbove.waterline);
   const teleportRejection = decodeFloat32(result.teleportedAbove.rejection);
-  expect(
-    teleportRejection.every(
-      (value, pixel) =>
-        Math.abs(value - (teleportWaterline[pixel] ?? 0)) <= 2 ** -10,
-    ),
-  ).toBe(true);
+  expect(teleportRejection.every((value) => value === 1)).toBe(true);
 
   await attachRegressionAcceptance(testInfo, page, {
     seed: result.teleportedAbove.presentation.seed,

@@ -43,7 +43,7 @@ export {
 export const REGRESSION_ACCEPTANCE_EVIDENCE_CLASS = "Regression acceptance";
 export const REGRESSION_ACCEPTANCE_SCHEMA =
   "real-water/regression-acceptance" as const;
-export const REGRESSION_ACCEPTANCE_VERSION = 2 as const;
+export const REGRESSION_ACCEPTANCE_VERSION = 3 as const;
 export const REGRESSION_ACCEPTANCE_RELATIVE_DIRECTORY =
   "test-results/regression-acceptance";
 
@@ -283,6 +283,7 @@ const REGRESSION_ACCEPTANCE_KEYS = [
   "powerState",
   "lowPowerMode",
   "screenshotProfile",
+  "seaLevelMetres",
   "seed",
   "tick",
   "camera",
@@ -932,7 +933,7 @@ export function readRegressionAcceptanceEvidence(
 ): Readonly<Record<string, unknown>> {
   if (!isRecord(value) || !hasExactKeys(value, REGRESSION_ACCEPTANCE_KEYS)) {
     throw new TypeError(
-      "Regression acceptance evidence must use the exact version-2 contract.",
+      "Regression acceptance evidence must use the exact version-3 contract.",
     );
   }
   if (
@@ -940,7 +941,7 @@ export function readRegressionAcceptanceEvidence(
     value.version !== REGRESSION_ACCEPTANCE_VERSION
   ) {
     throw new TypeError(
-      "Regression acceptance evidence must use schema real-water/regression-acceptance version 2.",
+      "Regression acceptance evidence must use schema real-water/regression-acceptance version 3.",
     );
   }
   if (value.evidenceClass !== REGRESSION_ACCEPTANCE_EVIDENCE_CLASS) {
@@ -949,6 +950,14 @@ export function readRegressionAcceptanceEvidence(
     );
   }
   assertNoRawCapturePayload(value);
+  if (
+    typeof value.seaLevelMetres !== "number" ||
+    !Number.isFinite(value.seaLevelMetres)
+  ) {
+    throw new RangeError(
+      "Regression acceptance seaLevelMetres must be finite.",
+    );
+  }
   const coreIdentity = readQaBoundCoreManifestIdentity(
     isRecord(value.coreManifest) ? value.coreManifest.identity : undefined,
   );
@@ -1670,7 +1679,7 @@ function readQaPrewarmV6(
   coreIdentity: QaBoundCoreManifestIdentity,
 ): QaFramePrewarmReceipt {
   if (!isRecord(value) || !hasExactKeys(value, QA_PREWARM_KEYS)) {
-    throw new TypeError("Regression acceptance requires QA prewarm v8.");
+    throw new TypeError("Regression acceptance requires QA prewarm v9.");
   }
   if (
     !isRecord(value.manifest) ||
@@ -1678,7 +1687,7 @@ function readQaPrewarmV6(
     value.manifest.version !== QA_FRAME_PREWARM_MANIFEST.version ||
     value.manifest.id !== QA_FRAME_PREWARM_MANIFEST.id
   ) {
-    throw new Error("Regression acceptance requires QA prewarm v8.");
+    throw new Error("Regression acceptance requires QA prewarm v9.");
   }
   if (
     canonicalJson(value.manifest.captures) !==
@@ -1687,11 +1696,11 @@ function readQaPrewarmV6(
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.coreDeclarations)
   ) {
     throw new Error(
-      "Regression acceptance requires the exact QA v8 25-name capture mapping.",
+      "Regression acceptance requires the exact QA v9 25-name capture mapping.",
     );
   }
   if (QA_FRAME_PREWARM_MANIFEST.captures.length !== 25) {
-    throw new Error("QA v8 capture contract must name exactly 25 outputs.");
+    throw new Error("QA v9 capture contract must name exactly 25 outputs.");
   }
   const core = readQaBoundCoreManifestIdentity(value.core);
   if (core.manifestHash !== coreIdentity.manifestHash) {

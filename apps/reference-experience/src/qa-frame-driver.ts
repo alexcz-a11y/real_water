@@ -31,7 +31,7 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
   "normal": "water-view-normal",
   "motion-vector": "water-motion-vectors",
   "waterline": "water-optical-factors-target",
-  "history-rejection": "water-optical-factors-target",
+  "history-rejection": "water-history-rejection-target",
   "optical-fresnel": "water-optical-factors-target",
   "optical-thickness": "water-optical-factors-target",
   "optical-scattering": "water-optical-diagnostics-b",
@@ -54,7 +54,7 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
 
 export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
   schema: "real-water/qa-frame-prewarm" as const,
-  version: 8 as const,
+  version: 9 as const,
   id: "reference-qa-frame" as const,
   captures: Object.freeze([
     Object.freeze({
@@ -83,7 +83,7 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       name: "history-rejection" as const,
-      preparedFormat: "rgba16float-history-rejection" as const,
+      preparedFormat: "rgba8unorm-history-rejection" as const,
     }),
     Object.freeze({
       name: "optical-fresnel" as const,
@@ -297,6 +297,7 @@ export interface QaFrameDriverStateReceipt {
   readonly seed: number;
   readonly tick: number;
   readonly timeSeconds: number;
+  readonly seaLevelMetres: number;
   readonly simulationResetRevision: number;
 }
 
@@ -402,6 +403,7 @@ export function createQaFrameDriver(
           seed: state.seed,
           tick: state.tick,
           timeSeconds: state.timeSeconds,
+          seaLevelMetres: state.seaLevelMetres,
           simulationResetRevision: state.simulationResetRevision,
         });
       });
@@ -552,6 +554,7 @@ function toQaPresentedFrame(
     seed: frame.seed,
     tick: frame.tick,
     timeSeconds: frame.timeSeconds,
+    seaLevelMetres: state.seaLevelMetres,
     presentationId: frame.presentationId,
     manifestHash: frame.manifestHash,
     simulationResetRevision: frame.simulationResetRevision,
