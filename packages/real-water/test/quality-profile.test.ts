@@ -172,7 +172,8 @@ const LEGACY_PRE_RESET_PROFILES = Object.freeze({
       "sha256:d61edd12017f4b8adfe9878fa2c116fd9831b1681ce8b52c5e474e012ad94886",
     segments: 256,
   }),
-} as const);const MEMORY_PREWARM_DRAWING_BUFFER = Object.freeze({
+} as const);
+const MEMORY_PREWARM_DRAWING_BUFFER = Object.freeze({
   width: 320,
   height: 180,
 });
@@ -600,7 +601,7 @@ describe("Quality Profiles", () => {
       "unknown version 4",
       { ...createMinimalWaterQualityProfile(), version: 4 },
     ],
-    ["future version", { ...createMinimalWaterQualityProfile(), version: 6 }],
+    ["future version", { ...createMinimalWaterQualityProfile(), version: 7 }],
     [
       "version 1 hash tampering",
       {

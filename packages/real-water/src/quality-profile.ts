@@ -334,6 +334,26 @@ const LEGACY_V2_QUALITY_PROFILES: Readonly<
     heightSegments: 256,
   }),
 });
+// The version 5 hashes below are the digests committed before the interaction
+// field existed, so they cover the version 5 field order: schema, version, id,
+// surface, temporal, reflection.
+const LEGACY_V5_QUALITY_PROFILES: Readonly<
+  Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
+> = Object.freeze({
+  "minimal": Object.freeze({
+    profileHash:
+      "sha256:9a75bfe19d0e81f51ee19908ce547b5a7abd49ab01dbe00feb234e3c95d23ec0",
+    widthSegments: 128,
+    heightSegments: 128,
+  }),
+  "minimal-high-detail": Object.freeze({
+    profileHash:
+      "sha256:04b1d29617d1d2dd50f9d0f5b4f5dcd6ab6012cde62ae7e36ab0bba7be3061d8",
+    widthSegments: 256,
+    heightSegments: 256,
+  }),
+});
+
 const LEGACY_PRE_RESET_V5_QUALITY_PROFILES: Readonly<
   Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
 > = Object.freeze({
@@ -438,6 +458,9 @@ const SSR_HISTORY_KEYS = [
   "resetDomains",
   "updateCadence",
 ] as const;
+const LEGACY_V5_QUALITY_PROFILE_KEYS = QUALITY_PROFILE_KEYS.filter(
+  (key) => key !== "interaction",
+);
 const LEGACY_PRE_RESET_SSR_HISTORY_KEYS = SSR_HISTORY_KEYS.filter(
   (key) => key !== "resetVelocityFormat",
 );
@@ -583,14 +606,18 @@ export function migrateQualityProfile(candidate: unknown): QualityProfile {
     try {
       return normalizeQualityProfile(candidate as unknown as QualityProfile);
     } catch {
-      if (
-        isSupportedProfileId(candidate.id) &&
-        matchesLegacyPreResetV5Profile(candidate, candidate.id)
-      ) {
-        return createMinimalWaterQualityProfile(candidate.id);
-      }
       throw new TypeError("The Quality Profile cannot be migrated.");
     }
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 5 &&
+    isSupportedProfileId(candidate.id) &&
+    (matchesLegacyV5Profile(candidate, candidate.id) ||
+      matchesLegacyPreResetV5Profile(candidate, candidate.id))
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
   }
 
   if (
@@ -716,12 +743,42 @@ function matchesLegacyV2Temporal(value: unknown): boolean {
   );
 }
 
+function matchesLegacyV5Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return (
+    hasExactKeys(value, LEGACY_V5_QUALITY_PROFILE_KEYS) &&
+    value.schema === QUALITY_PROFILE_SCHEMA &&
+    matchesLegacySurface(value, LEGACY_V5_QUALITY_PROFILES[id]) &&
+    matchesCurrentTemporal(value.temporal) &&
+    matchesCurrentReflection(value.reflection)
+  );
+}
+
+function matchesCurrentReflection(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, REFLECTION_KEYS) &&
+    isRecord(value.environment) &&
+    hasExactKeys(value.environment, ["source"]) &&
+    value.environment.source === NATIVE_REFLECTION.environment.source &&
+    isRecord(value.planar) &&
+    hasExactKeys(value.planar, ["resolutionPolicy", "format", "samples"]) &&
+    value.planar.resolutionPolicy ===
+      NATIVE_REFLECTION.planar.resolutionPolicy &&
+    value.planar.format === NATIVE_REFLECTION.planar.format &&
+    value.planar.samples === NATIVE_REFLECTION.planar.samples &&
+    isSupportedSsrPolicy(value.ssr, NATIVE_REFLECTION.ssr)
+  );
+}
+
 function matchesLegacyPreResetV5Profile(
   value: Record<string, unknown>,
   id: MinimalWaterQualityProfileId,
 ): boolean {
   return (
-    hasExactKeys(value, QUALITY_PROFILE_KEYS) &&
+    hasExactKeys(value, LEGACY_V5_QUALITY_PROFILE_KEYS) &&
     value.schema === QUALITY_PROFILE_SCHEMA &&
     matchesLegacySurface(value, LEGACY_PRE_RESET_V5_QUALITY_PROFILES[id]) &&
     matchesCurrentTemporal(value.temporal) &&
