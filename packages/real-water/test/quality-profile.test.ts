@@ -80,10 +80,21 @@ const NATIVE_REFLECTION = Object.freeze({
   }),
   ssr: NATIVE_SSR,
 });
+const LOCAL_INTERACTION = Object.freeze({
+  anchorCount: 1 as const,
+  field: Object.freeze({
+    radiusMetres: 48 as const,
+    edgeFadeMetres: 8 as const,
+    maxActiveDisturbances: 128 as const,
+    snapshotBanks: 2 as const,
+    maxSnapshotAgeTicks: 1 as const,
+    radialImpactRoute: "analytic-uniform-array" as const,
+  }),
+});
 const MINIMAL_PROFILE_HASH =
-  "sha256:9a75bfe19d0e81f51ee19908ce547b5a7abd49ab01dbe00feb234e3c95d23ec0";
+  "sha256:c60b0a30fa310fbc1f21270c413a35b5b6265d6f157e5f41233be4b8042d8ec5";
 const HIGH_DETAIL_PROFILE_HASH =
-  "sha256:04b1d29617d1d2dd50f9d0f5b4f5dcd6ab6012cde62ae7e36ab0bba7be3061d8";
+  "sha256:4cba756cba61d7f4e071605c4d6939c1ba76b2cab0ef500bcf5ed1be7404d7f4";
 const MEMORY_PREWARM_DRAWING_BUFFER = Object.freeze({
   width: 320,
   height: 180,
@@ -273,6 +284,9 @@ const CORE_PREWARM_DECLARATION_IDS = [
   "water-scene-depth",
   "water-render-target",
   "water-clipmap",
+  "water-local-interaction-field",
+  "water-local-interaction-buffers",
+  "water-local-interaction-radial-impact-route",
   "water-spectral-band-swell",
   "water-spectral-band-wind",
   "water-spectral-band-chop",
@@ -331,10 +345,10 @@ describe("Quality Profiles", () => {
     const minimal = createMinimalWaterQualityProfile();
     const highDetail = createMinimalWaterQualityProfile("minimal-high-detail");
 
-    expect(QUALITY_PROFILE_VERSION).toBe(5);
+    expect(QUALITY_PROFILE_VERSION).toBe(6);
     expect(minimal).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 5,
+      version: 6,
       id: "minimal",
       profileHash: MINIMAL_PROFILE_HASH,
       surface: {
@@ -343,12 +357,13 @@ describe("Quality Profiles", () => {
           heightSegments: 128,
         },
       },
+      interaction: LOCAL_INTERACTION,
       temporal: NATIVE_TEMPORAL,
       reflection: NATIVE_REFLECTION,
     });
     expect(highDetail).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 5,
+      version: 6,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
       surface: {
@@ -357,6 +372,7 @@ describe("Quality Profiles", () => {
           heightSegments: 256,
         },
       },
+      interaction: LOCAL_INTERACTION,
       temporal: NATIVE_TEMPORAL,
       reflection: NATIVE_REFLECTION,
     });
@@ -364,6 +380,8 @@ describe("Quality Profiles", () => {
     expect(Object.isFrozen(minimal)).toBe(true);
     expect(Object.isFrozen(minimal.surface)).toBe(true);
     expect(Object.isFrozen(minimal.surface.geometry)).toBe(true);
+    expect(Object.isFrozen(minimal.interaction)).toBe(true);
+    expect(Object.isFrozen(minimal.interaction.field)).toBe(true);
     expect(Object.isFrozen(minimal.temporal)).toBe(true);
     expect(Object.isFrozen(minimal.reflection)).toBe(true);
     expect(Object.isFrozen(minimal.reflection.planar)).toBe(true);
@@ -393,7 +411,7 @@ describe("Quality Profiles", () => {
     expect(normalized).not.toBe(candidate);
     expect(identity).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 5,
+      version: 6,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
     });
@@ -425,6 +443,19 @@ describe("Quality Profiles", () => {
       {
         ...createMinimalWaterQualityProfile(),
         surface: { geometry: { widthSegments: 2, heightSegments: 1 } },
+      },
+    ],
+    [
+      "local interaction capacity drift",
+      {
+        ...createMinimalWaterQualityProfile(),
+        interaction: {
+          ...LOCAL_INTERACTION,
+          field: {
+            ...LOCAL_INTERACTION.field,
+            maxActiveDisturbances: 129,
+          },
+        },
       },
     ],
     [
@@ -689,8 +720,8 @@ describe("Quality Profile manifests", () => {
     );
     const highDetail = createMinimalWaterPrewarmManifest(highDetailProfile);
 
-    expect(PREWARM_MANIFEST_VERSION).toBe(3);
-    expect(minimal.version).toBe(3);
+    expect(PREWARM_MANIFEST_VERSION).toBe(4);
+    expect(minimal.version).toBe(4);
     expect(minimal.drawingBuffer).toEqual(MEMORY_PREWARM_DRAWING_BUFFER);
     expect(Object.isFrozen(minimal.drawingBuffer)).toBe(true);
     expect(minimal.manifestHash).toBe(
@@ -709,7 +740,7 @@ describe("Quality Profile manifests", () => {
     expect(minimal.effectVariants).toEqual(SUPPORTED_EFFECT_VARIANTS);
     expect(minimal.qualityProfile.temporal).toEqual(NATIVE_TEMPORAL);
     expect(minimal.qualityProfile.reflection).toEqual(NATIVE_REFLECTION);
-    expect(minimal.qualityProfile.version).toBe(5);
+    expect(minimal.qualityProfile.version).toBe(6);
     expect(minimal.declarations.map(({ id }) => id)).toEqual([
       ...CORE_PREWARM_DECLARATION_IDS,
     ]);
@@ -840,7 +871,7 @@ describe("Quality Profile manifests", () => {
     );
     expect(manifestIdentity(highDetail)).toEqual({
       schema: "real-water/prewarm",
-      version: 3,
+      version: 4,
       id: "reference-minimal-water",
       manifestHash: highDetail.manifestHash,
       qualityProfile: qualityProfileIdentity(highDetailProfile),

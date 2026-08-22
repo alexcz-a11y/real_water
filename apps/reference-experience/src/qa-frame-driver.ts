@@ -3,6 +3,7 @@ import type {
   PrewarmManifest,
   RealWaterCapabilities,
 } from "real-water";
+import { PREWARM_MANIFEST_VERSION } from "real-water";
 import {
   createQaBoundCoreManifestIdentity,
   readReadyCapabilities,
@@ -424,7 +425,7 @@ export function createBoundCoreDiagnosticsPrewarmReceipt(
 ): QaFramePrewarmReceipt {
   if (
     coreManifest.schema !== "real-water/prewarm" ||
-    coreManifest.version !== 3 ||
+    coreManifest.version !== PREWARM_MANIFEST_VERSION ||
     typeof coreManifest.id !== "string" ||
     typeof coreManifest.manifestHash !== "string" ||
     !Array.isArray(coreManifest.declarations)

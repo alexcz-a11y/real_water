@@ -8,6 +8,8 @@ export type {
   MinimalWaterQualityProfileId,
   QualityProfile,
   QualityProfileIdentity,
+  QualityProfileInteraction,
+  QualityProfileInteractionField,
   QualityProfileReflection,
   QualityProfileReflectionSsr,
   QualityProfileReflectionSsrHistory,
@@ -31,6 +33,7 @@ export type {
 
 export type {
   GameplayCapabilities,
+  GameplayCapabilitiesInteractionField,
   RealWaterCapabilities,
   RenderingCapabilities,
   RenderingCapabilitiesReflection,
@@ -39,7 +42,10 @@ export type {
   RenderingCapabilitiesReflectionSsrHistory,
   RenderingCapabilitiesTemporal,
 } from "./capabilities.js";
-export { MAX_GAMEPLAY_QUERY_POINTS } from "./capabilities.js";
+export {
+  MAX_ACTIVE_DISTURBANCES,
+  MAX_GAMEPLAY_QUERY_POINTS,
+} from "./capabilities.js";
 
 export { RealWaterRuntimeError, RealWaterStartupError } from "./errors.js";
 export type {
@@ -62,9 +68,14 @@ export type {
   ArtisticControlUpdateReceipt,
   GameplayQueryBatch,
   GameplayQueryResults,
+  DisturbanceBatch,
+  DisturbanceSubmissionReceipt,
   HostSimulationAdapter,
   HostSimulationState,
+  InteractionAnchor,
+  InteractionAnchorUpdateReceipt,
   OpenWaterRuntimeSnapshot,
+  RadialImpactDisturbanceBatch,
   RealWaterRuntime,
 } from "./runtime.js";
 

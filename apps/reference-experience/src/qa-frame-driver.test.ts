@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createMinimalWaterPrewarmManifest,
+  MAX_ACTIVE_DISTURBANCES,
   MAX_GAMEPLAY_QUERY_POINTS,
   type PrewarmManifest,
   type RealWaterCapabilities,
@@ -87,6 +88,13 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
   },
   gameplay: {
     maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
+    maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+    interactionField: {
+      radiusMetres: 48,
+      edgeFadeMetres: 8,
+      maxSnapshotAgeTicks: 1,
+      disturbanceKinds: ["radial-impact"],
+    },
   },
 };
 

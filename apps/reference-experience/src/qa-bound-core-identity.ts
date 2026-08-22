@@ -1,6 +1,7 @@
 import {
   createMinimalWaterPrewarmManifest,
   createMinimalWaterQualityProfile,
+  MAX_ACTIVE_DISTURBANCES,
   MAX_GAMEPLAY_QUERY_POINTS,
   type HostEnvironmentReflectionDescriptor,
   type PrewarmDeclaration,
@@ -132,7 +133,17 @@ const REFLECTION_PLANAR_KEYS = [
   "format",
   "samples",
 ] as const;
-const GAMEPLAY_CAPABILITY_KEYS = ["maxQueryPointsPerTick"] as const;
+const GAMEPLAY_CAPABILITY_KEYS = [
+  "maxQueryPointsPerTick",
+  "maxActiveDisturbances",
+  "interactionField",
+] as const;
+const INTERACTION_FIELD_CAPABILITY_KEYS = [
+  "radiusMetres",
+  "edgeFadeMetres",
+  "maxSnapshotAgeTicks",
+  "disturbanceKinds",
+] as const;
 const CAPABILITIES_TEMPORAL_KEYS = [
   ...TEMPORAL_KEYS,
   "motionFormat",
@@ -204,7 +215,7 @@ export function readReadyCapabilities(
     !hasExactKeys(value.gameplay, GAMEPLAY_CAPABILITY_KEYS)
   ) {
     throw new TypeError(
-      "Ready capabilities.gameplay must include maxQueryPointsPerTick.",
+      "Ready capabilities.gameplay must include query, Disturbance, and interaction-field limits.",
     );
   }
   if (value.rendering.backend !== "core-webgpu") {
@@ -220,6 +231,26 @@ export function readReadyCapabilities(
   if (value.gameplay.maxQueryPointsPerTick !== MAX_GAMEPLAY_QUERY_POINTS) {
     throw new Error(
       "Ready capabilities.gameplay.maxQueryPointsPerTick disagrees with Core.",
+    );
+  }
+  if (value.gameplay.maxActiveDisturbances !== MAX_ACTIVE_DISTURBANCES) {
+    throw new Error(
+      "Ready capabilities.gameplay.maxActiveDisturbances disagrees with Core.",
+    );
+  }
+  const interactionField = value.gameplay.interactionField;
+  if (
+    !isRecord(interactionField) ||
+    !hasExactKeys(interactionField, INTERACTION_FIELD_CAPABILITY_KEYS) ||
+    interactionField.radiusMetres !== 48 ||
+    interactionField.edgeFadeMetres !== 8 ||
+    interactionField.maxSnapshotAgeTicks !== 1 ||
+    !Array.isArray(interactionField.disturbanceKinds) ||
+    interactionField.disturbanceKinds.length !== 1 ||
+    interactionField.disturbanceKinds[0] !== "radial-impact"
+  ) {
+    throw new Error(
+      "Ready capabilities.gameplay.interactionField disagrees with Core.",
     );
   }
   const temporal = readCapabilitiesTemporal(
@@ -241,6 +272,13 @@ export function readReadyCapabilities(
       },
       gameplay: {
         maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
+        maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+        interactionField: {
+          radiusMetres: 48 as const,
+          edgeFadeMetres: 8 as const,
+          maxSnapshotAgeTicks: 1 as const,
+          disturbanceKinds: ["radial-impact" as const],
+        },
       },
     }),
   );

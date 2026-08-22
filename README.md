@@ -5,6 +5,18 @@ Water Domain. The repository now includes a four-band, camera-relative Open
 Water Domain with a complete basic optical path, versioned Calm, Swell, and
 Storm Water Presets, and the prewarm, reveal, reprepare, and recovery path.
 
+Issue #24 adds the first bounded local interaction slice:
+
+- one current Host-frame world-space Interaction Anchor moves a 48-metre local
+  field with an 8-metre Hermite fade back into the spectral surface;
+- batched radial-impact Disturbances use 128 preallocated slots and return
+  deterministic accepted/dropped receipts under visual-priority overflow;
+- the same analytic correction drives TSL vertex height, previous position,
+  fragment normal, and synchronous CPU Gameplay Queries with zero-or-one-tick
+  snapshot age and no GPU readback;
+- the QA Harness drives impact input, Anchor movement, reset, and deterministic
+  replay, then compares non-zero rendered depth/normal against Gameplay Query.
+
 Issue #20 shades that domain with a Host-owned basic optical path:
 
 - Fresnel, Host environment reflection, depth-aware refraction, absorption,
@@ -37,7 +49,7 @@ Issue #18 extended the coherent spectral runtime and deterministic QA
 foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly fifty-seven work
+- the canonical minimal-water Prewarm Manifest declares exactly sixty work
   units: a texture, Host equirect environment radiance, viewport scene color,
   viewport scene depth, 6-attachment MRT, camera-relative clipmap, four spectral
   bands, TSL NodeMaterial, optical route, planar reflection target/route,
@@ -53,8 +65,10 @@ foundation:
   shared no-allocation TRAA+SSR reset route, current-color conversion,
   twenty-three named diagnostics output routes, eight hidden temporal
   stabilization frames, named-output completion probes, and main-camera guard
-  frame. Version 3 binds the physical drawing buffer into that work plan; a
-  viewport change creates a new manifest and lease;
+  frame, plus the local interaction field, its fixed current/previous uniform
+  buffers, and the hidden-executed radial-impact route. Version 4 binds the
+  physical drawing buffer into that work plan; a viewport change creates a new
+  manifest and lease;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
   restores their state after preparation, and never disposes them;
 - progress advances monotonically only when declared manifest work completes;
@@ -96,7 +110,7 @@ foundation:
   wall-clock sleeps or animation-frame polling;
 - the Reference Experience keeps the canvas hidden through preparation and
   reveals it on the next refresh after readiness;
-- immutable version-5 `minimal` and `minimal-high-detail` Quality Profiles pin
+- immutable version-6 `minimal` and `minimal-high-detail` Quality Profiles pin
   the Native temporal policy (TRAA at render scale 1; TAAU, dynamic resolution,
   frame generation, and MSAA samples off) and the implemented reflection layer
   (Host-adapter environment, drawing-buffer-exact planar, current-frame SSR, and

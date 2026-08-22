@@ -1,10 +1,10 @@
 # real-water
 
 This alpha package exposes versioned minimal-water Quality Profiles, their
-canonical fifty-seven-unit Prewarm Manifests, versioned Calm, Swell, and Storm
-Water Presets, the Startup and ready Runtime Interfaces, normalized Core WebGPU
-and Gameplay Query capabilities, structured errors, and Memory and Three r185
-Host Adapters.
+canonical sixty-unit Prewarm Manifests, versioned Calm, Swell, and Storm Water
+Presets, the Startup and ready Runtime Interfaces, normalized Core WebGPU and
+Gameplay Query capabilities, structured errors, and Memory and Three r185 Host
+Adapters.
 
 The Three Adapter borrows the Host renderer, scene, main camera, and a Host
 Environment Adapter to prepare a TSL NodeMaterial, four coherent spectral wave
@@ -46,13 +46,13 @@ viewport after opaque geometry. Real Water never reads `scene.environment` or
 guesses sky or weather. The water material is an unlit public NodeMaterial whose
 color and MRT come from the same optical path.
 
-Each Prewarm Manifest is version 3 and binds an immutable drawing buffer. The
+Each Prewarm Manifest is version 4 and binds an immutable drawing buffer. The
 factory hashes that complete work plan synchronously. Memory Host tests may omit
 the buffer and receive 320x180; Three Host fails closed if the renderer buffer
 does not match. Changing the physical drawing buffer creates a new manifest and
 requires a full conceal, dispose, prewarm, and reveal.
 
-`minimal` and `minimal-high-detail` are immutable version-5 structural Quality
+`minimal` and `minimal-high-detail` are immutable version-6 structural Quality
 Profiles. Both pin the Native temporal policy and the implemented reflection
 layer: TRAA at render scale 1 with a drawing-buffer-exact resolution policy and
 TAAU, dynamic resolution, frame generation, and MSAA samples off, plus
@@ -65,6 +65,19 @@ and requires a full new preparation. A ready lease accepts only effect variants
 declared by its manifest; undeclared requests fail with `EFFECT_NOT_PREWARMED`
 before the runtime revision changes. Issue #22 and Native certification are not
 complete until the final slice audit.
+
+Both profiles also pin one 48-metre local interaction field with an 8-metre
+Hermite edge fade, one Interaction Anchor, 128 preallocated Disturbance slots,
+and current/previous snapshot banks. The Prewarm Manifest compiles and hidden-
+executes the analytic radial-impact route with scratch state, clears that state,
+and stabilizes the normal ready route before reveal. At runtime,
+`updateInteractionAnchor({ x, z })` moves only that current Host-frame
+world-space focus (the same coordinate frame used by Gameplay Queries);
+`submitDisturbances(...)` accepts caller-owned radial-impact typed arrays. When
+capacity is full, the lowest visual priority is dropped and identified by the
+receipt without resizing the prepared buffers. Radial-impact radii are bounded
+to 0.0001–48 metres and signed peak amplitudes to -4–4 metres so every accepted
+128-impact composition remains finite.
 
 Ready leases expose one-shot runtime invalidation. A Host Integration calls
 `invalidateForLongSuspension()` when its own lifecycle classifies a suspension
@@ -118,8 +131,10 @@ Native certification claim.
 `queryGameplay(...)` is synchronous and performs no GPU readback. It writes up
 to 2,048 points per simulation tick into caller-owned typed arrays for height,
 normal, three-dimensional surface velocity, a zero foam placeholder, tick,
-Artistic Control revision, and zero-tick local snapshot age. Capacity and input
-failures are detected before output buffers are changed.
+Artistic Control revision, and zero-or-one-tick local snapshot age. Spectral
+state is evaluated on the CPU while the latest published local correction is
+composed without waiting for GPU work. Capacity and input failures are detected
+before output buffers are changed.
 
 Disposal releases the clipmap and other Real Water-owned resources without
 disposing Host-owned objects.

@@ -33,6 +33,7 @@ import {
 import type { HostEnvironmentAdapter } from "../environment.js";
 import { readHostEnvironmentState } from "../environment.js";
 import type { OpenWaterRuntimeSnapshot, RuntimeStateSink } from "../runtime.js";
+import type { LocalInteractionRenderSnapshot } from "./local-interaction.js";
 import { createWaterPreset } from "../water-preset.js";
 import type { createSpectralBandRendering } from "./spectral-bands-rendering.js";
 
@@ -337,8 +338,11 @@ export function createWaterOpticsRendering(
   };
 
   const sink: RuntimeStateSink = Object.freeze({
-    synchronize(snapshot: OpenWaterRuntimeSnapshot): void {
-      spectral.sink.synchronize(snapshot);
+    synchronize(
+      snapshot: OpenWaterRuntimeSnapshot,
+      interaction: LocalInteractionRenderSnapshot,
+    ): void {
+      spectral.sink.synchronize(snapshot, interaction);
       applySnapshot(snapshot);
     },
   });

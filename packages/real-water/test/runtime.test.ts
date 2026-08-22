@@ -75,6 +75,13 @@ describe("ready Open Water runtime", () => {
 
     expect(lease.capabilities.gameplay).toEqual({
       maxQueryPointsPerTick: 2_048,
+      maxActiveDisturbances: 128,
+      interactionField: {
+        radiusMetres: 48,
+        edgeFadeMetres: 8,
+        maxSnapshotAgeTicks: 1,
+        disturbanceKinds: ["radial-impact"],
+      },
     });
     expect(Object.isFrozen(lease.capabilities.gameplay)).toBe(true);
     await lease.dispose();

@@ -112,12 +112,26 @@ export interface RenderingCapabilities {
 }
 
 /**
- * Bounded hot-path capacities prepared for Gameplay Queries.
+ * Structural local interaction field prepared before the runtime becomes ready.
+ *
+ * @public
+ */
+export interface GameplayCapabilitiesInteractionField {
+  readonly radiusMetres: 48;
+  readonly edgeFadeMetres: 8;
+  readonly maxSnapshotAgeTicks: 1;
+  readonly disturbanceKinds: readonly ["radial-impact"];
+}
+
+/**
+ * Bounded hot-path capacities prepared for gameplay commands and queries.
  *
  * @public
  */
 export interface GameplayCapabilities {
   readonly maxQueryPointsPerTick: 2_048;
+  readonly maxActiveDisturbances: 128;
+  readonly interactionField: GameplayCapabilitiesInteractionField;
 }
 
 /**
@@ -126,6 +140,25 @@ export interface GameplayCapabilities {
  * @public
  */
 export const MAX_GAMEPLAY_QUERY_POINTS = 2_048 as const;
+
+/**
+ * Maximum active Disturbances retained by one prepared local interaction field.
+ *
+ * @public
+ */
+export const MAX_ACTIVE_DISTURBANCES = 128 as const;
+
+export const INTERACTION_FIELD_RADIUS_METRES = 48 as const;
+export const INTERACTION_FIELD_EDGE_FADE_METRES = 8 as const;
+
+const SUPPORTED_DISTURBANCE_KINDS = Object.freeze(["radial-impact"] as const);
+const INTERACTION_FIELD_CAPABILITIES: GameplayCapabilitiesInteractionField =
+  Object.freeze({
+    radiusMetres: INTERACTION_FIELD_RADIUS_METRES,
+    edgeFadeMetres: INTERACTION_FIELD_EDGE_FADE_METRES,
+    maxSnapshotAgeTicks: 1 as const,
+    disturbanceKinds: SUPPORTED_DISTURBANCE_KINDS,
+  });
 
 const NATIVE_TEMPORAL_CAPABILITIES: RenderingCapabilitiesTemporal =
   Object.freeze({
@@ -163,6 +196,8 @@ export function createCoreWebGPUCapabilities(
   return Object.freeze({
     gameplay: Object.freeze({
       maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
+      maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+      interactionField: INTERACTION_FIELD_CAPABILITIES,
     }),
     rendering: Object.freeze({
       backend: "core-webgpu" as const,

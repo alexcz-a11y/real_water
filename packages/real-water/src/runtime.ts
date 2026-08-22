@@ -6,6 +6,14 @@ import {
   type OriginRevisionTracker,
 } from "./internal/origin-revision-tracker.js";
 import { writeSpectralBandQueries } from "./internal/spectral-bands.js";
+import {
+  createLocalInteractionField,
+  type LocalInteractionRenderSnapshot,
+  type LocalInteractionField,
+  MAX_RADIAL_IMPACT_AMPLITUDE_METRES,
+  MAX_RADIAL_IMPACT_RADIUS_METRES,
+  MIN_RADIAL_IMPACT_RADIUS_METRES,
+} from "./internal/local-interaction.js";
 import { createWaterPreset } from "./water-preset.js";
 import {
   readHostPresentationState,
@@ -108,7 +116,9 @@ export interface HostSimulationAdapter {
  * Spectral wave state, seed, tick, time, and Artistic Controls are retained
  * across origin shifts. `seaStateCutRevision` increments only on an explicit
  * sea-state cut. `cameraCutRevision` is read from the Host Presentation
- * Adapter and is not stored as runtime-owned durable state.
+ * Adapter and is not stored as runtime-owned durable state. The published
+ * Interaction Anchor is expressed in the current Host frame, so its XZ values
+ * rebase when the Host origin changes while its absolute focus stays fixed.
  *
  * @public
  */
@@ -118,6 +128,73 @@ export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
   readonly originRevision: number;
   readonly seaStateCutRevision: number;
   readonly cameraCutRevision: number;
+  readonly interactionAnchor: InteractionAnchor;
+  readonly interactionAnchorRevision: number;
+  readonly activeDisturbanceCount: number;
+}
+
+/**
+ * Current Host-frame world-space XZ focus of the movable local interaction
+ * field. Like Gameplay Query positions, it is rebased by Host origin shifts.
+ *
+ * @public
+ */
+export interface InteractionAnchor {
+  readonly x: number;
+  readonly z: number;
+}
+
+/**
+ * Result of moving the one prepared Interaction Anchor.
+ *
+ * @public
+ */
+export interface InteractionAnchorUpdateReceipt {
+  readonly anchor: InteractionAnchor;
+  readonly changed: boolean;
+  readonly revision: number;
+}
+
+/**
+ * Caller-owned structure-of-arrays batch for radial-impact Disturbances.
+ *
+ * Positions are tightly packed XYZ triples in the current Host frame. Y is
+ * validated but does not move the horizontal Open Water surface.
+ *
+ * @public
+ */
+export interface RadialImpactDisturbanceBatch {
+  readonly kind: "radial-impact";
+  readonly count: number;
+  /** Caller identities, unique across this batch and all active Disturbances. */
+  readonly ids: Uint32Array;
+  /** Tightly packed XYZ centers in the current Host frame. */
+  readonly positions: Float32Array;
+  /** Per-impact radii in the inclusive range 0.0001 to 48 metres. */
+  readonly radii: Float32Array;
+  /** Signed peak displacement in the inclusive range -4 to 4 metres. */
+  readonly amplitudes: Float32Array;
+  /** Unsigned visual priority; overflow preserves older equal-priority input. */
+  readonly priorities: Uint8Array;
+}
+
+/**
+ * Batched Disturbance input supported by this runtime slice.
+ *
+ * @public
+ */
+export type DisturbanceBatch = RadialImpactDisturbanceBatch;
+
+/**
+ * Deterministic accepted/dropped outcome of one Disturbance submission.
+ *
+ * @public
+ */
+export interface DisturbanceSubmissionReceipt {
+  readonly tick: number;
+  readonly acceptedDisturbanceIds: readonly number[];
+  readonly droppedDisturbanceIds: readonly number[];
+  readonly activeDisturbanceCount: number;
 }
 
 /**
@@ -168,6 +245,7 @@ export interface GameplayQueryResults {
   readonly foam: Float32Array;
   readonly ticks: Float64Array;
   readonly controlRevisions: Float64Array;
+  /** Age in Host ticks of the published local correction snapshot (0 or 1). */
   readonly snapshotAges: Uint8Array;
 }
 
@@ -195,12 +273,19 @@ export interface RealWaterRuntime {
     controls: ArtisticControls,
     options?: ArtisticControlUpdateOptions,
   ): ArtisticControlUpdateReceipt;
+  updateInteractionAnchor(
+    anchor: InteractionAnchor,
+  ): InteractionAnchorUpdateReceipt;
+  submitDisturbances(batch: DisturbanceBatch): DisturbanceSubmissionReceipt;
   queryGameplay(batch: GameplayQueryBatch): GameplayQueryResults;
   inspectRuntime(): OpenWaterRuntimeSnapshot;
 }
 
 export interface RuntimeStateSink {
-  synchronize(snapshot: OpenWaterRuntimeSnapshot): void;
+  synchronize(
+    snapshot: OpenWaterRuntimeSnapshot,
+    interaction: LocalInteractionRenderSnapshot,
+  ): void;
 }
 
 export function createRealWaterRuntime(
@@ -215,9 +300,16 @@ export function createRealWaterRuntime(
   let seaStateCutRevision = 0;
   let queryTick = -1;
   let queriesUsedThisTick = 0;
-  const originRevisions = createOriginRevisionTracker(
-    readHostSimulationState(simulation),
-  );
+  const initialSimulationState = readHostSimulationState(simulation);
+  const originRevisions = createOriginRevisionTracker(initialSimulationState);
+  const localInteraction = createLocalInteractionField(initialSimulationState);
+  let synchronizedInteractionRevision = localInteraction.renderRevision();
+
+  const synchronizeSink = (snapshot: OpenWaterRuntimeSnapshot): void => {
+    const interaction = localInteraction.renderSnapshot();
+    sink?.synchronize(snapshot, interaction);
+    synchronizedInteractionRevision = interaction.revision;
+  };
 
   return Object.freeze({
     updateArtisticControls(
@@ -237,7 +329,7 @@ export function createRealWaterRuntime(
         seaStateCutRevision += 1;
       }
       if (changed || nextTransition === "sea-state-cut") {
-        sink?.synchronize(
+        synchronizeSink(
           readSnapshot(
             simulation,
             presentationState,
@@ -245,6 +337,7 @@ export function createRealWaterRuntime(
             controlRevision,
             originRevisions,
             seaStateCutRevision,
+            localInteraction,
           ),
         );
       }
@@ -255,6 +348,50 @@ export function createRealWaterRuntime(
         transition: nextTransition,
         seaStateCutRevision,
       });
+    },
+    updateInteractionAnchor(
+      anchor: InteractionAnchor,
+    ): InteractionAnchorUpdateReceipt {
+      assertActive();
+      readHostPresentationState(presentation);
+      const accepted = readInteractionAnchor(anchor);
+      const state = readHostSimulationState(simulation);
+      const receipt = localInteraction.updateAnchor(accepted, state);
+      if (receipt.changed) {
+        synchronizeSink(
+          readSnapshot(
+            simulation,
+            readHostPresentationState(presentation),
+            artisticControls,
+            controlRevision,
+            originRevisions,
+            seaStateCutRevision,
+            localInteraction,
+          ),
+        );
+      }
+      return receipt;
+    },
+    submitDisturbances(batch: DisturbanceBatch): DisturbanceSubmissionReceipt {
+      assertActive();
+      readHostPresentationState(presentation);
+      validateRadialImpactDisturbanceBatch(batch);
+      const state = readHostSimulationState(simulation);
+      const receipt = localInteraction.submitRadialImpacts(batch, state);
+      if (batch.count > 0) {
+        synchronizeSink(
+          readSnapshot(
+            simulation,
+            readHostPresentationState(presentation),
+            artisticControls,
+            controlRevision,
+            originRevisions,
+            seaStateCutRevision,
+            localInteraction,
+          ),
+        );
+      }
+      return receipt;
     },
     queryGameplay(batch: GameplayQueryBatch): GameplayQueryResults {
       assertActive();
@@ -267,10 +404,11 @@ export function createRealWaterRuntime(
         throw queryCapacityError(batch.count, usedThisTick);
       }
       writeSpectralBandQueries(batch, state, artisticControls);
+      const snapshotAge = localInteraction.applyQueries(batch, state);
       for (let point = 0; point < batch.count; point += 1) {
         batch.results.ticks[point] = state.tick;
         batch.results.controlRevisions[point] = controlRevision;
-        batch.results.snapshotAges[point] = 0;
+        batch.results.snapshotAges[point] = snapshotAge;
       }
       queryTick = state.tick;
       queriesUsedThisTick = usedThisTick + batch.count;
@@ -278,14 +416,21 @@ export function createRealWaterRuntime(
     },
     inspectRuntime(): OpenWaterRuntimeSnapshot {
       assertActive();
-      return readSnapshot(
+      const snapshot = readSnapshot(
         simulation,
         readHostPresentationState(presentation),
         artisticControls,
         controlRevision,
         originRevisions,
         seaStateCutRevision,
+        localInteraction,
       );
+      if (
+        localInteraction.renderRevision() !== synchronizedInteractionRevision
+      ) {
+        synchronizeSink(snapshot);
+      }
+      return snapshot;
     },
   });
 }
@@ -448,8 +593,10 @@ function readSnapshot(
   controlRevision: number,
   originRevisions: OriginRevisionTracker,
   seaStateCutRevision: number,
+  localInteraction: LocalInteractionField,
 ): OpenWaterRuntimeSnapshot {
   const state = readHostSimulationState(simulation);
+  const interaction = localInteraction.inspect(state);
   return freezeSnapshot({
     seed: state.seed,
     tick: state.tick,
@@ -463,7 +610,122 @@ function readSnapshot(
     originRevision: originRevisions.observe(state),
     seaStateCutRevision,
     cameraCutRevision: presentationState.cameraCutRevision,
+    interactionAnchor: interaction.anchor,
+    interactionAnchorRevision: interaction.revision,
+    activeDisturbanceCount: interaction.activeDisturbanceCount,
   });
+}
+
+function readInteractionAnchor(anchor: InteractionAnchor): InteractionAnchor {
+  const value: unknown = anchor;
+  if (!isRecord(value) || !hasExactKeys(value, ["x", "z"])) {
+    throw new TypeError(
+      "The Interaction Anchor must use exact XZ coordinates.",
+    );
+  }
+  if (!Number.isFinite(value.x) || !Number.isFinite(value.z)) {
+    throw new RangeError("The Interaction Anchor must contain finite values.");
+  }
+  return Object.freeze({ x: anchor.x, z: anchor.z });
+}
+
+function validateRadialImpactDisturbanceBatch(
+  batch: RadialImpactDisturbanceBatch,
+): void {
+  const value: unknown = batch;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "kind",
+      "count",
+      "ids",
+      "positions",
+      "radii",
+      "amplitudes",
+      "priorities",
+    ]) ||
+    value.kind !== "radial-impact"
+  ) {
+    throw new TypeError(
+      "Disturbance batches must use the exact radial-impact contract.",
+    );
+  }
+  if (!Number.isSafeInteger(batch.count) || batch.count < 0) {
+    throw new RangeError(
+      "Disturbance counts must be non-negative safe integers.",
+    );
+  }
+  requireUint32Length(batch.ids, batch.count, "ids");
+  requireLength(batch.positions, batch.count * 3, "positions");
+  requireLength(batch.radii, batch.count, "radii");
+  requireLength(batch.amplitudes, batch.count, "amplitudes");
+  requireUint8DisturbanceLength(batch.priorities, batch.count, "priorities");
+  const ids = new Set<number>();
+  for (let index = 0; index < batch.count; index += 1) {
+    const vectorIndex = index * 3;
+    if (
+      !Number.isFinite(batch.positions[vectorIndex]) ||
+      !Number.isFinite(batch.positions[vectorIndex + 1]) ||
+      !Number.isFinite(batch.positions[vectorIndex + 2])
+    ) {
+      throw new RangeError(
+        "Radial-impact positions must contain finite values.",
+      );
+    }
+    const radius = batch.radii[index];
+    if (
+      !Number.isFinite(radius) ||
+      radius === undefined ||
+      radius < MIN_RADIAL_IMPACT_RADIUS_METRES ||
+      radius > MAX_RADIAL_IMPACT_RADIUS_METRES
+    ) {
+      throw new RangeError(
+        "Radial-impact radii must be at least 0.0001 metres and at most 48 metres.",
+      );
+    }
+    const amplitude = batch.amplitudes[index];
+    if (
+      !Number.isFinite(amplitude) ||
+      amplitude === undefined ||
+      amplitude < -MAX_RADIAL_IMPACT_AMPLITUDE_METRES ||
+      amplitude > MAX_RADIAL_IMPACT_AMPLITUDE_METRES
+    ) {
+      throw new RangeError(
+        "Radial-impact amplitudes must be between -4 and 4 metres.",
+      );
+    }
+    const id = batch.ids[index] ?? 0;
+    if (ids.has(id)) {
+      throw new TypeError(
+        "Radial-impact batches require unique Disturbance ids.",
+      );
+    }
+    ids.add(id);
+  }
+}
+
+function requireUint32Length(
+  buffer: Uint32Array,
+  required: number,
+  label: string,
+): void {
+  if (!(buffer instanceof Uint32Array) || buffer.length < required) {
+    throw new RangeError(
+      `The Disturbance ${label} buffer requires at least ${required} Uint32 values.`,
+    );
+  }
+}
+
+function requireUint8DisturbanceLength(
+  buffer: Uint8Array,
+  required: number,
+  label: string,
+): void {
+  if (!(buffer instanceof Uint8Array) || buffer.length < required) {
+    throw new RangeError(
+      `The Disturbance ${label} buffer requires at least ${required} Uint8 values.`,
+    );
+  }
 }
 
 function validateGameplayQueryBatch(batch: GameplayQueryBatch): void {

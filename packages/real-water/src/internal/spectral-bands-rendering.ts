@@ -4,23 +4,35 @@ import {
   cos,
   float,
   highpModelNormalViewMatrix,
+  If,
   length,
+  Loop,
   Fn,
   mix,
   nodeObject,
   NodeUpdateType,
   positionGeometry,
   positionPrevious,
+  renderGroup,
   sin,
   smoothstep,
+  step,
   uniform,
+  uniformArray,
   vec2,
   vec3,
+  vec4,
 } from "three/tsl";
-import { Node } from "three/webgpu";
+import { Node, Vector2, Vector4 } from "three/webgpu";
+import {
+  INTERACTION_FIELD_EDGE_FADE_METRES,
+  INTERACTION_FIELD_RADIUS_METRES,
+  MAX_ACTIVE_DISTURBANCES,
+} from "../capabilities.js";
 import type {
   ArtisticControls,
   HostSimulationAdapter,
+  HostSimulationState,
   OpenWaterRuntimeSnapshot,
   RuntimeStateSink,
 } from "../runtime.js";
@@ -52,6 +64,11 @@ import {
 } from "./spectral-bands.js";
 import { snapClipmapToCamera } from "./camera-relative-clipmap.js";
 import { createWaterPreset } from "../water-preset.js";
+import {
+  MIN_RADIAL_IMPACT_RADIUS_METRES,
+  RADIAL_IMPACT_LIFETIME_SECONDS,
+  type LocalInteractionRenderSnapshot,
+} from "./local-interaction.js";
 
 const INITIAL_ARTISTIC_CONTROLS: ArtisticControls =
   createWaterPreset("swell").artisticControls;
@@ -94,6 +111,50 @@ export function createSpectralBandRendering(
   const previousCrestSharpness = uniform(0);
   const previousBlendOriginPhaseA = uniform(0);
   const previousBlendOriginPhaseB = uniform(0);
+  const createImpactVectors = () =>
+    Array.from({ length: MAX_ACTIVE_DISTURBANCES }, () => new Vector4());
+  const currentImpactGeometryValues = createImpactVectors();
+  const currentImpactTimingValues = createImpactVectors();
+  const previousImpactGeometryValues = createImpactVectors();
+  const previousImpactTimingValues = createImpactVectors();
+  const currentImpactGeometry = uniformArray<"vec4">(
+    currentImpactGeometryValues,
+    "vec4",
+  )
+    .setName("localImpactGeometryCurrent")
+    .setGroup(renderGroup);
+  const currentImpactTiming = uniformArray<"vec4">(
+    currentImpactTimingValues,
+    "vec4",
+  )
+    .setName("localImpactTimingCurrent")
+    .setGroup(renderGroup);
+  const previousImpactGeometry = uniformArray<"vec4">(
+    previousImpactGeometryValues,
+    "vec4",
+  )
+    .setName("localImpactGeometryPrevious")
+    .setGroup(renderGroup);
+  const previousImpactTiming = uniformArray<"vec4">(
+    previousImpactTimingValues,
+    "vec4",
+  )
+    .setName("localImpactTimingPrevious")
+    .setGroup(renderGroup);
+  const currentImpactCount = uniform(0, "int")
+    .setName("localImpactCountCurrent")
+    .setGroup(renderGroup);
+  const previousImpactCount = uniform(0, "int")
+    .setName("localImpactCountPrevious")
+    .setGroup(renderGroup);
+  const currentAnchorValue = new Vector2();
+  const previousAnchorValue = new Vector2();
+  const currentAnchor = uniform(currentAnchorValue)
+    .setName("interactionAnchorCurrent")
+    .setGroup(renderGroup);
+  const previousAnchor = uniform(previousAnchorValue)
+    .setName("interactionAnchorPrevious")
+    .setGroup(renderGroup);
 
   const createHostSample = () => {
     // Clipmap snap uniforms stay in the Host frame. positionLocal includes that
@@ -110,6 +171,124 @@ export function createSpectralBandRendering(
   };
   type HostSample = ReturnType<typeof createHostSample>;
   type WaveAxis = HostSample["hostX"];
+  type ImpactGeometry = typeof currentImpactGeometry;
+  type ImpactTiming = typeof currentImpactTiming;
+  type ImpactCount = typeof currentImpactCount;
+  type AnchorUniform = typeof currentAnchor;
+  type TimeUniform = typeof timeSeconds;
+  const evaluateLocalInteraction = (
+    hostX: WaveAxis,
+    hostZ: WaveAxis,
+    sampleTime: TimeUniform,
+    anchor: AnchorUniform,
+    count: ImpactCount,
+    geometry: ImpactGeometry,
+    timing: ImpactTiming,
+  ) =>
+    Fn(() => {
+      const anchorDx = hostX.sub(anchor.x);
+      const anchorDz = hostZ.sub(anchor.y);
+      const anchorDistance = length(vec2(anchorDx, anchorDz));
+      const fadeStart =
+        INTERACTION_FIELD_RADIUS_METRES - INTERACTION_FIELD_EDGE_FADE_METRES;
+      const fadeT = anchorDistance
+        .sub(fadeStart)
+        .div(INTERACTION_FIELD_EDGE_FADE_METRES)
+        .clamp(0, 1);
+      const fieldFade = float(1).sub(
+        fadeT.mul(fadeT).mul(float(3).sub(fadeT.mul(2))),
+      );
+      const fieldFadeDerivative = fadeT
+        .mul(float(1).sub(fadeT))
+        .mul(-6 / INTERACTION_FIELD_EDGE_FADE_METRES);
+      const inverseAnchorDistance = float(1).div(anchorDistance.max(1e-5));
+      const accumulated = vec4(0).toVar();
+      If(fieldFade.greaterThan(0), () => {
+        Loop({ start: 0, end: count, type: "int", condition: "<" }, ({ i }) => {
+          const descriptor = vec4(geometry.element(i));
+          const timingDescriptor = vec4(timing.element(i));
+          const dx = hostX.sub(descriptor.x);
+          const dz = hostZ.sub(descriptor.y);
+          const distance = length(vec2(dx, dz));
+          const radius = descriptor.z.max(MIN_RADIAL_IMPACT_RADIUS_METRES);
+          const normalizedRadius = distance.div(radius);
+          const age = sampleTime.sub(timingDescriptor.x);
+          const progress = age.div(RADIAL_IMPACT_LIFETIME_SECONDS).clamp(0, 1);
+          const remaining = float(1).sub(progress);
+          const decay = remaining.mul(remaining);
+          const radialT = normalizedRadius.clamp(0, 1);
+          const radialWindow = float(1).sub(
+            radialT.mul(radialT).mul(float(3).sub(radialT.mul(2))),
+          );
+          const radialWindowDerivative = radialT
+            .mul(float(1).sub(radialT))
+            .mul(-6);
+          const phase = normalizedRadius.sub(progress.mul(2)).mul(Math.PI);
+          const phaseCosine = cos(phase);
+          const phaseSine = sin(phase);
+          const active = step(0, age)
+            .mul(float(1).sub(step(RADIAL_IMPACT_LIFETIME_SECONDS, age)))
+            .mul(float(1).sub(step(1, normalizedRadius)));
+          const impactHeight = descriptor.w
+            .mul(decay)
+            .mul(phaseCosine)
+            .mul(radialWindow)
+            .mul(active);
+          const heightDerivativeRadius = descriptor.w
+            .mul(decay)
+            .mul(
+              phaseSine
+                .mul(-Math.PI)
+                .mul(radialWindow)
+                .add(phaseCosine.mul(radialWindowDerivative)),
+            )
+            .div(radius)
+            .mul(active);
+          const inverseDistance = float(1).div(distance.max(1e-5));
+          const impactVelocity = descriptor.w
+            .mul(radialWindow)
+            .mul(
+              remaining
+                .mul(-2 / RADIAL_IMPACT_LIFETIME_SECONDS)
+                .mul(phaseCosine)
+                .add(
+                  decay
+                    .mul((2 * Math.PI) / RADIAL_IMPACT_LIFETIME_SECONDS)
+                    .mul(phaseSine),
+                ),
+            )
+            .mul(active);
+          accumulated.x.addAssign(impactHeight);
+          accumulated.y.addAssign(
+            heightDerivativeRadius.mul(dx).mul(inverseDistance),
+          );
+          accumulated.z.addAssign(
+            heightDerivativeRadius.mul(dz).mul(inverseDistance),
+          );
+          accumulated.w.addAssign(impactVelocity);
+        });
+      });
+      return vec4(
+        accumulated.x.mul(fieldFade),
+        accumulated.y
+          .mul(fieldFade)
+          .add(
+            accumulated.x
+              .mul(fieldFadeDerivative)
+              .mul(anchorDx)
+              .mul(inverseAnchorDistance),
+          ),
+        accumulated.z
+          .mul(fieldFade)
+          .add(
+            accumulated.x
+              .mul(fieldFadeDerivative)
+              .mul(anchorDz)
+              .mul(inverseAnchorDistance),
+          ),
+        accumulated.w.mul(fieldFade),
+      );
+    })();
   const viewDistanceNode = (hostX: WaveAxis, hostZ: WaveAxis) =>
     length(vec2(hostX.sub(cameraPosition.x), hostZ.sub(cameraPosition.z)));
   const slopeFadeNode = (viewDistance: ReturnType<typeof viewDistanceNode>) =>
@@ -337,7 +516,18 @@ export function createSpectralBandRendering(
     vertexSlopeFade,
     currentWaveField,
   );
-  const vertexHeight = vertexSurface.height.toVertexStage();
+  const vertexLocalInteraction = evaluateLocalInteraction(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    timeSeconds,
+    currentAnchor,
+    currentImpactCount,
+    currentImpactGeometry,
+    currentImpactTiming,
+  );
+  const vertexHeight = vertexSurface.height
+    .add(vertexLocalInteraction.x)
+    .toVertexStage();
   const previousVertexSurface = evaluateBlendedSurface(
     vertexSample.hostX,
     vertexSample.hostZ,
@@ -345,7 +535,18 @@ export function createSpectralBandRendering(
     vertexSlopeFade,
     previousWaveField,
   );
-  const previousVertexHeight = previousVertexSurface.height.toVertexStage();
+  const previousVertexLocalInteraction = evaluateLocalInteraction(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    previousTimeSeconds,
+    previousAnchor,
+    previousImpactCount,
+    previousImpactGeometry,
+    previousImpactTiming,
+  );
+  const previousVertexHeight = previousVertexSurface.height
+    .add(previousVertexLocalInteraction.x)
+    .toVertexStage();
 
   const fragmentSample = createHostSample();
   const fragmentViewDistance = viewDistanceNode(
@@ -360,11 +561,22 @@ export function createSpectralBandRendering(
     fragmentSlopeFade,
     currentWaveField,
   );
+  const fragmentLocalInteraction = evaluateLocalInteraction(
+    fragmentSample.hostX,
+    fragmentSample.hostZ,
+    timeSeconds,
+    currentAnchor,
+    currentImpactCount,
+    currentImpactGeometry,
+    currentImpactTiming,
+  );
+  const fragmentSlopeX = fragmentSurface.slopeX.add(fragmentLocalInteraction.y);
+  const fragmentSlopeZ = fragmentSurface.slopeZ.add(fragmentLocalInteraction.z);
 
   const localNormal = vec3(
-    fragmentSurface.slopeX.mul(-1),
+    fragmentSlopeX.mul(-1),
     1,
-    fragmentSurface.slopeZ.mul(-1),
+    fragmentSlopeZ.mul(-1),
   ).normalize();
   const roughnessNode = mix(
     float(0.08),
@@ -377,7 +589,7 @@ export function createSpectralBandRendering(
   const nearWhite = smoothstep(
     0.22,
     0.9,
-    length(vec2(fragmentSurface.slopeX, fragmentSurface.slopeZ)),
+    length(vec2(fragmentSlopeX, fragmentSlopeZ)),
   );
   const farWhite = smoothstep(
     0.12,
@@ -475,6 +687,44 @@ export function createSpectralBandRendering(
     }
     writeOriginPhases(snapshot.originX, snapshot.originZ, field, writeFarWhite);
   };
+  const initialSimulationState = readHostSimulationState(simulation);
+  const emptyLocalInteraction: LocalInteractionRenderSnapshot = Object.freeze({
+    revision: 0,
+    anchorX: initialSimulationState.originX,
+    anchorZ: initialSimulationState.originZ,
+    impacts: Object.freeze([]),
+  });
+  let desiredLocalInteraction = emptyLocalInteraction;
+  let committedLocalInteraction: LocalInteractionRenderSnapshot | null = null;
+  let pendingLocalInteraction: LocalInteractionRenderSnapshot | null = null;
+  const writeLocalInteractionBank = (
+    interaction: LocalInteractionRenderSnapshot,
+    state: HostSimulationState,
+    geometryValues: Vector4[],
+    timingValues: Vector4[],
+    countUniform: typeof currentImpactCount,
+    anchorValue: Vector2,
+  ): void => {
+    const count = Math.min(interaction.impacts.length, MAX_ACTIVE_DISTURBANCES);
+    countUniform.value = count;
+    anchorValue.set(
+      interaction.anchorX - state.originX,
+      interaction.anchorZ - state.originZ,
+    );
+    for (let index = 0; index < count; index += 1) {
+      const impact = interaction.impacts[index];
+      if (impact === undefined) {
+        continue;
+      }
+      geometryValues[index]?.set(
+        impact.x - state.originX,
+        impact.z - state.originZ,
+        impact.radius,
+        impact.amplitude,
+      );
+      timingValues[index]?.set(impact.startTimeSeconds, 0, 0, 0);
+    }
+  };
   type PresentedWaveField = Readonly<{
     readonly seed: number;
     readonly tick: number;
@@ -521,9 +771,30 @@ export function createSpectralBandRendering(
         seaStateCutRevision: desiredSeaStateCutRevision,
         artisticControls: desiredControls,
       };
-      const previous = shouldResetWaveHistory(current) ? current : committed;
+      const resetHistory = shouldResetWaveHistory(current);
+      const previous = resetHistory ? current : committed;
       writeWaveField(currentWaveField, current, true);
       writeWaveField(previousWaveField, previous ?? current, false);
+      const previousLocalInteraction =
+        resetHistory || committedLocalInteraction === null
+          ? desiredLocalInteraction
+          : committedLocalInteraction;
+      writeLocalInteractionBank(
+        desiredLocalInteraction,
+        state,
+        currentImpactGeometryValues,
+        currentImpactTimingValues,
+        currentImpactCount,
+        currentAnchorValue,
+      );
+      writeLocalInteractionBank(
+        previousLocalInteraction,
+        state,
+        previousImpactGeometryValues,
+        previousImpactTimingValues,
+        previousImpactCount,
+        previousAnchorValue,
+      );
       const camera = frame.camera;
       if (
         camera !== null &&
@@ -542,12 +813,17 @@ export function createSpectralBandRendering(
         );
       }
       pending = current;
+      pendingLocalInteraction = desiredLocalInteraction;
     }
 
     override updateAfter(): undefined {
       if (pending !== null) {
         committed = pending;
         pending = null;
+      }
+      if (pendingLocalInteraction !== null) {
+        committedLocalInteraction = pendingLocalInteraction;
+        pendingLocalInteraction = null;
       }
     }
   }
@@ -560,9 +836,13 @@ export function createSpectralBandRendering(
     return vec3(vertexSample.hostX, vertexHeight, vertexSample.hostZ);
   })();
   const sink: RuntimeStateSink = Object.freeze({
-    synchronize(snapshot: OpenWaterRuntimeSnapshot): void {
+    synchronize(
+      snapshot: OpenWaterRuntimeSnapshot,
+      interaction: LocalInteractionRenderSnapshot,
+    ): void {
       desiredControls = snapshot.artisticControls;
       desiredSeaStateCutRevision = snapshot.seaStateCutRevision;
+      desiredLocalInteraction = interaction;
     },
   });
 
@@ -576,11 +856,28 @@ export function createSpectralBandRendering(
     hostXNode: fragmentSample.hostX,
     hostZNode: fragmentSample.hostZ,
     heightNode: vertexHeight,
-    slopeStrengthNode: length(
-      vec2(fragmentSurface.slopeX, fragmentSurface.slopeZ),
-    ),
+    slopeStrengthNode: length(vec2(fragmentSlopeX, fragmentSlopeZ)),
     roughnessNode,
     detailStrengthNode,
     sink,
+    stagePrewarmRadialImpact(): void {
+      desiredLocalInteraction = Object.freeze({
+        revision: -1,
+        anchorX: initialSimulationState.originX,
+        anchorZ: initialSimulationState.originZ,
+        impacts: Object.freeze([
+          Object.freeze({
+            x: initialSimulationState.originX,
+            z: initialSimulationState.originZ,
+            radius: 8,
+            amplitude: 0.25,
+            startTimeSeconds: initialSimulationState.timeSeconds,
+          }),
+        ]),
+      });
+    },
+    clearPrewarmRadialImpact(): void {
+      desiredLocalInteraction = emptyLocalInteraction;
+    },
   });
 }

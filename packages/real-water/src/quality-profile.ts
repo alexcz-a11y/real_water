@@ -1,4 +1,9 @@
 import { hasExactKeys, isRecord } from "./internal/record-validation.js";
+import {
+  INTERACTION_FIELD_EDGE_FADE_METRES,
+  INTERACTION_FIELD_RADIUS_METRES,
+  MAX_ACTIVE_DISTURBANCES,
+} from "./capabilities.js";
 
 /**
  * The discriminator for supported Quality Profiles.
@@ -12,7 +17,7 @@ export const QUALITY_PROFILE_SCHEMA = "real-water/quality-profile" as const;
  *
  * @public
  */
-export const QUALITY_PROFILE_VERSION = 5 as const;
+export const QUALITY_PROFILE_VERSION = 6 as const;
 
 /**
  * Built-in structural configurations for the minimal-water surface.
@@ -38,6 +43,30 @@ export interface MinimalWaterGeometrySegments {
  */
 export interface QualityProfileSurface {
   readonly geometry: MinimalWaterGeometrySegments;
+}
+
+/**
+ * Fixed local interaction field and bounded Disturbance layout.
+ *
+ * @public
+ */
+export interface QualityProfileInteractionField {
+  readonly radiusMetres: 48;
+  readonly edgeFadeMetres: 8;
+  readonly maxActiveDisturbances: 128;
+  readonly snapshotBanks: 2;
+  readonly maxSnapshotAgeTicks: 1;
+  readonly radialImpactRoute: "analytic-uniform-array";
+}
+
+/**
+ * Structural policy for the one prepared Interaction Anchor.
+ *
+ * @public
+ */
+export interface QualityProfileInteraction {
+  readonly anchorCount: 1;
+  readonly field: QualityProfileInteractionField;
 }
 
 /**
@@ -144,6 +173,7 @@ export interface QualityProfile {
   readonly id: MinimalWaterQualityProfileId;
   readonly profileHash: string;
   readonly surface: QualityProfileSurface;
+  readonly interaction: QualityProfileInteraction;
   readonly temporal: QualityProfileTemporal;
   readonly reflection: QualityProfileReflection;
 }
@@ -214,7 +244,7 @@ export const CURRENT_FRAME_SSR_POLICY: QualityProfileReflectionSsr =
 
 // Each static hash is the SHA-256 digest of the profile's canonical JSON,
 // excluding profileHash and preserving the public field order:
-// schema, version, id, surface, temporal, reflection.
+// schema, version, id, surface, interaction, temporal, reflection.
 const NATIVE_TEMPORAL: QualityProfileTemporal = Object.freeze({
   mode: "TRAA",
   renderScale: 1,
@@ -241,13 +271,13 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:9a75bfe19d0e81f51ee19908ce547b5a7abd49ab01dbe00feb234e3c95d23ec0",
+      "sha256:c60b0a30fa310fbc1f21270c413a35b5b6265d6f157e5f41233be4b8042d8ec5",
     widthSegments: 128,
     heightSegments: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:04b1d29617d1d2dd50f9d0f5b4f5dcd6ab6012cde62ae7e36ab0bba7be3061d8",
+      "sha256:4cba756cba61d7f4e071605c4d6939c1ba76b2cab0ef500bcf5ed1be7404d7f4",
     widthSegments: 256,
     heightSegments: 256,
   }),
@@ -259,8 +289,18 @@ const QUALITY_PROFILE_KEYS = [
   "id",
   "profileHash",
   "surface",
+  "interaction",
   "temporal",
   "reflection",
+] as const;
+const INTERACTION_KEYS = ["anchorCount", "field"] as const;
+const INTERACTION_FIELD_KEYS = [
+  "radiusMetres",
+  "edgeFadeMetres",
+  "maxActiveDisturbances",
+  "snapshotBanks",
+  "maxSnapshotAgeTicks",
+  "radialImpactRoute",
 ] as const;
 const TEMPORAL_KEYS = [
   "mode",
@@ -340,6 +380,17 @@ export function createMinimalWaterQualityProfile(
         heightSegments: supported.heightSegments,
       },
     },
+    interaction: {
+      anchorCount: 1,
+      field: {
+        radiusMetres: INTERACTION_FIELD_RADIUS_METRES,
+        edgeFadeMetres: INTERACTION_FIELD_EDGE_FADE_METRES,
+        maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+        snapshotBanks: 2,
+        maxSnapshotAgeTicks: 1,
+        radialImpactRoute: "analytic-uniform-array",
+      },
+    },
     temporal: NATIVE_TEMPORAL,
     reflection: NATIVE_REFLECTION,
   });
@@ -376,6 +427,23 @@ export function normalizeQualityProfile(
       supported.surface.geometry.widthSegments ||
     value.surface.geometry.heightSegments !==
       supported.surface.geometry.heightSegments ||
+    !isRecord(value.interaction) ||
+    !hasExactKeys(value.interaction, INTERACTION_KEYS) ||
+    value.interaction.anchorCount !== supported.interaction.anchorCount ||
+    !isRecord(value.interaction.field) ||
+    !hasExactKeys(value.interaction.field, INTERACTION_FIELD_KEYS) ||
+    value.interaction.field.radiusMetres !==
+      supported.interaction.field.radiusMetres ||
+    value.interaction.field.edgeFadeMetres !==
+      supported.interaction.field.edgeFadeMetres ||
+    value.interaction.field.maxActiveDisturbances !==
+      supported.interaction.field.maxActiveDisturbances ||
+    value.interaction.field.snapshotBanks !==
+      supported.interaction.field.snapshotBanks ||
+    value.interaction.field.maxSnapshotAgeTicks !==
+      supported.interaction.field.maxSnapshotAgeTicks ||
+    value.interaction.field.radialImpactRoute !==
+      supported.interaction.field.radialImpactRoute ||
     !isRecord(value.temporal) ||
     !hasExactKeys(value.temporal, TEMPORAL_KEYS) ||
     value.temporal.mode !== supported.temporal.mode ||
@@ -507,6 +575,10 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
     surface: Object.freeze({
       ...profile.surface,
       geometry: Object.freeze({ ...profile.surface.geometry }),
+    }),
+    interaction: Object.freeze({
+      anchorCount: profile.interaction.anchorCount,
+      field: Object.freeze({ ...profile.interaction.field }),
     }),
     temporal: Object.freeze({ ...profile.temporal }),
     reflection: Object.freeze({

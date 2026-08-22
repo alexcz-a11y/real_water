@@ -78,6 +78,21 @@ export function createThreeHostLifecycleAdapter(options: ThreeHostLifecycleAdapt
 export function createWaterPreset(id?: WaterPresetId): WaterPreset;
 
 // @public
+export type DisturbanceBatch = RadialImpactDisturbanceBatch;
+
+// @public
+export interface DisturbanceSubmissionReceipt {
+    // (undocumented)
+    readonly acceptedDisturbanceIds: readonly number[];
+    // (undocumented)
+    readonly activeDisturbanceCount: number;
+    // (undocumented)
+    readonly droppedDisturbanceIds: readonly number[];
+    // (undocumented)
+    readonly tick: number;
+}
+
+// @public
 export interface EffectVariantSelection {
     // (undocumented)
     readonly effectId: string;
@@ -112,7 +127,23 @@ export interface ErrorStartupSnapshot {
 // @public
 export interface GameplayCapabilities {
     // (undocumented)
+    readonly interactionField: GameplayCapabilitiesInteractionField;
+    // (undocumented)
+    readonly maxActiveDisturbances: 128;
+    // (undocumented)
     readonly maxQueryPointsPerTick: 2_048;
+}
+
+// @public
+export interface GameplayCapabilitiesInteractionField {
+    // (undocumented)
+    readonly disturbanceKinds: readonly ["radial-impact"];
+    // (undocumented)
+    readonly edgeFadeMetres: 8;
+    // (undocumented)
+    readonly maxSnapshotAgeTicks: 1;
+    // (undocumented)
+    readonly radiusMetres: 48;
 }
 
 // @public
@@ -135,7 +166,6 @@ export interface GameplayQueryResults {
     readonly heights: Float32Array;
     // (undocumented)
     readonly normals: Float32Array;
-    // (undocumented)
     readonly snapshotAges: Uint8Array;
     // (undocumented)
     readonly ticks: Float64Array;
@@ -339,6 +369,24 @@ export interface HostTexture {
 }
 
 // @public
+export interface InteractionAnchor {
+    // (undocumented)
+    readonly x: number;
+    // (undocumented)
+    readonly z: number;
+}
+
+// @public
+export interface InteractionAnchorUpdateReceipt {
+    // (undocumented)
+    readonly anchor: InteractionAnchor;
+    // (undocumented)
+    readonly changed: boolean;
+    // (undocumented)
+    readonly revision: number;
+}
+
+// @public
 export interface LoadingPresenterAdapter {
     // (undocumented)
     present(snapshot: StartupSnapshot, signal: AbortSignal): void | Promise<void>;
@@ -361,6 +409,9 @@ export interface LongSuspensionInvalidation {
     // (undocumented)
     readonly message: string;
 }
+
+// @public
+export const MAX_ACTIVE_DISTURBANCES: 128;
 
 // @public
 export const MAX_GAMEPLAY_QUERY_POINTS: 2048;
@@ -416,11 +467,17 @@ export type MinimalWaterQualityProfileId = "minimal" | "minimal-high-detail";
 // @public
 export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
     // (undocumented)
+    readonly activeDisturbanceCount: number;
+    // (undocumented)
     readonly artisticControls: ArtisticControls;
     // (undocumented)
     readonly cameraCutRevision: number;
     // (undocumented)
     readonly controlRevision: number;
+    // (undocumented)
+    readonly interactionAnchor: InteractionAnchor;
+    // (undocumented)
+    readonly interactionAnchorRevision: number;
     // (undocumented)
     readonly originRevision: number;
     // (undocumented)
@@ -464,7 +521,7 @@ export interface PreparingStartupSnapshot {
 export const PREWARM_MANIFEST_SCHEMA: "real-water/prewarm";
 
 // @public
-export const PREWARM_MANIFEST_VERSION: 3;
+export const PREWARM_MANIFEST_VERSION: 4;
 
 // @public
 export interface PrewarmDeclaration {
@@ -543,12 +600,14 @@ export interface PrewarmManifestIdentity {
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 5;
+export const QUALITY_PROFILE_VERSION: 6;
 
 // @public
 export interface QualityProfile {
     // (undocumented)
     readonly id: MinimalWaterQualityProfileId;
+    // (undocumented)
+    readonly interaction: QualityProfileInteraction;
     // (undocumented)
     readonly profileHash: string;
     // (undocumented)
@@ -573,6 +632,30 @@ export interface QualityProfileIdentity {
     readonly schema: typeof QUALITY_PROFILE_SCHEMA;
     // (undocumented)
     readonly version: typeof QUALITY_PROFILE_VERSION;
+}
+
+// @public
+export interface QualityProfileInteraction {
+    // (undocumented)
+    readonly anchorCount: 1;
+    // (undocumented)
+    readonly field: QualityProfileInteractionField;
+}
+
+// @public
+export interface QualityProfileInteractionField {
+    // (undocumented)
+    readonly edgeFadeMetres: 8;
+    // (undocumented)
+    readonly maxActiveDisturbances: 128;
+    // (undocumented)
+    readonly maxSnapshotAgeTicks: 1;
+    // (undocumented)
+    readonly radialImpactRoute: "analytic-uniform-array";
+    // (undocumented)
+    readonly radiusMetres: 48;
+    // (undocumented)
+    readonly snapshotBanks: 2;
 }
 
 // @public
@@ -697,6 +780,19 @@ export interface QualityProfileTemporal {
 }
 
 // @public
+export interface RadialImpactDisturbanceBatch {
+    readonly amplitudes: Float32Array;
+    // (undocumented)
+    readonly count: number;
+    readonly ids: Uint32Array;
+    // (undocumented)
+    readonly kind: "radial-impact";
+    readonly positions: Float32Array;
+    readonly priorities: Uint8Array;
+    readonly radii: Float32Array;
+}
+
+// @public
 export function readHostPresentationBinding(binding: HostPresentationBinding): HostPresentationBinding;
 
 // @public
@@ -750,7 +846,11 @@ export interface RealWaterRuntime {
     // (undocumented)
     queryGameplay(batch: GameplayQueryBatch): GameplayQueryResults;
     // (undocumented)
+    submitDisturbances(batch: DisturbanceBatch): DisturbanceSubmissionReceipt;
+    // (undocumented)
     updateArtisticControls(controls: ArtisticControls, options?: ArtisticControlUpdateOptions): ArtisticControlUpdateReceipt;
+    // (undocumented)
+    updateInteractionAnchor(anchor: InteractionAnchor): InteractionAnchorUpdateReceipt;
 }
 
 // @public
