@@ -27,8 +27,16 @@ import type {
 } from "../three-host.js";
 import type { HostEnvironmentAdapter } from "../environment.js";
 import { assertHostEnvironmentMatchesManifest } from "../environment.js";
-import type { HostSimulationAdapter } from "../runtime.js";
-import type { HostPresentationAdapter } from "../presentation.js";
+import {
+  readHostSimulationState,
+  type HostSimulationAdapter,
+  type OpenWaterRuntimeSnapshot,
+} from "../runtime.js";
+import {
+  readHostPresentationState,
+  type HostPresentationAdapter,
+} from "../presentation.js";
+import { createWaterPreset } from "../water-preset.js";
 import { HOST_RUNTIME_STATE_BRIDGE } from "./runtime-state-bridge.js";
 import { HOST_PRESENTATION_ROUTE_BRIDGE } from "./presentation-route-bridge.js";
 import {
@@ -37,6 +45,10 @@ import {
 } from "./camera-relative-clipmap.js";
 import { createWaterOpticsRendering } from "./water-optics-rendering.js";
 import { createSpectralBandRendering } from "./spectral-bands-rendering.js";
+import {
+  createSpectralWhitecapField,
+  type SpectralWhitecapField,
+} from "./spectral-whitecap-field.js";
 import {
   captureHostState,
   compileAndPrimePreparedWaterPresentation,
@@ -69,6 +81,7 @@ interface PreparedResources {
   readonly geometry: BufferGeometry;
   readonly material: NodeMaterial;
   readonly waterTexture: DataTexture;
+  readonly whitecapField: SpectralWhitecapField;
   readonly spectralBand: ReturnType<typeof createSpectralBandRendering>;
   readonly opticalPath: ReturnType<typeof createWaterOpticsRendering>;
   readonly presentation: PreparedWaterPresentationResources;
@@ -150,6 +163,10 @@ export async function prepareMinimalWaterPlane(
     );
     const waterTexture = createWaterTexture();
     partial.waterTexture = waterTexture;
+    const whitecapField = createSpectralWhitecapField(
+      options.request.manifest.qualityProfile.whitecaps,
+    );
+    partial.whitecapField = whitecapField;
 
     throwIfAborted(options.request.signal);
     const createdPresentation = createPreparedWaterPresentationResources(
@@ -157,6 +174,7 @@ export async function prepareMinimalWaterPlane(
       scene,
       camera,
       declaredDrawingBuffer,
+      whitecapField,
     );
     partial.presentation = createdPresentation.resources;
     partial.presentationPartial = createdPresentation.partial;
@@ -178,6 +196,7 @@ export async function prepareMinimalWaterPlane(
       options.simulation,
       options.presentation,
       innerCellMetres,
+      whitecapField,
     );
     partial.spectralBand = spectralBand;
     const opticalPath = createWaterOpticsRendering(
@@ -209,6 +228,21 @@ export async function prepareMinimalWaterPlane(
     renderer.initTexture(waterTexture);
     renderer.initTexture(environmentRadiance);
     renderer.initTexture(createdPresentation.resources.planar.target.texture);
+    const preparationSnapshot = createPreparationWhitecapSnapshot(
+      options.simulation,
+      options.presentation,
+    );
+    await whitecapField.prewarm(renderer, preparationSnapshot);
+    await completeDeclaredWork(options.request.progress, [
+      "whitecapFieldA",
+      "whitecapFieldB",
+      "whitecapResetRoute",
+      "whitecapGenerationRoute",
+      "whitecapHistory",
+      "whitecapAdvectionRoute",
+      "whitecapDiffusionRoute",
+      "whitecapDecayRoute",
+    ]);
     await compileAndPrimePreparedWaterPresentation(
       renderer,
       scene,
@@ -227,6 +261,8 @@ export async function prepareMinimalWaterPlane(
       "spectralBandWind",
       "spectralBandChop",
       "spectralBandRipple",
+      "whitecapStageTarget",
+      "whitecapStageRoute",
       "material",
       "opticalRoute",
       "planarReflectionTarget",
@@ -290,6 +326,7 @@ export async function prepareMinimalWaterPlane(
       "ssrHistoryResetVelocityTarget",
       "ssrHistoryResetVelocityRoute",
       "ssrHistoryProbe",
+      "whitecapProbe",
       "completionProbe",
     ]);
 
@@ -313,6 +350,7 @@ export async function prepareMinimalWaterPlane(
         geometry,
         material,
         waterTexture,
+        whitecapField,
         spectralBand,
         opticalPath,
         presentation: createdPresentation.resources,
@@ -412,6 +450,7 @@ function disposePreparedResources(
   resources.material.dispose();
   resources.geometry.dispose();
   resources.waterTexture.dispose();
+  resources.whitecapField.dispose();
 }
 
 function disposePartialResourcesSilently(
@@ -438,6 +477,7 @@ function disposePartialResourcesSilently(
     () => resources.material?.dispose(),
     () => resources.geometry?.dispose(),
     () => resources.waterTexture?.dispose(),
+    () => resources.whitecapField?.dispose(),
   ];
   for (const dispose of disposals) {
     try {
@@ -446,6 +486,22 @@ function disposePartialResourcesSilently(
       // Startup continues to reject with the primary preparation failure.
     }
   }
+}
+
+function createPreparationWhitecapSnapshot(
+  simulation: HostSimulationAdapter,
+  presentation: HostPresentationAdapter,
+): OpenWaterRuntimeSnapshot {
+  const state = readHostSimulationState(simulation);
+  return Object.freeze({
+    ...state,
+    artisticControls: createWaterPreset("swell").artisticControls,
+    controlRevision: 0,
+    originRevision: 0,
+    seaStateCutRevision: 0,
+    cameraCutRevision:
+      readHostPresentationState(presentation).cameraCutRevision,
+  });
 }
 
 function throwIfAborted(signal: AbortSignal): void {

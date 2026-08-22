@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import type { QaCameraV1, QaHarnessV8 } from "../src/qa-harness.js";
+import { createWaterPreset } from "real-water";
+import type { QaCameraV1, QaHarnessV9 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32 } from "./qa-capture-bytes.js";
 
@@ -19,6 +20,11 @@ const OFFSCREEN_CAMERA = {
   target: [80, 0, 80] as const,
 } satisfies QaCameraV1;
 const HALF_FLOAT_EPSILON = 2 ** -10;
+const SSR_CONTROLS = {
+  ...createWaterPreset("swell").artisticControls,
+  whitecapAmount: 0,
+  foamPersistence: 0,
+};
 
 function rawHitPixels(hit: Float32Array): number[] {
   const pixels: number[] = [];
@@ -110,48 +116,54 @@ test("captures TemporalReproject resolved history RGB and inverse frame weight f
   page,
 }) => {
   await openQaStage(page);
-  const result = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
-    if (harness === undefined) {
-      throw new Error("QA Harness is unavailable.");
-    }
-    await harness.reset({ seed: 0x4000_0000 });
-    await harness.setCamera(cameraPose, { transition: "camera-cut" });
-    await harness.setHostSceneForegroundFixture(false);
-    await harness.setHostSceneCurrentSsrFixtureHotColor("magenta");
-    await harness.setHostSceneCurrentSsrFixture(true);
-    await harness.advanceTicks(24);
-    const first = await harness.present();
-    const firstHistory = await harness.capture("ssr-history-color");
-    const firstWeight = await harness.capture("ssr-history-frame-weight");
-    const firstInput = await harness.capture("ssr-history-input-color");
-    const firstConfidence = await harness.capture("ssr-confidence");
-    const firstBase = await harness.capture("reflection-base-color");
-    const firstComposite = await harness.capture("ssr-composite-color");
-    await harness.reset({ seed: 0x4000_0000 });
-    await harness.setCamera(cameraPose, { transition: "camera-cut" });
-    await harness.setHostSceneForegroundFixture(false);
-    await harness.setHostSceneCurrentSsrFixtureHotColor("magenta");
-    await harness.setHostSceneCurrentSsrFixture(true);
-    await harness.advanceTicks(24);
-    await harness.present();
-    const replayHistory = await harness.capture("ssr-history-color");
-    const replayWeight = await harness.capture("ssr-history-frame-weight");
-    const replayInput = await harness.capture("ssr-history-input-color");
-    return {
-      firstHistory: firstHistory.data,
-      firstWeight: firstWeight.data,
-      firstInput: firstInput.data,
-      replayHistory: replayHistory.data,
-      replayWeight: replayWeight.data,
-      replayInput: replayInput.data,
-      confidence: firstConfidence.data,
-      base: firstBase.data,
-      composite: firstComposite.data,
-      compileCount: first.compileCount,
-      replayCompileCount: (await harness.present()).compileCount,
-    };
-  }, HIT_CAMERA);
+  const result = await page.evaluate(
+    async ({ cameraPose, controls }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
+      if (harness === undefined) {
+        throw new Error("QA Harness is unavailable.");
+      }
+      await harness.reset({ seed: 0x4000_0000 });
+      await harness.updateArtisticControls(controls, {
+        transition: "continuous",
+      });
+      await harness.setCamera(cameraPose, { transition: "camera-cut" });
+      await harness.setHostSceneForegroundFixture(false);
+      await harness.setHostSceneCurrentSsrFixtureHotColor("magenta");
+      await harness.setHostSceneCurrentSsrFixture(true);
+      await harness.advanceTicks(24);
+      const first = await harness.present();
+      const firstHistory = await harness.capture("ssr-history-color");
+      const firstWeight = await harness.capture("ssr-history-frame-weight");
+      const firstInput = await harness.capture("ssr-history-input-color");
+      const firstConfidence = await harness.capture("ssr-confidence");
+      const firstBase = await harness.capture("reflection-base-color");
+      const firstComposite = await harness.capture("ssr-composite-color");
+      await harness.reset({ seed: 0x4000_0000 });
+      await harness.setCamera(cameraPose, { transition: "camera-cut" });
+      await harness.setHostSceneForegroundFixture(false);
+      await harness.setHostSceneCurrentSsrFixtureHotColor("magenta");
+      await harness.setHostSceneCurrentSsrFixture(true);
+      await harness.advanceTicks(24);
+      await harness.present();
+      const replayHistory = await harness.capture("ssr-history-color");
+      const replayWeight = await harness.capture("ssr-history-frame-weight");
+      const replayInput = await harness.capture("ssr-history-input-color");
+      return {
+        firstHistory: firstHistory.data,
+        firstWeight: firstWeight.data,
+        firstInput: firstInput.data,
+        replayHistory: replayHistory.data,
+        replayWeight: replayWeight.data,
+        replayInput: replayInput.data,
+        confidence: firstConfidence.data,
+        base: firstBase.data,
+        composite: firstComposite.data,
+        compileCount: first.compileCount,
+        replayCompileCount: (await harness.present()).compileCount,
+      };
+    },
+    { cameraPose: HIT_CAMERA, controls: SSR_CONTROLS },
+  );
   expect(result.firstHistory).toBe(result.replayHistory);
   expect(result.firstWeight).toBe(result.replayWeight);
   expect(result.firstInput).toBe(result.replayInput);
@@ -182,7 +194,7 @@ test("accumulates inverse frame weight on a static hit and stays bounded", async
 }) => {
   await openQaStage(page);
   const weights = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -269,29 +281,35 @@ test("keeps a black current hit instead of residual bright history", async ({
   page,
 }) => {
   await openQaStage(page);
-  const result = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
-    if (harness === undefined) {
-      throw new Error("QA Harness is unavailable.");
-    }
-    await harness.reset({ seed: 0x4000_0000 });
-    await harness.setCamera(cameraPose, { transition: "camera-cut" });
-    await harness.setHostSceneForegroundFixture(false);
-    await harness.setHostSceneCurrentSsrFixtureHotColor("magenta");
-    await harness.setHostSceneCurrentSsrFixture(true);
-    await harness.advanceTicks(16);
-    await harness.present();
-    await harness.setHostSceneCurrentSsrFixtureHotColor("black");
-    const presentation = await harness.present();
-    return {
-      hit: (await harness.capture("ssr-hit")).data,
-      color: (await harness.capture("ssr-color")).data,
-      composite: (await harness.capture("ssr-composite-color")).data,
-      base: (await harness.capture("reflection-base-color")).data,
-      confidence: (await harness.capture("ssr-confidence")).data,
-      compileCount: presentation.compileCount,
-    };
-  }, HIT_CAMERA);
+  const result = await page.evaluate(
+    async ({ cameraPose, controls }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
+      if (harness === undefined) {
+        throw new Error("QA Harness is unavailable.");
+      }
+      await harness.reset({ seed: 0x4000_0000 });
+      await harness.updateArtisticControls(controls, {
+        transition: "continuous",
+      });
+      await harness.setCamera(cameraPose, { transition: "camera-cut" });
+      await harness.setHostSceneForegroundFixture(false);
+      await harness.setHostSceneCurrentSsrFixtureHotColor("magenta");
+      await harness.setHostSceneCurrentSsrFixture(true);
+      await harness.advanceTicks(16);
+      await harness.present();
+      await harness.setHostSceneCurrentSsrFixtureHotColor("black");
+      const presentation = await harness.present();
+      return {
+        hit: (await harness.capture("ssr-hit")).data,
+        color: (await harness.capture("ssr-color")).data,
+        composite: (await harness.capture("ssr-composite-color")).data,
+        base: (await harness.capture("reflection-base-color")).data,
+        confidence: (await harness.capture("ssr-confidence")).data,
+        compileCount: presentation.compileCount,
+      };
+    },
+    { cameraPose: HIT_CAMERA, controls: SSR_CONTROLS },
+  );
   const hits = decodeFloat32(result.hit);
   const color = decodeFloat32(result.color);
   const composite = decodeFloat32(result.composite);
@@ -321,7 +339,7 @@ test("rejects offscreen history ghosts: confidence 0 composite equals base", asy
 }) => {
   await openQaStage(page);
   const result = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -349,8 +367,8 @@ test("rejects history residual after fixture disappear, continuous move, and res
 }) => {
   await openQaStage(page);
   const result = await page.evaluate(
-    async ({ hitCamera, movedCamera }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    async ({ hitCamera, movedCamera, controls }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -364,6 +382,9 @@ test("rejects history residual after fixture disappear, continuous move, and res
         weight: (await harness.capture("ssr-history-frame-weight")).data,
       });
       await harness.reset({ seed: 0x4000_0000 });
+      await harness.updateArtisticControls(controls, {
+        transition: "continuous",
+      });
       await harness.setCamera(hitCamera, { transition: "camera-cut" });
       await harness.setHostSceneForegroundFixture(false);
       await harness.setHostSceneCurrentSsrFixtureHotColor("magenta");
@@ -396,6 +417,7 @@ test("rejects history residual after fixture disappear, continuous move, and res
         ...HIT_CAMERA,
         position: [2, 12, 20] as const,
       },
+      controls: SSR_CONTROLS,
     },
   );
   expect(result.primedReset).toBe(true);
@@ -511,7 +533,7 @@ test("camera-cut resets SSR history once and the next present is stable", async 
 }) => {
   await openQaStage(page);
   const result = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -572,7 +594,7 @@ test("updates history RGB on the same JS task after a current-color change", asy
 }) => {
   await openQaStage(page);
   const result = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -602,7 +624,7 @@ test("simulation, origin, and sea-state resets each reseed SSR history once", as
 }) => {
   await openQaStage(page);
   const result = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -652,6 +674,8 @@ test("simulation, origin, and sea-state resets each reseed SSR history once", as
         depthColoring: 1,
         inWaterGlow: 1,
         crestGlow: 1,
+        whitecapAmount: 0,
+        foamPersistence: 0,
       },
       { transition: "sea-state-cut" },
     );

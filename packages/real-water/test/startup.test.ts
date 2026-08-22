@@ -728,7 +728,7 @@ describe("prepareRealWater", () => {
       manifestHash: manifest.manifestHash,
       qualityProfile: {
         schema: "real-water/quality-profile",
-        version: 5,
+        version: 6,
         id: "minimal",
         profileHash: manifest.qualityProfile.profileHash,
       },
@@ -738,6 +738,10 @@ describe("prepareRealWater", () => {
         {
           effectId: "minimal-water-surface",
           variantId: "basic",
+        },
+        {
+          effectId: "spectral-whitecaps",
+          variantId: "persistent",
         },
       ],
     });
@@ -918,7 +922,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 57,
+        totalWork: 68,
       },
     });
   });
@@ -1601,6 +1605,17 @@ describe("prepareRealWater", () => {
       "water-spectral-band-wind",
       "water-spectral-band-chop",
       "water-spectral-band-ripple",
+      "water-whitecap-field-a",
+      "water-whitecap-field-b",
+      "water-whitecap-reset-route",
+      "water-whitecap-generation-route",
+      "water-whitecap-history",
+      "water-whitecap-advection-route",
+      "water-whitecap-diffusion-route",
+      "water-whitecap-decay-route",
+      "water-whitecap-stage-target",
+      "water-whitecap-stage-route",
+      "water-whitecap-probe",
       "water-material",
       "water-optical-route",
       "water-planar-reflection-target",

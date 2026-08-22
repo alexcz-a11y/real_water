@@ -27,7 +27,7 @@ export type {
 } from "./presentation.js";
 
 /**
- * The twenty-three named diagnostic outputs. Names and CPU shapes match the QA
+ * The twenty-seven named diagnostic outputs. Names and CPU shapes match the QA
  * capture contract. Planar color and target-alpha occupancy are their own
  * prepared target. `planar-confidence` is reserved for a future screen-space
  * mask and is not a current capture. Current-frame SSR hit (stock raw
@@ -45,6 +45,10 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
   "depth",
   "normal",
   "motion-vector",
+  "whitecap-generation",
+  "whitecap-history",
+  "whitecap-advection",
+  "whitecap-decay",
   "optical-fresnel",
   "optical-thickness",
   "optical-scattering",
@@ -66,7 +70,7 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
 ] as const);
 
 /**
- * One of the twenty-three named diagnostic CPU outputs.
+ * One of the twenty-seven named diagnostic CPU outputs.
  *
  * @public
  */
@@ -102,6 +106,26 @@ export const DIAGNOSTICS_CAPTURE_SHAPES = Object.freeze({
     format: "rg32float-ndc" as const,
     elementType: "float32" as const,
     components: 2 as const,
+  }),
+  "whitecap-generation": Object.freeze({
+    format: "r32float-whitecap-stage" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "whitecap-history": Object.freeze({
+    format: "r32float-whitecap-stage" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "whitecap-advection": Object.freeze({
+    format: "r32float-whitecap-stage" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "whitecap-decay": Object.freeze({
+    format: "r32float-whitecap-stage" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
   }),
   "optical-fresnel": Object.freeze({
     format: "r32float-optical" as const,
@@ -317,6 +341,24 @@ export interface DiagnosticsMotionVectorCapture extends DiagnosticsCaptureBase {
 }
 
 /**
+ * One scalar stage of the deterministic spectral-whitecap reconstruction.
+ *
+ * @public
+ */
+export interface DiagnosticsWhitecapStageCapture extends DiagnosticsCaptureBase {
+  /** Whitecap stage capture name. */
+  readonly name:
+    | "whitecap-generation"
+    | "whitecap-history"
+    | "whitecap-advection"
+    | "whitecap-decay";
+  /** Packed scalar whitecap density format. */
+  readonly format: "r32float-whitecap-stage";
+  /** Tightly packed scalar density samples. */
+  readonly data: Float32Array;
+}
+
+/**
  * Optical scalar AOV readback.
  *
  * @public
@@ -464,6 +506,7 @@ export type DiagnosticsCapture =
   | DiagnosticsDepthCapture
   | DiagnosticsNormalCapture
   | DiagnosticsMotionVectorCapture
+  | DiagnosticsWhitecapStageCapture
   | DiagnosticsOpticalScalarCapture;
 
 /**
@@ -516,7 +559,7 @@ export interface HostDiagnosticsRoute {
 }
 
 /**
- * Confirms `value` is one of the twenty-three diagnostic capture names.
+ * Confirms `value` is one of the twenty-seven diagnostic capture names.
  *
  * @public
  */

@@ -13,7 +13,7 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV8,
+  type QaHarnessV9,
 } from "../src/qa-harness.js";
 import { REFERENCE_ENVIRONMENT_LIGHTING } from "../src/reference-optical-inputs.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
@@ -88,7 +88,7 @@ test("breaks repeating Open Water patches on the deterministic horizon route", a
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async (shiftMetres) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -200,7 +200,7 @@ test("preserves queried and rendered Open Water across a host origin shift", asy
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async (periodMetres) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -336,7 +336,7 @@ test("preserves queried and rendered Open Water across a billion-metre origin sh
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ baselineOrigin, periodMetres }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -460,7 +460,7 @@ test("transitions near geometry, middle normals, and far slope detail without a 
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -612,7 +612,7 @@ test("keeps filtered slope detail and optical glints stable under camera motion"
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -821,7 +821,9 @@ test("keeps filtered slope detail and optical glints stable under camera motion"
   expect(firstGlint.max).toBeGreaterThan(0.2);
   expect(firstGlint.mean).toBeGreaterThan(0.002);
   expect(Math.abs(firstGlint.mean - secondGlint.mean)).toBeLessThan(0.01);
-  expect(far.colorMeanAbs).toBeLessThan(8);
+  // Persistent world-locked whitecaps add legitimate high-contrast parallax;
+  // the translated far field must still stay below a five-percent byte delta.
+  expect(far.colorMeanAbs).toBeLessThan(12);
   expect(far.normalMeanAbs).toBeLessThan(0.12);
   expect(result.stress).toHaveLength(24);
   for (const frame of result.stress) {

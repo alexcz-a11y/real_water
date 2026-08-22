@@ -37,10 +37,12 @@ Issue #18 extended the coherent spectral runtime and deterministic QA
 foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly fifty-seven work
+- the canonical minimal-water Prewarm Manifest declares exactly sixty-eight work
   units: a texture, Host equirect environment radiance, viewport scene color,
   viewport scene depth, 6-attachment MRT, camera-relative clipmap, four spectral
-  bands, TSL NodeMaterial, optical route, planar reflection target/route,
+  bands, two fixed RGBA16F whitecap fields, reset/generate/history/advect/
+  diffuse/decay routes, a packed output-resolution whitecap stage target and
+  probe, TSL NodeMaterial, optical route, planar reflection target/route,
   environment fallback, planar probe, current-frame SSR raw/blur/composite
   targets and routes plus probe, dedicated TemporalReproject history and resolve
   targets, beauty input target/route, resolved diagnostics copy target/route,
@@ -51,7 +53,7 @@ foundation:
   A, optical factors, optical diagnostics A/B, Core final-color and
   current-color targets, stock TRAA color+depth history, resolve/jitter route,
   shared no-allocation TRAA+SSR reset route, current-color conversion,
-  twenty-three named diagnostics output routes, eight hidden temporal
+  twenty-seven named diagnostics output routes, eight hidden temporal
   stabilization frames, named-output completion probes, and main-camera guard
   frame. Version 3 binds the physical drawing buffer into that work plan; a
   viewport change creates a new manifest and lease;
@@ -96,7 +98,7 @@ foundation:
   wall-clock sleeps or animation-frame polling;
 - the Reference Experience keeps the canvas hidden through preparation and
   reveals it on the next refresh after readiness;
-- immutable version-5 `minimal` and `minimal-high-detail` Quality Profiles pin
+- immutable version-6 `minimal` and `minimal-high-detail` Quality Profiles pin
   the Native temporal policy (TRAA at render scale 1; TAAU, dynamic resolution,
   frame generation, and MSAA samples off) and the implemented reflection layer
   (Host-adapter environment, drawing-buffer-exact planar, current-frame SSR, and

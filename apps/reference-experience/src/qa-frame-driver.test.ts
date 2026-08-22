@@ -209,6 +209,21 @@ function createCapture(
       data: new Float32Array(width * height * 2),
     };
   }
+  if (
+    name === "whitecap-generation" ||
+    name === "whitecap-history" ||
+    name === "whitecap-advection" ||
+    name === "whitecap-decay"
+  ) {
+    return {
+      name,
+      format: "r32float-whitecap-stage",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
   return {
     name,
     format: "r32float-optical",
@@ -276,8 +291,8 @@ function coreFrame(
 }
 
 describe("QA frame driver Core association", () => {
-  it("publishes a v7 capture-contract mapped to actual Core declaration IDs", () => {
-    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(7);
+  it("publishes a v8 capture-contract mapped to actual Core declaration IDs", () => {
+    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(8);
     expect(QA_FRAME_PREWARM_MANIFEST.coreDeclarations).toEqual(
       QA_TO_CORE_DECLARATION_IDS,
     );
@@ -311,6 +326,7 @@ describe("QA frame driver Core association", () => {
       "water-inverse-linear-depth",
       "water-view-normal",
       "water-motion-vectors",
+      "water-whitecap-stage-target",
       "water-optical-factors-target",
       "water-optical-diagnostics-b",
       "water-optical-diagnostics-a",
@@ -321,8 +337,8 @@ describe("QA frame driver Core association", () => {
       "water-ssr-history-resolved-capture-target",
       "water-ssr-history-beauty-target",
     ]);
-    expect(receipt.progress.completedWork).toBe(14);
-    expect(receipt.progress.totalWork).toBe(14);
+    expect(receipt.progress.completedWork).toBe(15);
+    expect(receipt.progress.totalWork).toBe(15);
   });
 
   it("rejects a Core manifest that is missing a mapped declaration", () => {

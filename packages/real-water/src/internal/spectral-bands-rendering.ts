@@ -52,6 +52,7 @@ import {
 } from "./spectral-bands.js";
 import { snapClipmapToCamera } from "./camera-relative-clipmap.js";
 import { createWaterPreset } from "../water-preset.js";
+import type { SpectralWhitecapField } from "./spectral-whitecap-field.js";
 
 const INITIAL_ARTISTIC_CONTROLS: ArtisticControls =
   createWaterPreset("swell").artisticControls;
@@ -60,6 +61,7 @@ export function createSpectralBandRendering(
   simulation: HostSimulationAdapter,
   presentation: HostPresentationAdapter,
   innerCellMetres: number,
+  whitecaps: SpectralWhitecapField,
 ) {
   const originX = uniform(0);
   const originZ = uniform(0);
@@ -402,6 +404,10 @@ export function createSpectralBandRendering(
     ),
   );
   const detailStrengthNode = mix(nearWhite, farWhite, fragmentSlopeFade);
+  const whitecapStagesNode = whitecaps.sampleStages(
+    fragmentSample.hostX,
+    fragmentSample.hostZ,
+  );
   const writeOriginPhases = (
     originXValue: number,
     originZValue: number,
@@ -563,6 +569,10 @@ export function createSpectralBandRendering(
     synchronize(snapshot: OpenWaterRuntimeSnapshot): void {
       desiredControls = snapshot.artisticControls;
       desiredSeaStateCutRevision = snapshot.seaStateCutRevision;
+      whitecaps.runtimeStateSink.synchronize(snapshot);
+    },
+    observe(snapshot: OpenWaterRuntimeSnapshot): void {
+      whitecaps.runtimeStateSink.observe?.(snapshot);
     },
   });
 
@@ -581,6 +591,8 @@ export function createSpectralBandRendering(
     ),
     roughnessNode,
     detailStrengthNode,
+    whitecapStagesNode,
+    whitecapDensityNode: whitecapStagesNode.a,
     sink,
   });
 }

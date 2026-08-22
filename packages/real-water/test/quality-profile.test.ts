@@ -80,10 +80,29 @@ const NATIVE_REFLECTION = Object.freeze({
   }),
   ssr: NATIVE_SSR,
 });
+const NATIVE_WHITECAPS = Object.freeze({
+  mode: "spectral-ping-pong" as const,
+  fixedTickHz: 60 as const,
+  fieldResolution: 128 as const,
+  tileSizeMetres: 256 as const,
+  fieldFormat: "rgba16float" as const,
+  stageLayout: "generation-history-advection-decay" as const,
+  diffusionTaps: 3 as const,
+  updateCadence: "host-fixed-tick" as const,
+  captureResolutionPolicy: "drawing-buffer-exact" as const,
+  captureFormat: "rgba16float" as const,
+  resetDomains: Object.freeze([
+    "simulation-reset",
+    "seed-change",
+    "tick-rewind",
+    "time-rewind",
+    "sea-state-cut",
+  ] as const),
+});
 const MINIMAL_PROFILE_HASH =
-  "sha256:9a75bfe19d0e81f51ee19908ce547b5a7abd49ab01dbe00feb234e3c95d23ec0";
+  "sha256:e89f6484cb983b184dee0ee46a77f8f05561b97df2a37c4686525b73b53eda28";
 const HIGH_DETAIL_PROFILE_HASH =
-  "sha256:04b1d29617d1d2dd50f9d0f5b4f5dcd6ab6012cde62ae7e36ab0bba7be3061d8";
+  "sha256:008a6a813e5e048fca87cce20a13ea7c1a2187a146a4fda7e2a441f4e7d71a37";
 const MEMORY_PREWARM_DRAWING_BUFFER = Object.freeze({
   width: 320,
   height: 180,
@@ -120,11 +139,11 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-traa-resolve-jitter":
     "sha256:ba8bdc48d2842afd8f4f620e5296fce9bde9055047e4de7d593eec83dce25733",
   "water-render-route":
-    "sha256:42b6254fad454c6b5b415b997c96a14c78e7bf1b1473c28a2d7fe5ab90b4c579",
+    "sha256:6cac0421e8bfc58786596e077221136c4f29dc249e4c70b557836692958322b4",
   "water-current-color-conversion":
     "sha256:ea19f958120b52c05d673abcec39db3aa8ca7157f326d5d4449a4faa0457c57c",
   "water-named-output-routes":
-    "sha256:ac7175ab7f59205e4aefef72d46d2b68cfe4dc256db66788de2466d2d67dcf3a",
+    "sha256:a5f86239f7b86685991bc1e5e0669cadc120c4acb3f9749c5dc70991735c444f",
   "water-ssr-raw-target":
     "sha256:5229f76bc28be7b7aa032fadcb3adabfada2202dde29a88f499d16fac9ba659f",
   "water-ssr-blur-target":
@@ -178,9 +197,15 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-planar-reflection-probe":
     "sha256:f203f71435dfe40d3d14d3b19b853fd13f8338aba138c1eee29400570074311e",
   "water-completion-probe":
-    "sha256:c4e77fab97a18b547bf0053649e772e8faf9ce0dd58958136d531ecfca9ab89f",
+    "sha256:d80c56dde025d2eeb391c93648ef11eda60ee07a9b9337afa1375484bd5268f3",
   "water-main-camera-guard":
     "sha256:ef72fd8cb5959aa73eeef6a857f67edc3f32b1b9f7e73b76b295f913ae6aca25",
+  "water-whitecap-stage-target":
+    "sha256:731d234e5ce0ccd2bb8c4102219849e318b619dc1ea21723562e9a0ebbd08969",
+  "water-whitecap-stage-route":
+    "sha256:caf42fa74e220528b2c24d8fe5831ce569629a93eba6a26bba085f18173d6666",
+  "water-whitecap-probe":
+    "sha256:d740f79214a0fbb393edfb647e59881e642cf6b9ba79347db72d990058a81881",
 });
 const DRAWING_BUFFER_BOUND_IDS = [
   "water-scene-color",
@@ -227,6 +252,9 @@ const DRAWING_BUFFER_BOUND_IDS = [
   "water-ssr-history-reset-velocity-target",
   "water-ssr-history-reset-velocity-route",
   "water-ssr-history-probe",
+  "water-whitecap-stage-target",
+  "water-whitecap-stage-route",
+  "water-whitecap-probe",
 ] as const;
 
 function sha256Identifier(value: string): string {
@@ -277,6 +305,17 @@ const CORE_PREWARM_DECLARATION_IDS = [
   "water-spectral-band-wind",
   "water-spectral-band-chop",
   "water-spectral-band-ripple",
+  "water-whitecap-field-a",
+  "water-whitecap-field-b",
+  "water-whitecap-reset-route",
+  "water-whitecap-generation-route",
+  "water-whitecap-history",
+  "water-whitecap-advection-route",
+  "water-whitecap-diffusion-route",
+  "water-whitecap-decay-route",
+  "water-whitecap-stage-target",
+  "water-whitecap-stage-route",
+  "water-whitecap-probe",
   "water-material",
   "water-optical-route",
   "water-planar-reflection-target",
@@ -327,14 +366,44 @@ const CORE_PREWARM_DECLARATION_IDS = [
 ] as const;
 
 describe("Quality Profiles", () => {
+  it("pins spectral-whitecap history structure outside hot Artistic Controls", () => {
+    const profile = createMinimalWaterQualityProfile();
+
+    expect(profile.whitecaps).toEqual({
+      mode: "spectral-ping-pong",
+      fixedTickHz: 60,
+      fieldResolution: 128,
+      tileSizeMetres: 256,
+      fieldFormat: "rgba16float",
+      stageLayout: "generation-history-advection-decay",
+      diffusionTaps: 3,
+      updateCadence: "host-fixed-tick",
+      captureResolutionPolicy: "drawing-buffer-exact",
+      captureFormat: "rgba16float",
+      resetDomains: [
+        "simulation-reset",
+        "seed-change",
+        "tick-rewind",
+        "time-rewind",
+        "sea-state-cut",
+      ],
+    });
+    expect(Object.isFrozen(profile.whitecaps)).toBe(true);
+    expect(Object.isFrozen(profile.whitecaps.resetDomains)).toBe(true);
+    expect(
+      createMinimalWaterQualityProfile("minimal-high-detail").whitecaps
+        .fieldResolution,
+    ).toBe(256);
+  });
+
   it("creates deterministic deeply immutable minimal-water structures", () => {
     const minimal = createMinimalWaterQualityProfile();
     const highDetail = createMinimalWaterQualityProfile("minimal-high-detail");
 
-    expect(QUALITY_PROFILE_VERSION).toBe(5);
+    expect(QUALITY_PROFILE_VERSION).toBe(6);
     expect(minimal).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 5,
+      version: 6,
       id: "minimal",
       profileHash: MINIMAL_PROFILE_HASH,
       surface: {
@@ -345,10 +414,11 @@ describe("Quality Profiles", () => {
       },
       temporal: NATIVE_TEMPORAL,
       reflection: NATIVE_REFLECTION,
+      whitecaps: NATIVE_WHITECAPS,
     });
     expect(highDetail).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 5,
+      version: 6,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
       surface: {
@@ -359,6 +429,10 @@ describe("Quality Profiles", () => {
       },
       temporal: NATIVE_TEMPORAL,
       reflection: NATIVE_REFLECTION,
+      whitecaps: {
+        ...NATIVE_WHITECAPS,
+        fieldResolution: 256,
+      },
     });
     expect(createMinimalWaterQualityProfile()).toEqual(minimal);
     expect(Object.isFrozen(minimal)).toBe(true);
@@ -393,7 +467,7 @@ describe("Quality Profiles", () => {
     expect(normalized).not.toBe(candidate);
     expect(identity).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 5,
+      version: 6,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
     });
@@ -678,6 +752,48 @@ describe("Quality Profiles", () => {
 });
 
 describe("Quality Profile manifests", () => {
+  it("declares every prepared spectral-whitecap field and capture route", () => {
+    const manifest = createMinimalWaterPrewarmManifest();
+    const declarations = new Map(
+      manifest.declarations.map((declaration) => [
+        declaration.id,
+        declaration.kind,
+      ]),
+    );
+
+    expect(manifest.effectVariants).toContainEqual({
+      effectId: "spectral-whitecaps",
+      variantId: "persistent",
+    });
+    expect(Object.fromEntries(declarations)).toMatchObject({
+      "water-whitecap-field-a": "resource",
+      "water-whitecap-field-b": "resource",
+      "water-whitecap-reset-route": "conditional-route",
+      "water-whitecap-generation-route": "conditional-route",
+      "water-whitecap-history": "effect-state",
+      "water-whitecap-advection-route": "conditional-route",
+      "water-whitecap-diffusion-route": "conditional-route",
+      "water-whitecap-decay-route": "conditional-route",
+      "water-whitecap-stage-target": "resource",
+      "water-whitecap-stage-route": "conditional-route",
+      "water-whitecap-probe": "conditional-route",
+    });
+
+    const nextSize = createMinimalWaterPrewarmManifest(
+      createMinimalWaterQualityProfile(),
+      NEXT_DRAWING_BUFFER,
+    );
+    expect(
+      nextSize.declarations.find(
+        ({ id }) => id === "water-whitecap-stage-target",
+      )?.fingerprint,
+    ).not.toBe(
+      manifest.declarations.find(
+        ({ id }) => id === "water-whitecap-stage-target",
+      )?.fingerprint,
+    );
+  });
+
   it("maps each supported structure to a deterministic complete work plan", () => {
     const minimalProfile = createMinimalWaterQualityProfile();
     const highDetailProfile = createMinimalWaterQualityProfile(
@@ -705,11 +821,13 @@ describe("Quality Profile manifests", () => {
     expect(highDetail.qualityProfile).toEqual(highDetailProfile);
     expect(minimal.effectVariants).toEqual([
       { effectId: "minimal-water-surface", variantId: "basic" },
+      { effectId: "spectral-whitecaps", variantId: "persistent" },
     ]);
     expect(minimal.effectVariants).toEqual(SUPPORTED_EFFECT_VARIANTS);
     expect(minimal.qualityProfile.temporal).toEqual(NATIVE_TEMPORAL);
     expect(minimal.qualityProfile.reflection).toEqual(NATIVE_REFLECTION);
-    expect(minimal.qualityProfile.version).toBe(5);
+    expect(minimal.qualityProfile.version).toBe(6);
+    expect(minimal.qualityProfile.whitecaps).toEqual(NATIVE_WHITECAPS);
     expect(minimal.declarations.map(({ id }) => id)).toEqual([
       ...CORE_PREWARM_DECLARATION_IDS,
     ]);
@@ -717,7 +835,7 @@ describe("Quality Profile manifests", () => {
       minimal.declarations.find(
         (declaration) => declaration.id === "water-named-output-routes",
       )?.label,
-    ).toBe("Twenty-three named diagnostics output routes");
+    ).toBe("Twenty-seven named diagnostics output routes");
     expect(
       Object.fromEntries(
         minimal.declarations
@@ -787,7 +905,7 @@ describe("Quality Profile manifests", () => {
         "Viewport pre-water scene color (viewportSharedTexture)",
       "water-scene-depth": "Viewport opaque scene depth (viewportDepthTexture)",
       "water-optical-route":
-        "Basic optical composition route (planar+environment fallback, projected refraction, RGB Beer-Lambert, perspective camera)",
+        "Optical composition route (planar+environment fallback, projected refraction, RGB Beer-Lambert, whitecap reflection/transmission/roughness/micro detail)",
     });
     const highDetailClipmap = highDetail.declarations.find(
       (declaration) => declaration.id === "water-clipmap",
@@ -819,9 +937,9 @@ describe("Quality Profile manifests", () => {
       "water-environment-radiance":
         "sha256:3b4e72ce8470faf690ea64fa4f7e0e99c36517e5c93df2036bd80472021b777d",
       "water-material":
-        "sha256:0a8c1aaa649d6a28ff0565d73cf0cf6e45acf14135c54e5162fbc7fbe0c7e386",
+        "sha256:20c6447eb1b1d8ea56fc606898ea49e9505013b24ede63e70535057d5c0050ec",
       "water-optical-route":
-        "sha256:f24789707811ecec877cb42335cd5d2f1ba2325c6e31644ec35d59dd724b0027",
+        "sha256:c2c89db1c48c537cd41aedafb7dc88cf1b3a55c96399f308ab94cc679a076e07",
       "water-traa-reset-route":
         "sha256:e4a59425b89a6138d620200a8404be90b74fd8d20a5da54fbefb259a3b4dd9ab",
       "water-hidden-stabilization":
@@ -848,6 +966,7 @@ describe("Quality Profile manifests", () => {
       environmentReflection: SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
       effectVariants: [
         { effectId: "minimal-water-surface", variantId: "basic" },
+        { effectId: "spectral-whitecaps", variantId: "persistent" },
       ],
     });
     expect(Object.isFrozen(minimal.drawingBuffer)).toBe(true);
@@ -856,6 +975,7 @@ describe("Quality Profile manifests", () => {
     expect(Object.isFrozen(minimal.effectVariants[0])).toBe(true);
     expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS)).toBe(true);
     expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[0])).toBe(true);
+    expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[1])).toBe(true);
   });
 
   it("binds drawing-buffer-exact fingerprints and hashes to each physical size", () => {

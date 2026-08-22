@@ -13,7 +13,7 @@ export const WATER_PRESET_SCHEMA = "real-water/water-preset" as const;
  *
  * @public
  */
-export const WATER_PRESET_VERSION = 2 as const;
+export const WATER_PRESET_VERSION = 3 as const;
 
 /**
  * Built-in named sea characters stored as hot Artistic Controls.
@@ -59,7 +59,7 @@ const SUPPORTED_WATER_PRESETS: Readonly<
 > = Object.freeze({
   calm: Object.freeze({
     presetHash:
-      "sha256:7823cba17b46a26315541babfde3d3b7fda6a937794df7a32cbc3bf3d28df047",
+      "sha256:2636557cea16c0c4c8fc249e486192db8b205737d2679df95e36ee10baeb2825",
     artisticControls: Object.freeze({
       waveStrength: 0.55,
       swellDrama: 0.35,
@@ -74,11 +74,13 @@ const SUPPORTED_WATER_PRESETS: Readonly<
       depthColoring: 0.4,
       inWaterGlow: 0.35,
       crestGlow: 0.25,
+      whitecapAmount: 0.25,
+      foamPersistence: 0.45,
     }),
   }),
   swell: Object.freeze({
     presetHash:
-      "sha256:667f6dd3b383cc3909b98829ba6979aa99fe31b47996f7e806e4768feccad37b",
+      "sha256:a271f14c1aad0eaf6681b9499cb962b94b19531870cf5b4bca3a6061636ccbeb",
     artisticControls: Object.freeze({
       waveStrength: 1,
       swellDrama: 1,
@@ -93,11 +95,13 @@ const SUPPORTED_WATER_PRESETS: Readonly<
       depthColoring: 1,
       inWaterGlow: 1,
       crestGlow: 1,
+      whitecapAmount: 1,
+      foamPersistence: 1,
     }),
   }),
   storm: Object.freeze({
     presetHash:
-      "sha256:85ff6bf8c652aaecb3d7aa3e3bf35c693264365c19cec1683c42fe2fb1164f9e",
+      "sha256:04ba3bb41ea6ca9c9f6b54bd7bf8888c0b634df026379be67bad284143f2d3e9",
     artisticControls: Object.freeze({
       waveStrength: 1.45,
       swellDrama: 1.6,
@@ -112,6 +116,8 @@ const SUPPORTED_WATER_PRESETS: Readonly<
       depthColoring: 1.55,
       inWaterGlow: 1.45,
       crestGlow: 1.6,
+      whitecapAmount: 1.65,
+      foamPersistence: 1.6,
     }),
   }),
 });
@@ -163,6 +169,11 @@ export function normalizeWaterPreset(candidate: WaterPreset): WaterPreset {
   if (value.version === 1) {
     throw new TypeError(
       "Water Preset version 1 does not include the required optical Artistic Controls.",
+    );
+  }
+  if (value.version === 2) {
+    throw new TypeError(
+      "Water Preset version 2 does not include the required spectral whitecap Artistic Controls.",
     );
   }
 

@@ -44,6 +44,10 @@ export interface ArtisticControls {
   readonly inWaterGlow: number;
   /** How brightly thin crests transmit light. */
   readonly crestGlow: number;
+  /** How readily steep spectral crests generate persistent whitecaps. */
+  readonly whitecapAmount: number;
+  /** How long generated spectral foam remains visible as it moves and breaks up. */
+  readonly foamPersistence: number;
 }
 
 export const ARTISTIC_CONTROL_KEYS = [
@@ -60,6 +64,8 @@ export const ARTISTIC_CONTROL_KEYS = [
   "depthColoring",
   "inWaterGlow",
   "crestGlow",
+  "whitecapAmount",
+  "foamPersistence",
 ] as const;
 
 const DEFAULT_ARTISTIC_CONTROLS: ArtisticControls =
@@ -201,6 +207,7 @@ export interface RealWaterRuntime {
 
 export interface RuntimeStateSink {
   synchronize(snapshot: OpenWaterRuntimeSnapshot): void;
+  observe?(snapshot: OpenWaterRuntimeSnapshot): void;
 }
 
 export function createRealWaterRuntime(
@@ -215,9 +222,9 @@ export function createRealWaterRuntime(
   let seaStateCutRevision = 0;
   let queryTick = -1;
   let queriesUsedThisTick = 0;
-  const originRevisions = createOriginRevisionTracker(
-    readHostSimulationState(simulation),
-  );
+  const initialSimulationState = readHostSimulationState(simulation);
+  const originRevisions = createOriginRevisionTracker(initialSimulationState);
+  const whitecapHistory = createWhitecapHistoryTracker(initialSimulationState);
 
   return Object.freeze({
     updateArtisticControls(
@@ -266,7 +273,12 @@ export function createRealWaterRuntime(
       if (usedThisTick + batch.count > MAX_GAMEPLAY_QUERY_POINTS) {
         throw queryCapacityError(batch.count, usedThisTick);
       }
-      writeSpectralBandQueries(batch, state, artisticControls);
+      writeSpectralBandQueries(
+        batch,
+        state,
+        artisticControls,
+        whitecapHistory.observe(state, seaStateCutRevision),
+      );
       for (let point = 0; point < batch.count; point += 1) {
         batch.results.ticks[point] = state.tick;
         batch.results.controlRevisions[point] = controlRevision;
@@ -278,7 +290,7 @@ export function createRealWaterRuntime(
     },
     inspectRuntime(): OpenWaterRuntimeSnapshot {
       assertActive();
-      return readSnapshot(
+      const snapshot = readSnapshot(
         simulation,
         readHostPresentationState(presentation),
         artisticControls,
@@ -286,6 +298,8 @@ export function createRealWaterRuntime(
         originRevisions,
         seaStateCutRevision,
       );
+      sink?.observe?.(snapshot);
+      return snapshot;
     },
   });
 }
@@ -372,6 +386,8 @@ function freezeArtisticControls(controls: ArtisticControls): ArtisticControls {
   assertControlRange(value.depthColoring, 0, 2, "depthColoring");
   assertControlRange(value.inWaterGlow, 0, 2, "inWaterGlow");
   assertControlRange(value.crestGlow, 0, 2, "crestGlow");
+  assertControlRange(value.whitecapAmount, 0, 2, "whitecapAmount");
+  assertControlRange(value.foamPersistence, 0, 2, "foamPersistence");
 
   return Object.freeze({
     waveStrength: value.waveStrength,
@@ -387,6 +403,8 @@ function freezeArtisticControls(controls: ArtisticControls): ArtisticControls {
     depthColoring: value.depthColoring,
     inWaterGlow: value.inWaterGlow,
     crestGlow: value.crestGlow,
+    whitecapAmount: value.whitecapAmount,
+    foamPersistence: value.foamPersistence,
   });
 }
 
@@ -395,6 +413,44 @@ function artisticControlsChanged(
   next: ArtisticControls,
 ): boolean {
   return ARTISTIC_CONTROL_KEYS.some((key) => current[key] !== next[key]);
+}
+
+interface WhitecapHistoryTracker {
+  observe(state: HostSimulationState, seaStateCutRevision: number): number;
+}
+
+function createWhitecapHistoryTracker(
+  initial: HostSimulationState,
+): WhitecapHistoryTracker {
+  let seed = initial.seed;
+  let tick = initial.tick;
+  let timeSeconds = initial.timeSeconds;
+  let simulationResetRevision = initial.simulationResetRevision;
+  let seaStateCutRevision = 0;
+  let historyStartTick = 0;
+
+  return {
+    observe(
+      state: HostSimulationState,
+      nextSeaStateCutRevision: number,
+    ): number {
+      if (
+        state.seed !== seed ||
+        state.simulationResetRevision !== simulationResetRevision ||
+        state.tick < tick ||
+        state.timeSeconds < timeSeconds ||
+        nextSeaStateCutRevision !== seaStateCutRevision
+      ) {
+        historyStartTick = state.tick;
+      }
+      seed = state.seed;
+      tick = state.tick;
+      timeSeconds = state.timeSeconds;
+      simulationResetRevision = state.simulationResetRevision;
+      seaStateCutRevision = nextSeaStateCutRevision;
+      return Math.max(0, state.tick - historyStartTick);
+    },
+  };
 }
 
 function assertControlRange(

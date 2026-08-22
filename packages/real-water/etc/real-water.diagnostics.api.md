@@ -5,7 +5,7 @@
 ```ts
 
 // @public
-export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color"];
+export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "whitecap-generation", "whitecap-history", "whitecap-advection", "whitecap-decay", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color"];
 
 // @public
 export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
@@ -33,6 +33,26 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
         format: "rg32float-ndc";
         elementType: "float32";
         components: 2;
+    }>;
+    "whitecap-generation": Readonly<{
+        format: "r32float-whitecap-stage";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "whitecap-history": Readonly<{
+        format: "r32float-whitecap-stage";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "whitecap-advection": Readonly<{
+        format: "r32float-whitecap-stage";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "whitecap-decay": Readonly<{
+        format: "r32float-whitecap-stage";
+        elementType: "float32";
+        components: 1;
     }>;
     "optical-fresnel": Readonly<{
         format: "r32float-optical";
@@ -127,7 +147,7 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
 }>;
 
 // @public
-export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsOpticalScalarCapture;
+export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsWhitecapStageCapture | DiagnosticsOpticalScalarCapture;
 
 // @public
 export interface DiagnosticsCaptureBase {
@@ -235,6 +255,13 @@ export interface DiagnosticsSsrRoughnessCapture extends DiagnosticsCaptureBase {
     readonly data: Float32Array;
     readonly format: "r32float-ssr-roughness";
     readonly name: "ssr-roughness";
+}
+
+// @public
+export interface DiagnosticsWhitecapStageCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-whitecap-stage";
+    readonly name: "whitecap-generation" | "whitecap-history" | "whitecap-advection" | "whitecap-decay";
 }
 
 // @public

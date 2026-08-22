@@ -11,6 +11,7 @@ export type {
   QualityProfileReflection,
   QualityProfileReflectionSsr,
   QualityProfileReflectionSsrHistory,
+  QualityProfileSpectralWhitecaps,
   QualityProfileSurface,
   QualityProfileTemporal,
 } from "./quality-profile.js";
