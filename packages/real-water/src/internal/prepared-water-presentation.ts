@@ -353,7 +353,12 @@ export async function compileAndPrimePreparedWaterPresentation(
 ): Promise<void> {
   throwIfAborted(signal);
   resources.counters.compileCount += 1;
-  await resources.planar.prime(renderer, scene, camera);
+  await resources.planar.prime(
+    renderer,
+    scene,
+    camera,
+    resources.waterline.current.seaLevelMetres,
+  );
   resources.counters.sceneRenderCount += 1;
   throwIfAborted(signal);
   resources.counters.compileCount += 1;
@@ -711,6 +716,7 @@ function renderTemporalFrame(
     renderer,
     scene,
     camera,
+    resources.waterline.current.seaLevelMetres,
     resources.waterline.current.classification !== "below",
   );
   if (resources.planar.hasOutput.value === 1) {

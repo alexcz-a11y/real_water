@@ -2342,6 +2342,42 @@ describe("createThreeHostLifecycleAdapter", () => {
     await lease.dispose();
   });
 
+  it("mirrors the planar camera around the authoritative Host sea level", async () => {
+    const scene = new Scene();
+    scene.add(new Mesh());
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    camera.position.set(0, 12, 8);
+    camera.lookAt(0, 5, 0);
+    camera.updateMatrixWorld(true);
+    const simulation = createMutableSimulationAdapter();
+    simulation.assign({ seaLevelMetres: 5 });
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        simulation,
+        presentation,
+      }),
+    }).ready;
+    const preparedPlanarCamera = renderer.compileAsync.mock.calls.find(
+      ([usedScene, usedCamera]) => usedScene === scene && usedCamera !== camera,
+    )?.[1] as PerspectiveCamera | undefined;
+    expect(preparedPlanarCamera?.position.y).toBeCloseTo(-2);
+
+    renderer.render.mockClear();
+    await presentation.present();
+    const readyPlanarCamera = renderer.render.mock.calls.find(
+      ([usedScene, usedCamera]) => usedScene === scene && usedCamera !== camera,
+    )?.[1] as PerspectiveCamera | undefined;
+    expect(readyPlanarCamera?.position.y).toBeCloseTo(-2);
+    await lease.dispose();
+  });
+
   it("primes planar while below the plane and does not compile again after rising above", async () => {
     const scene = new Scene();
     scene.add(new Mesh());

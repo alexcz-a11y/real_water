@@ -158,7 +158,7 @@ export async function attachRegressionAcceptance(
     createMinimalWaterQualityProfile(coreIdentity.qualityProfile.id),
     coreIdentity.drawingBuffer,
   );
-  assertQaPrewarmV8(details.qaPrewarm);
+  assertQaPrewarmV9(details.qaPrewarm);
   const [userAgent, hardwareConcurrency, drawingBuffer, navigatorGpuAdapter] =
     await Promise.all([
       page.evaluate(() => navigator.userAgent),
@@ -356,7 +356,7 @@ function chromeVersionFromUserAgent(userAgent: string): string {
   return /(?:Chrome|Chromium)\/([\d.]+)/u.exec(userAgent)?.[1] ?? userAgent;
 }
 
-function assertQaPrewarmV8(prewarm: QaFramePrewarmReceipt): void {
+function assertQaPrewarmV9(prewarm: QaFramePrewarmReceipt): void {
   if (
     prewarm.manifest.schema !== QA_FRAME_PREWARM_MANIFEST.schema ||
     prewarm.manifest.version !== QA_FRAME_PREWARM_MANIFEST.version ||

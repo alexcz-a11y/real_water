@@ -281,6 +281,7 @@ function coreFrame(
     },
     waterline: {
       classification: "above",
+      seaLevelMetres: 0,
       surfaceHeightMetres: 0,
       signedDistanceMetres: 1,
       submersion: 0,
@@ -423,6 +424,7 @@ describe("QA frame driver Core association", () => {
     expect(frame.manifestHash).toBe(CORE_MANIFEST.manifestHash);
     expect(frame.waterline).toEqual({
       classification: "above",
+      seaLevelMetres: 0,
       surfaceHeightMetres: 0,
       signedDistanceMetres: 1,
       submersion: 0,

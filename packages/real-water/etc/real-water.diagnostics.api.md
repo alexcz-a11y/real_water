@@ -265,6 +265,7 @@ export interface DiagnosticsWaterlineCapture extends DiagnosticsCaptureBase {
 export interface DiagnosticsWaterlineState {
     readonly classification: "above" | "crossing" | "below";
     readonly lensWetnessImpulse: boolean;
+    readonly seaLevelMetres: number;
     readonly signedDistanceMetres: number;
     readonly submersion: number;
     readonly surfaceHeightMetres: number;

@@ -95,7 +95,7 @@ export interface QaCameraV1 {
   readonly far: number;
 }
 
-export interface QaFrameStateReceiptV4 {
+export interface QaFrameStateReceiptV10 {
   readonly seed: number;
   readonly tick: number;
   readonly timeSeconds: number;
@@ -116,7 +116,7 @@ export interface QaOriginReceiptV4 {
   readonly originRevision: number;
 }
 
-export interface QaSeaLevelReceiptV9 {
+export interface QaSeaLevelReceiptV10 {
   readonly seaLevelMetres: number;
 }
 
@@ -140,13 +140,13 @@ export interface QaMotionAssociationV5 {
   readonly current: QaPresentedMotionStateV5;
 }
 
-export interface QaTemporalReceiptV5 {
+export interface QaTemporalReceiptV10 {
   readonly historyEpoch: number;
   readonly resetReason: QaTemporalResetReason | null;
   readonly resetFrame: boolean;
 }
 
-export interface QaPresentationReceiptV9 extends QaFrameStateReceiptV4 {
+export interface QaPresentationReceiptV10 extends QaFrameStateReceiptV10 {
   readonly generation: number;
   readonly presentationId: number;
   readonly manifestHash: string;
@@ -160,10 +160,10 @@ export interface QaPresentationReceiptV9 extends QaFrameStateReceiptV4 {
   readonly prewarm: QaFramePrewarmReceipt;
   readonly motion: QaMotionAssociationV5;
   readonly waterline: DiagnosticsWaterlineState;
-  readonly temporal: QaTemporalReceiptV5;
+  readonly temporal: QaTemporalReceiptV10;
 }
 
-export interface QaCaptureV9 extends QaPresentationReceiptV9 {
+export interface QaCaptureV10 extends QaPresentationReceiptV10 {
   readonly schema: typeof QA_CAPTURE_SCHEMA;
   readonly version: typeof QA_CAPTURE_VERSION;
   readonly name: QaCaptureName;
@@ -238,14 +238,14 @@ export interface QaHarnessOptions {
   synthesizeDeviceLoss(): void;
 }
 
-export interface QaHarnessV9 {
+export interface QaHarnessV10 {
   readonly schema: typeof QA_HARNESS_SCHEMA;
   readonly version: typeof QA_HARNESS_VERSION;
   readonly fixedTickHz: typeof QA_HARNESS_FIXED_TICK_HZ;
   readonly captureNames: typeof QA_HARNESS_CAPTURE_NAMES;
   readonly prewarmManifest: typeof QA_FRAME_PREWARM_MANIFEST;
-  reset(request: { readonly seed: number }): Promise<QaFrameStateReceiptV4>;
-  advanceTicks(count: number): Promise<QaFrameStateReceiptV4>;
+  reset(request: { readonly seed: number }): Promise<QaFrameStateReceiptV10>;
+  advanceTicks(count: number): Promise<QaFrameStateReceiptV10>;
   setCamera(
     camera: QaCameraV1,
     options: QaCameraUpdateOptions,
@@ -256,9 +256,9 @@ export interface QaHarnessV9 {
   }): Promise<QaOriginReceiptV4>;
   setSeaLevel(seaLevel: {
     readonly metres: number;
-  }): Promise<QaSeaLevelReceiptV9>;
-  present(): Promise<QaPresentationReceiptV9>;
-  capture(name: QaCaptureName): Promise<QaCaptureV9>;
+  }): Promise<QaSeaLevelReceiptV10>;
+  present(): Promise<QaPresentationReceiptV10>;
+  capture(name: QaCaptureName): Promise<QaCaptureV10>;
   updateArtisticControls(
     controls: ArtisticControls,
     options: ArtisticControlUpdateOptions,
@@ -300,12 +300,12 @@ interface ActiveRecipe {
   pendingTicks: number;
   cameraRevision: number;
   cameraSet: boolean;
-  captures: ReadonlyMap<QaCaptureName, QaCaptureV9> | null;
-  presentation: QaPresentationReceiptV9 | null;
+  captures: ReadonlyMap<QaCaptureName, QaCaptureV10> | null;
+  presentation: QaPresentationReceiptV10 | null;
   lastPresentedMotion: QaPresentedMotionStateV5 | null;
 }
 
-export function createQaHarness(options: QaHarnessOptions): QaHarnessV9 {
+export function createQaHarness(options: QaHarnessOptions): QaHarnessV10 {
   let active: ActiveRecipe | null = null;
   let queue = Promise.resolve();
 
@@ -324,7 +324,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV9 {
     active = null;
   };
 
-  const harness: QaHarnessV9 = {
+  const harness: QaHarnessV10 = {
     schema: QA_HARNESS_SCHEMA,
     version: QA_HARNESS_VERSION,
     fixedTickHz: QA_HARNESS_FIXED_TICK_HZ,
@@ -1069,9 +1069,9 @@ function readArtisticControlUpdateOptions(
 
 function cacheCaptures(
   captures: readonly QaFrameDriverCapture[],
-  receipt: QaPresentationReceiptV9,
-): ReadonlyMap<QaCaptureName, QaCaptureV9> {
-  const byName = new Map<QaCaptureName, QaCaptureV9>();
+  receipt: QaPresentationReceiptV10,
+): ReadonlyMap<QaCaptureName, QaCaptureV10> {
+  const byName = new Map<QaCaptureName, QaCaptureV10>();
   for (const name of QA_HARNESS_CAPTURE_NAMES) {
     const capture = captures.find((candidate) => candidate.name === name);
     if (capture === undefined) {
@@ -1093,8 +1093,8 @@ function cacheCaptures(
 
 function encodeCapture(
   capture: QaFrameDriverCapture,
-  receipt: QaPresentationReceiptV9,
-): QaCaptureV9 {
+  receipt: QaPresentationReceiptV10,
+): QaCaptureV10 {
   const shape = QA_FRAME_CAPTURE_SHAPES[capture.name];
   return Object.freeze({
     schema: QA_CAPTURE_SCHEMA,

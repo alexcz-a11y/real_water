@@ -969,7 +969,7 @@ export function readRegressionAcceptanceEvidence(
       "Regression acceptance coreManifest.hash disagrees with the Core identity.",
     );
   }
-  const qaPrewarm = readQaPrewarmV6(value.qaPrewarmManifest, coreIdentity);
+  const qaPrewarm = readQaPrewarmV9(value.qaPrewarmManifest, coreIdentity);
   const temporalPolicy = readReadyCapabilities(
     qaPrewarm.capabilities,
     createMinimalWaterQualityProfile(coreIdentity.qualityProfile.id),
@@ -1674,7 +1674,7 @@ function evaluateMetricPolicy(
   return true;
 }
 
-function readQaPrewarmV6(
+function readQaPrewarmV9(
   value: unknown,
   coreIdentity: QaBoundCoreManifestIdentity,
 ): QaFramePrewarmReceipt {

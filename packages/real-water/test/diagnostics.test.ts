@@ -24,6 +24,7 @@ import {
 const VALID_MANIFEST_HASH = `sha256:${"cd".repeat(32)}`;
 const ABOVE_WATERLINE = Object.freeze({
   classification: "above" as const,
+  seaLevelMetres: 0,
   surfaceHeightMetres: 0,
   signedDistanceMetres: 1,
   submersion: 0,

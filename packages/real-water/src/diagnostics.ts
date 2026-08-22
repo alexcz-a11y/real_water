@@ -232,6 +232,7 @@ const HOST_DIAGNOSTICS_PRESENTED_FRAME_KEYS = [
 ] as const;
 const DIAGNOSTICS_WATERLINE_KEYS = [
   "classification",
+  "seaLevelMetres",
   "surfaceHeightMetres",
   "signedDistanceMetres",
   "submersion",
@@ -544,6 +545,8 @@ export interface HostDiagnosticsPresentRequest {
 export interface DiagnosticsWaterlineState {
   /** Stable camera-medium classification. */
   readonly classification: "above" | "crossing" | "below";
+  /** Authoritative Host mean sea level for the single Open Water Domain. */
+  readonly seaLevelMetres: number;
   /** Seed-matched Open Water surface height at the camera XZ position. */
   readonly surfaceHeightMetres: number;
   /** Camera world Y minus the seed-matched surface height. */
@@ -755,6 +758,7 @@ function readDiagnosticsWaterlineState(
     );
   }
   if (
+    !Number.isFinite(value.seaLevelMetres) ||
     !Number.isFinite(value.surfaceHeightMetres) ||
     !Number.isFinite(value.signedDistanceMetres)
   ) {
@@ -778,6 +782,7 @@ function readDiagnosticsWaterlineState(
   }
   return Object.freeze({
     classification: value.classification,
+    seaLevelMetres: value.seaLevelMetres,
     surfaceHeightMetres: value.surfaceHeightMetres,
     signedDistanceMetres: value.signedDistanceMetres,
     submersion: value.submersion,

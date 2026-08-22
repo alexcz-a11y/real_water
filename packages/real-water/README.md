@@ -16,38 +16,38 @@ TemporalReproject history, stock r185 TRAA, and RenderPipeline. Dedicated SSR
 history is prepared before ready and updated per Host present, independent of
 TRAA. Before readiness it compiles and hidden-executes the planar single-target
 path even when the prepare camera is below the water, then clears any forced
-warm so it cannot leak into a ready below-plane frame. Ready diagnostics expose
-planar-color and planar-target-alpha occupancy from that auxiliary target; they
-do not claim a screen-space planar-confidence mask. Current-frame SSR exposes
-ssr-hit from the stock raw target, ssr-confidence from the compose-target alpha
-used by the shader, linear Float32 ssr-color from the raw RGB, ssr-roughness
-from view-normal alpha, reflection-base-color from the scene-pass output RGB,
-and ssr-composite-color from the compose-target RGB. Stock roughness blur is
-current-frame spatial only. Dedicated TemporalReproject history RGB and inverse
-accumulated frame-count weight are capturable from the resolved texture. TRAA
-and SSR, including SSR history, update on each Host present. The Core main scene
-render remains one 6-attachment 32-byte MRT pass, plus one auxiliary planar
-scene render when facing. Current-frame SSR, history, and compose are fullscreen
-passes after that single main scene and before TRAA. Before readiness it also
-renders a no-allocation TRAA and SSR-history reset frame, eight full temporal
-hidden stabilization frames, performs completion readbacks of every named
-diagnostics output route and the main-camera guard frame, then blits the probed
-final color through a transform-free presentation pipeline. Progress advances
-only as manifest work completes. Optional `real-water/diagnostics` reads CPU
-DTOs from the same bound Core frame, including waterline coverage and an
-on-demand full-screen GPU target driven by the actual shared TRAA/SSR reset
-uniform; QA does not own a second scene or TRAA. The Host must supply a
-perspective camera. The Reference Experience reveals the prepared canvas on the
-next refresh. The Host retains ownership of environment radiance and finite sun.
-The prepared radiance fingerprint is the Host verification credential: the
-SHA-256 of the canonical 8x4 RGBA8 sRGB pixels. Identity, size, format, type,
-and color space are structural and must agree with the borrowed Three texture.
-Texture bytes, sampler, and identity stay unchanged and alive through the lease;
-Core does not dispose the Host texture or read back its pixels.
-Scene-behind-water color and depth are sampled from the Host viewport after
-opaque geometry. Real Water never reads `scene.environment` or guesses sky or
-weather. The water material is an unlit public NodeMaterial whose color and MRT
-come from the same optical path.
+warm so it cannot leak into a ready below-sea-level frame. Ready diagnostics
+expose planar-color and planar-target-alpha occupancy from that auxiliary
+target; they do not claim a screen-space planar-confidence mask. Current-frame
+SSR exposes ssr-hit from the stock raw target, ssr-confidence from the
+compose-target alpha used by the shader, linear Float32 ssr-color from the raw
+RGB, ssr-roughness from view-normal alpha, reflection-base-color from the
+scene-pass output RGB, and ssr-composite-color from the compose-target RGB.
+Stock roughness blur is current-frame spatial only. Dedicated TemporalReproject
+history RGB and inverse accumulated frame-count weight are capturable from the
+resolved texture. TRAA and SSR, including SSR history, update on each Host
+present. The Core main scene render remains one 6-attachment 32-byte MRT pass,
+plus one auxiliary planar scene render when facing. Current-frame SSR, history,
+and compose are fullscreen passes after that single main scene and before TRAA.
+Before readiness it also renders a no-allocation TRAA and SSR-history reset
+frame, eight full temporal hidden stabilization frames, performs completion
+readbacks of every named diagnostics output route and the main-camera guard
+frame, then blits the probed final color through a transform-free presentation
+pipeline. Progress advances only as manifest work completes. Optional
+`real-water/diagnostics` reads CPU DTOs from the same bound Core frame,
+including waterline coverage and an on-demand full-screen GPU target driven by
+the actual shared TRAA/SSR reset uniform; QA does not own a second scene or
+TRAA. The Host must supply a perspective camera. The Reference Experience
+reveals the prepared canvas on the next refresh. The Host retains ownership of
+environment radiance and finite sun. The prepared radiance fingerprint is the
+Host verification credential: the SHA-256 of the canonical 8x4 RGBA8 sRGB
+pixels. Identity, size, format, type, and color space are structural and must
+agree with the borrowed Three texture. Texture bytes, sampler, and identity stay
+unchanged and alive through the lease; Core does not dispose the Host texture or
+read back its pixels. Scene-behind-water color and depth are sampled from the
+Host viewport after opaque geometry. Real Water never reads `scene.environment`
+or guesses sky or weather. The water material is an unlit public NodeMaterial
+whose color and MRT come from the same optical path.
 
 Each Prewarm Manifest is version 3 and binds an immutable drawing buffer. The
 factory hashes that complete work plan synchronously. Memory Host tests may omit

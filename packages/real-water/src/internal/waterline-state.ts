@@ -23,6 +23,7 @@ export type WaterlineSampleState = Pick<
 
 export interface WaterlineFrameState {
   readonly classification: WaterlineClassification;
+  readonly seaLevelMetres: number;
   readonly surfaceHeightMetres: number;
   readonly signedDistanceMetres: number;
   readonly submersion: number;
@@ -73,6 +74,7 @@ export function createWaterlineStateController(): WaterlineStateController {
         committed !== undefined && classification !== committed.classification;
       const frameState = Object.freeze({
         classification,
+        seaLevelMetres: state.seaLevelMetres,
         surfaceHeightMetres,
         signedDistanceMetres,
         submersion: waterlineSubmersion(signedDistanceMetres),

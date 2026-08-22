@@ -388,9 +388,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.planarReflectionRoute,
     kind: "conditional-route",
     label:
-      "Horizontal XZ planar reflection route (waterline crossing fade and below clear, oblique clip, water hidden, no bounce)",
+      "Horizontal XZ planar reflection route (dynamic Host sea level, waterline crossing fade and below clear, oblique clip, water hidden, no bounce)",
     fingerprint:
-      "sha256:e52854cd938743a140da3d2b7d4c3b457eee0135fbc9ba5f59da56710abfb394",
+      "sha256:717e164787f7d1d29b1111b1a80e75c1968ae31b5e3e3011a7d79cfb99238265",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.planarEnvironmentFallback,
