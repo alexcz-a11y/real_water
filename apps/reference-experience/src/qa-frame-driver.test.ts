@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createMinimalWaterPrewarmManifest,
+  MAX_ATTACHED_BODIES,
   MAX_GAMEPLAY_QUERY_POINTS,
   type PrewarmManifest,
   type RealWaterCapabilities,
@@ -86,6 +87,7 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
     },
   },
   gameplay: {
+    maxAttachedBodies: MAX_ATTACHED_BODIES,
     maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
   },
 };

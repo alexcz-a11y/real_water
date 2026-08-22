@@ -117,8 +117,16 @@ export interface RenderingCapabilities {
  * @public
  */
 export interface GameplayCapabilities {
+  readonly maxAttachedBodies: 32;
   readonly maxQueryPointsPerTick: 2_048;
 }
+
+/**
+ * Maximum Body attachments accepted by one ready runtime.
+ *
+ * @public
+ */
+export const MAX_ATTACHED_BODIES = 32 as const;
 
 /**
  * Maximum Gameplay Query points accepted by one ready-runtime tick.
@@ -162,6 +170,7 @@ export function createCoreWebGPUCapabilities(
   }
   return Object.freeze({
     gameplay: Object.freeze({
+      maxAttachedBodies: MAX_ATTACHED_BODIES,
       maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
     }),
     rendering: Object.freeze({

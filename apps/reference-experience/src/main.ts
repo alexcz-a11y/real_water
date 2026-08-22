@@ -35,6 +35,7 @@ import {
   type ReferenceHostPresentationController,
 } from "./reference-presentation-controller.js";
 import { createReferenceHostSimulationController } from "./reference-simulation-controller.js";
+import { createReferenceFloatingSphere } from "./reference-floating-sphere.js";
 import { createReferenceEnvironmentAdapter } from "./reference-optical-inputs.js";
 import {
   startReferenceExperience,
@@ -308,6 +309,8 @@ function createThreeReferenceHostAttempt(
   const scene = new Scene();
   scene.background = new Color(0x031019);
   const seabed = addReferenceSeabed(scene, qaModule !== null);
+  const floatingSphere =
+    qaModule === null ? createReferenceFloatingSphere(scene) : undefined;
 
   const width = drawingBuffer.width;
   const height = drawingBuffer.height;
@@ -325,7 +328,11 @@ function createThreeReferenceHostAttempt(
   let referencePresentation: ReferenceHostPresentationController | undefined;
   const referenceSimulation =
     qaSimulation === undefined
-      ? createReferenceHostSimulationController()
+      ? createReferenceHostSimulationController({
+          ...(floatingSphere === undefined
+            ? {}
+            : { integrateFixedStep: floatingSphere.integrateFixedStep }),
+        })
       : undefined;
   let referenceSimulationStarted = false;
   const presentation =
@@ -342,9 +349,13 @@ function createThreeReferenceHostAttempt(
         if (!referenceSimulationStarted) {
           referenceSimulationStarted = true;
           simulationController.start(timestamp);
+          floatingSphere?.present(1);
           return;
         }
         simulationController.beforePresent(timestamp);
+        floatingSphere?.present(
+          simulationController.interpolationAlpha(timestamp),
+        );
       },
     }));
   const simulation = qaSimulation ?? referenceSimulation;
@@ -379,6 +390,7 @@ function createThreeReferenceHostAttempt(
       host: frameSource?.host ?? baseHost,
       createReadyStage: (lease: RealWaterLease) => {
         frameSource?.bindLease(lease);
+        floatingSphere?.attach(lease);
         const stage = createCanvasStage(renderer, lease);
         referencePresentation?.start();
         return stage;
@@ -388,6 +400,7 @@ function createThreeReferenceHostAttempt(
           disposed = true;
           renderer.dispose();
           seabed.dispose();
+          floatingSphere?.dispose();
           if (environment.texture !== null) {
             disposeHostTexture(environment.texture);
           }

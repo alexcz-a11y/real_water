@@ -11,6 +11,8 @@ import {
   readHostPresentationState,
   type HostPresentationAdapter,
 } from "./presentation.js";
+import type { BodyAttachment, BodyAttachmentOptions } from "./body-physics.js";
+import { createSphereBodyCoupling } from "./internal/sphere-body-coupling.js";
 
 /**
  * Hot, perceptual controls for the prepared four-band Open Water Domain.
@@ -196,7 +198,12 @@ export interface RealWaterRuntime {
     options?: ArtisticControlUpdateOptions,
   ): ArtisticControlUpdateReceipt;
   queryGameplay(batch: GameplayQueryBatch): GameplayQueryResults;
+  attachBody(options: BodyAttachmentOptions): BodyAttachment;
   inspectRuntime(): OpenWaterRuntimeSnapshot;
+}
+
+export interface RealWaterRuntimeController extends RealWaterRuntime {
+  disposeBodyAttachments(): void;
 }
 
 export interface RuntimeStateSink {
@@ -208,7 +215,7 @@ export function createRealWaterRuntime(
   simulation: HostSimulationAdapter,
   presentation: HostPresentationAdapter,
   sink?: RuntimeStateSink,
-): RealWaterRuntime {
+): RealWaterRuntimeController {
   readHostPresentationState(presentation);
   let artisticControls = DEFAULT_ARTISTIC_CONTROLS;
   let controlRevision = 0;
@@ -218,6 +225,28 @@ export function createRealWaterRuntime(
   const originRevisions = createOriginRevisionTracker(
     readHostSimulationState(simulation),
   );
+
+  const queryGameplay = (batch: GameplayQueryBatch): GameplayQueryResults => {
+    assertActive();
+    readHostPresentationState(presentation);
+    validateGameplayQueryBatch(batch);
+    const state = readHostSimulationState(simulation);
+    originRevisions.observe(state);
+    const usedThisTick = state.tick === queryTick ? queriesUsedThisTick : 0;
+    if (usedThisTick + batch.count > MAX_GAMEPLAY_QUERY_POINTS) {
+      throw queryCapacityError(batch.count, usedThisTick);
+    }
+    writeSpectralBandQueries(batch, state, artisticControls);
+    for (let point = 0; point < batch.count; point += 1) {
+      batch.results.ticks[point] = state.tick;
+      batch.results.controlRevisions[point] = controlRevision;
+      batch.results.snapshotAges[point] = 0;
+    }
+    queryTick = state.tick;
+    queriesUsedThisTick = usedThisTick + batch.count;
+    return batch.results;
+  };
+  const bodies = createSphereBodyCoupling(assertActive, queryGameplay);
 
   return Object.freeze({
     updateArtisticControls(
@@ -256,26 +285,8 @@ export function createRealWaterRuntime(
         seaStateCutRevision,
       });
     },
-    queryGameplay(batch: GameplayQueryBatch): GameplayQueryResults {
-      assertActive();
-      readHostPresentationState(presentation);
-      validateGameplayQueryBatch(batch);
-      const state = readHostSimulationState(simulation);
-      originRevisions.observe(state);
-      const usedThisTick = state.tick === queryTick ? queriesUsedThisTick : 0;
-      if (usedThisTick + batch.count > MAX_GAMEPLAY_QUERY_POINTS) {
-        throw queryCapacityError(batch.count, usedThisTick);
-      }
-      writeSpectralBandQueries(batch, state, artisticControls);
-      for (let point = 0; point < batch.count; point += 1) {
-        batch.results.ticks[point] = state.tick;
-        batch.results.controlRevisions[point] = controlRevision;
-        batch.results.snapshotAges[point] = 0;
-      }
-      queryTick = state.tick;
-      queriesUsedThisTick = usedThisTick + batch.count;
-      return batch.results;
-    },
+    queryGameplay,
+    attachBody: bodies.attachBody,
     inspectRuntime(): OpenWaterRuntimeSnapshot {
       assertActive();
       return readSnapshot(
@@ -287,6 +298,7 @@ export function createRealWaterRuntime(
         seaStateCutRevision,
       );
     },
+    disposeBodyAttachments: bodies.dispose,
   });
 }
 

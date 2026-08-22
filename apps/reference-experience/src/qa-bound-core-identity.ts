@@ -1,6 +1,7 @@
 import {
   createMinimalWaterPrewarmManifest,
   createMinimalWaterQualityProfile,
+  MAX_ATTACHED_BODIES,
   MAX_GAMEPLAY_QUERY_POINTS,
   type HostEnvironmentReflectionDescriptor,
   type PrewarmDeclaration,
@@ -132,7 +133,10 @@ const REFLECTION_PLANAR_KEYS = [
   "format",
   "samples",
 ] as const;
-const GAMEPLAY_CAPABILITY_KEYS = ["maxQueryPointsPerTick"] as const;
+const GAMEPLAY_CAPABILITY_KEYS = [
+  "maxAttachedBodies",
+  "maxQueryPointsPerTick",
+] as const;
 const CAPABILITIES_TEMPORAL_KEYS = [
   ...TEMPORAL_KEYS,
   "motionFormat",
@@ -204,7 +208,7 @@ export function readReadyCapabilities(
     !hasExactKeys(value.gameplay, GAMEPLAY_CAPABILITY_KEYS)
   ) {
     throw new TypeError(
-      "Ready capabilities.gameplay must include maxQueryPointsPerTick.",
+      "Ready capabilities.gameplay must include the exact Body and Query capacities.",
     );
   }
   if (value.rendering.backend !== "core-webgpu") {
@@ -220,6 +224,11 @@ export function readReadyCapabilities(
   if (value.gameplay.maxQueryPointsPerTick !== MAX_GAMEPLAY_QUERY_POINTS) {
     throw new Error(
       "Ready capabilities.gameplay.maxQueryPointsPerTick disagrees with Core.",
+    );
+  }
+  if (value.gameplay.maxAttachedBodies !== MAX_ATTACHED_BODIES) {
+    throw new Error(
+      "Ready capabilities.gameplay.maxAttachedBodies disagrees with Core.",
     );
   }
   const temporal = readCapabilitiesTemporal(
@@ -240,6 +249,7 @@ export function readReadyCapabilities(
         reflection,
       },
       gameplay: {
+        maxAttachedBodies: MAX_ATTACHED_BODIES,
         maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
       },
     }),

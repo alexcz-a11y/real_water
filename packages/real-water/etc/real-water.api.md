@@ -48,6 +48,120 @@ export interface ArtisticControlUpdateReceipt {
 export function assertHostPresentationAdapter(presentation: HostPresentationAdapter): HostPresentationAdapter;
 
 // @public
+export const BODY_PHYSICS_FIXED_TICK_HZ: 60;
+
+// @public
+export interface BodyAttachment {
+    // (undocumented)
+    detach(): void;
+    // (undocumented)
+    readonly id: number;
+    // (undocumented)
+    inspect(): BodyAttachmentSnapshot;
+    // (undocumented)
+    readonly shape: InteractionShape;
+}
+
+// @public
+export interface BodyAttachmentOptions {
+    // (undocumented)
+    readonly physics: BodyPhysicsAdapter;
+    // (undocumented)
+    readonly shape: InteractionShape;
+}
+
+// @public
+export interface BodyAttachmentSnapshot {
+    // (undocumented)
+    readonly attached: boolean;
+    // (undocumented)
+    readonly lastWaterLoad: BodyWaterLoad | null;
+}
+
+// @public
+export interface BodyPhysicsAdapter {
+    // (undocumented)
+    applyWaterLoad(load: BodyWaterLoad): void;
+    // (undocumented)
+    bind(route: BodyPhysicsFixedStepRoute): BodyPhysicsBinding;
+    // (undocumented)
+    snapshot(): BodyPhysicsState;
+}
+
+// @public
+export type BodyPhysicsAdapterOptions = BodyPhysicsAdapter;
+
+// @public
+export interface BodyPhysicsBinding {
+    // (undocumented)
+    dispose(): void;
+}
+
+// @public
+export interface BodyPhysicsFixedStepRoute {
+    // (undocumented)
+    beforeIntegrate(): BodyWaterLoad;
+}
+
+// @public
+export interface BodyPhysicsPose {
+    // (undocumented)
+    readonly position: BodyPhysicsVector3;
+    // (undocumented)
+    readonly rotation: BodyPhysicsQuaternion;
+}
+
+// @public
+export interface BodyPhysicsQuaternion extends BodyPhysicsVector3 {
+    // (undocumented)
+    readonly w: number;
+}
+
+// @public
+export interface BodyPhysicsState {
+    // (undocumented)
+    readonly angularVelocity: BodyPhysicsVector3;
+    // (undocumented)
+    readonly linearVelocity: BodyPhysicsVector3;
+    // (undocumented)
+    readonly mass: number;
+    // (undocumented)
+    readonly position: BodyPhysicsVector3;
+    // (undocumented)
+    readonly rotation: BodyPhysicsQuaternion;
+}
+
+// @public
+export interface BodyPhysicsVector3 {
+    // (undocumented)
+    readonly x: number;
+    // (undocumented)
+    readonly y: number;
+    // (undocumented)
+    readonly z: number;
+}
+
+// @public
+export interface BodyWaterLoad {
+    // (undocumented)
+    readonly force: BodyPhysicsVector3;
+    // (undocumented)
+    readonly queryControlRevision: number;
+    // (undocumented)
+    readonly querySnapshotAge: 0 | 1;
+    // (undocumented)
+    readonly queryTick: number;
+    // (undocumented)
+    readonly torque: BodyPhysicsVector3;
+}
+
+// @public
+export function createBodyPhysicsAdapter(options: BodyPhysicsAdapterOptions): BodyPhysicsAdapter;
+
+// @public
+export function createMemoryBodyPhysicsAdapter(options: MemoryBodyPhysicsAdapterOptions): MemoryBodyPhysicsAdapter;
+
+// @public
 export function createMemoryHostLifecycleAdapter(options: MemoryHostLifecycleAdapterOptions): HostLifecycleAdapter;
 
 // @public
@@ -111,6 +225,8 @@ export interface ErrorStartupSnapshot {
 
 // @public
 export interface GameplayCapabilities {
+    // (undocumented)
+    readonly maxAttachedBodies: 32;
     // (undocumented)
     readonly maxQueryPointsPerTick: 2_048;
 }
@@ -339,6 +455,9 @@ export interface HostTexture {
 }
 
 // @public
+export type InteractionShape = SphereInteractionShape;
+
+// @public
 export interface LoadingPresenterAdapter {
     // (undocumented)
     present(snapshot: StartupSnapshot, signal: AbortSignal): void | Promise<void>;
@@ -363,7 +482,24 @@ export interface LongSuspensionInvalidation {
 }
 
 // @public
+export const MAX_ATTACHED_BODIES: 32;
+
+// @public
 export const MAX_GAMEPLAY_QUERY_POINTS: 2048;
+
+// @public
+export interface MemoryBodyPhysicsAdapter extends BodyPhysicsAdapter {
+    // (undocumented)
+    integrateFixedStep(): BodyPhysicsState;
+    // (undocumented)
+    interpolate(alpha: number): BodyPhysicsPose;
+}
+
+// @public
+export interface MemoryBodyPhysicsAdapterOptions {
+    // (undocumented)
+    readonly initialState: BodyPhysicsState;
+}
 
 // @public
 export interface MemoryHostLifecycleAdapterOptions {
@@ -746,6 +882,8 @@ export interface RealWaterLease extends RealWaterRuntime {
 // @public
 export interface RealWaterRuntime {
     // (undocumented)
+    attachBody(options: BodyAttachmentOptions): BodyAttachment;
+    // (undocumented)
     inspectRuntime(): OpenWaterRuntimeSnapshot;
     // (undocumented)
     queryGameplay(batch: GameplayQueryBatch): GameplayQueryResults;
@@ -941,7 +1079,15 @@ export interface RenderingCapabilitiesTemporal {
 export type RuntimeDiagnostics = StartupDiagnostics;
 
 // @public
-export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "GAMEPLAY_QUERY_CAPACITY_EXCEEDED" | "RUNTIME_INVALIDATED";
+export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "BODY_CAPACITY_EXCEEDED" | "GAMEPLAY_QUERY_CAPACITY_EXCEEDED" | "RUNTIME_INVALIDATED";
+
+// @public
+export interface SphereInteractionShape {
+    // (undocumented)
+    readonly kind: "sphere";
+    // (undocumented)
+    readonly radius: number;
+}
 
 // @public
 export type StartupDiagnostics = Readonly<Record<string, string | number | boolean | null>>;

@@ -38,4 +38,38 @@ describe("Reference Host Simulation Controller", () => {
     simulation.start(0);
     expect(simulation.snapshot().tick).toBe(1);
   });
+
+  it("runs every 60 Hz Host integration before a 30 FPS presentation", () => {
+    const integratedTicks: number[] = [];
+    const controller: {
+      current?: ReturnType<typeof createReferenceHostSimulationController>;
+    } = {};
+    const simulation = createReferenceHostSimulationController({
+      integrateFixedStep: () => {
+        integratedTicks.push(controller.current?.snapshot().tick ?? -1);
+      },
+    });
+    controller.current = simulation;
+
+    simulation.start(0);
+    expect(simulation.beforePresent(34).tick).toBe(2);
+    expect(integratedTicks).toEqual([0, 1]);
+    expect(simulation.interpolationAlpha(42)).toBeCloseTo(0.52, 12);
+  });
+
+  it("rejects a long gap before starting an unbounded catch-up spiral", () => {
+    let integrationCount = 0;
+    const simulation = createReferenceHostSimulationController({
+      integrateFixedStep: () => {
+        integrationCount += 1;
+      },
+    });
+    simulation.start(0);
+
+    expect(() => simulation.beforePresent(1_000)).toThrowError(
+      /bounded fixed-step catch-up/i,
+    );
+    expect(integrationCount).toBe(0);
+    expect(simulation.snapshot().tick).toBe(0);
+  });
 });

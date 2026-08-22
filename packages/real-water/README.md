@@ -121,5 +121,20 @@ normal, three-dimensional surface velocity, a zero foam placeholder, tick,
 Artistic Control revision, and zero-tick local snapshot age. Capacity and input
 failures are detected before output buffers are changed.
 
+`attachBody(...)` binds a Host-owned rigid body through the public Body Physics
+Adapter seam and an immutable closed sphere Interaction Shape. The ready lease
+prepares 32 Body slots; a thirty-third active attachment fails with the
+structured `BODY_CAPACITY_EXCEEDED` error. A production Adapter registers the
+opaque `beforeIntegrate()` route with its own 60 Hz physics loop. On each fixed
+tick, that route samples the synchronous Gameplay Query state, applies the
+resulting force and torque through the Adapter, and returns query tick, Artistic
+Control revision, and zero-or-one-tick snapshot age before the Host integrates
+its body. Core never steps or disposes the Host rigid body. The deterministic
+Memory Body Physics Adapter exercises the same route and retains previous and
+current poses for Host-owned presentation interpolation; reading an interpolated
+pose never advances physics. The non-QA Reference Experience uses that Adapter
+to float one visible sphere at 60 Hz while its Host Presentation controller may
+render at 30 FPS.
+
 Disposal releases the clipmap and other Real Water-owned resources without
 disposing Host-owned objects.

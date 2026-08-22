@@ -74,6 +74,7 @@ describe("ready Open Water runtime", () => {
     }).ready;
 
     expect(lease.capabilities.gameplay).toEqual({
+      maxAttachedBodies: 32,
       maxQueryPointsPerTick: 2_048,
     });
     expect(Object.isFrozen(lease.capabilities.gameplay)).toBe(true);

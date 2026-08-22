@@ -39,7 +39,10 @@ export type {
   RenderingCapabilitiesReflectionSsrHistory,
   RenderingCapabilitiesTemporal,
 } from "./capabilities.js";
-export { MAX_GAMEPLAY_QUERY_POINTS } from "./capabilities.js";
+export {
+  MAX_ATTACHED_BODIES,
+  MAX_GAMEPLAY_QUERY_POINTS,
+} from "./capabilities.js";
 
 export { RealWaterRuntimeError, RealWaterStartupError } from "./errors.js";
 export type {
@@ -67,6 +70,33 @@ export type {
   OpenWaterRuntimeSnapshot,
   RealWaterRuntime,
 } from "./runtime.js";
+
+export { createBodyPhysicsAdapter } from "./body-physics.js";
+export type {
+  BodyAttachment,
+  BodyAttachmentOptions,
+  BodyAttachmentSnapshot,
+  BodyPhysicsAdapter,
+  BodyPhysicsAdapterOptions,
+  BodyPhysicsBinding,
+  BodyPhysicsFixedStepRoute,
+  BodyPhysicsPose,
+  BodyPhysicsQuaternion,
+  BodyPhysicsState,
+  BodyPhysicsVector3,
+  BodyWaterLoad,
+  InteractionShape,
+  SphereInteractionShape,
+} from "./body-physics.js";
+
+export {
+  BODY_PHYSICS_FIXED_TICK_HZ,
+  createMemoryBodyPhysicsAdapter,
+} from "./memory-body-physics.js";
+export type {
+  MemoryBodyPhysicsAdapter,
+  MemoryBodyPhysicsAdapterOptions,
+} from "./memory-body-physics.js";
 
 export {
   assertHostPresentationAdapter,

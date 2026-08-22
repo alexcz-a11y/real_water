@@ -280,7 +280,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     const lease = await run.ready;
 
     expect(lease.capabilities).toEqual({
-      gameplay: { maxQueryPointsPerTick: 2_048 },
+      gameplay: { maxAttachedBodies: 32, maxQueryPointsPerTick: 2_048 },
       rendering: {
         backend: "core-webgpu",
         timestampQuery: true,

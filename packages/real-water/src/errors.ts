@@ -60,6 +60,7 @@ export type StartupDiagnostics = Readonly<
  */
 export type RuntimeErrorCode =
   | "EFFECT_NOT_PREWARMED"
+  | "BODY_CAPACITY_EXCEEDED"
   | "GAMEPLAY_QUERY_CAPACITY_EXCEEDED"
   | "RUNTIME_INVALIDATED";
 

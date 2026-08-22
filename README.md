@@ -3,7 +3,21 @@
 Real Water is an ESM-only TypeScript Module for a reusable native Three.js Open
 Water Domain. The repository now includes a four-band, camera-relative Open
 Water Domain with a complete basic optical path, versioned Calm, Swell, and
-Storm Water Presets, and the prewarm, reveal, reprepare, and recovery path.
+Storm Water Presets, one Host-driven floating sphere, and the prewarm, reveal,
+reprepare, and recovery path.
+
+Issue #23 adds the first complete Gameplay Coupling tracer:
+
+- a production callback Adapter and deterministic Memory Body Physics Adapter
+  occupy the same public seam;
+- one immutable sphere Interaction Shape samples the synchronous water state and
+  receives its water load before Host fixed integration;
+- Host physics runs every 1/60 second while the Reference presentation may use
+  30 FPS pose interpolation without changing the physical result;
+- query tick, Artistic Control revision, and snapshot age remain observable on
+  each Body water load;
+- 32 attachments are prepared, the thirty-third fails structurally, detach
+  returns capacity, and runtime disposal never destroys the Host rigid body.
 
 Issue #20 shades that domain with a Host-owned basic optical path:
 

@@ -85,7 +85,10 @@ const TEST_REFLECTION_CAPABILITIES = Object.freeze({
   }),
 });
 const TEST_CAPABILITIES = Object.freeze({
-  gameplay: Object.freeze({ maxQueryPointsPerTick: 2_048 as const }),
+  gameplay: Object.freeze({
+    maxAttachedBodies: 32 as const,
+    maxQueryPointsPerTick: 2_048 as const,
+  }),
   rendering: Object.freeze({
     backend: "core-webgpu" as const,
     timestampQuery: false,
@@ -125,7 +128,7 @@ describe("prepareRealWater", () => {
     const lease = await run.ready;
 
     expect(lease.capabilities).toEqual({
-      gameplay: { maxQueryPointsPerTick: 2_048 },
+      gameplay: { maxAttachedBodies: 32, maxQueryPointsPerTick: 2_048 },
       rendering: {
         backend: "core-webgpu",
         timestampQuery: true,

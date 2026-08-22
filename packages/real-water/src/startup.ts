@@ -931,7 +931,10 @@ function createLease(
   bindSession.activate();
 
   return Object.freeze({
-    ...runtime,
+    updateArtisticControls: runtime.updateArtisticControls,
+    queryGameplay: runtime.queryGameplay,
+    attachBody: runtime.attachBody,
+    inspectRuntime: runtime.inspectRuntime,
     capabilities,
     invalidated,
     manifest,
@@ -994,6 +997,7 @@ function createLease(
       if (terminalState === "active") {
         terminalState = "disposed";
       }
+      runtime.disposeBodyAttachments();
       unbindPreparedPresentationRoute(hostLease);
       try {
         presentationBinding.dispose();
