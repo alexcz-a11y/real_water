@@ -48,6 +48,15 @@ export interface ArtisticControlUpdateReceipt {
 export function assertHostPresentationAdapter(presentation: HostPresentationAdapter): HostPresentationAdapter;
 
 // @public
+export function createAuthoredEnvironmentPreset(id: string, snapshot: EnvironmentPresetSnapshot): EnvironmentPreset;
+
+// @public
+export function createAuthoredShowcasePreset(authoring: ShowcasePresetAuthoring): ShowcasePreset;
+
+// @public
+export function createAuthoredWaterPreset(id: WaterPresetId, artisticControls: ArtisticControls): WaterPreset;
+
+// @public
 export function createMemoryHostLifecycleAdapter(options: MemoryHostLifecycleAdapterOptions): HostLifecycleAdapter;
 
 // @public
@@ -55,6 +64,12 @@ export function createMinimalWaterPrewarmManifest(profile?: QualityProfile, draw
 
 // @public
 export function createMinimalWaterQualityProfile(id?: MinimalWaterQualityProfileId): QualityProfile;
+
+// @public
+export function createReferenceEnvironmentPreset(): EnvironmentPreset;
+
+// @public
+export function createReferenceShowcasePreset(): ShowcasePreset;
 
 // @public
 export function createStaticHostEnvironmentAdapter(reflection: HostEnvironmentReflectionResource, state: HostEnvironmentState): HostEnvironmentAdapter;
@@ -78,6 +93,16 @@ export function createThreeHostLifecycleAdapter(options: ThreeHostLifecycleAdapt
 export function createWaterPreset(id?: WaterPresetId): WaterPreset;
 
 // @public
+export interface CurrentPresetImport {
+    // (undocumented)
+    readonly preset: PresetDocument;
+    // (undocumented)
+    readonly sourceVersion: number;
+    // (undocumented)
+    readonly status: "current";
+}
+
+// @public
 export interface EffectVariantSelection {
     // (undocumented)
     readonly effectId: string;
@@ -96,6 +121,75 @@ export interface EffectVariantSelectionReceipt {
 }
 
 // @public
+export const ENVIRONMENT_PRESET_SCHEMA: "real-water/environment-preset";
+
+// @public
+export const ENVIRONMENT_PRESET_VERSION: 1;
+
+// @public
+export interface EnvironmentPreset extends EnvironmentPresetSnapshot {
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly presetHash: string;
+    // (undocumented)
+    readonly schema: typeof ENVIRONMENT_PRESET_SCHEMA;
+    // (undocumented)
+    readonly version: typeof ENVIRONMENT_PRESET_VERSION;
+}
+
+// @public
+export interface EnvironmentPresetAtmosphere {
+    // (undocumented)
+    readonly cloudCoverage: number;
+    // (undocumented)
+    readonly cloudShadowStrength: number;
+    // (undocumented)
+    readonly horizonHaze: number;
+}
+
+// @public
+export interface EnvironmentPresetIdentity {
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly presetHash: string;
+    // (undocumented)
+    readonly schema: typeof ENVIRONMENT_PRESET_SCHEMA;
+    // (undocumented)
+    readonly version: typeof ENVIRONMENT_PRESET_VERSION;
+}
+
+// @public
+export function environmentPresetIdentity(preset: EnvironmentPreset): EnvironmentPresetIdentity;
+
+// @public
+export interface EnvironmentPresetSnapshot {
+    // (undocumented)
+    readonly atmosphere: EnvironmentPresetAtmosphere;
+    // (undocumented)
+    readonly lighting: HostEnvironmentState;
+    // (undocumented)
+    readonly reflection: HostEnvironmentReflectionDescriptor;
+    // (undocumented)
+    readonly weather: EnvironmentPresetWeather;
+}
+
+// @public
+export interface EnvironmentPresetWeather {
+    // (undocumented)
+    readonly gustStrength: number;
+    // (undocumented)
+    readonly rainIntensity: number;
+    // (undocumented)
+    readonly windDirectionX: number;
+    // (undocumented)
+    readonly windDirectionZ: number;
+    // (undocumented)
+    readonly windStrength: number;
+}
+
+// @public
 export interface ErrorStartupSnapshot {
     // (undocumented)
     readonly error: RealWaterStartupError;
@@ -108,6 +202,9 @@ export interface ErrorStartupSnapshot {
     // (undocumented)
     readonly status: "unsupported" | "failed" | "cancelled";
 }
+
+// @public
+export function exportPresetJson(preset: PresetDocument): string;
 
 // @public
 export interface GameplayCapabilities {
@@ -339,6 +436,9 @@ export interface HostTexture {
 }
 
 // @public
+export function importPresetJson(rawJson: string): PresetImportResult;
+
+// @public
 export interface LoadingPresenterAdapter {
     // (undocumented)
     present(snapshot: StartupSnapshot, signal: AbortSignal): void | Promise<void>;
@@ -403,6 +503,28 @@ export type MemoryHostScenario = Readonly<{
 }>;
 
 // @public
+export interface MigratedPresetImport {
+    // (undocumented)
+    readonly preset: PresetDocument;
+    // (undocumented)
+    readonly sourceVersion: number;
+    // (undocumented)
+    readonly status: "migrated";
+}
+
+// @public
+export function migrateEnvironmentPreset(candidate: unknown): EnvironmentPreset;
+
+// @public
+export function migrateQualityProfile(candidate: unknown): QualityProfile;
+
+// @public
+export function migrateShowcasePreset(candidate: unknown): ShowcasePreset;
+
+// @public
+export function migrateWaterPreset(candidate: unknown): WaterPreset;
+
+// @public
 export interface MinimalWaterGeometrySegments {
     // (undocumented)
     readonly heightSegments: number;
@@ -412,6 +534,21 @@ export interface MinimalWaterGeometrySegments {
 
 // @public
 export type MinimalWaterQualityProfileId = "minimal" | "minimal-high-detail";
+
+// @public
+export function normalizeEnvironmentPreset(candidate: EnvironmentPreset): EnvironmentPreset;
+
+// @public
+export function normalizePreset(candidate: unknown): PresetDocument;
+
+// @public
+export function normalizeQualityProfile(candidate: QualityProfile): QualityProfile;
+
+// @public
+export function normalizeShowcasePreset(candidate: ShowcasePreset): ShowcasePreset;
+
+// @public
+export function normalizeWaterPreset(candidate: WaterPreset): WaterPreset;
 
 // @public
 export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
@@ -459,6 +596,15 @@ export interface PreparingStartupSnapshot {
     // (undocumented)
     readonly status: "preparing";
 }
+
+// @public
+export type PresetDocument = WaterPreset | EnvironmentPreset | QualityProfile | ShowcasePreset;
+
+// @public
+export type PresetImportResult = CurrentPresetImport | MigratedPresetImport | RecoveryPresetImport;
+
+// @public
+export type PresetRecoveryReason = "invalid-json" | "unknown-schema" | "invalid-preset" | "unsupported-version" | "future-version";
 
 // @public
 export const PREWARM_MANIFEST_SCHEMA: "real-water/prewarm";
@@ -574,6 +720,9 @@ export interface QualityProfileIdentity {
     // (undocumented)
     readonly version: typeof QUALITY_PROFILE_VERSION;
 }
+
+// @public
+export function qualityProfileIdentity(profile: QualityProfile): QualityProfileIdentity;
 
 // @public
 export interface QualityProfileReflection {
@@ -808,6 +957,20 @@ export interface RealWaterStartupErrorInit {
 }
 
 // @public
+export interface RecoveryPresetImport {
+    // (undocumented)
+    readonly detectedSchema?: string;
+    // (undocumented)
+    readonly detectedVersion?: number;
+    // (undocumented)
+    readonly rawJson: string;
+    // (undocumented)
+    readonly reason: PresetRecoveryReason;
+    // (undocumented)
+    readonly status: "recovery";
+}
+
+// @public
 export interface RenderingCapabilities {
     // (undocumented)
     readonly backend: "core-webgpu";
@@ -944,6 +1107,78 @@ export type RuntimeDiagnostics = StartupDiagnostics;
 export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "GAMEPLAY_QUERY_CAPACITY_EXCEEDED" | "RUNTIME_INVALIDATED";
 
 // @public
+export const SHOWCASE_PRESET_SCHEMA: "real-water/showcase-preset";
+
+// @public
+export const SHOWCASE_PRESET_VERSION: 1;
+
+// @public
+export interface ShowcaseCameraKeyframe {
+    // (undocumented)
+    readonly position: ShowcaseVector3;
+    // (undocumented)
+    readonly target: ShowcaseVector3;
+    // (undocumented)
+    readonly tick: number;
+    // (undocumented)
+    readonly verticalFovDegrees: number;
+}
+
+// @public
+export interface ShowcaseEventKeyframe {
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly tick: number;
+}
+
+// @public
+export interface ShowcasePreset extends ShowcasePresetAuthoring {
+    // (undocumented)
+    readonly presetHash: string;
+    // (undocumented)
+    readonly schema: typeof SHOWCASE_PRESET_SCHEMA;
+    // (undocumented)
+    readonly version: typeof SHOWCASE_PRESET_VERSION;
+}
+
+// @public
+export interface ShowcasePresetAuthoring {
+    // (undocumented)
+    readonly cameraTimeline: readonly ShowcaseCameraKeyframe[];
+    // (undocumented)
+    readonly durationTicks: number;
+    // (undocumented)
+    readonly environmentPreset: EnvironmentPresetIdentity;
+    // (undocumented)
+    readonly eventTimeline: readonly ShowcaseEventKeyframe[];
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly qualityProfile: QualityProfileIdentity;
+    // (undocumented)
+    readonly waterPreset: WaterPresetIdentity;
+}
+
+// @public
+export interface ShowcasePresetIdentity {
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly presetHash: string;
+    // (undocumented)
+    readonly schema: typeof SHOWCASE_PRESET_SCHEMA;
+    // (undocumented)
+    readonly version: typeof SHOWCASE_PRESET_VERSION;
+}
+
+// @public
+export function showcasePresetIdentity(preset: ShowcasePreset): ShowcasePresetIdentity;
+
+// @public
+export type ShowcaseVector3 = readonly [number, number, number];
+
+// @public
 export type StartupDiagnostics = Readonly<Record<string, string | number | boolean | null>>;
 
 // @public
@@ -1014,7 +1249,7 @@ export interface ThreeHostScene {
 export const WATER_PRESET_SCHEMA: "real-water/water-preset";
 
 // @public
-export const WATER_PRESET_VERSION: 2;
+export const WATER_PRESET_VERSION: 3;
 
 // @public
 export interface WaterPreset {
@@ -1044,6 +1279,9 @@ export interface WaterPresetIdentity {
     // (undocumented)
     readonly version: typeof WATER_PRESET_VERSION;
 }
+
+// @public
+export function waterPresetIdentity(preset: WaterPreset): WaterPresetIdentity;
 
 // @public
 export interface WebGPUDeviceLoss {

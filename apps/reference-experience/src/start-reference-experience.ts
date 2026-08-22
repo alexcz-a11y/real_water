@@ -465,9 +465,6 @@ export function startReferenceExperience(
         profile,
         desiredDrawingBuffer,
       );
-      if (manifest.manifestHash === desiredManifest.manifestHash) {
-        return latestTransition;
-      }
       return scheduleTransition(manifest, "quality-profile");
     },
     applyViewport(viewport: ReferenceViewport): Promise<void> {

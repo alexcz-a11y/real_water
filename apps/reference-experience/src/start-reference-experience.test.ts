@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createMemoryHostLifecycleAdapter,
+  createMinimalWaterQualityProfile,
   createStaticHostPresentationAdapter,
   createStaticHostSimulationAdapter,
 } from "real-water";
@@ -21,6 +22,35 @@ let currentSession: ReturnType<typeof startReferenceExperience> | null = null;
 let mount: {
   querySelector(selector: string): { dataset?: DOMStringMap } | null;
 };
+
+describe("ReferenceExperienceSession.applyQualityProfile", () => {
+  afterEach(async () => {
+    await currentSession?.dispose();
+    currentSession = null;
+  });
+
+  it("re-enters the Loading Experience when the same Quality Profile is applied", async () => {
+    const session = startSession();
+    await waitForReady(session);
+    const before = session.snapshot();
+
+    const applying = session.applyQualityProfile(
+      createMinimalWaterQualityProfile("minimal"),
+    );
+
+    expect(session.snapshot().state).toBe("loading");
+    expect(mount.querySelector("[data-testid='reference-stage']")).toBeNull();
+    expect(
+      mount.querySelector("[data-testid='loading-experience']"),
+    ).not.toBeNull();
+
+    await applying;
+    await waitForReady(session);
+    const after = session.snapshot();
+    expect(after.generation).toBe(before.generation + 1);
+    expect(after.manifestHash).toBe(before.manifestHash);
+  });
+});
 
 describe("ReferenceExperienceSession.applyViewport", () => {
   afterEach(async () => {
