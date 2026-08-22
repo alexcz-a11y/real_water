@@ -11,3 +11,6 @@ test-results/
 *.tgz
 *.tsbuildinfo
 packages/real-water/temp/
+
+# Local planning scratch: handoffs and session-local notes.
+.scratch/
