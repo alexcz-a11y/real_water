@@ -30,6 +30,7 @@ import {
   disposeQaCurrentSsrFixture,
 } from "./qa-current-ssr-fixture.js";
 import type * as QaHarnessModuleContract from "./qa-harness.js";
+import { createLocalPresetLibrary } from "./local-preset-library.js";
 import {
   createReferenceHostPresentationController,
   type ReferenceHostPresentationController,
@@ -61,6 +62,7 @@ const hostSetup = createHostSetup(parameters, qaHarnessModule, (cause) => {
 const referenceSession = startReferenceExperience(mount, {
   createHostAttempt: hostSetup.createHostAttempt,
   initialDrawingBuffer: readPhysicalDrawingBuffer(),
+  presetLibrary: createLocalPresetLibrary(),
   revealDelayFrames: readRevealFrames(parameters, qaHarnessModule !== null),
 });
 presentationFailureSink.report = (cause) => {

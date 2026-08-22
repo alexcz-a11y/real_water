@@ -16,6 +16,7 @@ import {
   type WebGPUDeviceLoss,
 } from "real-water";
 import { DomLoadingPresenter } from "./loading-presenter.js";
+import type { LocalPresetLibrary } from "./local-preset-library.js";
 
 export interface ReferenceHostAttempt {
   readonly host: HostLifecycleAdapter;
@@ -29,6 +30,7 @@ export interface StartReferenceExperienceOptions {
   ) => ReferenceHostAttempt;
   readonly initialDrawingBuffer: PrewarmDrawingBuffer;
   readonly initialQualityProfile?: QualityProfile;
+  readonly presetLibrary: LocalPresetLibrary;
   readonly revealDelayFrames?: number;
 }
 
@@ -51,6 +53,7 @@ export interface ReferenceViewport {
 }
 
 export interface ReferenceExperienceSession {
+  readonly presets: LocalPresetLibrary;
   applyQualityProfile(profile: QualityProfile): Promise<void>;
   applyViewport(viewport: ReferenceViewport): Promise<void>;
   signalLongSuspension(): Promise<void>;
@@ -458,6 +461,7 @@ export function startReferenceExperience(
   void initialTransition.catch(() => {});
 
   return Object.freeze({
+    presets: options.presetLibrary,
     applyQualityProfile(profile: QualityProfile): Promise<void> {
       // Derivation validates the complete structural input before desired state
       // or the visible Reference Experience is mutated.

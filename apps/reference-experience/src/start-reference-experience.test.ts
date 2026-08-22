@@ -4,9 +4,15 @@ import {
   createMinimalWaterQualityProfile,
   createStaticHostPresentationAdapter,
   createStaticHostSimulationAdapter,
+  createWaterPreset,
 } from "real-water";
 import { createReferenceEnvironmentAdapter } from "./reference-optical-inputs.js";
 import { createReferenceHostSimulationController } from "./reference-simulation-controller.js";
+import {
+  createLocalPresetLibrary,
+  createMemoryLocalPresetStorage,
+  type LocalPresetLibrary,
+} from "./local-preset-library.js";
 import { startReferenceExperience } from "./start-reference-experience.js";
 
 const INITIAL = Object.freeze({
@@ -22,6 +28,28 @@ let currentSession: ReturnType<typeof startReferenceExperience> | null = null;
 let mount: {
   querySelector(selector: string): { dataset?: DOMStringMap } | null;
 };
+
+describe("ReferenceExperienceSession.presets", () => {
+  afterEach(async () => {
+    await currentSession?.dispose();
+    currentSession = null;
+  });
+
+  it("exposes the injected local authoring library through the production session seam", () => {
+    const presets = createLocalPresetLibrary({
+      storage: createMemoryLocalPresetStorage(),
+      builtIns: [],
+    });
+    const session = startSession(presets);
+
+    expect(session.presets).toBe(presets);
+    const saved = session.presets.save({
+      displayName: "Session storm",
+      preset: createWaterPreset("storm"),
+    });
+    expect(session.presets.get(saved.recordId)).toEqual(saved);
+  });
+});
 
 describe("ReferenceExperienceSession.applyQualityProfile", () => {
   afterEach(async () => {
@@ -190,6 +218,9 @@ describe("ReferenceExperienceSession.reportPresentationFailure", () => {
           void drawingBuffer;
         },
       }),
+      presetLibrary: createLocalPresetLibrary({
+        storage: createMemoryLocalPresetStorage(),
+      }),
       revealDelayFrames: 1,
     });
     currentSession = session;
@@ -221,7 +252,11 @@ describe("ReferenceExperienceSession.reportPresentationFailure", () => {
   });
 });
 
-function startSession() {
+function startSession(
+  presetLibrary: LocalPresetLibrary = createLocalPresetLibrary({
+    storage: createMemoryLocalPresetStorage(),
+  }),
+) {
   installMinimalDocument();
   mount = document.createElement("div") as unknown as typeof mount;
   document.body.append(mount as unknown as Node);
@@ -246,6 +281,7 @@ function startSession() {
         void drawingBuffer;
       },
     }),
+    presetLibrary,
     revealDelayFrames: 1,
   });
   currentSession = session;

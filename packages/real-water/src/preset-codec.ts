@@ -91,6 +91,45 @@ export interface RecoveryPresetImport {
 export type PresetImportResult =
   CurrentPresetImport | MigratedPresetImport | RecoveryPresetImport;
 
+type PresetSchema =
+  | typeof WATER_PRESET_SCHEMA
+  | typeof ENVIRONMENT_PRESET_SCHEMA
+  | typeof QUALITY_PROFILE_SCHEMA
+  | typeof SHOWCASE_PRESET_SCHEMA;
+
+interface PresetCodec {
+  readonly currentVersion: number;
+  normalize(candidate: unknown): PresetDocument;
+  migrate(candidate: unknown): PresetDocument;
+}
+
+const PRESET_CODECS = Object.freeze({
+  [WATER_PRESET_SCHEMA]: Object.freeze({
+    currentVersion: WATER_PRESET_VERSION,
+    normalize: (candidate: unknown) =>
+      normalizeWaterPreset(candidate as WaterPreset),
+    migrate: migrateWaterPreset,
+  }),
+  [ENVIRONMENT_PRESET_SCHEMA]: Object.freeze({
+    currentVersion: ENVIRONMENT_PRESET_VERSION,
+    normalize: (candidate: unknown) =>
+      normalizeEnvironmentPreset(candidate as EnvironmentPreset),
+    migrate: migrateEnvironmentPreset,
+  }),
+  [QUALITY_PROFILE_SCHEMA]: Object.freeze({
+    currentVersion: QUALITY_PROFILE_VERSION,
+    normalize: (candidate: unknown) =>
+      normalizeQualityProfile(candidate as QualityProfile),
+    migrate: migrateQualityProfile,
+  }),
+  [SHOWCASE_PRESET_SCHEMA]: Object.freeze({
+    currentVersion: SHOWCASE_PRESET_VERSION,
+    normalize: (candidate: unknown) =>
+      normalizeShowcasePreset(candidate as ShowcasePreset),
+    migrate: migrateShowcasePreset,
+  }),
+}) satisfies Readonly<Record<PresetSchema, PresetCodec>>;
+
 /**
  * Imports current or known historical preset JSON. Unsupported input is
  * returned unchanged for recovery instead of being discarded or reshaped.
@@ -109,7 +148,8 @@ export function importPresetJson(rawJson: string): PresetImportResult {
     return recovery(rawJson, "unknown-schema");
   }
   const schema = candidate.schema;
-  if (!isKnownPresetSchema(schema)) {
+  const codec = readPresetCodec(schema);
+  if (codec === undefined) {
     return recovery(rawJson, "unknown-schema", schema);
   }
   const version = candidate.version;
@@ -117,7 +157,7 @@ export function importPresetJson(rawJson: string): PresetImportResult {
     return recovery(rawJson, "invalid-preset", schema);
   }
   const sourceVersion = version as number;
-  const currentVersion = currentPresetVersion(schema);
+  const currentVersion = codec.currentVersion;
   if (sourceVersion > currentVersion) {
     return recovery(rawJson, "future-version", schema, sourceVersion);
   }
@@ -126,7 +166,7 @@ export function importPresetJson(rawJson: string): PresetImportResult {
     return Object.freeze({
       status: "current",
       sourceVersion,
-      preset: normalizePreset(candidate),
+      preset: codec.normalize(candidate),
     });
   } catch {
     // A strict current normalizer intentionally rejects every historical shape.
@@ -136,7 +176,7 @@ export function importPresetJson(rawJson: string): PresetImportResult {
     return Object.freeze({
       status: "migrated",
       sourceVersion,
-      preset: migratePreset(schema, candidate),
+      preset: codec.migrate(candidate),
     });
   } catch {
     return recovery(
@@ -167,64 +207,18 @@ export function normalizePreset(candidate: unknown): PresetDocument {
     throw new TypeError("A preset needs a supported schema discriminator.");
   }
 
-  switch (candidate.schema) {
-    case WATER_PRESET_SCHEMA:
-      return normalizeWaterPreset(candidate as unknown as WaterPreset);
-    case ENVIRONMENT_PRESET_SCHEMA:
-      return normalizeEnvironmentPreset(
-        candidate as unknown as EnvironmentPreset,
-      );
-    case QUALITY_PROFILE_SCHEMA:
-      return normalizeQualityProfile(candidate as unknown as QualityProfile);
-    case SHOWCASE_PRESET_SCHEMA:
-      return normalizeShowcasePreset(candidate as unknown as ShowcasePreset);
-    default:
-      throw new TypeError("A preset needs a supported schema discriminator.");
+  const codec = readPresetCodec(candidate.schema);
+  if (codec === undefined) {
+    throw new TypeError("A preset needs a supported schema discriminator.");
   }
+  return codec.normalize(candidate);
 }
 
-type PresetSchema =
-  | typeof WATER_PRESET_SCHEMA
-  | typeof ENVIRONMENT_PRESET_SCHEMA
-  | typeof QUALITY_PROFILE_SCHEMA
-  | typeof SHOWCASE_PRESET_SCHEMA;
-
-function isKnownPresetSchema(schema: string): schema is PresetSchema {
-  return (
-    schema === WATER_PRESET_SCHEMA ||
-    schema === ENVIRONMENT_PRESET_SCHEMA ||
-    schema === QUALITY_PROFILE_SCHEMA ||
-    schema === SHOWCASE_PRESET_SCHEMA
-  );
-}
-
-function currentPresetVersion(schema: PresetSchema): number {
-  switch (schema) {
-    case WATER_PRESET_SCHEMA:
-      return WATER_PRESET_VERSION;
-    case ENVIRONMENT_PRESET_SCHEMA:
-      return ENVIRONMENT_PRESET_VERSION;
-    case QUALITY_PROFILE_SCHEMA:
-      return QUALITY_PROFILE_VERSION;
-    case SHOWCASE_PRESET_SCHEMA:
-      return SHOWCASE_PRESET_VERSION;
+function readPresetCodec(schema: string): PresetCodec | undefined {
+  if (Object.hasOwn(PRESET_CODECS, schema)) {
+    return PRESET_CODECS[schema as PresetSchema];
   }
-}
-
-function migratePreset(
-  schema: PresetSchema,
-  candidate: unknown,
-): PresetDocument {
-  switch (schema) {
-    case WATER_PRESET_SCHEMA:
-      return migrateWaterPreset(candidate);
-    case ENVIRONMENT_PRESET_SCHEMA:
-      return migrateEnvironmentPreset(candidate);
-    case QUALITY_PROFILE_SCHEMA:
-      return migrateQualityProfile(candidate);
-    case SHOWCASE_PRESET_SCHEMA:
-      return migrateShowcasePreset(candidate);
-  }
+  return undefined;
 }
 
 function recovery(
