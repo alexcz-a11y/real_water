@@ -1670,7 +1670,7 @@ function readQaPrewarmV6(
   coreIdentity: QaBoundCoreManifestIdentity,
 ): QaFramePrewarmReceipt {
   if (!isRecord(value) || !hasExactKeys(value, QA_PREWARM_KEYS)) {
-    throw new TypeError("Regression acceptance requires QA prewarm v7.");
+    throw new TypeError("Regression acceptance requires QA prewarm v8.");
   }
   if (
     !isRecord(value.manifest) ||
@@ -1678,7 +1678,7 @@ function readQaPrewarmV6(
     value.manifest.version !== QA_FRAME_PREWARM_MANIFEST.version ||
     value.manifest.id !== QA_FRAME_PREWARM_MANIFEST.id
   ) {
-    throw new Error("Regression acceptance requires QA prewarm v7.");
+    throw new Error("Regression acceptance requires QA prewarm v8.");
   }
   if (
     canonicalJson(value.manifest.captures) !==
@@ -1687,11 +1687,11 @@ function readQaPrewarmV6(
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.coreDeclarations)
   ) {
     throw new Error(
-      "Regression acceptance requires the exact QA v7 23-name capture mapping.",
+      "Regression acceptance requires the exact QA v8 25-name capture mapping.",
     );
   }
-  if (QA_FRAME_PREWARM_MANIFEST.captures.length !== 23) {
-    throw new Error("QA v7 capture contract must name exactly 23 outputs.");
+  if (QA_FRAME_PREWARM_MANIFEST.captures.length !== 25) {
+    throw new Error("QA v8 capture contract must name exactly 25 outputs.");
   }
   const core = readQaBoundCoreManifestIdentity(value.core);
   if (core.manifestHash !== coreIdentity.manifestHash) {

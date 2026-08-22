@@ -69,6 +69,7 @@ const TEST_REFLECTION_CAPABILITIES = Object.freeze({
         "camera-cut",
         "origin-shift",
         "sea-state-cut",
+        "waterline-crossing",
       ] as const),
       updateCadence: "host-present" as const,
     }),
@@ -728,7 +729,7 @@ describe("prepareRealWater", () => {
       manifestHash: manifest.manifestHash,
       qualityProfile: {
         schema: "real-water/quality-profile",
-        version: 5,
+        version: 6,
         id: "minimal",
         profileHash: manifest.qualityProfile.profileHash,
       },
@@ -918,7 +919,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 57,
+        totalWork: 61,
       },
     });
   });
@@ -1603,6 +1604,10 @@ describe("prepareRealWater", () => {
       "water-spectral-band-ripple",
       "water-material",
       "water-optical-route",
+      "water-waterline-state",
+      "water-underside-optical-route",
+      "water-waterline-history-reset-route",
+      "water-lens-wetness-transition",
       "water-planar-reflection-target",
       "water-planar-reflection-route",
       "water-planar-environment-fallback",

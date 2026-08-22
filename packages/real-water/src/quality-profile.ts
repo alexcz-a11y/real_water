@@ -12,7 +12,7 @@ export const QUALITY_PROFILE_SCHEMA = "real-water/quality-profile" as const;
  *
  * @public
  */
-export const QUALITY_PROFILE_VERSION = 5 as const;
+export const QUALITY_PROFILE_VERSION = 6 as const;
 
 /**
  * Built-in structural configurations for the minimal-water surface.
@@ -79,6 +79,7 @@ export interface QualityProfileReflectionSsrHistory {
     "camera-cut",
     "origin-shift",
     "sea-state-cut",
+    "waterline-crossing",
   ];
   readonly updateCadence: "host-present";
 }
@@ -183,6 +184,7 @@ export const CURRENT_FRAME_SSR_HISTORY_POLICY: QualityProfileReflectionSsrHistor
       "camera-cut",
       "origin-shift",
       "sea-state-cut",
+      "waterline-crossing",
     ] as const),
     updateCadence: "host-present",
   });
@@ -241,13 +243,13 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:9a75bfe19d0e81f51ee19908ce547b5a7abd49ab01dbe00feb234e3c95d23ec0",
+      "sha256:e09b96aea95dcf7f52f3220a07ec83a90f29f59c978814b5e107f86098e892c2",
     widthSegments: 128,
     heightSegments: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:04b1d29617d1d2dd50f9d0f5b4f5dcd6ab6012cde62ae7e36ab0bba7be3061d8",
+      "sha256:cb9323969633c4f8a5d6e44dfe9baf84bd3b61923dbc884e65f704e4d7e3b772",
     widthSegments: 256,
     heightSegments: 256,
   }),
@@ -521,6 +523,7 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
             "camera-cut",
             "origin-shift",
             "sea-state-cut",
+            "waterline-crossing",
           ] as const),
         }),
       }),

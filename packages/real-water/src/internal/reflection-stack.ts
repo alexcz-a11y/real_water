@@ -40,7 +40,12 @@ export interface PlanarReflectionPass {
     scene: Scene,
     hostCamera: PerspectiveCamera,
   ): Promise<void>;
-  render(renderer: Renderer, scene: Scene, hostCamera: PerspectiveCamera): void;
+  render(
+    renderer: Renderer,
+    scene: Scene,
+    hostCamera: PerspectiveCamera,
+    enabled?: boolean,
+  ): void;
   dispose(): void;
 }
 
@@ -247,8 +252,15 @@ export function createPlanarReflectionPass(
         }
       });
     },
-    render(renderer, scene, camera) {
+    render(renderer, scene, camera, enabled = true) {
       assertReady();
+      if (!enabled) {
+        hasOutput.value = 0;
+        withBorrowedHostState(renderer, scene, camera, () => {
+          renderer.clear();
+        });
+        return;
+      }
       const view = createHorizontalPlanarReflectionView({
         coordinateSystem: "webgpu",
         planeY: PLANAR_REFLECTION_PLANE_Y,

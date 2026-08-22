@@ -69,6 +69,7 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
             "camera-cut",
             "origin-shift",
             "sea-state-cut",
+            "waterline-crossing",
           ] as const,
           updateCadence: "host-present",
         },
@@ -209,6 +210,26 @@ function createCapture(
       data: new Float32Array(width * height * 2),
     };
   }
+  if (name === "waterline") {
+    return {
+      name,
+      format: "r32float-waterline-coverage",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "history-rejection") {
+    return {
+      name,
+      format: "r32float-history-rejection",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
   return {
     name,
     format: "r32float-optical",
@@ -258,6 +279,14 @@ function coreFrame(
       resetReason: "simulation-reset",
       resetFrame: true,
     },
+    waterline: {
+      classification: "above",
+      surfaceHeightMetres: 0,
+      signedDistanceMetres: 1,
+      submersion: 0,
+      transitionRevision: 0,
+      lensWetnessImpulse: false,
+    },
     outputs: request.outputs.map((name) =>
       createCapture(
         name,
@@ -276,11 +305,27 @@ function coreFrame(
 }
 
 describe("QA frame driver Core association", () => {
-  it("publishes a v7 capture-contract mapped to actual Core declaration IDs", () => {
-    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(7);
+  it("publishes a v8 capture-contract mapped to actual Core declaration IDs", () => {
+    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(8);
     expect(QA_FRAME_PREWARM_MANIFEST.coreDeclarations).toEqual(
       QA_TO_CORE_DECLARATION_IDS,
     );
+    expect(QA_TO_CORE_DECLARATION_IDS.waterline).toBe(
+      "water-optical-factors-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["history-rejection"]).toBe(
+      "water-optical-factors-target",
+    );
+    expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(5, 7)).toEqual([
+      {
+        name: "waterline",
+        preparedFormat: "rgba16float-waterline-coverage",
+      },
+      {
+        name: "history-rejection",
+        preparedFormat: "rgba16float-history-rejection",
+      },
+    ]);
     expect(JSON.stringify(QA_FRAME_PREWARM_MANIFEST)).not.toMatch(
       /qa-(?:final|current|inverse|view|motion|optical|stock|traa|single|eight|named|main|transform)-/,
     );
@@ -374,6 +419,14 @@ describe("QA frame driver Core association", () => {
     expect(frame.timeSeconds).toBe(6 / 60);
     expect(frame.simulationResetRevision).toBe(1);
     expect(frame.manifestHash).toBe(CORE_MANIFEST.manifestHash);
+    expect(frame.waterline).toEqual({
+      classification: "above",
+      surfaceHeightMetres: 0,
+      signedDistanceMetres: 1,
+      submersion: 0,
+      transitionRevision: 0,
+      lensWetnessImpulse: false,
+    });
     expect(frame.temporal.resetReason).toBe("qa-reset");
     expect(frame.captures.map((capture) => capture.name)).toEqual([
       "final-color",

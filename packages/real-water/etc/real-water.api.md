@@ -331,7 +331,7 @@ export interface HostSimulationState {
 }
 
 // @public
-export type HostTemporalResetReason = "simulation-reset" | "camera-cut" | "origin-shift" | "sea-state-cut";
+export type HostTemporalResetReason = "simulation-reset" | "camera-cut" | "origin-shift" | "sea-state-cut" | "waterline-crossing";
 
 // @public
 export interface HostTexture {
@@ -543,7 +543,7 @@ export interface PrewarmManifestIdentity {
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 5;
+export const QUALITY_PROFILE_VERSION: 6;
 
 // @public
 export interface QualityProfile {
@@ -660,7 +660,8 @@ export interface QualityProfileReflectionSsrHistory {
     "simulation-reset",
     "camera-cut",
     "origin-shift",
-    "sea-state-cut"
+    "sea-state-cut",
+    "waterline-crossing"
     ];
     // (undocumented)
     readonly resetVelocityFormat: "rg16float";
@@ -901,7 +902,8 @@ export interface RenderingCapabilitiesReflectionSsrHistory {
     "simulation-reset",
     "camera-cut",
     "origin-shift",
-    "sea-state-cut"
+    "sea-state-cut",
+    "waterline-crossing"
     ];
     // (undocumented)
     readonly resetVelocityFormat: "rg16float";

@@ -72,6 +72,10 @@ import {
   renderCurrentFrameSsrHistory,
   type CurrentFrameSsrStack,
 } from "./ssr-stack.js";
+import type {
+  WaterlineFrameState,
+  WaterlineStateController,
+} from "./waterline-state.js";
 
 export const PREWARM_HISTORY_EPOCH = 1;
 export const HIDDEN_STABILIZATION_FRAME_COUNT = 8;
@@ -111,6 +115,7 @@ export interface PreparedWaterPresentationResources {
   readonly opticalDiagnosticsATextureIndex: number;
   readonly opticalDiagnosticsBTextureIndex: number;
   readonly planar: PlanarReflectionPass;
+  readonly waterline: { current: WaterlineFrameState };
   readonly width: number;
   readonly height: number;
   readonly counters: PresentationReadinessCounters;
@@ -127,6 +132,7 @@ export function createPreparedWaterPresentationResources(
   scene: Scene,
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
+  initialWaterline: WaterlineFrameState,
 ): {
   readonly resources: PreparedWaterPresentationResources;
   readonly partial: PartialPreparedWaterPresentationResources;
@@ -138,6 +144,7 @@ export function createPreparedWaterPresentationResources(
       scene,
       camera,
       drawingBuffer,
+      initialWaterline,
       partial,
     );
   } catch (error) {
@@ -151,6 +158,7 @@ function constructPreparedWaterPresentationResources(
   scene: Scene,
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
+  initialWaterline: WaterlineFrameState,
   partial: PartialPreparedWaterPresentationResources,
 ): {
   readonly resources: PreparedWaterPresentationResources;
@@ -163,6 +171,8 @@ function constructPreparedWaterPresentationResources(
     diagnosticReadbackCount: 0,
     sceneRenderCount: 0,
   };
+  const waterline = { current: initialWaterline };
+  partial.waterline = waterline;
   const scenePass = pass(scene, camera, { samples: 0 });
   partial.scenePass = scenePass;
   scenePass.updateBeforeType = "render";
@@ -173,7 +183,7 @@ function constructPreparedWaterPresentationResources(
       output,
       [VIEW_NORMAL_ATTACHMENT]: vec4(packNormalToRGB(normalView), 1),
       [MOTION_VECTORS_ATTACHMENT]: velocity,
-      [OPTICAL_FACTORS_ATTACHMENT]: vec4(0, 0, 0, 1),
+      [OPTICAL_FACTORS_ATTACHMENT]: vec4(0, 0, 0, 0),
       [OPTICAL_DIAGNOSTICS_A_ATTACHMENT]: vec4(0, 0, 0, 1),
       [OPTICAL_DIAGNOSTICS_B_ATTACHMENT]: vec4(0, 0, 0, 1),
     }),
@@ -304,6 +314,7 @@ function constructPreparedWaterPresentationResources(
       OPTICAL_DIAGNOSTICS_B_ATTACHMENT,
     ),
     planar,
+    waterline,
     width: drawingBuffer.width,
     height: drawingBuffer.height,
     counters,
@@ -377,6 +388,8 @@ export function createPresentationRouteBridge(
   scene: Scene,
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
+  waterline: WaterlineStateController,
+  waterlineOptics: { synchronize(state: WaterlineFrameState): void },
   drawingBuffer: Readonly<{ width: number; height: number }>,
   manifestHash: string,
 ): HostPresentationRouteBridge {
@@ -409,10 +422,20 @@ export function createPresentationRouteBridge(
       );
     }
     const snapshot = inspectRuntime();
-    const resetReason =
+    const snapshotResetReason =
       lastPresented === undefined
         ? null
         : detectPresentationReset(lastPresented, snapshot);
+    const waterlineCandidate = waterline.preview(
+      camera,
+      snapshot,
+      snapshotResetReason !== null,
+    );
+    const resetReason =
+      snapshotResetReason ??
+      (waterlineCandidate.transitioned ? "waterline-crossing" : null);
+    resources.waterline.current = waterlineCandidate.state;
+    waterlineOptics.synchronize(waterlineCandidate.state);
     const hostState = captureHostState(renderer, scene, camera);
     const outputs: DiagnosticsCapture[] = [];
     let temporalSceneStarted = false;
@@ -440,6 +463,7 @@ export function createPresentationRouteBridge(
       }
       presentationId += 1;
       lastPresented = readPresentedSnapshotKeys(snapshot);
+      waterline.commit(waterlineCandidate);
       return Object.freeze({
         presentationId,
         manifestHash,
@@ -456,6 +480,7 @@ export function createPresentationRouteBridge(
           resetReason,
           resetFrame: resetReason !== null,
         }),
+        waterline: waterlineCandidate.state,
         outputs: Object.freeze(outputs),
         compileCount: resources.counters.compileCount,
         probeCount: resources.counters.probeCount,
@@ -652,7 +677,12 @@ function renderTemporalFrame(
     );
   }
   assertNativeTraaCamera(camera);
-  resources.planar.render(renderer, scene, camera);
+  resources.planar.render(
+    renderer,
+    scene,
+    camera,
+    resources.waterline.current.classification !== "below",
+  );
   if (resources.planar.hasOutput.value === 1) {
     resources.counters.sceneRenderCount += 1;
   }
@@ -923,6 +953,9 @@ async function readNamedOutput(
     }
     case "motion-vector":
       return readMotionVectorCapture(renderer, resources);
+    case "waterline":
+    case "history-rejection":
+      return readWaterlineCapture(renderer, resources, name);
     case "optical-fresnel":
       return readOpticalScalarCapture(
         renderer,
@@ -1073,6 +1106,53 @@ async function readMotionVectorCapture(
     format: DIAGNOSTICS_CAPTURE_SHAPES["motion-vector"].format,
     data,
   });
+}
+
+async function readWaterlineCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+  name: "waterline" | "history-rejection",
+): Promise<DiagnosticsCapture> {
+  const raw = await readAttachmentPixels(
+    renderer,
+    resources,
+    resources.opticalFactorsTextureIndex,
+  );
+  if (!(raw instanceof Uint16Array)) {
+    throw new TypeError(
+      "Waterline readback did not return Float16 coverage data.",
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height);
+  const rejection =
+    name === "history-rejection" && resources.resetUniform.value > 0.5 ? 1 : 0;
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    const coverage = DataUtils.fromHalfFloat(rgba[pixel * 4 + 3] ?? 0);
+    if (!Number.isFinite(coverage) || coverage < 0 || coverage > 1) {
+      throw new RangeError(
+        "Waterline coverage readback must contain finite normalized samples.",
+      );
+    }
+    data[pixel] = coverage * (name === "history-rejection" ? rejection : 1);
+  }
+  const base = {
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left" as const,
+    data,
+  };
+  return name === "waterline"
+    ? Object.freeze({
+        ...base,
+        name: "waterline" as const,
+        format: DIAGNOSTICS_CAPTURE_SHAPES.waterline.format,
+      })
+    : Object.freeze({
+        ...base,
+        name: "history-rejection" as const,
+        format: DIAGNOSTICS_CAPTURE_SHAPES["history-rejection"].format,
+      });
 }
 
 async function readPlanarColorCapture(

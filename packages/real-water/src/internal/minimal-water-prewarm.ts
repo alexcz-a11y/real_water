@@ -1,6 +1,7 @@
 import {
   type BufferGeometry,
   DataTexture,
+  DoubleSide,
   type PerspectiveCamera,
   Mesh,
   NoBlending,
@@ -27,8 +28,12 @@ import type {
 } from "../three-host.js";
 import type { HostEnvironmentAdapter } from "../environment.js";
 import { assertHostEnvironmentMatchesManifest } from "../environment.js";
-import type { HostSimulationAdapter } from "../runtime.js";
+import {
+  readHostSimulationState,
+  type HostSimulationAdapter,
+} from "../runtime.js";
 import type { HostPresentationAdapter } from "../presentation.js";
+import { createWaterPreset } from "../water-preset.js";
 import { HOST_RUNTIME_STATE_BRIDGE } from "./runtime-state-bridge.js";
 import { HOST_PRESENTATION_ROUTE_BRIDGE } from "./presentation-route-bridge.js";
 import {
@@ -37,6 +42,10 @@ import {
 } from "./camera-relative-clipmap.js";
 import { createWaterOpticsRendering } from "./water-optics-rendering.js";
 import { createSpectralBandRendering } from "./spectral-bands-rendering.js";
+import {
+  createInitialWaterlineSampleState,
+  createWaterlineStateController,
+} from "./waterline-state.js";
 import {
   captureHostState,
   compileAndPrimePreparedWaterPresentation,
@@ -71,6 +80,7 @@ interface PreparedResources {
   readonly waterTexture: DataTexture;
   readonly spectralBand: ReturnType<typeof createSpectralBandRendering>;
   readonly opticalPath: ReturnType<typeof createWaterOpticsRendering>;
+  readonly waterline: ReturnType<typeof createWaterlineStateController>;
   readonly presentation: PreparedWaterPresentationResources;
 }
 
@@ -150,6 +160,17 @@ export async function prepareMinimalWaterPlane(
     );
     const waterTexture = createWaterTexture();
     partial.waterTexture = waterTexture;
+    const waterline = createWaterlineStateController();
+    partial.waterline = waterline;
+    const initialWaterline = waterline.commit(
+      waterline.preview(
+        camera,
+        createInitialWaterlineSampleState(
+          readHostSimulationState(options.simulation),
+          createWaterPreset("swell").artisticControls,
+        ),
+      ),
+    );
 
     throwIfAborted(options.request.signal);
     const createdPresentation = createPreparedWaterPresentationResources(
@@ -157,6 +178,7 @@ export async function prepareMinimalWaterPlane(
       scene,
       camera,
       declaredDrawingBuffer,
+      initialWaterline,
     );
     partial.presentation = createdPresentation.resources;
     partial.presentationPartial = createdPresentation.partial;
@@ -189,6 +211,7 @@ export async function prepareMinimalWaterPlane(
         viewProjection: createdPresentation.resources.planar.viewProjection,
         hasOutput: createdPresentation.resources.planar.hasOutput,
       },
+      initialWaterline,
     );
     partial.opticalPath = opticalPath;
     material.positionNode = spectralBand.positionNode;
@@ -197,6 +220,7 @@ export async function prepareMinimalWaterPlane(
     material.mrtNode = opticalPath.mrtNode;
     material.transparent = true;
     material.blending = NoBlending;
+    material.side = DoubleSide;
     const plane = new Mesh(geometry, material);
     partial.plane = plane;
     plane.name = "Real Water clipmap";
@@ -229,6 +253,10 @@ export async function prepareMinimalWaterPlane(
       "spectralBandRipple",
       "material",
       "opticalRoute",
+      "waterlineState",
+      "undersideOpticalRoute",
+      "waterlineHistoryResetRoute",
+      "lensWetnessTransition",
       "planarReflectionTarget",
       "planarReflectionRoute",
       "planarEnvironmentFallback",
@@ -315,6 +343,7 @@ export async function prepareMinimalWaterPlane(
         waterTexture,
         spectralBand,
         opticalPath,
+        waterline,
         presentation: createdPresentation.resources,
       },
       options.invalidated,
@@ -382,6 +411,8 @@ function createPreparedLease(
     scene,
     camera,
     resources.presentation,
+    resources.waterline,
+    resources.opticalPath.waterline,
     drawingBuffer,
     manifestHash,
   );

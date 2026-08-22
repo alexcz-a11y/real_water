@@ -749,6 +749,7 @@ function readCapabilitiesSsrHistory(
       "camera-cut",
       "origin-shift",
       "sea-state-cut",
+      "waterline-crossing",
     ],
     updateCadence: "host-present",
   };

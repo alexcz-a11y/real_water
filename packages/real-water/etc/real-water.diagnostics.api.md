@@ -5,7 +5,7 @@
 ```ts
 
 // @public
-export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color"];
+export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "waterline", "history-rejection", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color"];
 
 // @public
 export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
@@ -33,6 +33,16 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
         format: "rg32float-ndc";
         elementType: "float32";
         components: 2;
+    }>;
+    waterline: Readonly<{
+        format: "r32float-waterline-coverage";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "history-rejection": Readonly<{
+        format: "r32float-history-rejection";
+        elementType: "float32";
+        components: 1;
     }>;
     "optical-fresnel": Readonly<{
         format: "r32float-optical";
@@ -127,7 +137,7 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
 }>;
 
 // @public
-export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsOpticalScalarCapture;
+export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsWaterlineCapture | DiagnosticsHistoryRejectionCapture | DiagnosticsOpticalScalarCapture;
 
 // @public
 export interface DiagnosticsCaptureBase {
@@ -158,6 +168,13 @@ export interface DiagnosticsFinalColorCapture extends DiagnosticsCaptureBase {
     readonly data: Uint8Array;
     readonly format: "rgba8unorm-srgb";
     readonly name: "final-color";
+}
+
+// @public
+export interface DiagnosticsHistoryRejectionCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-history-rejection";
+    readonly name: "history-rejection";
 }
 
 // @public
@@ -238,6 +255,23 @@ export interface DiagnosticsSsrRoughnessCapture extends DiagnosticsCaptureBase {
 }
 
 // @public
+export interface DiagnosticsWaterlineCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-waterline-coverage";
+    readonly name: "waterline";
+}
+
+// @public
+export interface DiagnosticsWaterlineState {
+    readonly classification: "above" | "crossing" | "below";
+    readonly lensWetnessImpulse: boolean;
+    readonly signedDistanceMetres: number;
+    readonly submersion: number;
+    readonly surfaceHeightMetres: number;
+    readonly transitionRevision: number;
+}
+
+// @public
 export interface HostDiagnosticsPresentedFrame extends HostPresentedFrame {
     readonly compileCount: number;
     readonly diagnosticReadbackCount: number;
@@ -245,6 +279,7 @@ export interface HostDiagnosticsPresentedFrame extends HostPresentedFrame {
     readonly outputs: readonly DiagnosticsCapture[];
     readonly probeCount: number;
     readonly sceneRenderCount: number;
+    readonly waterline: DiagnosticsWaterlineState;
     readonly width: number;
 }
 
@@ -286,7 +321,7 @@ export interface HostPresentedTemporal {
 }
 
 // @public
-export type HostTemporalResetReason = "simulation-reset" | "camera-cut" | "origin-shift" | "sea-state-cut";
+export type HostTemporalResetReason = "simulation-reset" | "camera-cut" | "origin-shift" | "sea-state-cut" | "waterline-crossing";
 
 // @public
 export function isDiagnosticsCaptureName(value: unknown): value is DiagnosticsCaptureName;
