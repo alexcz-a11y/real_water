@@ -144,11 +144,14 @@ interface UnifiedFoamKernels {
   readonly resolveLocal: ComputeNode;
 }
 
-interface FoamTimelineEntry {
-  readonly tick: number;
-  readonly sequence: number;
+interface FoamTimelineState {
   readonly snapshot: OpenWaterRuntimeSnapshot;
   readonly interaction: LocalInteractionRenderSnapshot;
+}
+
+interface FoamTimelineEntry extends FoamTimelineState {
+  readonly tick: number;
+  readonly sequence: number;
 }
 
 interface FoamTimelinePlan {
@@ -157,15 +160,8 @@ interface FoamTimelinePlan {
   readonly entries: readonly FoamTimelineEntry[];
 }
 
-interface SynchronizedFoamBaseline {
+interface SynchronizedFoamBaseline extends FoamTimelineState {
   readonly tick: number;
-  readonly snapshot: OpenWaterRuntimeSnapshot;
-  readonly interaction: LocalInteractionRenderSnapshot;
-}
-
-interface FoamTimelineState {
-  readonly snapshot: OpenWaterRuntimeSnapshot;
-  readonly interaction: LocalInteractionRenderSnapshot;
 }
 
 export interface UnifiedFoamField {
@@ -372,7 +368,7 @@ export function createUnifiedFoamField(
       // The declared 128-tick ring is the bounded bridge between authoritative
       // 60 Hz controls/sources and a slower presentation cadence. Same-tick
       // writes replace, and a full ring overwrites only its oldest entry.
-      foamTimeline.record(observed, interaction);
+      foamTimeline.record({ snapshot: observed, interaction });
     },
     observe(snapshot: OpenWaterRuntimeSnapshot): void {
       if (disposed) {
@@ -715,13 +711,10 @@ function createFoamTimeline(capacity: number) {
       return currentEpoch;
     },
     reset,
-    record(
-      snapshot: OpenWaterRuntimeSnapshot,
-      interaction: LocalInteractionRenderSnapshot,
-    ): void {
-      const tick = snapshot.tick;
-      const immutableSnapshot = copySnapshot(snapshot);
-      const immutable = copyInteraction(interaction);
+    record(state: FoamTimelineState): void {
+      const tick = state.snapshot.tick;
+      const immutableSnapshot = copySnapshot(state.snapshot);
+      const immutable = copyInteraction(state.interaction);
       const sequence = nextSequence;
       nextSequence += 1;
       if (length > 0) {
