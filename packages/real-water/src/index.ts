@@ -10,6 +10,7 @@ export type {
   MinimalWaterGeometrySegments,
   MinimalWaterQualityProfileId,
   QualityProfile,
+  QualityProfileBodyCoupling,
   QualityProfileIdentity,
   QualityProfileInteraction,
   QualityProfileInteractionField,
@@ -37,6 +38,7 @@ export type {
 
 export type {
   GameplayCapabilities,
+  GameplayCapabilitiesBodyInteraction,
   GameplayCapabilitiesInteractionField,
   RealWaterCapabilities,
   RenderingCapabilities,
@@ -75,6 +77,7 @@ export type {
   GameplayQueryResults,
   DisturbanceBatch,
   DisturbanceSubmissionReceipt,
+  DirectionalWakeDisturbanceBatch,
   HostSimulationAdapter,
   HostSimulationState,
   InteractionAnchor,
@@ -84,8 +87,14 @@ export type {
   RealWaterRuntime,
 } from "./runtime.js";
 
-export { createBodyPhysicsAdapter } from "./body-physics.js";
+export {
+  MAX_BODY_INTERACTION_SOCKETS,
+  MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN,
+  MAX_CONVEX_HULL_VERTICES,
+  createBodyPhysicsAdapter,
+} from "./body-physics.js";
 export type {
+  BodyEffectSocket,
   BodyAttachment,
   BodyAttachmentOptions,
   BodyAttachmentSnapshot,
@@ -97,8 +106,19 @@ export type {
   BodyPhysicsQuaternion,
   BodyPhysicsState,
   BodyPhysicsVector3,
+  BodyInteractionAnchorSocket,
+  BodyInteractionSocket,
+  BodyInteractionSocketKind,
   BodyWaterLoad,
+  BodyWakeUpdateReceipt,
+  BodyWakeSourceIdentity,
+  BoxInteractionShape,
+  CapsuleInteractionShape,
+  CompoundInteractionShape,
+  CompoundInteractionShapeChild,
+  ConvexHullInteractionShape,
   InteractionShape,
+  PrimitiveInteractionShape,
   SphereInteractionShape,
 } from "./body-physics.js";
 

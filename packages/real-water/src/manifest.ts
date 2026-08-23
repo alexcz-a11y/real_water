@@ -158,6 +158,9 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   localInteractionBuffers: "water-local-interaction-buffers",
   localInteractionRadialImpactRoute:
     "water-local-interaction-radial-impact-route",
+  localInteractionDirectionalWakeRoute:
+    "water-local-interaction-directional-wake-route",
+  bodySocketEmissionRoute: "water-body-socket-emission-route",
   spectralBandSwell: "water-spectral-band-swell",
   spectralBandWind: "water-spectral-band-wind",
   spectralBandChop: "water-spectral-band-chop",
@@ -343,9 +346,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.localInteractionBuffers,
     kind: "resource",
     label:
-      "Preallocated current/previous radial-impact uniform arrays (128 slots, two snapshot banks)",
+      "Preallocated current/previous local Disturbance uniform arrays (128 shared slots; radial, directional wake, and propeller-wash descriptors)",
     fingerprint:
-      "sha256:f6f4066fb66bf262d908392d0571f15fdb9ae3c88d9e252c91c3422af90e578a",
+      "sha256:d5eb5a7a2e878c0f08cf2a6540a966ec45b1d674cee0e0f320fcf88955e21085",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.localInteractionRadialImpactRoute,
@@ -354,6 +357,22 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
       "Analytic radial-impact deformation and zero-or-one-tick local correction snapshot route",
     fingerprint:
       "sha256:14c091bcb991385050dc738b3f032e64cc654059db94b7edd4dfc4f8329e17bc",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.localInteractionDirectionalWakeRoute,
+    kind: "conditional-route",
+    label:
+      "Analytic directional-wake deformation and zero-or-one-tick local correction snapshot route",
+    fingerprint:
+      "sha256:0f10fe46295e2ce29efbb4ece51e4c9c0b56b218415c66b96eecea2394ac8c9f",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.bodySocketEmissionRoute,
+    kind: "conditional-route",
+    label:
+      "Stable Body socket upsert route for bow, stern, wake, and propeller-wash sources",
+    fingerprint:
+      "sha256:c1cfe69dc318716f368f32c9fdc5f4a008d71b00785049ae34e524b2c98d06b5",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.spectralBandSwell,

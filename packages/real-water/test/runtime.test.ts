@@ -83,7 +83,22 @@ describe("ready Open Water runtime", () => {
         radiusMetres: 48,
         edgeFadeMetres: 8,
         maxSnapshotAgeTicks: 1,
-        disturbanceKinds: ["radial-impact"],
+        disturbanceKinds: ["radial-impact", "directional-wake"],
+      },
+      bodyInteraction: {
+        fixedTickHz: 60,
+        maxShapeSamplesPerBody: 32,
+        maxConvexHullVertices: 64,
+        maxSocketsPerBody: 8,
+        shapeKinds: ["sphere", "box", "capsule", "convex-hull", "compound"],
+        socketKinds: [
+          "bow",
+          "stern",
+          "propeller",
+          "wake",
+          "interaction-anchor",
+        ],
+        generatedDisturbanceKinds: ["directional-wake", "propeller-wash"],
       },
     });
     expect(Object.isFrozen(lease.capabilities.gameplay)).toBe(true);

@@ -65,7 +65,21 @@ import {
 import { snapClipmapToCamera } from "./camera-relative-clipmap.js";
 import { createWaterPreset } from "../water-preset.js";
 import {
+  DIRECTIONAL_WAKE_HEIGHT_SCALE,
+  DIRECTIONAL_WAKE_LENGTH_RADIUS_MULTIPLIER,
+  DIRECTIONAL_WAKE_SPATIAL_RADIANS,
+  DIRECTIONAL_WAKE_TEMPORAL_RADIANS_PER_SECOND,
+  DIRECTIONAL_WAKE_WIDTH_RADIUS_MULTIPLIER,
+  LOCAL_INTERACTION_KIND_DIRECTIONAL_WAKE,
+  LOCAL_INTERACTION_KIND_PROPELLER_WASH,
+  LOCAL_INTERACTION_KIND_RADIAL_IMPACT,
   MIN_RADIAL_IMPACT_RADIUS_METRES,
+  PERSISTENT_BODY_WAKE_START_TIME_SECONDS,
+  PROPELLER_WASH_HEIGHT_SCALE,
+  PROPELLER_WASH_LENGTH_RADIUS_MULTIPLIER,
+  PROPELLER_WASH_SPATIAL_RADIANS,
+  PROPELLER_WASH_TEMPORAL_RADIANS_PER_SECOND,
+  PROPELLER_WASH_WIDTH_RADIUS_MULTIPLIER,
   RADIAL_IMPACT_LIFETIME_SECONDS,
   type LocalInteractionRenderSnapshot,
 } from "./local-interaction.js";
@@ -213,8 +227,12 @@ export function createSpectralBandRendering(
           const timingDescriptor = vec4(timing.element(i));
           const dx = hostX.sub(descriptor.x);
           const dz = hostZ.sub(descriptor.y);
-          const distance = length(vec2(dx, dz));
           const radius = descriptor.z.max(MIN_RADIAL_IMPACT_RADIUS_METRES);
+          const kind = timingDescriptor.y;
+          const radialKind = float(1).sub(step(0.5, kind));
+          const directionalKind = step(0.5, kind);
+          const propellerKind = step(1.5, kind);
+          const distance = length(vec2(dx, dz));
           const normalizedRadius = distance.div(radius);
           const age = sampleTime.sub(timingDescriptor.x);
           const progress = age.div(RADIAL_IMPACT_LIFETIME_SECONDS).clamp(0, 1);
@@ -262,14 +280,138 @@ export function createSpectralBandRendering(
                 ),
             )
             .mul(active);
-          accumulated.x.addAssign(impactHeight);
+          accumulated.x.addAssign(impactHeight.mul(radialKind));
           accumulated.y.addAssign(
-            heightDerivativeRadius.mul(dx).mul(inverseDistance),
+            heightDerivativeRadius.mul(dx).mul(inverseDistance).mul(radialKind),
           );
           accumulated.z.addAssign(
-            heightDerivativeRadius.mul(dz).mul(inverseDistance),
+            heightDerivativeRadius.mul(dz).mul(inverseDistance).mul(radialKind),
           );
-          accumulated.w.addAssign(impactVelocity);
+          accumulated.w.addAssign(impactVelocity.mul(radialKind));
+
+          const directionX = timingDescriptor.z;
+          const directionZ = timingDescriptor.w;
+          const along = dx.mul(directionX).add(dz.mul(directionZ));
+          const lateral = dx.mul(directionZ).mul(-1).add(dz.mul(directionX));
+          const lengthMultiplier = mix(
+            float(DIRECTIONAL_WAKE_LENGTH_RADIUS_MULTIPLIER),
+            float(PROPELLER_WASH_LENGTH_RADIUS_MULTIPLIER),
+            propellerKind,
+          );
+          const widthMultiplier = mix(
+            float(DIRECTIONAL_WAKE_WIDTH_RADIUS_MULTIPLIER),
+            float(PROPELLER_WASH_WIDTH_RADIUS_MULTIPLIER),
+            propellerKind,
+          );
+          const wakeLength = radius.mul(lengthMultiplier);
+          const wakeWidth = radius.mul(widthMultiplier);
+          const alongT = along.div(wakeLength).clamp(0, 1);
+          const lateralT = abs(lateral).div(wakeWidth).clamp(0, 1);
+          const longitudinalWindow = float(1).sub(
+            alongT.mul(alongT).mul(float(3).sub(alongT.mul(2))),
+          );
+          const lateralWindow = float(1).sub(
+            lateralT.mul(lateralT).mul(float(3).sub(lateralT.mul(2))),
+          );
+          const longitudinalDerivative = alongT
+            .mul(float(1).sub(alongT))
+            .mul(-6)
+            .div(wakeLength);
+          const lateralDerivative = lateralT
+            .mul(float(1).sub(lateralT))
+            .mul(-6)
+            .div(wakeWidth);
+          const spatialRadians = mix(
+            float(DIRECTIONAL_WAKE_SPATIAL_RADIANS),
+            float(PROPELLER_WASH_SPATIAL_RADIANS),
+            propellerKind,
+          );
+          const temporalFrequency = mix(
+            float(DIRECTIONAL_WAKE_TEMPORAL_RADIANS_PER_SECOND),
+            float(PROPELLER_WASH_TEMPORAL_RADIANS_PER_SECOND),
+            propellerKind,
+          );
+          const spatialFrequency = spatialRadians.div(radius);
+          const directionalPhase = along
+            .mul(spatialFrequency)
+            .sub(sampleTime.mul(temporalFrequency));
+          const directionalCosine = cos(directionalPhase);
+          const directionalSine = sin(directionalPhase);
+          const persistent = float(1).sub(
+            step(
+              PERSISTENT_BODY_WAKE_START_TIME_SECONDS + 1,
+              timingDescriptor.x,
+            ),
+          );
+          const lifetimeActive = step(0, age).mul(
+            float(1).sub(step(RADIAL_IMPACT_LIFETIME_SECONDS, age)),
+          );
+          const directionalActive = persistent
+            .max(lifetimeActive)
+            .mul(step(0, along))
+            .mul(float(1).sub(step(1, along.div(wakeLength))))
+            .mul(float(1).sub(step(1, abs(lateral).div(wakeWidth))))
+            .mul(directionalKind);
+          const directionalDecay = mix(decay, float(1), persistent);
+          const directionalDecayDerivative = mix(
+            remaining.mul(-2 / RADIAL_IMPACT_LIFETIME_SECONDS),
+            float(0),
+            persistent,
+          );
+          const directionalHeightScale = mix(
+            float(DIRECTIONAL_WAKE_HEIGHT_SCALE),
+            float(PROPELLER_WASH_HEIGHT_SCALE),
+            propellerKind,
+          );
+          const scaledAmplitude = descriptor.w.mul(directionalHeightScale);
+          const directionalHeight = scaledAmplitude
+            .mul(directionalDecay)
+            .mul(directionalCosine)
+            .mul(longitudinalWindow)
+            .mul(lateralWindow)
+            .mul(directionalActive);
+          const derivativeAlong = scaledAmplitude
+            .mul(directionalDecay)
+            .mul(lateralWindow)
+            .mul(
+              longitudinalDerivative
+                .mul(directionalCosine)
+                .sub(
+                  longitudinalWindow.mul(directionalSine).mul(spatialFrequency),
+                ),
+            )
+            .mul(directionalActive);
+          const lateralSign = step(0, lateral).mul(2).sub(1);
+          const derivativeLateral = scaledAmplitude
+            .mul(directionalDecay)
+            .mul(directionalCosine)
+            .mul(longitudinalWindow)
+            .mul(lateralDerivative)
+            .mul(lateralSign)
+            .mul(directionalActive);
+          const directionalVelocity = scaledAmplitude
+            .mul(longitudinalWindow)
+            .mul(lateralWindow)
+            .mul(
+              directionalDecayDerivative
+                .mul(directionalCosine)
+                .add(
+                  directionalDecay.mul(temporalFrequency).mul(directionalSine),
+                ),
+            )
+            .mul(directionalActive);
+          accumulated.x.addAssign(directionalHeight);
+          accumulated.y.addAssign(
+            derivativeAlong
+              .mul(directionX)
+              .sub(derivativeLateral.mul(directionZ)),
+          );
+          accumulated.z.addAssign(
+            derivativeAlong
+              .mul(directionZ)
+              .add(derivativeLateral.mul(directionX)),
+          );
+          accumulated.w.addAssign(directionalVelocity);
         });
       });
       return vec4(
@@ -741,7 +883,18 @@ export function createSpectralBandRendering(
         impact.radius,
         impact.amplitude,
       );
-      timingValues[index]?.set(impact.startTimeSeconds, 0, 0, 0);
+      const kind =
+        impact.kind === "radial-impact"
+          ? LOCAL_INTERACTION_KIND_RADIAL_IMPACT
+          : impact.kind === "directional-wake"
+            ? LOCAL_INTERACTION_KIND_DIRECTIONAL_WAKE
+            : LOCAL_INTERACTION_KIND_PROPELLER_WASH;
+      timingValues[index]?.set(
+        impact.startTimeSeconds,
+        kind,
+        impact.directionX,
+        impact.directionZ,
+      );
     }
   };
   type PresentedWaveField = Readonly<{
@@ -887,23 +1040,46 @@ export function createSpectralBandRendering(
     whitecapStagesNode,
     whitecapDensityNode: whitecapStagesNode.a,
     sink,
-    stagePrewarmRadialImpact(): void {
+    stagePrewarmLocalInteractionRoutes(): void {
       desiredLocalInteraction = Object.freeze({
         revision: -1,
         anchorX: initialSimulationState.originX,
         anchorZ: initialSimulationState.originZ,
         impacts: Object.freeze([
           Object.freeze({
+            kind: "radial-impact",
             x: initialSimulationState.originX,
             z: initialSimulationState.originZ,
+            directionX: 0,
+            directionZ: 0,
             radius: 8,
             amplitude: 0.25,
             startTimeSeconds: initialSimulationState.timeSeconds,
           }),
+          Object.freeze({
+            kind: "directional-wake",
+            x: initialSimulationState.originX,
+            z: initialSimulationState.originZ,
+            directionX: 0,
+            directionZ: 1,
+            radius: 2,
+            amplitude: 0.2,
+            startTimeSeconds: initialSimulationState.timeSeconds,
+          }),
+          Object.freeze({
+            kind: "propeller-wash",
+            x: initialSimulationState.originX + 1,
+            z: initialSimulationState.originZ,
+            directionX: 0,
+            directionZ: 1,
+            radius: 1,
+            amplitude: 0.25,
+            startTimeSeconds: PERSISTENT_BODY_WAKE_START_TIME_SECONDS,
+          }),
         ]),
       });
     },
-    clearPrewarmRadialImpact(): void {
+    clearPrewarmLocalInteractionRoutes(): void {
       desiredLocalInteraction = emptyLocalInteraction;
     },
   });

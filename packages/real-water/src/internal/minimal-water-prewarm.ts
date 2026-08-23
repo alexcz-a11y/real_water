@@ -263,7 +263,7 @@ export async function prepareMinimalWaterPlane(
       "whitecapDiffusionRoute",
       "whitecapDecayRoute",
     ]);
-    spectralBand.stagePrewarmRadialImpact();
+    spectralBand.stagePrewarmLocalInteractionRoutes();
     try {
       await compileAndPrimePreparedWaterPresentation(
         renderer,
@@ -273,7 +273,7 @@ export async function prepareMinimalWaterPlane(
         options.request.signal,
       );
     } finally {
-      spectralBand.clearPrewarmRadialImpact();
+      spectralBand.clearPrewarmLocalInteractionRoutes();
     }
     await completeDeclaredWork(options.request.progress, [
       "texture",
@@ -285,6 +285,8 @@ export async function prepareMinimalWaterPlane(
       "localInteractionField",
       "localInteractionBuffers",
       "localInteractionRadialImpactRoute",
+      "localInteractionDirectionalWakeRoute",
+      "bodySocketEmissionRoute",
       "spectralBandSwell",
       "spectralBandWind",
       "spectralBandChop",
@@ -542,6 +544,10 @@ function createPreparationWhitecapSnapshot(
     interactionAnchor: Object.freeze({ x: 0, z: 0 }),
     interactionAnchorRevision: 0,
     activeDisturbanceCount: 0,
+    // Prewarm runs before any Host body is attached, so the Body coupling
+    // counts #25 added are zero for the same reason the disturbance count is.
+    attachedBodyCount: 0,
+    activeBodyWakeCount: 0,
   });
 }
 

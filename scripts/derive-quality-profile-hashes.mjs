@@ -5,18 +5,14 @@
 // The Quality Profile hash is otherwise an open loop: it is hardcoded in
 // quality-profile.ts and hardcoded again in the tests, so a miscomputed value
 // would validate against itself. This script is the closed loop. Run it
-// whenever QUALITY_PROFILE_VERSION changes, and record its output alongside the
-// change:
+// whenever QUALITY_PROFILE_VERSION or PREWARM_MANIFEST_VERSION changes, a
+// declaration moves, or a fingerprint is minted, and record its output
+// alongside the change:
 //
 //   pnpm exec tsc -b packages/real-water && node scripts/derive-quality-profile-hashes.mjs
 //
 // The recipe is the SHA-256 digest of the profile's canonical JSON with
-// profileHash removed and the remaining public field order preserved:
-// schema, version, id, surface, interaction, temporal, reflection, whitecaps.
-//
-// The Prewarm Manifest hash is checked the same way, at the bottom of this
-// file, against anchors committed here. Run this whenever
-// PREWARM_MANIFEST_VERSION, a declaration, or a fingerprint changes.
+// profileHash removed and the remaining public field order preserved.
 
 import { createHash } from "node:crypto";
 
@@ -30,54 +26,87 @@ const PROFILE_IDS = ["minimal", "minimal-high-detail"];
 const digest = (canonical) =>
   `sha256:${createHash("sha256").update(canonical, "utf8").digest("hex")}`;
 
-function omitKeys(record, omitted) {
-  return Object.fromEntries(
-    Object.entries(record).filter(([key]) => !omitted.includes(key)),
+// The canonical field order, stated rather than inherited. Reading it off the
+// live object's key order would make the recipe agree with whatever the source
+// happens to do, which is not a check. #25 committed this list for that
+// reason and it is kept.
+const CANONICAL_QUALITY_PROFILE_FIELDS = Object.freeze([
+  "schema",
+  "version",
+  "id",
+  "surface",
+  "interaction",
+  "bodyCoupling",
+  "temporal",
+  "reflection",
+  "whitecaps",
+]);
+
+const CANONICAL_INTERACTION_FIELD_KEYS = Object.freeze([
+  "radiusMetres",
+  "edgeFadeMetres",
+  "maxActiveDisturbances",
+  "snapshotBanks",
+  "maxSnapshotAgeTicks",
+  "radialImpactRoute",
+  "directionalWakeRoute",
+]);
+
+let failures = 0;
+
+// One key-set check, used for the current profile and every legacy variant
+// alike. A variant carries the canonical fields minus the ones it predates,
+// never "the canonical fields, roughly". Without this a field added later is
+// silently dropped from the canonical form and the resulting mismatch points
+// at the hash instead of at the omission - which is the failure that invites
+// someone to just update the hash.
+function checkKeys(label, present, expected) {
+  const actual = [...present].sort();
+  const wanted = [...expected].sort();
+  if (actual.join(",") === wanted.join(",")) {
+    return;
+  }
+  failures += 1;
+  const missing = wanted.filter((key) => !actual.includes(key));
+  const extra = actual.filter((key) => !wanted.includes(key));
+  console.log(
+    `  ${label}: key set drifted.` +
+      (missing.length > 0 ? ` Missing ${missing.join(", ")}.` : "") +
+      (extra.length > 0 ? ` Unexpected ${extra.join(", ")}.` : ""),
   );
 }
 
-function canonicalJson(profile) {
-  return JSON.stringify(omitKeys(profile, ["profileHash"]));
+function canonicalJson(label, profile, variant) {
+  const absentKeys = variant?.absentKeys ?? [];
+  const fields = CANONICAL_QUALITY_PROFILE_FIELDS.filter(
+    (field) => !absentKeys.includes(field),
+  );
+  checkKeys(
+    label,
+    Object.keys(profile).filter((key) => key !== "profileHash"),
+    fields,
+  );
+  if (profile.interaction !== undefined) {
+    const absentFieldKeys = variant?.absentInteractionFieldKeys ?? [];
+    checkKeys(
+      `${label} interaction field`,
+      Object.keys(profile.interaction.field),
+      CANONICAL_INTERACTION_FIELD_KEYS.filter(
+        (key) => !absentFieldKeys.includes(key),
+      ),
+    );
+  }
+  return JSON.stringify(
+    Object.fromEntries(fields.map((field) => [field, profile[field]])),
+  );
 }
 
-// Version 6 was committed twice, in two different shapes, on two branches
-// developed in parallel: #24 added `interaction`, #26 added `whitecaps`. Both
-// are reconstructed from the current profile so this script cannot drift from
-// the shared policy constants, and both are checked against the digests those
-// two commits carry.
-const COMMITTED_LEGACY_HASHES = {
-  "6 (interaction)": {
-    "minimal":
-      "sha256:c60b0a30fa310fbc1f21270c413a35b5b6265d6f157e5f41233be4b8042d8ec5",
-    "minimal-high-detail":
-      "sha256:4cba756cba61d7f4e071605c4d6939c1ba76b2cab0ef500bcf5ed1be7404d7f4",
-  },
-  "6 (whitecaps)": {
-    "minimal":
-      "sha256:e89f6484cb983b184dee0ee46a77f8f05561b97df2a37c4686525b73b53eda28",
-    "minimal-high-detail":
-      "sha256:008a6a813e5e048fca87cce20a13ea7c1a2187a146a4fda7e2a441f4e7d71a37",
-  },
-  "6 (waterline)": {
-    "minimal":
-      "sha256:e09b96aea95dcf7f52f3220a07ec83a90f29f59c978814b5e107f86098e892c2",
-    "minimal-high-detail":
-      "sha256:cb9323969633c4f8a5d6e44dfe9baf84bd3b61923dbc884e65f704e4d7e3b772",
-  },
-  "7": {
-    "minimal":
-      "sha256:f896b4033ed12264eabcc4e88fc2f41cdbd9e8a2d2a70698b296683b586d3c3f",
-    "minimal-high-detail":
-      "sha256:d33533c3f740eb2d9ef0d4a516f8e242ce22ca83ce90f38fb72f74e57c9738b3",
-  },
-};
-
-// The reset domains every shape committed so far. Held here as its own literal
-// rather than read off the current profile: reconstructing a historical shape
-// from the current one means the next policy change silently rewrites history
-// and this script starts reporting mismatches against digests that are still
-// perfectly correct. quality-profile.ts declares the same list separately, for
-// the same reason.
+// The reset domains every shape committed so far. Held here as their own
+// literals rather than read off the current profile: reconstructing a
+// historical shape from the current one means the next policy change silently
+// rewrites history and this script starts reporting mismatches against digests
+// that are still perfectly correct. quality-profile.ts declares the same lists
+// separately, for the same reason.
 const LEGACY_SSR_HISTORY_RESET_DOMAINS = [
   "simulation-reset",
   "camera-cut",
@@ -85,51 +114,136 @@ const LEGACY_SSR_HISTORY_RESET_DOMAINS = [
   "sea-state-cut",
 ];
 
-function withLegacyResetDomains(profile) {
+const WATERLINE_SSR_HISTORY_RESET_DOMAINS = [
+  "simulation-reset",
+  "camera-cut",
+  "origin-shift",
+  "sea-state-cut",
+  "waterline-crossing",
+];
+
+// Every legacy shape this release still migrates, stated the way
+// quality-profile.ts states it: what the shape was missing, what its reset
+// domains were, and the two digests it was committed with. Versions 6 and 7
+// were each committed more than once, in more than one shape, on branches
+// developed in parallel - #24 added interaction, #26 added whitecaps, #31
+// added the waterline domain, #25 added bodyCoupling and a directional wake
+// route. Same numbers, different payloads, all still recoverable.
+const COMMITTED_LEGACY_VARIANTS = [
+  {
+    label: "6 (interaction)",
+    version: 6,
+    absentKeys: ["bodyCoupling", "whitecaps"],
+    absentInteractionFieldKeys: ["directionalWakeRoute"],
+    ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+    hashes: {
+      "minimal":
+        "sha256:c60b0a30fa310fbc1f21270c413a35b5b6265d6f157e5f41233be4b8042d8ec5",
+      "minimal-high-detail":
+        "sha256:4cba756cba61d7f4e071605c4d6939c1ba76b2cab0ef500bcf5ed1be7404d7f4",
+    },
+  },
+  {
+    label: "6 (whitecaps)",
+    version: 6,
+    absentKeys: ["interaction", "bodyCoupling"],
+    absentInteractionFieldKeys: [],
+    ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+    hashes: {
+      "minimal":
+        "sha256:e89f6484cb983b184dee0ee46a77f8f05561b97df2a37c4686525b73b53eda28",
+      "minimal-high-detail":
+        "sha256:008a6a813e5e048fca87cce20a13ea7c1a2187a146a4fda7e2a441f4e7d71a37",
+    },
+  },
+  {
+    label: "6 (waterline)",
+    version: 6,
+    absentKeys: ["interaction", "bodyCoupling", "whitecaps"],
+    absentInteractionFieldKeys: [],
+    ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    hashes: {
+      "minimal":
+        "sha256:e09b96aea95dcf7f52f3220a07ec83a90f29f59c978814b5e107f86098e892c2",
+      "minimal-high-detail":
+        "sha256:cb9323969633c4f8a5d6e44dfe9baf84bd3b61923dbc884e65f704e4d7e3b772",
+    },
+  },
+  {
+    label: "7 (whitecaps)",
+    version: 7,
+    absentKeys: ["bodyCoupling"],
+    absentInteractionFieldKeys: ["directionalWakeRoute"],
+    ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+    hashes: {
+      "minimal":
+        "sha256:f896b4033ed12264eabcc4e88fc2f41cdbd9e8a2d2a70698b296683b586d3c3f",
+      "minimal-high-detail":
+        "sha256:d33533c3f740eb2d9ef0d4a516f8e242ce22ca83ce90f38fb72f74e57c9738b3",
+    },
+  },
+  {
+    label: "7 (body coupling)",
+    version: 7,
+    absentKeys: ["whitecaps"],
+    absentInteractionFieldKeys: [],
+    ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+    hashes: {
+      "minimal":
+        "sha256:1c11f4a6ae5099ee4ffe2610edc4c57fc546975fdb05a3a55ad4b662991db6a4",
+      "minimal-high-detail":
+        "sha256:98911284133f9b9be6f93548f7726657c9f5164d4e241c08bab0ac440c04e67a",
+    },
+  },
+  {
+    label: "8",
+    version: 8,
+    absentKeys: ["bodyCoupling"],
+    absentInteractionFieldKeys: ["directionalWakeRoute"],
+    ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    hashes: {
+      "minimal":
+        "sha256:b2e727a8016dbac41a2ea1036275f10c344cffc82b2a10bea2c4bc4807bc651d",
+      "minimal-high-detail":
+        "sha256:a760008c06d5c27ea2cd42f986aff9272f7eaf184e97c6aab6bedf1d73f96bcd",
+    },
+  },
+];
+
+function omitKeys(record, omitted) {
+  return Object.fromEntries(
+    Object.entries(record).filter(([key]) => !omitted.includes(key)),
+  );
+}
+
+function legacyProfile(profile, variant) {
+  const reduced = omitKeys(profile, variant.absentKeys);
+  if (reduced.interaction !== undefined) {
+    reduced.interaction = {
+      ...reduced.interaction,
+      field: omitKeys(
+        reduced.interaction.field,
+        variant.absentInteractionFieldKeys,
+      ),
+    };
+  }
   return {
-    ...profile,
+    ...reduced,
+    version: variant.version,
     reflection: {
-      ...profile.reflection,
+      ...reduced.reflection,
       ssr: {
-        ...profile.reflection.ssr,
+        ...reduced.reflection.ssr,
         history: {
-          ...profile.reflection.ssr.history,
-          resetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+          ...reduced.reflection.ssr.history,
+          resetDomains: variant.ssrHistoryResetDomains,
         },
       },
     },
   };
 }
 
-function legacyV6Interaction(profile) {
-  return {
-    ...withLegacyResetDomains(omitKeys(profile, ["whitecaps"])),
-    version: 6,
-  };
-}
-
-function legacyV6Whitecaps(profile) {
-  return {
-    ...withLegacyResetDomains(omitKeys(profile, ["interaction"])),
-    version: 6,
-  };
-}
-
-// #31's version 6 added no field; it is a distinct shape only because it
-// already carried waterline-crossing, so the current reset domains are correct
-// for it and only interaction and whitecaps are removed.
-function legacyV6Waterline(profile) {
-  return { ...omitKeys(profile, ["interaction", "whitecaps"]), version: 6 };
-}
-
-function legacyV7(profile) {
-  return { ...withLegacyResetDomains(profile), version: 7 };
-}
-
-let failures = 0;
-
-function report(label, id, canonical, expected) {
-  const actual = digest(canonical);
+function report(label, id, actual, expected) {
   const matches = actual === expected;
   if (!matches) {
     failures += 1;
@@ -137,48 +251,45 @@ function report(label, id, canonical, expected) {
   const verdict = matches
     ? "matches source"
     : `MISMATCH, source has ${expected}`;
-  console.log(`version ${label}  ${id.padEnd(20)} ${actual}  ${verdict}`);
+  console.log(
+    `version ${label.padEnd(18)} ${id.padEnd(20)} ${actual}  ${verdict}`,
+  );
 }
 
 for (const id of PROFILE_IDS) {
   const profile = createMinimalWaterQualityProfile(id);
-  report("current", id, canonicalJson(profile), profile.profileHash);
+  report(
+    "current",
+    id,
+    digest(canonicalJson(`current ${id}`, profile)),
+    profile.profileHash,
+  );
 }
 
-for (const id of PROFILE_IDS) {
-  const profile = createMinimalWaterQualityProfile(id);
-  report(
-    "6 (interaction)",
-    id,
-    canonicalJson(legacyV6Interaction(profile)),
-    COMMITTED_LEGACY_HASHES["6 (interaction)"][id],
-  );
-  report(
-    "6 (whitecaps)",
-    id,
-    canonicalJson(legacyV6Whitecaps(profile)),
-    COMMITTED_LEGACY_HASHES["6 (whitecaps)"][id],
-  );
-  report(
-    "6 (waterline)",
-    id,
-    canonicalJson(legacyV6Waterline(profile)),
-    COMMITTED_LEGACY_HASHES["6 (waterline)"][id],
-  );
-  report(
-    "7",
-    id,
-    canonicalJson(legacyV7(profile)),
-    COMMITTED_LEGACY_HASHES["7"][id],
-  );
+for (const variant of COMMITTED_LEGACY_VARIANTS) {
+  for (const id of PROFILE_IDS) {
+    const profile = createMinimalWaterQualityProfile(id);
+    report(
+      variant.label,
+      id,
+      digest(
+        canonicalJson(
+          `${variant.label} ${id}`,
+          legacyProfile(profile, variant),
+          variant,
+        ),
+      ),
+      variant.hashes[id],
+    );
+  }
 }
 
 // The Prewarm Manifest hash had the same open loop the Quality Profile hash
-// had, one level up: the manifest computes it, and every test that mentions it
-// compares `manifest.manifestHash` to itself. Nothing in the repository stated
-// what the digest is supposed to be, so the whole manifest - all 77
-// declarations and every fingerprint inside them - agreed with itself no matter
-// what it said.
+// had, one level up: the manifest computes it, and every reference in the
+// repository compares `manifest.manifestHash` to itself. Nothing in the
+// repository stated what the digest is supposed to be, so the whole manifest -
+// every declaration and every fingerprint inside them - agreed with itself no
+// matter what it said.
 //
 // These two values are the anchor. They were generated once, read off a
 // reviewed manifest, and pasted in. The recipe below is restated here rather
@@ -187,9 +298,9 @@ for (const id of PROFILE_IDS) {
 // public fields in declared order, with manifestHash itself excluded.
 const COMMITTED_MANIFEST_HASHES = {
   "minimal":
-    "sha256:1c4d1a1b4ae1a50b0c466519e16843d6753b8f4b176eb8826ea2861f32e6e3e6",
+    "sha256:2acc2b56f364f8525f54e39db324b247f5b4a4a759bee8a6933e507367ebebd2",
   "minimal-high-detail":
-    "sha256:7b37dba673d927adb9a6dc6d20ac1bd9835bf875aa3afdc6afb6ee2daf3da162",
+    "sha256:079b894f0c4f487d236496a3f8449a4abdeb3e165167d241e672ed740cfc5382",
 };
 
 function canonicalManifestJson(manifest) {
@@ -221,7 +332,7 @@ for (const id of PROFILE_IDS) {
     : !matchesManifest
       ? `MISMATCH, the manifest carries ${manifest.manifestHash}`
       : "matches the committed anchor and the manifest";
-  console.log(`manifest         ${id.padEnd(20)} ${derived}  ${verdict}`);
+  console.log(`manifest           ${id.padEnd(20)} ${derived}  ${verdict}`);
 }
 
 if (failures > 0) {

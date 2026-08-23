@@ -2,8 +2,14 @@ import { hasExactKeys, isRecord } from "./internal/record-validation.js";
 import {
   INTERACTION_FIELD_EDGE_FADE_METRES,
   INTERACTION_FIELD_RADIUS_METRES,
+  MAX_ATTACHED_BODIES,
   MAX_ACTIVE_DISTURBANCES,
 } from "./capabilities.js";
+import {
+  MAX_BODY_INTERACTION_SOCKETS,
+  MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN,
+  MAX_CONVEX_HULL_VERTICES,
+} from "./body-physics.js";
 
 /**
  * The discriminator for supported Quality Profiles.
@@ -17,7 +23,7 @@ export const QUALITY_PROFILE_SCHEMA = "real-water/quality-profile" as const;
  *
  * @public
  */
-export const QUALITY_PROFILE_VERSION = 8 as const;
+export const QUALITY_PROFILE_VERSION = 9 as const;
 
 /**
  * Built-in structural configurations for the minimal-water surface.
@@ -57,6 +63,7 @@ export interface QualityProfileInteractionField {
   readonly snapshotBanks: 2;
   readonly maxSnapshotAgeTicks: 1;
   readonly radialImpactRoute: "analytic-uniform-array";
+  readonly directionalWakeRoute: "analytic-uniform-array";
 }
 
 /**
@@ -67,6 +74,21 @@ export interface QualityProfileInteractionField {
 export interface QualityProfileInteraction {
   readonly anchorCount: 1;
   readonly field: QualityProfileInteractionField;
+}
+
+/**
+ * Bounded structural policy for fixed-step Body coupling and authored sockets.
+ * Per-Body Interaction Shapes and socket poses remain runtime attachment data.
+ *
+ * @public
+ */
+export interface QualityProfileBodyCoupling {
+  readonly fixedTickHz: 60;
+  readonly maxAttachedBodies: 32;
+  readonly maxShapeSamplesPerBody: 32;
+  readonly maxConvexHullVertices: 64;
+  readonly maxSocketsPerBody: 8;
+  readonly socketRoute: "stable-slot-upsert";
 }
 
 /**
@@ -201,6 +223,7 @@ export interface QualityProfile {
   readonly profileHash: string;
   readonly surface: QualityProfileSurface;
   readonly interaction: QualityProfileInteraction;
+  readonly bodyCoupling: QualityProfileBodyCoupling;
   readonly temporal: QualityProfileTemporal;
   readonly reflection: QualityProfileReflection;
   readonly whitecaps: QualityProfileSpectralWhitecaps;
@@ -281,7 +304,8 @@ export const CURRENT_FRAME_SSR_POLICY: QualityProfileReflectionSsr =
 
 // Each static hash is the SHA-256 digest of the profile's canonical JSON,
 // excluding profileHash and preserving the public field order:
-// schema, version, id, surface, interaction, temporal, reflection, whitecaps.
+// schema, version, id, surface, interaction, bodyCoupling, temporal,
+// reflection, whitecaps.
 const NATIVE_TEMPORAL: QualityProfileTemporal = Object.freeze({
   mode: "TRAA",
   renderScale: 1,
@@ -323,14 +347,14 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:b2e727a8016dbac41a2ea1036275f10c344cffc82b2a10bea2c4bc4807bc651d",
+      "sha256:6a3385d04d854e423957d290f562696ce4041c0ad1eb38e3f26fc9306a950978",
     widthSegments: 128,
     heightSegments: 128,
     whitecapFieldResolution: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:a760008c06d5c27ea2cd42f986aff9272f7eaf184e97c6aab6bedf1d73f96bcd",
+      "sha256:3ef8c9bbcb9e5895de1a42425aa67ce69ed171c037ce29f21f82cefae398f637",
     widthSegments: 256,
     heightSegments: 256,
     whitecapFieldResolution: 256,
@@ -402,10 +426,15 @@ const LEGACY_V2_QUALITY_PROFILES: Readonly<
 // would begin rejecting the payload it exists to recover.
 type QualityProfileKey = (typeof QUALITY_PROFILE_KEYS)[number];
 type SsrHistoryKey = (typeof SSR_HISTORY_KEYS)[number];
+type InteractionFieldKey = (typeof INTERACTION_FIELD_KEYS)[number];
 
 interface LegacyQualityProfileVariant {
   readonly absentKeys: readonly QualityProfileKey[];
   readonly absentSsrHistoryKeys: readonly SsrHistoryKey[];
+  // The interaction field grows too. #25 added directionalWakeRoute, so every
+  // variant committed before it carries an interaction field one key short,
+  // and says so here rather than being matched against today's field.
+  readonly absentInteractionFieldKeys: readonly InteractionFieldKey[];
   readonly ssrHistoryResetDomains: readonly string[];
   readonly profiles: Readonly<
     Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
@@ -438,8 +467,13 @@ const WATERLINE_SSR_HISTORY_RESET_DOMAINS = Object.freeze([
 const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
-      absentKeys: Object.freeze(["interaction", "whitecaps"] as const),
+      absentKeys: Object.freeze([
+        "interaction",
+        "bodyCoupling",
+        "whitecaps",
+      ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([] as const),
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
       profiles: Object.freeze({
         "minimal": Object.freeze({
@@ -457,8 +491,13 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
       }),
     }),
     Object.freeze({
-      absentKeys: Object.freeze(["interaction", "whitecaps"] as const),
+      absentKeys: Object.freeze([
+        "interaction",
+        "bodyCoupling",
+        "whitecaps",
+      ] as const),
       absentSsrHistoryKeys: Object.freeze(["resetVelocityFormat"] as const),
+      absentInteractionFieldKeys: Object.freeze([] as const),
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
       profiles: Object.freeze({
         "minimal": Object.freeze({
@@ -484,12 +523,51 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
 // carries both fields, which is why it exists at all.
 // Version 7 carried interaction and whitecaps but predates the waterline: its
 // SSR history reset domains stop at sea-state-cut. Version 8 is the first that
-// also resets on a waterline crossing.
+// also resets on a waterline crossing, and version 9 the first that carries
+// Body coupling and a directional wake route.
+//
+// Version 8 was committed once, on this branch, before #25 arrived. It is the
+// only shape that carries every field except bodyCoupling and still resets on a
+// waterline crossing.
+const LEGACY_V8_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze(["bodyCoupling"] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([
+        "directionalWakeRoute",
+      ] as const),
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:b2e727a8016dbac41a2ea1036275f10c344cffc82b2a10bea2c4bc4807bc651d",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:a760008c06d5c27ea2cd42f986aff9272f7eaf184e97c6aab6bedf1d73f96bcd",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
+// Version 7, like version 6, was committed twice in two shapes on branches
+// developed in parallel. This branch's 7 added whitecaps to version 6's
+// interaction; #25's 7 added bodyCoupling and a directional wake route to the
+// same version 6 and never saw whitecaps at all. Same number, two payloads,
+// both recoverable.
 const LEGACY_V7_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
-      absentKeys: Object.freeze([] as const),
+      absentKeys: Object.freeze(["bodyCoupling"] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([
+        "directionalWakeRoute",
+      ] as const),
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
       profiles: Object.freeze({
         "minimal": Object.freeze({
@@ -506,13 +584,38 @@ const LEGACY_V7_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         }),
       }),
     }),
+    // #25's version 7: interaction with a directional wake route, plus
+    // bodyCoupling, and no whitecaps.
+    Object.freeze({
+      absentKeys: Object.freeze(["whitecaps"] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([] as const),
+      ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:1c11f4a6ae5099ee4ffe2610edc4c57fc546975fdb05a3a55ad4b662991db6a4",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:98911284133f9b9be6f93548f7726657c9f5164d4e241c08bab0ac440c04e67a",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
   ]);
 
 const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
-      absentKeys: Object.freeze(["whitecaps"] as const),
+      absentKeys: Object.freeze(["bodyCoupling", "whitecaps"] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([
+        "directionalWakeRoute",
+      ] as const),
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
       profiles: Object.freeze({
         "minimal": Object.freeze({
@@ -530,8 +633,9 @@ const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
       }),
     }),
     Object.freeze({
-      absentKeys: Object.freeze(["interaction"] as const),
+      absentKeys: Object.freeze(["interaction", "bodyCoupling"] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([] as const),
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
       profiles: Object.freeze({
         "minimal": Object.freeze({
@@ -552,8 +656,13 @@ const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
     // version 5 -- and is a distinct shape only because it added
     // waterline-crossing to the reset domains, which moved the hash.
     Object.freeze({
-      absentKeys: Object.freeze(["interaction", "whitecaps"] as const),
+      absentKeys: Object.freeze([
+        "interaction",
+        "bodyCoupling",
+        "whitecaps",
+      ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([] as const),
       ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
       profiles: Object.freeze({
         "minimal": Object.freeze({
@@ -579,6 +688,7 @@ const QUALITY_PROFILE_KEYS = [
   "profileHash",
   "surface",
   "interaction",
+  "bodyCoupling",
   "temporal",
   "reflection",
   "whitecaps",
@@ -604,6 +714,15 @@ const INTERACTION_FIELD_KEYS = [
   "snapshotBanks",
   "maxSnapshotAgeTicks",
   "radialImpactRoute",
+  "directionalWakeRoute",
+] as const;
+const BODY_COUPLING_KEYS = [
+  "fixedTickHz",
+  "maxAttachedBodies",
+  "maxShapeSamplesPerBody",
+  "maxConvexHullVertices",
+  "maxSocketsPerBody",
+  "socketRoute",
 ] as const;
 const LEGACY_V1_QUALITY_PROFILE_KEYS = [
   "schema",
@@ -712,7 +831,16 @@ export function createMinimalWaterQualityProfile(
         snapshotBanks: 2,
         maxSnapshotAgeTicks: 1,
         radialImpactRoute: "analytic-uniform-array",
+        directionalWakeRoute: "analytic-uniform-array",
       },
+    },
+    bodyCoupling: {
+      fixedTickHz: 60,
+      maxAttachedBodies: MAX_ATTACHED_BODIES,
+      maxShapeSamplesPerBody: MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN,
+      maxConvexHullVertices: MAX_CONVEX_HULL_VERTICES,
+      maxSocketsPerBody: MAX_BODY_INTERACTION_SOCKETS,
+      socketRoute: "stable-slot-upsert",
     },
     temporal: NATIVE_TEMPORAL,
     reflection: NATIVE_REFLECTION,
@@ -782,6 +910,20 @@ export function normalizeQualityProfile(
       supported.interaction.field.maxSnapshotAgeTicks ||
     value.interaction.field.radialImpactRoute !==
       supported.interaction.field.radialImpactRoute ||
+    value.interaction.field.directionalWakeRoute !==
+      supported.interaction.field.directionalWakeRoute ||
+    !isRecord(value.bodyCoupling) ||
+    !hasExactKeys(value.bodyCoupling, BODY_COUPLING_KEYS) ||
+    value.bodyCoupling.fixedTickHz !== supported.bodyCoupling.fixedTickHz ||
+    value.bodyCoupling.maxAttachedBodies !==
+      supported.bodyCoupling.maxAttachedBodies ||
+    value.bodyCoupling.maxShapeSamplesPerBody !==
+      supported.bodyCoupling.maxShapeSamplesPerBody ||
+    value.bodyCoupling.maxConvexHullVertices !==
+      supported.bodyCoupling.maxConvexHullVertices ||
+    value.bodyCoupling.maxSocketsPerBody !==
+      supported.bodyCoupling.maxSocketsPerBody ||
+    value.bodyCoupling.socketRoute !== supported.bodyCoupling.socketRoute ||
     !isRecord(value.temporal) ||
     !hasExactKeys(value.temporal, TEMPORAL_KEYS) ||
     value.temporal.mode !== supported.temporal.mode ||
@@ -862,6 +1004,15 @@ export function migrateQualityProfile(candidate: unknown): QualityProfile {
     } catch {
       throw new TypeError("The Quality Profile cannot be migrated.");
     }
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 8 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV8Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
   }
 
   if (
@@ -1023,6 +1174,15 @@ function matchesLegacyV7Profile(
   );
 }
 
+function matchesLegacyV8Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V8_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
 function matchesLegacyV6Profile(
   value: Record<string, unknown>,
   id: MinimalWaterQualityProfileId,
@@ -1048,7 +1208,8 @@ function matchesLegacyVariant(
     matchesLegacySurface(value, variant.profiles[id]) &&
     matchesCurrentTemporal(value.temporal) &&
     matchesVariantReflection(value.reflection, variant) &&
-    (!carriesInteraction || matchesCurrentInteraction(value.interaction, id)) &&
+    (!carriesInteraction ||
+      matchesVariantInteraction(value.interaction, id, variant)) &&
     (!carriesWhitecaps ||
       isSupportedSpectralWhitecaps(
         value.whitecaps,
@@ -1057,11 +1218,15 @@ function matchesLegacyVariant(
   );
 }
 
-// The interaction and whitecap policies are unchanged between the two committed
-// version 6 shapes and version 7, so the current profile is the comparand.
-function matchesCurrentInteraction(
+// Every value the interaction policy carries is unchanged across the versions
+// that carry it, so the current profile is the comparand for those. Which keys
+// the field is allowed to have is not: a variant committed before
+// directionalWakeRoute must be matched against the field it had, so the key set
+// comes from the variant and only the values come from today.
+function matchesVariantInteraction(
   value: unknown,
   id: MinimalWaterQualityProfileId,
+  variant: LegacyQualityProfileVariant,
 ): boolean {
   const supported = createMinimalWaterQualityProfile(id).interaction;
   return (
@@ -1069,14 +1234,21 @@ function matchesCurrentInteraction(
     hasExactKeys(value, INTERACTION_KEYS) &&
     value.anchorCount === supported.anchorCount &&
     isRecord(value.field) &&
-    hasExactKeys(value.field, INTERACTION_FIELD_KEYS) &&
+    hasExactKeys(
+      value.field,
+      INTERACTION_FIELD_KEYS.filter(
+        (key) => !variant.absentInteractionFieldKeys.includes(key),
+      ),
+    ) &&
     value.field.radiusMetres === supported.field.radiusMetres &&
     value.field.edgeFadeMetres === supported.field.edgeFadeMetres &&
     value.field.maxActiveDisturbances ===
       supported.field.maxActiveDisturbances &&
     value.field.snapshotBanks === supported.field.snapshotBanks &&
     value.field.maxSnapshotAgeTicks === supported.field.maxSnapshotAgeTicks &&
-    value.field.radialImpactRoute === supported.field.radialImpactRoute
+    value.field.radialImpactRoute === supported.field.radialImpactRoute &&
+    (variant.absentInteractionFieldKeys.includes("directionalWakeRoute") ||
+      value.field.directionalWakeRoute === supported.field.directionalWakeRoute)
   );
 }
 
@@ -1243,6 +1415,7 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
       anchorCount: profile.interaction.anchorCount,
       field: Object.freeze({ ...profile.interaction.field }),
     }),
+    bodyCoupling: Object.freeze({ ...profile.bodyCoupling }),
     temporal: Object.freeze({ ...profile.temporal }),
     reflection: Object.freeze({
       environment: Object.freeze({ ...profile.reflection.environment }),

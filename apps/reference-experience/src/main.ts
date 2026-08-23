@@ -36,7 +36,11 @@ import {
   type ReferenceHostPresentationController,
 } from "./reference-presentation-controller.js";
 import { createReferenceHostSimulationController } from "./reference-simulation-controller.js";
-import { createReferenceFloatingSphere } from "./reference-floating-sphere.js";
+import {
+  REFERENCE_PROXY_VESSEL_SOCKETS,
+  createReferenceProxyVessel,
+  type ReferenceProxyVessel,
+} from "./reference-proxy-vessel.js";
 import { createReferenceEnvironmentAdapter } from "./reference-optical-inputs.js";
 import {
   startReferenceExperience,
@@ -311,8 +315,27 @@ function createThreeReferenceHostAttempt(
   const scene = new Scene();
   scene.background = new Color(0x031019);
   const seabed = addReferenceSeabed(scene, qaModule !== null);
-  const floatingSphere =
-    qaModule === null ? createReferenceFloatingSphere(scene) : undefined;
+  const proxyMode = parameters.get("proxy");
+  const qaProxyRequested = proxyMode === "1" || proxyMode === "propeller";
+  const proxyVessel =
+    qaModule === null || qaProxyRequested
+      ? createReferenceProxyVessel(
+          scene,
+          qaModule !== null && proxyMode === "propeller"
+            ? {
+                attachmentSockets: REFERENCE_PROXY_VESSEL_SOCKETS.filter(
+                  (socket) =>
+                    socket.kind === "propeller" ||
+                    socket.kind === "interaction-anchor",
+                ),
+              }
+            : {},
+        )
+      : undefined;
+  const disposeVesselControls =
+    proxyVessel === undefined
+      ? undefined
+      : bindReferenceVesselControls(proxyVessel);
 
   const width = drawingBuffer.width;
   const height = drawingBuffer.height;
@@ -325,15 +348,25 @@ function createThreeReferenceHostAttempt(
   renderer.setPixelRatio(1);
   renderer.setSize(width, height, false);
   let disposed = false;
-  const qaSimulation = qaModule?.createQaHostSimulationController();
+  const qaSimulation = qaModule?.createQaHostSimulationController({
+    ...(proxyVessel === undefined
+      ? {}
+      : {
+          integrateFixedStep: proxyVessel.integrateFixedStep,
+          reset: () => {
+            proxyVessel.reset();
+            proxyVessel.setControls({ throttle: 1, steering: 0 });
+          },
+        }),
+  });
   const qaPresentation = qaModule?.createQaHostPresentationController();
   let referencePresentation: ReferenceHostPresentationController | undefined;
   const referenceSimulation =
     qaSimulation === undefined
       ? createReferenceHostSimulationController({
-          ...(floatingSphere === undefined
+          ...(proxyVessel === undefined
             ? {}
-            : { integrateFixedStep: floatingSphere.integrateFixedStep }),
+            : { integrateFixedStep: proxyVessel.integrateFixedStep }),
         })
       : undefined;
   let referenceSimulationStarted = false;
@@ -351,11 +384,11 @@ function createThreeReferenceHostAttempt(
         if (!referenceSimulationStarted) {
           referenceSimulationStarted = true;
           simulationController.start(timestamp);
-          floatingSphere?.present(1);
+          proxyVessel?.present(1);
           return;
         }
         simulationController.beforePresent(timestamp);
-        floatingSphere?.present(
+        proxyVessel?.present(
           simulationController.interpolationAlpha(timestamp),
         );
       },
@@ -392,7 +425,7 @@ function createThreeReferenceHostAttempt(
       host: frameSource?.host ?? baseHost,
       createReadyStage: (lease: RealWaterLease) => {
         frameSource?.bindLease(lease);
-        floatingSphere?.attach(lease);
+        proxyVessel?.attach(lease);
         const stage = createCanvasStage(renderer, lease);
         referencePresentation?.start();
         return stage;
@@ -402,7 +435,8 @@ function createThreeReferenceHostAttempt(
           disposed = true;
           renderer.dispose();
           seabed.dispose();
-          floatingSphere?.dispose();
+          disposeVesselControls?.();
+          proxyVessel?.dispose();
           if (environment.texture !== null) {
             disposeHostTexture(environment.texture);
           }
@@ -410,6 +444,51 @@ function createThreeReferenceHostAttempt(
       },
     },
   });
+}
+
+function bindReferenceVesselControls(vessel: ReferenceProxyVessel): () => void {
+  const held = new Set<string>();
+  const acceptedKeys = new Set([
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "KeyW",
+    "KeyA",
+    "KeyS",
+    "KeyD",
+  ]);
+  const apply = (): void => {
+    vessel.setControls({
+      throttle:
+        Number(held.has("ArrowUp") || held.has("KeyW")) -
+        Number(held.has("ArrowDown") || held.has("KeyS")),
+      steering:
+        Number(held.has("ArrowLeft") || held.has("KeyA")) -
+        Number(held.has("ArrowRight") || held.has("KeyD")),
+    });
+  };
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (!acceptedKeys.has(event.code) || event.repeat) {
+      return;
+    }
+    held.add(event.code);
+    apply();
+  };
+  const onKeyUp = (event: KeyboardEvent): void => {
+    if (!acceptedKeys.has(event.code)) {
+      return;
+    }
+    held.delete(event.code);
+    apply();
+  };
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+  return (): void => {
+    window.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("keyup", onKeyUp);
+    held.clear();
+  };
 }
 
 function createCanvasStage(

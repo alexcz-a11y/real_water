@@ -1,15 +1,213 @@
 import { describe, expect, it } from "vitest";
 import {
+  createBodyPhysicsAdapter,
   createMemoryHostLifecycleAdapter,
   createMinimalWaterPrewarmManifest,
   createStaticHostPresentationAdapter,
   prepareRealWater,
+  type BodyPhysicsState,
+  type BodyWaterLoad,
   type GameplayQueryResults,
   type HostSimulationState,
 } from "../src/index.js";
 import { createTestEnvironmentAdapter } from "./test-host-environment.js";
 
 describe("ready local interaction runtime", () => {
+  it("submits a directional wake through the ready Runtime Interface", async () => {
+    let state: HostSimulationState = Object.freeze({
+      seed: 25,
+      tick: 0,
+      timeSeconds: 0,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      seaLevelMetres: 0,
+      simulationResetRevision: 0,
+    });
+    const lease = await createInteractionLease(() => state);
+    const forwardBaseline = queryPoint(lease, 0, 0, 1);
+    const behindBaseline = queryPoint(lease, 0, 0, -1);
+
+    expect(lease.submitDisturbances(directionalWakeBatch(41))).toEqual({
+      tick: 0,
+      acceptedDisturbanceIds: [41],
+      droppedDisturbanceIds: [],
+      displacedBodyWakeSources: [],
+      activeDisturbanceCount: 1,
+    });
+    const forward = queryPoint(lease, 0, 0, 1);
+    const behind = queryPoint(lease, 0, 0, -1);
+    expect(
+      Math.abs((forward.heights[0] ?? 0) - (forwardBaseline.heights[0] ?? 0)),
+    ).toBeGreaterThan(0.000_01);
+    expect(behind.heights[0]).toBe(behindBaseline.heights[0]);
+    expect(() =>
+      lease.submitDisturbances(radialImpactBatch({ id: 41, priority: 255 })),
+    ).toThrow(/already active/i);
+
+    state = Object.freeze({ ...state, tick: 120, timeSeconds: 2 });
+    expect(lease.inspectRuntime().activeDisturbanceCount).toBe(0);
+    await lease.dispose();
+  });
+
+  it("reports the oldest contributing bank when a current impact joins a previous Body wake", async () => {
+    let state: HostSimulationState = Object.freeze({
+      seed: 25,
+      tick: 0,
+      timeSeconds: 0,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      seaLevelMetres: 0,
+      simulationResetRevision: 0,
+    });
+    let runHostFixedStep: (() => BodyWaterLoad) | undefined;
+    const bodyState = createMovingBodyState();
+    const body = createBodyPhysicsAdapter({
+      snapshot: () => bodyState,
+      applyWaterLoad() {},
+      bind(route) {
+        runHostFixedStep = route.beforeIntegrate;
+        return Object.freeze({ dispose() {} });
+      },
+    });
+    const lease = await createInteractionLease(() => state);
+    lease.attachBody({
+      physics: body,
+      shape: { kind: "sphere", radius: 0.6 },
+      sockets: [createWakeSocket()],
+    });
+    runHostFixedStep?.();
+    state = Object.freeze({ ...state, tick: 1, timeSeconds: 1 / 60 });
+    runHostFixedStep?.();
+    const previousBody = queryPoint(lease, 0, 0, 1);
+
+    lease.submitDisturbances({
+      ...radialImpactBatch({ id: 42, priority: 128 }),
+      positions: Float32Array.of(0, 0, 1),
+      radii: Float32Array.of(1),
+      amplitudes: Float32Array.of(1),
+    });
+    const mixed = queryPoint(lease, 0, 0, 1);
+    expect(
+      (mixed.heights[0] ?? 0) - (previousBody.heights[0] ?? 0),
+    ).toBeCloseTo(1, 6);
+    expect(mixed.snapshotAges[0]).toBe(1);
+    await lease.dispose();
+  });
+
+  it("lets a higher-priority Body wake displace the globally lowest manual Disturbance", async () => {
+    const state: HostSimulationState = Object.freeze({
+      seed: 25,
+      tick: 0,
+      timeSeconds: 0,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      seaLevelMetres: 0,
+      simulationResetRevision: 0,
+    });
+    const lease = await createInteractionLease(() => state);
+    lease.submitDisturbances({
+      kind: "radial-impact",
+      count: 128,
+      ids: Uint32Array.from({ length: 128 }, (_, index) => index + 1),
+      positions: new Float32Array(128 * 3),
+      radii: new Float32Array(128).fill(1),
+      amplitudes: new Float32Array(128).fill(0.25),
+      priorities: new Uint8Array(128),
+    });
+    let runHostFixedStep: (() => BodyWaterLoad) | undefined;
+    const body = createBodyPhysicsAdapter({
+      snapshot: createMovingBodyState,
+      applyWaterLoad() {},
+      bind(route) {
+        runHostFixedStep = route.beforeIntegrate;
+        return Object.freeze({ dispose() {} });
+      },
+    });
+    const attachment = lease.attachBody({
+      physics: body,
+      shape: { kind: "sphere", radius: 0.6 },
+      sockets: [createWakeSocket()],
+    });
+    runHostFixedStep?.();
+
+    expect(attachment.inspect().lastWakeReceipt).toEqual({
+      tick: 0,
+      emittedSocketIds: ["wake"],
+      droppedSocketIds: [],
+      displacedDisturbanceIds: [1],
+      displacedBodyWakeSources: [],
+      activeBodyWakeCount: 1,
+      activeDisturbanceCount: 128,
+    });
+    expect(lease.inspectRuntime()).toMatchObject({
+      activeBodyWakeCount: 1,
+      activeDisturbanceCount: 128,
+    });
+    await lease.dispose();
+  });
+
+  it("reports the Body socket displaced by a higher-priority manual Disturbance", async () => {
+    const state: HostSimulationState = Object.freeze({
+      seed: 25,
+      tick: 0,
+      timeSeconds: 0,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      seaLevelMetres: 0,
+      simulationResetRevision: 0,
+    });
+    const lease = await createInteractionLease(() => state);
+    let runHostFixedStep: (() => BodyWaterLoad) | undefined;
+    const body = createBodyPhysicsAdapter({
+      snapshot: createMovingBodyState,
+      applyWaterLoad() {},
+      bind(route) {
+        runHostFixedStep = route.beforeIntegrate;
+        return Object.freeze({ dispose() {} });
+      },
+    });
+    const attachment = lease.attachBody({
+      physics: body,
+      shape: { kind: "sphere", radius: 0.6 },
+      sockets: [{ ...createWakeSocket(), priority: 0 }],
+    });
+    runHostFixedStep?.();
+    lease.submitDisturbances({
+      kind: "radial-impact",
+      count: 127,
+      ids: Uint32Array.from({ length: 127 }, (_, index) => index + 1),
+      positions: new Float32Array(127 * 3),
+      radii: new Float32Array(127).fill(1),
+      amplitudes: new Float32Array(127).fill(0.25),
+      priorities: new Uint8Array(127).fill(255),
+    });
+
+    expect(
+      lease.submitDisturbances(radialImpactBatch({ id: 999, priority: 1 })),
+    ).toEqual({
+      tick: 0,
+      acceptedDisturbanceIds: [999],
+      droppedDisturbanceIds: [],
+      displacedBodyWakeSources: [
+        {
+          attachmentId: attachment.id,
+          socketId: "wake",
+          socketKind: "wake",
+        },
+      ],
+      activeDisturbanceCount: 128,
+    });
+    expect(lease.inspectRuntime()).toMatchObject({
+      activeBodyWakeCount: 0,
+      activeDisturbanceCount: 128,
+    });
+    await lease.dispose();
+  });
+
   it("makes one radial impact visible to Gameplay Query at the Interaction Anchor", async () => {
     const simulationState: HostSimulationState = Object.freeze({
       seed: 0x24,
@@ -53,6 +251,7 @@ describe("ready local interaction runtime", () => {
       tick: 12,
       acceptedDisturbanceIds: [7],
       droppedDisturbanceIds: [],
+      displacedBodyWakeSources: [],
       activeDisturbanceCount: 1,
     });
 
@@ -121,6 +320,7 @@ describe("ready local interaction runtime", () => {
       tick: 4,
       acceptedDisturbanceIds: [999],
       droppedDisturbanceIds: [1],
+      displacedBodyWakeSources: [],
       activeDisturbanceCount: 128,
     });
     expect(
@@ -129,6 +329,7 @@ describe("ready local interaction runtime", () => {
       tick: 4,
       acceptedDisturbanceIds: [],
       droppedDisturbanceIds: [1_000],
+      displacedBodyWakeSources: [],
       activeDisturbanceCount: 128,
     });
 
@@ -218,7 +419,7 @@ describe("ready local interaction runtime", () => {
       radiusMetres: 48,
       edgeFadeMetres: 8,
       maxSnapshotAgeTicks: 1,
-      disturbanceKinds: ["radial-impact"],
+      disturbanceKinds: ["radial-impact", "directional-wake"],
     });
     expect(Object.isFrozen(lease.capabilities.gameplay.interactionField)).toBe(
       true,
@@ -373,8 +574,8 @@ describe("ready local interaction runtime", () => {
   it("declares the bounded local interaction route before readiness", () => {
     const manifest = createMinimalWaterPrewarmManifest();
 
-    expect(manifest.version).toBe(5);
-    expect(manifest.qualityProfile.version).toBe(8);
+    expect(manifest.version).toBe(6);
+    expect(manifest.qualityProfile.version).toBe(9);
     expect(manifest.qualityProfile.interaction).toEqual({
       anchorCount: 1,
       field: {
@@ -384,6 +585,7 @@ describe("ready local interaction runtime", () => {
         snapshotBanks: 2,
         maxSnapshotAgeTicks: 1,
         radialImpactRoute: "analytic-uniform-array",
+        directionalWakeRoute: "analytic-uniform-array",
       },
     });
     expect(Object.isFrozen(manifest.qualityProfile.interaction.field)).toBe(
@@ -391,7 +593,11 @@ describe("ready local interaction runtime", () => {
     );
     expect(
       manifest.declarations
-        .filter(({ id }) => id.startsWith("water-local-interaction"))
+        .filter(
+          ({ id }) =>
+            id.startsWith("water-local-interaction") ||
+            id === "water-body-socket-emission-route",
+        )
         .map(({ id, kind }) => ({ id, kind })),
     ).toEqual([
       {
@@ -404,6 +610,14 @@ describe("ready local interaction runtime", () => {
       },
       {
         id: "water-local-interaction-radial-impact-route",
+        kind: "conditional-route",
+      },
+      {
+        id: "water-local-interaction-directional-wake-route",
+        kind: "conditional-route",
+      },
+      {
+        id: "water-body-socket-emission-route",
         kind: "conditional-route",
       },
     ]);
@@ -422,6 +636,19 @@ function radialImpactBatch(options: {
     radii: Float32Array.of(8),
     amplitudes: Float32Array.of(0.25),
     priorities: Uint8Array.of(options.priority),
+  };
+}
+
+function directionalWakeBatch(id: number) {
+  return {
+    kind: "directional-wake" as const,
+    count: 1,
+    ids: Uint32Array.of(id),
+    positions: Float32Array.of(0, 0, 0),
+    directions: Float32Array.of(0, 0, 1),
+    radii: Float32Array.of(2),
+    amplitudes: Float32Array.of(1),
+    priorities: Uint8Array.of(128),
   };
 }
 
@@ -459,5 +686,40 @@ function serializeQuery(results: GameplayQueryResults) {
     ticks: [...results.ticks],
     controlRevisions: [...results.controlRevisions],
     snapshotAges: [...results.snapshotAges],
+  };
+}
+
+function createInteractionLease(snapshot: () => HostSimulationState) {
+  return prepareRealWater({
+    manifest: createMinimalWaterPrewarmManifest(),
+    loading: { present() {} },
+    host: createMemoryHostLifecycleAdapter({
+      simulation: { snapshot },
+      environment: createTestEnvironmentAdapter(),
+      presentation: createStaticHostPresentationAdapter(),
+      stepDelayMs: 0,
+    }),
+  }).ready;
+}
+
+function createMovingBodyState(): BodyPhysicsState {
+  return Object.freeze({
+    position: Object.freeze({ x: 0, y: 0.35, z: 0 }),
+    rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
+    linearVelocity: Object.freeze({ x: 0, y: 0, z: -2 }),
+    angularVelocity: Object.freeze({ x: 0, y: 0, z: 0 }),
+    mass: 80,
+  });
+}
+
+function createWakeSocket() {
+  return {
+    id: "wake",
+    kind: "wake" as const,
+    position: { x: 0, y: 0, z: 0 },
+    direction: { x: 0, y: 0, z: 1 },
+    radius: 2,
+    strength: 0.5,
+    priority: 128,
   };
 }

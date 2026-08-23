@@ -19,8 +19,12 @@ import {
   readHostPresentationState,
   type HostPresentationAdapter,
 } from "./presentation.js";
-import type { BodyAttachment, BodyAttachmentOptions } from "./body-physics.js";
-import { createSphereBodyCoupling } from "./internal/sphere-body-coupling.js";
+import type {
+  BodyAttachment,
+  BodyAttachmentOptions,
+  BodyWakeSourceIdentity,
+} from "./body-physics.js";
+import { createBodyCoupling } from "./internal/body-coupling.js";
 
 /**
  * Hot, perceptual controls for the prepared four-band Open Water Domain.
@@ -141,6 +145,8 @@ export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
   readonly interactionAnchor: InteractionAnchor;
   readonly interactionAnchorRevision: number;
   readonly activeDisturbanceCount: number;
+  readonly activeBodyWakeCount: number;
+  readonly attachedBodyCount: number;
 }
 
 /**
@@ -189,11 +195,30 @@ export interface RadialImpactDisturbanceBatch {
 }
 
 /**
+ * Caller-owned structure-of-arrays batch for transient directional wakes.
+ * Directions are normalized XYZ triples in the current Host frame; the local
+ * field uses their horizontal projection as the trailing axis.
+ *
+ * @public
+ */
+export interface DirectionalWakeDisturbanceBatch {
+  readonly kind: "directional-wake";
+  readonly count: number;
+  readonly ids: Uint32Array;
+  readonly positions: Float32Array;
+  readonly directions: Float32Array;
+  readonly radii: Float32Array;
+  readonly amplitudes: Float32Array;
+  readonly priorities: Uint8Array;
+}
+
+/**
  * Batched Disturbance input supported by this runtime slice.
  *
  * @public
  */
-export type DisturbanceBatch = RadialImpactDisturbanceBatch;
+export type DisturbanceBatch =
+  RadialImpactDisturbanceBatch | DirectionalWakeDisturbanceBatch;
 
 /**
  * Deterministic accepted/dropped outcome of one Disturbance submission.
@@ -204,6 +229,7 @@ export interface DisturbanceSubmissionReceipt {
   readonly tick: number;
   readonly acceptedDisturbanceIds: readonly number[];
   readonly droppedDisturbanceIds: readonly number[];
+  readonly displacedBodyWakeSources: readonly BodyWakeSourceIdentity[];
   readonly activeDisturbanceCount: number;
 }
 
@@ -354,7 +380,25 @@ export function createRealWaterRuntime(
     queriesUsedThisTick = usedThisTick + batch.count;
     return batch.results;
   };
-  const bodies = createSphereBodyCoupling(assertActive, queryGameplay);
+  const synchronizeBodyInteraction = (): void => {
+    synchronizeSink(
+      readSnapshot(
+        simulation,
+        readHostPresentationState(presentation),
+        artisticControls,
+        controlRevision,
+        originRevisions,
+        seaStateCutRevision,
+        localInteraction,
+        bodies.inspect().attachedBodyCount,
+      ),
+    );
+  };
+  const bodies = createBodyCoupling(assertActive, queryGameplay, {
+    readSimulationState: () => readHostSimulationState(simulation),
+    localInteraction,
+    synchronize: synchronizeBodyInteraction,
+  });
 
   return Object.freeze({
     updateArtisticControls(
@@ -383,6 +427,7 @@ export function createRealWaterRuntime(
             originRevisions,
             seaStateCutRevision,
             localInteraction,
+            bodies.inspect().attachedBodyCount,
           ),
         );
       }
@@ -400,6 +445,16 @@ export function createRealWaterRuntime(
       assertActive();
       readHostPresentationState(presentation);
       const accepted = readInteractionAnchor(anchor);
+      if (bodies.ownsInteractionAnchor()) {
+        throw new RealWaterRuntimeError({
+          code: "INTERACTION_ANCHOR_OWNED_BY_BODY",
+          message:
+            "The Interaction Anchor is driven by an attached Body socket.",
+          diagnostics: {
+            attachedBodyCount: bodies.inspect().attachedBodyCount,
+          },
+        });
+      }
       const state = readHostSimulationState(simulation);
       const receipt = localInteraction.updateAnchor(accepted, state);
       if (receipt.changed) {
@@ -412,6 +467,7 @@ export function createRealWaterRuntime(
             originRevisions,
             seaStateCutRevision,
             localInteraction,
+            bodies.inspect().attachedBodyCount,
           ),
         );
       }
@@ -420,9 +476,15 @@ export function createRealWaterRuntime(
     submitDisturbances(batch: DisturbanceBatch): DisturbanceSubmissionReceipt {
       assertActive();
       readHostPresentationState(presentation);
-      validateRadialImpactDisturbanceBatch(batch);
       const state = readHostSimulationState(simulation);
-      const receipt = localInteraction.submitRadialImpacts(batch, state);
+      let receipt: DisturbanceSubmissionReceipt;
+      if (batch.kind === "radial-impact") {
+        validateRadialImpactDisturbanceBatch(batch);
+        receipt = localInteraction.submitRadialImpacts(batch, state);
+      } else {
+        validateDirectionalWakeDisturbanceBatch(batch);
+        receipt = localInteraction.submitDirectionalWakes(batch, state);
+      }
       if (batch.count > 0) {
         synchronizeSink(
           readSnapshot(
@@ -433,6 +495,7 @@ export function createRealWaterRuntime(
             originRevisions,
             seaStateCutRevision,
             localInteraction,
+            bodies.inspect().attachedBodyCount,
           ),
         );
       }
@@ -450,6 +513,7 @@ export function createRealWaterRuntime(
         originRevisions,
         seaStateCutRevision,
         localInteraction,
+        bodies.inspect().attachedBodyCount,
       );
       if (
         localInteraction.renderRevision() !== synchronizedInteractionRevision
@@ -668,6 +732,7 @@ function readSnapshot(
   originRevisions: OriginRevisionTracker,
   seaStateCutRevision: number,
   localInteraction: LocalInteractionField,
+  attachedBodyCount: number,
 ): OpenWaterRuntimeSnapshot {
   const state = readHostSimulationState(simulation);
   const interaction = localInteraction.inspect(state);
@@ -688,6 +753,8 @@ function readSnapshot(
     interactionAnchor: interaction.anchor,
     interactionAnchorRevision: interaction.revision,
     activeDisturbanceCount: interaction.activeDisturbanceCount,
+    activeBodyWakeCount: interaction.activeBodyWakeCount,
+    attachedBodyCount,
   });
 }
 
@@ -725,6 +792,68 @@ function validateRadialImpactDisturbanceBatch(
       "Disturbance batches must use the exact radial-impact contract.",
     );
   }
+  validateDisturbanceBatchStorage(batch, "Radial-impact");
+}
+
+function validateDirectionalWakeDisturbanceBatch(
+  batch: DirectionalWakeDisturbanceBatch,
+): void {
+  const value: unknown = batch;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "kind",
+      "count",
+      "ids",
+      "positions",
+      "directions",
+      "radii",
+      "amplitudes",
+      "priorities",
+    ]) ||
+    value.kind !== "directional-wake"
+  ) {
+    throw new TypeError(
+      "Directional-wake batches must use the exact supported contract.",
+    );
+  }
+  validateDisturbanceBatchStorage(
+    batch,
+    "Directional-wake",
+    () => requireLength(batch.directions, batch.count * 3, "directions"),
+    (_index, vectorIndex) => {
+      const directionX = batch.directions[vectorIndex];
+      const directionY = batch.directions[vectorIndex + 1];
+      const directionZ = batch.directions[vectorIndex + 2];
+      const directionLength = Math.hypot(
+        directionX ?? Number.NaN,
+        directionY ?? Number.NaN,
+        directionZ ?? Number.NaN,
+      );
+      if (
+        !Number.isFinite(directionLength) ||
+        Math.abs(directionLength - 1) > 1e-5 ||
+        Math.hypot(directionX ?? 0, directionZ ?? 0) < 1e-6
+      ) {
+        throw new RangeError(
+          "Directional-wake directions must be normalized with a horizontal component.",
+        );
+      }
+    },
+  );
+}
+
+type SharedDisturbanceBatch = Pick<
+  RadialImpactDisturbanceBatch,
+  "amplitudes" | "count" | "ids" | "positions" | "priorities" | "radii"
+>;
+
+function validateDisturbanceBatchStorage(
+  batch: SharedDisturbanceBatch,
+  label: "Directional-wake" | "Radial-impact",
+  validateAdditionalStorage?: () => void,
+  validatePoint?: (index: number, vectorIndex: number) => void,
+): void {
   if (!Number.isSafeInteger(batch.count) || batch.count < 0) {
     throw new RangeError(
       "Disturbance counts must be non-negative safe integers.",
@@ -735,6 +864,7 @@ function validateRadialImpactDisturbanceBatch(
   requireLength(batch.radii, batch.count, "radii");
   requireLength(batch.amplitudes, batch.count, "amplitudes");
   requireUint8DisturbanceLength(batch.priorities, batch.count, "priorities");
+  validateAdditionalStorage?.();
   const ids = new Set<number>();
   for (let index = 0; index < batch.count; index += 1) {
     const vectorIndex = index * 3;
@@ -743,10 +873,9 @@ function validateRadialImpactDisturbanceBatch(
       !Number.isFinite(batch.positions[vectorIndex + 1]) ||
       !Number.isFinite(batch.positions[vectorIndex + 2])
     ) {
-      throw new RangeError(
-        "Radial-impact positions must contain finite values.",
-      );
+      throw new RangeError(`${label} positions must contain finite values.`);
     }
+    validatePoint?.(index, vectorIndex);
     const radius = batch.radii[index];
     if (
       !Number.isFinite(radius) ||
@@ -755,7 +884,7 @@ function validateRadialImpactDisturbanceBatch(
       radius > MAX_RADIAL_IMPACT_RADIUS_METRES
     ) {
       throw new RangeError(
-        "Radial-impact radii must be at least 0.0001 metres and at most 48 metres.",
+        `${label} radii must be at least 0.0001 metres and at most 48 metres.`,
       );
     }
     const amplitude = batch.amplitudes[index];
@@ -766,14 +895,12 @@ function validateRadialImpactDisturbanceBatch(
       amplitude > MAX_RADIAL_IMPACT_AMPLITUDE_METRES
     ) {
       throw new RangeError(
-        "Radial-impact amplitudes must be between -4 and 4 metres.",
+        `${label} amplitudes must be between -4 and 4 metres.`,
       );
     }
     const id = batch.ids[index] ?? 0;
     if (ids.has(id)) {
-      throw new TypeError(
-        "Radial-impact batches require unique Disturbance ids.",
-      );
+      throw new TypeError(`${label} batches require unique Disturbance ids.`);
     }
     ids.add(id);
   }
