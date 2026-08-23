@@ -33,7 +33,7 @@ export const PREWARM_MANIFEST_SCHEMA = "real-water/prewarm" as const;
  *
  * @public
  */
-export const PREWARM_MANIFEST_VERSION = 6 as const;
+export const PREWARM_MANIFEST_VERSION = 7 as const;
 
 /**
  * Immutable physical drawing-buffer dimensions bound into a Prewarm Manifest.
@@ -142,8 +142,8 @@ export const SUPPORTED_EFFECT_VARIANTS: readonly PrewarmEffectVariant[] =
       variantId: "basic",
     }),
     Object.freeze({
-      effectId: "spectral-whitecaps",
-      variantId: "persistent",
+      effectId: "unified-foam",
+      variantId: "source-resolved-persistent",
     }),
   ]);
 
@@ -176,6 +176,14 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   whitecapStageTarget: "water-whitecap-stage-target",
   whitecapStageRoute: "water-whitecap-stage-route",
   whitecapProbe: "water-whitecap-probe",
+  foamLocalFieldA: "water-foam-local-field-a",
+  foamLocalFieldB: "water-foam-local-field-b",
+  foamSourceHistory: "water-foam-source-history",
+  foamLocalAdvectionRoute: "water-foam-local-advection-route",
+  foamLocalResolveRoute: "water-foam-local-resolve-route",
+  foamSourceIdentityTarget: "water-foam-source-identity-target",
+  foamSourceIdentityRoute: "water-foam-source-identity-route",
+  foamSourceIdentityProbe: "water-foam-source-identity-probe",
   material: "water-material",
   opticalRoute: "water-optical-route",
   waterlineState: "water-waterline-state",
@@ -291,6 +299,7 @@ const DRAWING_BUFFER_BOUND_DECLARATION_IDS: ReadonlySet<string> = new Set([
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapStageTarget,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapStageRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapProbe,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceIdentityTarget,
 ]);
 const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
@@ -486,24 +495,87 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
       "sha256:d740f79214a0fbb393edfb647e59881e642cf6b9ba79347db72d990058a81881",
   },
   {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalFieldA,
+    kind: "resource",
+    label:
+      "Unified foam local field A (RGBA16F 128x128 anchor-local ping-pong, 48m radius, 8m Hermite edge fade, stable final identity)",
+    fingerprint:
+      "sha256:654d41ced88d65264012da784dd5d6d45a16dcfac7873a7cd7ea578a78f04a2b",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalFieldB,
+    kind: "resource",
+    label:
+      "Unified foam local field B (RGBA16F 128x128 anchor-local ping-pong scratch, 48m radius, 8m Hermite edge fade)",
+    fingerprint:
+      "sha256:82dac57c07467b78a7bc2bc880daef08ffbd422daf546aa958855f2a72814aab",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceHistory,
+    kind: "effect-state",
+    label:
+      "Bounded whitecap, wake, and impact source history (128 shared sources, two local history banks)",
+    fingerprint:
+      "sha256:bf0e7a732a14df1f3df38c88ea42d309a22b4119748c927434697e1ecfb3dcd5",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalAdvectionRoute,
+    kind: "conditional-route",
+    label:
+      "Anchor-local unified foam advection compute route (A to B, host fixed tick, 128x128)",
+    fingerprint:
+      "sha256:ae50160423e8c912dfe71eba8b3a6cf91c0aad2323cab5796a61ca3902e1dcd5",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalResolveRoute,
+    kind: "conditional-route",
+    label:
+      "Source-prioritized whitecap, wake, and impact foam resolve compute route (B to A, 128x128)",
+    fingerprint:
+      "sha256:61617d619104b9e50914d24d287b3fda56af58041a35fc013321c282bbc898c3",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceIdentityTarget,
+    kind: "resource",
+    label:
+      "Unified foam source-identity diagnostics (RGBA16F, drawing-buffer-exact)",
+    fingerprint:
+      "sha256:a3468e67ddf8d47ed6dd455574639215f56e3debfa1b613b7543d70563c92a1c",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceIdentityRoute,
+    kind: "conditional-route",
+    label:
+      "Drawing-buffer whitecap, wake, and impact source-identity diagnostics route",
+    fingerprint:
+      "sha256:63b87a198f5c3b63c22b5fb08efe546891c2f936ca94ea9cdd1c81bae7a0dc8e",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceIdentityProbe,
+    kind: "conditional-route",
+    label: "GPU completion probe of unified foam source identity",
+    fingerprint:
+      "sha256:95606c3b131052b445e77776b112b057fb74fbd525f5792de73a9bf499283e4a",
+  },
+  {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.material,
     kind: "effect-state",
     label:
-      "Double-sided minimal water material with persistent spectral-whitecap response",
-    // sha256 of 20c6447e… (whitecap response) followed by 39301b82…
-    // (double-sided): this declaration is the composition of those two.
+      "Double-sided minimal water material with persistent unified source-resolved foam response",
+    // Identity covers the double-sided material plus combined spectral
+    // whitecap, wake, and impact foam shading.
     fingerprint:
-      "sha256:815144ef7b32c8fa8f3415db408b9f0a056b4de797daddd9cd4e9a4a0f413f47",
+      "sha256:0bac2d6549fce1b062e2b79e104109eddef671ab3478d6f75fc35600838fbd85",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalRoute,
     kind: "effect-state",
     label:
-      "Waterline optical composition route (planar+environment fallback, air/water refraction, underside Fresnel and TIR, RGB Beer-Lambert, whitecap reflection/transmission/roughness/micro detail)",
-    // sha256 of c2c89db1… (whitecap optics) followed by 7427b7bc…
-    // (waterline optics): this declaration is the composition of those two.
+      "Waterline optical composition route (planar+environment fallback, air/water refraction, underside Fresnel and TIR, RGB Beer-Lambert, unified source-resolved foam reflection/transmission/roughness/micro detail)",
+    // Identity covers the waterline optics plus combined spectral whitecap,
+    // wake, and impact foam response.
     fingerprint:
-      "sha256:d3b5614e48527196fe1dffd9bd160ad7f5d903bfd1f1a1094d85ed7886f8515c",
+      "sha256:b526b877082981792ee86708b08d71525a43be1471b06a08ab82567c51a7f044",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.waterlineState,
@@ -876,11 +948,11 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
     kind: "conditional-route",
-    label: "Twenty-nine named diagnostics output routes",
-    // sha256 of a5f86239… (twenty-seven routes) followed by 274528e7…
-    // (twenty-five routes): this declaration is the composition of those two.
+    label:
+      "Thirty named diagnostics output routes including unified foam source identity",
+    // Identity covers the complete thirty-route diagnostics registry.
     fingerprint:
-      "sha256:bab01729c0b83003c83d1cc96368ba5bfdbd19a8a198250aa0badea37a4f4b5d",
+      "sha256:e6ddeb49353021157af2be265782d8c710f4d4bf038ab064cdc493e6ea10f5e5",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.hiddenStabilization,
@@ -893,9 +965,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.completionProbe,
     kind: "conditional-route",
     label:
-      "GPU completion probe of every named output route including whitecaps",
+      "GPU completion probe of all thirty named output routes including unified foam source identity",
     fingerprint:
-      "sha256:d80c56dde025d2eeb391c93648ef11eda60ee07a9b9337afa1375484bd5268f3",
+      "sha256:3bbdf71667f978093bc91a74ba06bc6bca5e2fbfbd24c5fe991a10407c7fe400",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.mainCameraGuard,
@@ -933,6 +1005,14 @@ function highDetailDeclaration(
       "sha256:0d7dd8b91573cb52914ce0c22e32f6ac1189ec47c3eadd8a90d444392b256812",
     [MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapDecayRoute]:
       "sha256:10faf88f44796a9e5ce1533a2cdf5c2fc986b2bb01bf2c5f14c650d88115a8ee",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalFieldA]:
+      "sha256:ee4d471913df6f0f09bff048557fd863e1f5ce7a681c76c86951df5bf295a148",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalFieldB]:
+      "sha256:a0ef7d6c0c3601881f8dfc57a080cd5cc454dada02f3ed5500a998e640a9e031",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalAdvectionRoute]:
+      "sha256:bf745e588618cc8e7effc2e2367058fe7216c7768e18be7da63dbface4906b8b",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalResolveRoute]:
+      "sha256:c914cf36381b90065a8e759b57c6621b16b9316c22f9df01b3c530625aab69f8",
   });
   const fingerprint = fingerprints[declaration.id];
   if (fingerprint === undefined) {

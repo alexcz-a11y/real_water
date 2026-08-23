@@ -52,6 +52,37 @@ const CANONICAL_INTERACTION_FIELD_KEYS = Object.freeze([
   "directionalWakeRoute",
 ]);
 
+const CANONICAL_WHITECAP_FIELDS = Object.freeze([
+  "mode",
+  "fixedTickHz",
+  "fieldResolution",
+  "tileSizeMetres",
+  "fieldFormat",
+  "stageLayout",
+  "sourceLayout",
+  "localHistoryBanks",
+  "maxLocalSources",
+  "diffusionTaps",
+  "updateCadence",
+  "captureResolutionPolicy",
+  "captureFormat",
+  "resetDomains",
+]);
+
+const LEGACY_SPECTRAL_WHITECAP_FIELDS = Object.freeze([
+  "mode",
+  "fixedTickHz",
+  "fieldResolution",
+  "tileSizeMetres",
+  "fieldFormat",
+  "stageLayout",
+  "diffusionTaps",
+  "updateCadence",
+  "captureResolutionPolicy",
+  "captureFormat",
+  "resetDomains",
+]);
+
 let failures = 0;
 
 // One key-set check, used for the current profile and every legacy variant
@@ -94,6 +125,15 @@ function canonicalJson(label, profile, variant) {
       CANONICAL_INTERACTION_FIELD_KEYS.filter(
         (key) => !absentFieldKeys.includes(key),
       ),
+    );
+  }
+  if (profile.whitecaps !== undefined) {
+    checkKeys(
+      `${label} whitecaps`,
+      Object.keys(profile.whitecaps),
+      variant?.legacySpectralWhitecaps === true
+        ? LEGACY_SPECTRAL_WHITECAP_FIELDS
+        : CANONICAL_WHITECAP_FIELDS,
     );
   }
   return JSON.stringify(
@@ -149,6 +189,7 @@ const COMMITTED_LEGACY_VARIANTS = [
     absentKeys: ["interaction", "bodyCoupling"],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+    legacySpectralWhitecaps: true,
     hashes: {
       "minimal":
         "sha256:e89f6484cb983b184dee0ee46a77f8f05561b97df2a37c4686525b73b53eda28",
@@ -175,6 +216,7 @@ const COMMITTED_LEGACY_VARIANTS = [
     absentKeys: ["bodyCoupling"],
     absentInteractionFieldKeys: ["directionalWakeRoute"],
     ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+    legacySpectralWhitecaps: true,
     hashes: {
       "minimal":
         "sha256:f896b4033ed12264eabcc4e88fc2f41cdbd9e8a2d2a70698b296683b586d3c3f",
@@ -201,11 +243,26 @@ const COMMITTED_LEGACY_VARIANTS = [
     absentKeys: ["bodyCoupling"],
     absentInteractionFieldKeys: ["directionalWakeRoute"],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    legacySpectralWhitecaps: true,
     hashes: {
       "minimal":
         "sha256:b2e727a8016dbac41a2ea1036275f10c344cffc82b2a10bea2c4bc4807bc651d",
       "minimal-high-detail":
         "sha256:a760008c06d5c27ea2cd42f986aff9272f7eaf184e97c6aab6bedf1d73f96bcd",
+    },
+  },
+  {
+    label: "9",
+    version: 9,
+    absentKeys: [],
+    absentInteractionFieldKeys: [],
+    ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    legacySpectralWhitecaps: true,
+    hashes: {
+      "minimal":
+        "sha256:6a3385d04d854e423957d290f562696ce4041c0ad1eb38e3f26fc9306a950978",
+      "minimal-high-detail":
+        "sha256:3ef8c9bbcb9e5895de1a42425aa67ce69ed171c037ce29f21f82cefae398f637",
     },
   },
 ];
@@ -225,6 +282,19 @@ function legacyProfile(profile, variant) {
         reduced.interaction.field,
         variant.absentInteractionFieldKeys,
       ),
+    };
+  }
+  if (
+    reduced.whitecaps !== undefined &&
+    variant.legacySpectralWhitecaps === true
+  ) {
+    reduced.whitecaps = {
+      ...omitKeys(reduced.whitecaps, [
+        "sourceLayout",
+        "localHistoryBanks",
+        "maxLocalSources",
+      ]),
+      mode: "spectral-ping-pong",
     };
   }
   return {
@@ -298,9 +368,9 @@ for (const variant of COMMITTED_LEGACY_VARIANTS) {
 // public fields in declared order, with manifestHash itself excluded.
 const COMMITTED_MANIFEST_HASHES = {
   "minimal":
-    "sha256:2acc2b56f364f8525f54e39db324b247f5b4a4a759bee8a6933e507367ebebd2",
+    "sha256:8b0427cb06e1ffa77b22c9484c227d6515e35ff48f58eff70be7af2160cdbf4d",
   "minimal-high-detail":
-    "sha256:079b894f0c4f487d236496a3f8449a4abdeb3e165167d241e672ed740cfc5382",
+    "sha256:1a9537397f7c7318ae5ff025e7b5625edc7c2007ad23a438d29fce880a5cebb1",
 };
 
 function canonicalManifestJson(manifest) {

@@ -52,6 +52,20 @@ Issue #25 deepens that coupling into the proxy-vessel tracer:
 - manual radial impacts, directional wakes, and automatic Body wakes share the
   declared 128-slot capacity with inspectable deterministic receipts.
 
+Issue #27 merges the accepted whitewater sources without weakening their
+individual contracts:
+
+- the existing spectral generate/history/advect/diffuse/decay path remains
+  intact while a fixed anchor-local ping-pong attachment carries wake and impact
+  history without repeating it across the ocean tile;
+- one source-identity diagnostic packs spectral whitecap, wake/propeller wash,
+  impact, and their saturating union into distinct RGBA channels;
+- the same 128 Disturbance slots remain the only local source capacity, so
+  priority overflow returns its existing receipt and never reallocates or clears
+  already-generated foam;
+- Gameplay Query composes bounded local source envelopes with its deterministic
+  CPU spectral-foam reconstruction without a GPU wait.
+
 Issue #20 shades that domain with a Host-owned basic optical path:
 
 - Fresnel, Host environment reflection, depth-aware refraction, absorption,
@@ -84,31 +98,33 @@ Issue #18 extended the coherent spectral runtime and deterministic QA
 foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly seventy-nine
+- the canonical minimal-water Prewarm Manifest declares exactly eighty-seven
   work units: a texture, Host equirect environment radiance, viewport scene
   color, viewport scene depth, 6-attachment MRT, camera-relative clipmap, four
-  spectral bands, two fixed RGBA16F whitecap fields,
-  reset/generate/history/advect/ diffuse/decay routes, a packed
-  output-resolution whitecap stage target and probe, a double-sided TSL
-  NodeMaterial, a stable camera-medium waterline state, a shared waterline
-  history reset, a deterministic lens-wetness handoff, waterline/underside
-  optical route, planar reflection target/route, environment fallback, planar
-  probe, current-frame SSR raw/blur/composite targets and routes plus probe,
-  dedicated TemporalReproject history and resolve targets, beauty input
-  target/route, resolved diagnostics copy target/route, previous depth/normal,
-  seed/resolve/accumulate/reset/probe routes, reset-velocity target/route, one
-  Core main scene render plus one auxiliary planar scene render when facing,
-  procedural motion, velocity, independent inverse-linear depth conversion,
-  packed view-normal RGB plus water roughness A, optical factors, a
-  diagnostics-only GPU history-rejection target/route, optical diagnostics A/B,
-  Core final-color and current-color targets, stock TRAA color+depth history,
-  resolve/jitter route, shared no-allocation TRAA+SSR reset route, current-color
-  conversion, twenty-nine named diagnostics output routes, eight hidden temporal
-  stabilization frames, named-output completion probes, and main-camera guard
-  frame, plus the local interaction field, its fixed current/previous uniform
-  buffers, and the hidden-executed radial-impact, directional-wake, and Body
-  socket emission routes. Version 6 binds the physical drawing buffer into that
-  work plan; a viewport change creates a new manifest and lease;
+  spectral bands, two fixed RGBA16F spectral-stage fields and two fixed
+  anchor-local RGBA16F source-history fields, reset/generate/history/advect/
+  diffuse/decay routes, a packed output-resolution whitecap stage target and
+  probe, a double-sided TSL NodeMaterial, a stable camera-medium waterline
+  state, a shared waterline history reset, a deterministic lens-wetness handoff,
+  waterline/underside optical route, planar reflection target/route, environment
+  fallback, planar probe, current-frame SSR raw/blur/composite targets and
+  routes plus probe, dedicated TemporalReproject history and resolve targets,
+  beauty input target/route, resolved diagnostics copy target/route, previous
+  depth/normal, seed/resolve/accumulate/reset/probe routes, reset-velocity
+  target/route, one Core main scene render plus one auxiliary planar scene
+  render when facing, procedural motion, velocity, independent inverse-linear
+  depth conversion, packed view-normal RGB plus water roughness A, optical
+  factors, a diagnostics-only GPU history-rejection target/route, optical
+  diagnostics A/B, Core final-color and current-color targets, stock TRAA
+  color+depth history, resolve/jitter route, shared no-allocation TRAA+SSR reset
+  route, current-color conversion, thirty named diagnostics output routes, eight
+  hidden temporal stabilization frames, named-output completion probes, and
+  main-camera guard frame, plus the local interaction field, its fixed
+  current/previous uniform buffers, and the hidden-executed radial-impact,
+  directional-wake, and Body socket emission routes, plus bounded local-foam
+  reproject/resolve and source-identity target/probe routes. Version 7 binds the
+  physical drawing buffer into that work plan; a viewport change creates a new
+  manifest and lease;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
   restores their state after preparation, and never disposes them;
 - progress advances monotonically only when declared manifest work completes;

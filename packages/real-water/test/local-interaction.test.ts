@@ -40,7 +40,9 @@ describe("ready local interaction runtime", () => {
     expect(
       Math.abs((forward.heights[0] ?? 0) - (forwardBaseline.heights[0] ?? 0)),
     ).toBeGreaterThan(0.000_01);
+    expect(forward.foam[0]).toBeGreaterThan(forwardBaseline.foam[0] ?? 0);
     expect(behind.heights[0]).toBe(behindBaseline.heights[0]);
+    expect(behind.foam[0]).toBe(behindBaseline.foam[0]);
     expect(() =>
       lease.submitDisturbances(radialImpactBatch({ id: 41, priority: 255 })),
     ).toThrow(/already active/i);
@@ -257,6 +259,7 @@ describe("ready local interaction runtime", () => {
 
     const impacted = queryPoint(lease, 2, 0, 3);
     expect(impacted.heights[0] - baseline.heights[0]).toBeCloseTo(1.25, 5);
+    expect(impacted.foam[0]).toBeGreaterThan(baseline.foam[0] ?? 0);
     expect(impacted.velocities[1]).not.toBe(baseline.velocities[1]);
     expect(impacted.ticks[0]).toBe(12);
     expect(impacted.snapshotAges[0]).toBe(0);
@@ -313,6 +316,7 @@ describe("ready local interaction runtime", () => {
     const saturated = queryPoint(lease, 0, 0, 0);
     expect(Number.isFinite(saturated.heights[0])).toBe(true);
     expect([...saturated.normals].every(Number.isFinite)).toBe(true);
+    expect(saturated.foam[0]).toBeGreaterThan(0);
 
     expect(
       lease.submitDisturbances(radialImpactBatch({ id: 999, priority: 2 })),
@@ -332,6 +336,7 @@ describe("ready local interaction runtime", () => {
       displacedBodyWakeSources: [],
       activeDisturbanceCount: 128,
     });
+    expect(queryPoint(lease, 0, 0, 0).foam[0]).toBeGreaterThan(0);
 
     await lease.dispose();
   });
@@ -574,8 +579,8 @@ describe("ready local interaction runtime", () => {
   it("declares the bounded local interaction route before readiness", () => {
     const manifest = createMinimalWaterPrewarmManifest();
 
-    expect(manifest.version).toBe(6);
-    expect(manifest.qualityProfile.version).toBe(9);
+    expect(manifest.version).toBe(7);
+    expect(manifest.qualityProfile.version).toBe(10);
     expect(manifest.qualityProfile.interaction).toEqual({
       anchorCount: 1,
       field: {

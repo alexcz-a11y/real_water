@@ -769,6 +769,10 @@ export function createSpectralBandRendering(
     fragmentSample.hostX,
     fragmentSample.hostZ,
   );
+  const foamSourcesNode = whitecaps.sampleSources(
+    fragmentSample.hostX,
+    fragmentSample.hostZ,
+  );
   const writeOriginPhases = (
     originXValue: number,
     originZValue: number,
@@ -1038,7 +1042,10 @@ export function createSpectralBandRendering(
     roughnessNode,
     detailStrengthNode,
     whitecapStagesNode,
-    whitecapDensityNode: whitecapStagesNode.a,
+    foamSourcesNode,
+    foamDensityNode: foamSourcesNode.a,
+    // Compatibility alias for internal consumers introduced with T15.
+    whitecapDensityNode: foamSourcesNode.a,
     sink,
     stagePrewarmLocalInteractionRoutes(): void {
       desiredLocalInteraction = Object.freeze({

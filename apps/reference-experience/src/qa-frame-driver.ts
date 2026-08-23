@@ -35,6 +35,7 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
   "whitecap-history": "water-whitecap-stage-target",
   "whitecap-advection": "water-whitecap-stage-target",
   "whitecap-decay": "water-whitecap-stage-target",
+  "foam-source-identity": "water-foam-source-identity-target",
   "waterline": "water-optical-factors-target",
   "history-rejection": "water-history-rejection-target",
   "optical-fresnel": "water-optical-factors-target",
@@ -59,7 +60,7 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
 
 export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
   schema: "real-water/qa-frame-prewarm" as const,
-  version: 10 as const,
+  version: 11 as const,
   id: "reference-qa-frame" as const,
   captures: Object.freeze([
     Object.freeze({
@@ -97,6 +98,10 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
     Object.freeze({
       name: "whitecap-decay" as const,
       preparedFormat: "rgba16float-whitecap-stages" as const,
+    }),
+    Object.freeze({
+      name: "foam-source-identity" as const,
+      preparedFormat: "rgba16float-foam-source-identity" as const,
     }),
     Object.freeze({
       name: "waterline" as const,
@@ -236,6 +241,16 @@ export interface QaFrameDriverWhitecapStageCapture extends QaFrameDriverCaptureB
   readonly data: Float32Array;
 }
 
+export interface QaFrameDriverFoamSourceIdentityCapture extends QaFrameDriverCaptureBase {
+  readonly name: "foam-source-identity";
+  readonly format: "rgba32float-foam-source-identity";
+  /**
+   * R = spectral whitecap, G = wake or propeller wash, B = impact,
+   * A = saturating union.
+   */
+  readonly data: Float32Array;
+}
+
 export interface QaFrameDriverWaterlineCapture extends QaFrameDriverCaptureBase {
   readonly name: "waterline";
   readonly format: "r32float-waterline-coverage";
@@ -321,6 +336,7 @@ export type QaFrameDriverCapture =
   | QaFrameDriverNormalCapture
   | QaFrameDriverMotionVectorCapture
   | QaFrameDriverWhitecapStageCapture
+  | QaFrameDriverFoamSourceIdentityCapture
   | QaFrameDriverWaterlineCapture
   | QaFrameDriverHistoryRejectionCapture
   | QaFrameDriverOpticalScalarCapture;

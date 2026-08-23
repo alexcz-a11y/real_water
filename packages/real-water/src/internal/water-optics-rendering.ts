@@ -149,8 +149,8 @@ export function createWaterOpticsRendering(
     applyHostLighting();
   });
 
-  const whitecapDensity = spectral.whitecapDensityNode.clamp(0, 1);
-  const foamMicroStrength = whitecapDensity
+  const foamDensity = spectral.foamDensityNode.clamp(0, 1);
+  const foamMicroStrength = foamDensity
     .mul(foamMicroDetail)
     .mul(0.04)
     .clamp(0, 0.16);
@@ -197,7 +197,7 @@ export function createWaterOpticsRendering(
   const environmentColor = environmentSample.rgb
     .mul(environmentReflection)
     .mul(environmentIntensity)
-    .mul(float(1).sub(whitecapDensity.mul(0.9)).clamp(0, 1));
+    .mul(float(1).sub(foamDensity.mul(0.9)).clamp(0, 1));
   const planarViewProjection = uniform(planar.viewProjection)
     .setName("planarViewProjection")
     .setGroup(renderGroup);
@@ -302,7 +302,7 @@ export function createWaterOpticsRendering(
     spectral.heightNode.mul(0.06).add(1),
   );
   const seeThrough = depthSeeThrough.mul(0.5).add(0.5);
-  const foamTransmission = float(1).sub(whitecapDensity.mul(0.94)).clamp(0, 1);
+  const foamTransmission = float(1).sub(foamDensity.mul(0.94)).clamp(0, 1);
   const transmitted = mix(bodySample, sceneColor.rgb, seeThrough)
     .mul(absorptionRgb)
     .mul(foamTransmission);
@@ -318,7 +318,7 @@ export function createWaterOpticsRendering(
     .mul(backlight)
     .mul(sunAmount)
     .mul(crestGlow)
-    .mul(float(1).sub(whitecapDensity.mul(0.8)).clamp(0, 1))
+    .mul(float(1).sub(foamDensity.mul(0.8)).clamp(0, 1))
     .clamp(0, 1);
   const crestLift = mix(
     transmitted.add(scattered),
@@ -337,12 +337,12 @@ export function createWaterOpticsRendering(
   const whitewaterColor = mix(
     opticalColor,
     foamDiffuse,
-    whitecapDensity.mul(0.86).clamp(0, 1),
+    foamDensity.mul(0.86).clamp(0, 1),
   );
   const surfaceRoughnessNode = mix(
     spectral.roughnessNode,
     float(0.94),
-    whitecapDensity.mul(0.9).clamp(0, 1),
+    foamDensity.mul(0.9).clamp(0, 1),
   );
   const halfDirection = sunDirection.add(viewDirection).normalize();
   const highlightExponent = float(2)

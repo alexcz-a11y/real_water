@@ -53,7 +53,7 @@ function createPresentedFrame(): HostPresentedFrame {
 }
 
 describe("real-water/diagnostics", () => {
-  it("publishes the twenty-nine frozen CPU capture names and shapes only", () => {
+  it("publishes the thirty frozen CPU capture names and shapes only", () => {
     expect(DIAGNOSTICS_CAPTURE_NAMES).toEqual([
       "final-color",
       "current-color",
@@ -64,6 +64,7 @@ describe("real-water/diagnostics", () => {
       "whitecap-history",
       "whitecap-advection",
       "whitecap-decay",
+      "foam-source-identity",
       "waterline",
       "history-rejection",
       "optical-fresnel",
@@ -92,6 +93,7 @@ describe("real-water/diagnostics", () => {
     expect(isDiagnosticsCaptureName("whitecap-history")).toBe(true);
     expect(isDiagnosticsCaptureName("whitecap-advection")).toBe(true);
     expect(isDiagnosticsCaptureName("whitecap-decay")).toBe(true);
+    expect(isDiagnosticsCaptureName("foam-source-identity")).toBe(true);
     for (const name of [
       "whitecap-generation",
       "whitecap-history",
@@ -104,6 +106,11 @@ describe("real-water/diagnostics", () => {
         components: 1,
       });
     }
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["foam-source-identity"]).toEqual({
+      format: "rgba32float-foam-source-identity",
+      elementType: "float32",
+      components: 4,
+    });
     expect(DIAGNOSTICS_CAPTURE_SHAPES["ssr-hit"]).toEqual({
       format: "r32float-optical",
       elementType: "float32",
@@ -321,16 +328,30 @@ describe("real-water/diagnostics", () => {
           origin: "top-left" as const,
           data: new Uint8Array(8),
         },
+        {
+          name: "foam-source-identity" as const,
+          format: "rgba32float-foam-source-identity" as const,
+          width: 2,
+          height: 1,
+          origin: "top-left" as const,
+          // R = spectral, G = wake/wash, B = impact, A = saturating union.
+          data: Float32Array.of(0.2, 0.3, 0.4, 0.664, 0, 0, 0, 0),
+        },
       ],
       compileCount: 1,
       probeCount: 1,
-      diagnosticReadbackCount: 1,
+      diagnosticReadbackCount: 2,
       sceneRenderCount: 1,
       waterline: ABOVE_WATERLINE,
       width: 2,
       height: 1,
     };
-    expect(readHostDiagnosticsPresentedFrame(valid).width).toBe(2);
+    const accepted = readHostDiagnosticsPresentedFrame(valid);
+    expect(accepted.width).toBe(2);
+    expect(accepted.outputs[1]).toMatchObject({
+      name: "foam-source-identity",
+      format: "rgba32float-foam-source-identity",
+    });
     const firstOutput = valid.outputs[0];
     if (firstOutput === undefined) {
       throw new Error("expected a diagnostics output");

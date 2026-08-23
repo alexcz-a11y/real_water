@@ -30,6 +30,7 @@ import {
   readHostDiagnosticsPresentRequest,
   type DiagnosticsCapture,
   type DiagnosticsCaptureName,
+  type DiagnosticsFoamSourceIdentityCapture,
   type DiagnosticsMotionVectorCapture,
   type DiagnosticsOpticalScalarCapture,
   type DiagnosticsSsrRoughnessCapture,
@@ -388,7 +389,7 @@ export async function compileAndPrimePreparedWaterPresentation(
   throwIfAborted(signal);
   resources.ssr.ensureGraphPrepared(renderer);
   resources.resetUniform.value = 1;
-  renderTemporalFrame(renderer, scene, camera, resources, true);
+  renderTemporalFrame(renderer, scene, camera, resources, true, true);
   renderHistoryRejection(renderer, resources);
   resources.resetUniform.value = 0;
   renderCurrentColorConversion(renderer, resources);
@@ -508,12 +509,19 @@ export function createPresentationRouteBridge(
         resources.jitterAdapter.realign();
       }
       temporalSceneStarted = true;
+      const captureWhitecapStages = accepted.outputs.some(
+        isWhitecapCaptureName,
+      );
+      const captureFoamSources = accepted.outputs.includes(
+        "foam-source-identity",
+      );
       renderTemporalFrame(
         renderer,
         scene,
         camera,
         resources,
-        accepted.outputs.some(isWhitecapCaptureName),
+        captureWhitecapStages,
+        captureFoamSources,
       );
       if (accepted.outputs.includes("current-color")) {
         renderCurrentColorConversion(renderer, resources);
@@ -763,7 +771,8 @@ function renderTemporalFrame(
   scene: Scene,
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
-  captureWhitecaps: boolean,
+  captureWhitecapStages: boolean,
+  captureFoamSources = false,
 ): void {
   const actual = readDrawingBufferSize(renderer);
   if (actual.width !== resources.width || actual.height !== resources.height) {
@@ -792,8 +801,12 @@ function renderTemporalFrame(
       renderer.setRenderTarget(resources.currentColorTarget);
       resources.ssr.sceneTriggerPipeline.render();
       resources.counters.sceneRenderCount += 1;
-      if (captureWhitecaps) {
-        resources.whitecapDiagnostics.render(renderer, camera);
+      if (captureWhitecapStages && captureFoamSources) {
+        resources.whitecapDiagnostics.renderAll(renderer, camera);
+      } else if (captureWhitecapStages) {
+        resources.whitecapDiagnostics.renderStages(renderer, camera);
+      } else if (captureFoamSources) {
+        resources.whitecapDiagnostics.renderSources(renderer, camera);
       }
       renderCurrentFrameSsr(renderer, resources.ssr);
       const historyHostState = captureHostState(renderer, scene, camera);
@@ -926,6 +939,11 @@ async function probeNamedOutputRoutes(
     renderer,
     resources,
     resources.whitecapDiagnostics.target,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.whitecapDiagnostics.sourceIdentityTarget,
   );
 }
 
@@ -1086,6 +1104,8 @@ async function readNamedOutput(
       throw new Error(
         "The spectral-whitecap diagnostic route has not been prepared.",
       );
+    case "foam-source-identity":
+      return readFoamSourceIdentityCapture(renderer, resources);
     case "waterline":
       return readWaterlineCapture(renderer, resources);
     case "history-rejection":
@@ -1299,6 +1319,47 @@ async function readWhitecapStageCaptures(
     );
   }
   return result;
+}
+
+async function readFoamSourceIdentityCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsFoamSourceIdentityCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.whitecapDiagnostics.sourceIdentityTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array) && !(raw instanceof Float32Array)) {
+    throw new TypeError(
+      "Unified-foam source readback did not return Float16 or Float32 data.",
+    );
+  }
+  const packed = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height * 4);
+  for (let index = 0; index < data.length; index += 1) {
+    const encoded = packed[index] ?? 0;
+    const value =
+      packed instanceof Uint16Array
+        ? DataUtils.fromHalfFloat(encoded)
+        : encoded;
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new RangeError(
+        "The foam-source-identity capture must contain finite unit density.",
+      );
+    }
+    data[index] = value;
+  }
+  return Object.freeze({
+    name: "foam-source-identity",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["foam-source-identity"].format,
+    data,
+  });
 }
 
 async function readWaterlineCapture(

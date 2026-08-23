@@ -27,7 +27,7 @@ export type {
 } from "./presentation.js";
 
 /**
- * The twenty-nine named diagnostic outputs. Names and CPU shapes match the QA
+ * The thirty named diagnostic outputs. Names and CPU shapes match the QA
  * capture contract. Planar color and target-alpha occupancy are their own
  * prepared target. `planar-confidence` is reserved for a future screen-space
  * mask and is not a current capture. Current-frame SSR hit (stock raw
@@ -49,6 +49,7 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
   "whitecap-history",
   "whitecap-advection",
   "whitecap-decay",
+  "foam-source-identity",
   "waterline",
   "history-rejection",
   "optical-fresnel",
@@ -72,7 +73,7 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
 ] as const);
 
 /**
- * One of the twenty-nine named diagnostic CPU outputs.
+ * One of the thirty named diagnostic CPU outputs.
  *
  * @public
  */
@@ -128,6 +129,11 @@ export const DIAGNOSTICS_CAPTURE_SHAPES = Object.freeze({
     format: "r32float-whitecap-stage" as const,
     elementType: "float32" as const,
     components: 1 as const,
+  }),
+  "foam-source-identity": Object.freeze({
+    format: "rgba32float-foam-source-identity" as const,
+    elementType: "float32" as const,
+    components: 4 as const,
   }),
   "waterline": Object.freeze({
     format: "r32float-waterline-coverage" as const,
@@ -386,6 +392,23 @@ export interface DiagnosticsWhitecapStageCapture extends DiagnosticsCaptureBase 
 }
 
 /**
+ * Source-resolved contribution and saturating union of the unified foam field.
+ *
+ * @public
+ */
+export interface DiagnosticsFoamSourceIdentityCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "foam-source-identity";
+  /** Packed RGBA source-identity format. */
+  readonly format: "rgba32float-foam-source-identity";
+  /**
+   * Tightly packed source samples: R = spectral whitecap, G = vessel wake or
+   * propeller wash, B = local impact, A = saturating union.
+   */
+  readonly data: Float32Array;
+}
+
+/**
  * Waterline coverage read from the prepared water-only attachment channel.
  *
  * @public
@@ -563,6 +586,7 @@ export type DiagnosticsCapture =
   | DiagnosticsNormalCapture
   | DiagnosticsMotionVectorCapture
   | DiagnosticsWhitecapStageCapture
+  | DiagnosticsFoamSourceIdentityCapture
   | DiagnosticsWaterlineCapture
   | DiagnosticsHistoryRejectionCapture
   | DiagnosticsOpticalScalarCapture;
@@ -642,7 +666,7 @@ export interface HostDiagnosticsRoute {
 }
 
 /**
- * Confirms `value` is one of the twenty-nine diagnostic capture names.
+ * Confirms `value` is one of the thirty diagnostic capture names.
  *
  * @public
  */

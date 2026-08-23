@@ -262,6 +262,11 @@ export async function prepareMinimalWaterPlane(
       "whitecapAdvectionRoute",
       "whitecapDiffusionRoute",
       "whitecapDecayRoute",
+      "foamLocalFieldA",
+      "foamLocalFieldB",
+      "foamSourceHistory",
+      "foamLocalAdvectionRoute",
+      "foamLocalResolveRoute",
     ]);
     spectralBand.stagePrewarmLocalInteractionRoutes();
     try {
@@ -293,6 +298,8 @@ export async function prepareMinimalWaterPlane(
       "spectralBandRipple",
       "whitecapStageTarget",
       "whitecapStageRoute",
+      "foamSourceIdentityTarget",
+      "foamSourceIdentityRoute",
       "material",
       "opticalRoute",
       "waterlineState",
@@ -364,6 +371,7 @@ export async function prepareMinimalWaterPlane(
       "ssrHistoryResetVelocityRoute",
       "ssrHistoryProbe",
       "whitecapProbe",
+      "foamSourceIdentityProbe",
       "completionProbe",
     ]);
 
