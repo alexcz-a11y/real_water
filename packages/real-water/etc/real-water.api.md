@@ -1000,7 +1000,7 @@ export type PresetRecoveryReason = "invalid-json" | "unknown-schema" | "invalid-
 export const PREWARM_MANIFEST_SCHEMA: "real-water/prewarm";
 
 // @public
-export const PREWARM_MANIFEST_VERSION: 7;
+export const PREWARM_MANIFEST_VERSION: 8;
 
 // @public
 export interface PrewarmDeclaration {
@@ -1082,7 +1082,7 @@ export type PrimitiveInteractionShape = SphereInteractionShape | BoxInteractionS
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 10;
+export const QUALITY_PROFILE_VERSION: 11;
 
 // @public
 export interface QualityProfile {
@@ -1277,8 +1277,13 @@ export interface QualityProfileSpectralWhitecaps {
     readonly fieldResolution: 128 | 256;
     // (undocumented)
     readonly fixedTickHz: 60;
+    readonly foamTimelineCapacityTicks: 128;
     // (undocumented)
-    readonly mode: "spectral-ping-pong";
+    readonly localHistoryBanks: 2;
+    // (undocumented)
+    readonly maxLocalSources: 128;
+    // (undocumented)
+    readonly mode: "unified-source-ping-pong";
     // (undocumented)
     readonly resetDomains: readonly [
     "simulation-reset",
@@ -1287,6 +1292,8 @@ export interface QualityProfileSpectralWhitecaps {
     "time-rewind",
     "sea-state-cut"
     ];
+    // (undocumented)
+    readonly sourceLayout: "whitecap-wake-impact-combined";
     // (undocumented)
     readonly stageLayout: "generation-history-advection-decay";
     // (undocumented)

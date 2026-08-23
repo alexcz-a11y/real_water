@@ -30,6 +30,7 @@ import {
   readHostDiagnosticsPresentRequest,
   type DiagnosticsCapture,
   type DiagnosticsCaptureName,
+  type DiagnosticsFoamSourceIdentityCapture,
   type DiagnosticsMotionVectorCapture,
   type DiagnosticsOpticalScalarCapture,
   type DiagnosticsSsrRoughnessCapture,
@@ -77,10 +78,10 @@ import {
   type CurrentFrameSsrStack,
 } from "./ssr-stack.js";
 import {
-  createSpectralWhitecapDiagnostics,
-  type SpectralWhitecapDiagnostics,
+  createUnifiedFoamDiagnostics,
+  type UnifiedFoamDiagnostics,
 } from "./spectral-whitecap-diagnostics.js";
-import type { SpectralWhitecapField } from "./spectral-whitecap-field.js";
+import type { UnifiedFoamField } from "./spectral-whitecap-field.js";
 import type {
   WaterlineFrameState,
   WaterlineStateController,
@@ -125,8 +126,8 @@ export interface PreparedWaterPresentationResources {
   readonly underwaterVolumeTarget: RenderTarget;
   readonly underwaterDiagnosticsPipeline: RenderPipeline;
   readonly underwaterDiagnosticsTarget: RenderTarget;
-  readonly whitecapField: SpectralWhitecapField;
-  readonly whitecapDiagnostics: SpectralWhitecapDiagnostics;
+  readonly foamField: UnifiedFoamField;
+  readonly foamDiagnostics: UnifiedFoamDiagnostics;
   readonly inverseLinearDepthTextureIndex: number;
   readonly viewNormalTextureIndex: number;
   readonly motionVectorsTextureIndex: number;
@@ -151,7 +152,7 @@ export function createPreparedWaterPresentationResources(
   scene: Scene,
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
-  whitecapField: SpectralWhitecapField,
+  foamField: UnifiedFoamField,
   environment: HostEnvironmentAdapter,
   underwaterPolicy: QualityProfileUnderwaterVolume,
   initialWaterline: WaterlineFrameState,
@@ -166,7 +167,7 @@ export function createPreparedWaterPresentationResources(
       scene,
       camera,
       drawingBuffer,
-      whitecapField,
+      foamField,
       environment,
       underwaterPolicy,
       initialWaterline,
@@ -183,7 +184,7 @@ function constructPreparedWaterPresentationResources(
   scene: Scene,
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
-  whitecapField: SpectralWhitecapField,
+  foamField: UnifiedFoamField,
   environment: HostEnvironmentAdapter,
   underwaterPolicy: QualityProfileUnderwaterVolume,
   initialWaterline: WaterlineFrameState,
@@ -245,15 +246,15 @@ function constructPreparedWaterPresentationResources(
   opticalDiagnosticsBTexture.type = UnsignedByteType;
   opticalDiagnosticsBTexture.colorSpace = LinearSRGBColorSpace;
   assertCoreScenePassColorByteBudget(scenePass.renderTarget.textures);
-  const whitecapDiagnostics = createSpectralWhitecapDiagnostics(
+  const foamDiagnostics = createUnifiedFoamDiagnostics(
     renderer,
     camera,
     scenePass.getTexture("depth"),
     opticalFactorsTexture,
     drawingBuffer,
-    whitecapField,
+    foamField,
   );
-  partial.whitecapDiagnostics = whitecapDiagnostics;
+  partial.foamDiagnostics = foamDiagnostics;
 
   const historyRejectionTarget = new RenderTarget(
     drawingBuffer.width,
@@ -400,8 +401,8 @@ function constructPreparedWaterPresentationResources(
     underwaterVolumeTarget,
     underwaterDiagnosticsPipeline,
     underwaterDiagnosticsTarget,
-    whitecapField,
-    whitecapDiagnostics,
+    foamField,
+    foamDiagnostics,
     inverseLinearDepthTextureIndex: 0,
     viewNormalTextureIndex: textureIndex(
       scenePass.renderTarget,
@@ -454,7 +455,7 @@ export async function compileAndPrimePreparedWaterPresentation(
   throwIfAborted(signal);
   resources.ssr.ensureGraphPrepared(renderer);
   resources.resetUniform.value = 1;
-  renderTemporalFrame(renderer, scene, camera, resources, true, true);
+  renderTemporalFrame(renderer, scene, camera, resources, true, true, true);
   renderHistoryRejection(renderer, resources);
   resources.resetUniform.value = 0;
   renderCurrentColorConversion(renderer, resources);
@@ -477,7 +478,15 @@ export function renderHiddenStabilizationFrames(
       resources.jitterAdapter.realign();
     }
     try {
-      renderTemporalFrame(renderer, scene, camera, resources, false, false);
+      renderTemporalFrame(
+        renderer,
+        scene,
+        camera,
+        resources,
+        false,
+        false,
+        false,
+      );
     } finally {
       if (resetFrame) {
         resources.resetUniform.value = 0;
@@ -503,7 +512,7 @@ export async function renderMainCameraGuard(
   resources: PreparedWaterPresentationResources,
   signal: AbortSignal,
 ): Promise<void> {
-  renderTemporalFrame(renderer, scene, camera, resources, false, false);
+  renderTemporalFrame(renderer, scene, camera, resources, false, false, false);
   renderCurrentColorConversion(renderer, resources);
   renderer.setRenderTarget(null);
   resources.presentationPipeline.render();
@@ -550,7 +559,7 @@ export function createPresentationRouteBridge(
       );
     }
     const snapshot = inspectRuntime();
-    await resources.whitecapField.synchronize(renderer, snapshot);
+    await resources.foamField.synchronize(renderer, snapshot);
     const snapshotResetReason =
       lastPresented === undefined
         ? null
@@ -574,12 +583,19 @@ export function createPresentationRouteBridge(
         resources.jitterAdapter.realign();
       }
       temporalSceneStarted = true;
+      const captureWhitecapStages = accepted.outputs.some(
+        isWhitecapCaptureName,
+      );
+      const captureFoamSources = accepted.outputs.includes(
+        "foam-source-identity",
+      );
       renderTemporalFrame(
         renderer,
         scene,
         camera,
         resources,
-        accepted.outputs.some(isWhitecapCaptureName),
+        captureWhitecapStages,
+        captureFoamSources,
         accepted.outputs.some(isUnderwaterVolumeCaptureName),
       );
       if (accepted.outputs.includes("current-color")) {
@@ -739,7 +755,7 @@ export function disposePreparedWaterPresentationResources(
   resources.traaNode.dispose();
   resources.currentColorTarget.dispose();
   resources.finalColorTarget.dispose();
-  resources.whitecapDiagnostics.dispose();
+  resources.foamDiagnostics.dispose();
   resources.scenePass.dispose();
   disposeCurrentFrameSsrStack(resources.ssr);
   resources.planar.dispose();
@@ -761,7 +777,7 @@ export function disposePartialPreparedWaterPresentationResources(
     () => resources.traaNode?.dispose(),
     () => resources.currentColorTarget?.dispose(),
     () => resources.finalColorTarget?.dispose(),
-    () => resources.whitecapDiagnostics?.dispose(),
+    () => resources.foamDiagnostics?.dispose(),
     () => resources.scenePass?.dispose(),
     () => {
       if (resources.ssr !== undefined) {
@@ -852,7 +868,8 @@ function renderTemporalFrame(
   scene: Scene,
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
-  captureWhitecaps: boolean,
+  captureWhitecapStages: boolean,
+  captureFoamSources: boolean,
   captureUnderwaterDiagnostics: boolean,
 ): void {
   const actual = readDrawingBufferSize(renderer);
@@ -882,8 +899,12 @@ function renderTemporalFrame(
       renderer.setRenderTarget(resources.currentColorTarget);
       resources.ssr.sceneTriggerPipeline.render();
       resources.counters.sceneRenderCount += 1;
-      if (captureWhitecaps) {
-        resources.whitecapDiagnostics.render(renderer, camera);
+      if (captureWhitecapStages && captureFoamSources) {
+        resources.foamDiagnostics.renderAll(renderer, camera);
+      } else if (captureWhitecapStages) {
+        resources.foamDiagnostics.renderStages(renderer, camera);
+      } else if (captureFoamSources) {
+        resources.foamDiagnostics.renderSources(renderer);
       }
       renderCurrentFrameSsr(renderer, resources.ssr);
       const historyHostState = captureHostState(renderer, scene, camera);
@@ -1032,7 +1053,12 @@ async function probeNamedOutputRoutes(
   await probeCompletedFrame(
     renderer,
     resources,
-    resources.whitecapDiagnostics.target,
+    resources.foamDiagnostics.stageTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.foamDiagnostics.sourceIdentityTarget,
   );
 }
 
@@ -1204,6 +1230,8 @@ async function readNamedOutput(
       throw new Error(
         "The spectral-whitecap diagnostic route has not been prepared.",
       );
+    case "foam-source-identity":
+      return readFoamSourceIdentityCapture(renderer, resources);
     case "waterline":
       return readWaterlineCapture(renderer, resources);
     case "history-rejection":
@@ -1374,7 +1402,7 @@ async function readWhitecapStageCaptures(
   ReadonlyMap<DiagnosticsCaptureName, DiagnosticsWhitecapStageCapture>
 > {
   const raw = await renderer.readRenderTargetPixelsAsync(
-    resources.whitecapDiagnostics.target,
+    resources.foamDiagnostics.stageTarget,
     0,
     0,
     resources.width,
@@ -1482,6 +1510,47 @@ async function readUnderwaterVolumeCaptures(
     );
   }
   return captures;
+}
+
+async function readFoamSourceIdentityCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsFoamSourceIdentityCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.foamDiagnostics.sourceIdentityTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array) && !(raw instanceof Float32Array)) {
+    throw new TypeError(
+      "Unified-foam source readback did not return Float16 or Float32 data.",
+    );
+  }
+  const packed = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height * 4);
+  for (let index = 0; index < data.length; index += 1) {
+    const encoded = packed[index] ?? 0;
+    const value =
+      packed instanceof Uint16Array
+        ? DataUtils.fromHalfFloat(encoded)
+        : encoded;
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new RangeError(
+        "The foam-source-identity capture must contain finite unit density.",
+      );
+    }
+    data[index] = value;
+  }
+  return Object.freeze({
+    name: "foam-source-identity",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["foam-source-identity"].format,
+    data,
+  });
 }
 
 async function readWaterlineCapture(

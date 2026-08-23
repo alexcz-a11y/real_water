@@ -10,7 +10,7 @@ import {
 import {
   QA_CAPTURE_VERSION,
   type QaCameraV1,
-  type QaHarnessV12,
+  type QaHarnessV13,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
@@ -110,6 +110,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "whitecap-history",
       "whitecap-advection",
       "whitecap-decay",
+      "foam-source-identity",
       "waterline",
       "history-rejection",
       "optical-fresnel",
@@ -150,6 +151,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "whitecap-history": "water-whitecap-stage-target",
       "whitecap-advection": "water-whitecap-stage-target",
       "whitecap-decay": "water-whitecap-stage-target",
+      "foam-source-identity": "water-foam-source-identity-target",
       "waterline": "water-optical-factors-target",
       "history-rejection": "water-history-rejection-target",
       "optical-fresnel": "water-optical-factors-target",
@@ -196,6 +198,10 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       {
         name: "whitecap-decay",
         preparedFormat: "rgba16float-whitecap-stages",
+      },
+      {
+        name: "foam-source-identity",
+        preparedFormat: "rgba16float-foam-source-identity",
       },
       {
         name: "waterline",
@@ -295,7 +301,7 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
     const harness = window.__REAL_WATER_QA__ as
-      | (QaHarnessV12 & {
+      | (QaHarnessV13 & {
           updateArtisticControls(
             controls: {
               readonly waveStrength: number;
@@ -468,7 +474,7 @@ test("presents camera-relative Open Water through the horizon", async ({
   await page.goto("/?qa=1&host=three");
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -524,7 +530,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -567,6 +573,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       "whitecap-history",
       "whitecap-advection",
       "whitecap-decay",
+      "foam-source-identity",
       "waterline",
       "history-rejection",
       "optical-fresnel",
@@ -619,6 +626,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "whitecap-history",
     "whitecap-advection",
     "whitecap-decay",
+    "foam-source-identity",
     "waterline",
     "history-rejection",
     "optical-fresnel",
@@ -645,7 +653,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "ssr-history-input-color",
   ]);
   expect(result.first.captures.map(({ version }) => version)).toEqual(
-    new Array<number>(33).fill(QA_CAPTURE_VERSION),
+    new Array<number>(34).fill(QA_CAPTURE_VERSION),
   );
   expect(result.first.captures.map(({ format }) => format)).toEqual([
     "rgba8unorm-srgb",
@@ -657,6 +665,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "r32float-whitecap-stage",
     "r32float-whitecap-stage",
     "r32float-whitecap-stage",
+    "rgba32float-foam-source-identity",
     "r32float-waterline-coverage",
     "r32float-history-rejection",
     "r32float-optical",
@@ -839,7 +848,7 @@ test("matches the visible WebGPU canvas RGB to the same-frame final-color captur
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }

@@ -53,6 +53,38 @@ const CANONICAL_INTERACTION_FIELD_KEYS = Object.freeze([
   "directionalWakeRoute",
 ]);
 
+const CANONICAL_WHITECAP_FIELDS = Object.freeze([
+  "mode",
+  "fixedTickHz",
+  "fieldResolution",
+  "tileSizeMetres",
+  "fieldFormat",
+  "stageLayout",
+  "sourceLayout",
+  "localHistoryBanks",
+  "maxLocalSources",
+  "foamTimelineCapacityTicks",
+  "diffusionTaps",
+  "updateCadence",
+  "captureResolutionPolicy",
+  "captureFormat",
+  "resetDomains",
+]);
+
+const LEGACY_SPECTRAL_WHITECAP_FIELDS = Object.freeze([
+  "mode",
+  "fixedTickHz",
+  "fieldResolution",
+  "tileSizeMetres",
+  "fieldFormat",
+  "stageLayout",
+  "diffusionTaps",
+  "updateCadence",
+  "captureResolutionPolicy",
+  "captureFormat",
+  "resetDomains",
+]);
+
 let failures = 0;
 
 // One key-set check, used for the current profile and every legacy variant
@@ -95,6 +127,15 @@ function canonicalJson(label, profile, variant) {
       CANONICAL_INTERACTION_FIELD_KEYS.filter(
         (key) => !absentFieldKeys.includes(key),
       ),
+    );
+  }
+  if (profile.whitecaps !== undefined) {
+    checkKeys(
+      `${label} whitecaps`,
+      Object.keys(profile.whitecaps),
+      variant?.legacySpectralWhitecaps === true
+        ? LEGACY_SPECTRAL_WHITECAP_FIELDS
+        : CANONICAL_WHITECAP_FIELDS,
     );
   }
   return JSON.stringify(
@@ -151,6 +192,7 @@ const COMMITTED_LEGACY_VARIANTS = [
     absentKeys: ["interaction", "bodyCoupling", "underwater"],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+    legacySpectralWhitecaps: true,
     hashes: {
       "minimal":
         "sha256:e89f6484cb983b184dee0ee46a77f8f05561b97df2a37c4686525b73b53eda28",
@@ -177,6 +219,7 @@ const COMMITTED_LEGACY_VARIANTS = [
     absentKeys: ["bodyCoupling", "underwater"],
     absentInteractionFieldKeys: ["directionalWakeRoute"],
     ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+    legacySpectralWhitecaps: true,
     hashes: {
       "minimal":
         "sha256:f896b4033ed12264eabcc4e88fc2f41cdbd9e8a2d2a70698b296683b586d3c3f",
@@ -203,6 +246,7 @@ const COMMITTED_LEGACY_VARIANTS = [
     absentKeys: ["bodyCoupling", "underwater"],
     absentInteractionFieldKeys: ["directionalWakeRoute"],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    legacySpectralWhitecaps: true,
     hashes: {
       "minimal":
         "sha256:b2e727a8016dbac41a2ea1036275f10c344cffc82b2a10bea2c4bc4807bc651d",
@@ -216,6 +260,7 @@ const COMMITTED_LEGACY_VARIANTS = [
     absentKeys: ["underwater"],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    legacySpectralWhitecaps: true,
     hashes: {
       "minimal":
         "sha256:6a3385d04d854e423957d290f562696ce4041c0ad1eb38e3f26fc9306a950978",
@@ -229,11 +274,44 @@ const COMMITTED_LEGACY_VARIANTS = [
     absentKeys: ["bodyCoupling"],
     absentInteractionFieldKeys: ["directionalWakeRoute"],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    legacySpectralWhitecaps: true,
     hashes: {
       "minimal":
         "sha256:9ec18552c76f5c2df7da7798b9d18148f27d247b97fff2b252742a321daa1bed",
       "minimal-high-detail":
         "sha256:98d424b79e24f5b785e9305eb7f50e83057a30ce3d37d50c90e1ce8dd72954b3",
+    },
+  },
+  // Version 10 is the first same-number-different-meaning rung on this ladder.
+  // Both parents shipped a version 10 and neither saw the other's: the merge
+  // line's 10 carries the underwater volume with spectral whitecaps, and
+  // ticket/t16's 10 carries unified foam with no underwater volume. Both are
+  // committed shapes, so both migrate.
+  {
+    label: "10 (underwater, spectral whitecaps)",
+    version: 10,
+    absentKeys: [],
+    absentInteractionFieldKeys: [],
+    ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    legacySpectralWhitecaps: true,
+    hashes: {
+      "minimal":
+        "sha256:ab07356cb71f4cdf9dabad49af2c9aa1c89ee2405588830c4c3493d1fe7280a4",
+      "minimal-high-detail":
+        "sha256:294f30cbd88b56da8b81cf5e8201fd2ea250faf0f25a35f869820cf87b9f2742",
+    },
+  },
+  {
+    label: "10 (unified foam, no underwater)",
+    version: 10,
+    absentKeys: ["underwater"],
+    absentInteractionFieldKeys: [],
+    ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    hashes: {
+      "minimal":
+        "sha256:47475f80673e8e4c942b567715e0e3d36dedf0d6d1320e83825dc866fefacd93",
+      "minimal-high-detail":
+        "sha256:a8ce0bc38f028341be0567b0e467355f1b0bc74d4abe3f2043c59e28a2dbc239",
     },
   },
 ];
@@ -253,6 +331,20 @@ function legacyProfile(profile, variant) {
         reduced.interaction.field,
         variant.absentInteractionFieldKeys,
       ),
+    };
+  }
+  if (
+    reduced.whitecaps !== undefined &&
+    variant.legacySpectralWhitecaps === true
+  ) {
+    reduced.whitecaps = {
+      ...omitKeys(reduced.whitecaps, [
+        "sourceLayout",
+        "localHistoryBanks",
+        "maxLocalSources",
+        "foamTimelineCapacityTicks",
+      ]),
+      mode: "spectral-ping-pong",
     };
   }
   return {
@@ -326,9 +418,9 @@ for (const variant of COMMITTED_LEGACY_VARIANTS) {
 // public fields in declared order, with manifestHash itself excluded.
 const COMMITTED_MANIFEST_HASHES = {
   "minimal":
-    "sha256:89aabea22190709212c3e3222628e0f0f702d051dcb9d9b214bdbc0e212ff6f8",
+    "sha256:5a3fcb168199ce3b8101364ac9e7a74888de44734557784da26d286e9f6c76e7",
   "minimal-high-detail":
-    "sha256:ddb087200961c122d6c97cf55627aa2a614c0ca2c7075cdf70676b73f1f9eda2",
+    "sha256:bc29f47e4a2db94ce464a62b128922ea6e8f7b036393848b1f9710512568a6e1",
 };
 
 function canonicalManifestJson(manifest) {

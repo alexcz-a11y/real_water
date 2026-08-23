@@ -129,6 +129,16 @@ function createCapture(
       data: new Uint8Array(width * height * 4),
     };
   }
+  if (name === "foam-source-identity") {
+    return {
+      name,
+      format: "rgba32float-foam-source-identity",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height * 4),
+    };
+  }
   if (name === "ssr-color") {
     return {
       name,
@@ -355,8 +365,9 @@ function coreFrame(
 }
 
 describe("QA frame driver Core association", () => {
-  it("publishes a v11 capture-contract mapped to actual Core declaration IDs", () => {
-    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(11);
+  it("publishes a v12 capture-contract mapped to actual Core declaration IDs", () => {
+    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(12);
+    expect(QA_FRAME_PREWARM_MANIFEST.captures).toHaveLength(34);
     expect(QA_FRAME_PREWARM_MANIFEST.coreDeclarations).toEqual(
       QA_TO_CORE_DECLARATION_IDS,
     );
@@ -366,7 +377,14 @@ describe("QA frame driver Core association", () => {
     expect(QA_TO_CORE_DECLARATION_IDS["history-rejection"]).toBe(
       "water-history-rejection-target",
     );
-    expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(9, 11)).toEqual([
+    expect(QA_TO_CORE_DECLARATION_IDS["foam-source-identity"]).toBe(
+      "water-foam-source-identity-target",
+    );
+    expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(9, 12)).toEqual([
+      {
+        name: "foam-source-identity",
+        preparedFormat: "rgba16float-foam-source-identity",
+      },
       {
         name: "waterline",
         preparedFormat: "rgba16float-waterline-coverage",
@@ -407,6 +425,7 @@ describe("QA frame driver Core association", () => {
       "water-view-normal",
       "water-motion-vectors",
       "water-whitecap-stage-target",
+      "water-foam-source-identity-target",
       "water-optical-factors-target",
       "water-history-rejection-target",
       "water-optical-diagnostics-b",
@@ -419,8 +438,8 @@ describe("QA frame driver Core association", () => {
       "water-ssr-history-resolved-capture-target",
       "water-ssr-history-beauty-target",
     ]);
-    expect(receipt.progress.completedWork).toBe(17);
-    expect(receipt.progress.totalWork).toBe(17);
+    expect(receipt.progress.completedWork).toBe(18);
+    expect(receipt.progress.totalWork).toBe(18);
   });
 
   it("rejects a Core manifest that is missing a mapped declaration", () => {

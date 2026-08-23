@@ -5,7 +5,7 @@
 ```ts
 
 // @public
-export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "whitecap-generation", "whitecap-history", "whitecap-advection", "whitecap-decay", "waterline", "history-rejection", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "underwater-transmittance", "underwater-scattering", "underwater-light-shafts", "underwater-shadow", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color"];
+export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "whitecap-generation", "whitecap-history", "whitecap-advection", "whitecap-decay", "foam-source-identity", "waterline", "history-rejection", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "underwater-transmittance", "underwater-scattering", "underwater-light-shafts", "underwater-shadow", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color"];
 
 // @public
 export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
@@ -53,6 +53,11 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
         format: "r32float-whitecap-stage";
         elementType: "float32";
         components: 1;
+    }>;
+    "foam-source-identity": Readonly<{
+        format: "rgba32float-foam-source-identity";
+        elementType: "float32";
+        components: 4;
     }>;
     waterline: Readonly<{
         format: "r32float-waterline-coverage";
@@ -177,7 +182,7 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
 }>;
 
 // @public
-export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsWhitecapStageCapture | DiagnosticsWaterlineCapture | DiagnosticsHistoryRejectionCapture | DiagnosticsOpticalScalarCapture | DiagnosticsUnderwaterVolumeCapture;
+export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsWhitecapStageCapture | DiagnosticsFoamSourceIdentityCapture | DiagnosticsWaterlineCapture | DiagnosticsHistoryRejectionCapture | DiagnosticsOpticalScalarCapture | DiagnosticsUnderwaterVolumeCapture;
 
 // @public
 export interface DiagnosticsCaptureBase {
@@ -208,6 +213,13 @@ export interface DiagnosticsFinalColorCapture extends DiagnosticsCaptureBase {
     readonly data: Uint8Array;
     readonly format: "rgba8unorm-srgb";
     readonly name: "final-color";
+}
+
+// @public
+export interface DiagnosticsFoamSourceIdentityCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "rgba32float-foam-source-identity";
+    readonly name: "foam-source-identity";
 }
 
 // @public

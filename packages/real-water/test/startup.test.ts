@@ -762,12 +762,12 @@ describe("prepareRealWater", () => {
     );
     expect(lease.manifest).toEqual({
       schema: "real-water/prewarm",
-      version: 7,
+      version: 8,
       id: manifest.id,
       manifestHash: manifest.manifestHash,
       qualityProfile: {
         schema: "real-water/quality-profile",
-        version: 10,
+        version: 11,
         id: "minimal",
         profileHash: manifest.qualityProfile.profileHash,
       },
@@ -779,8 +779,8 @@ describe("prepareRealWater", () => {
           variantId: "basic",
         },
         {
-          effectId: "spectral-whitecaps",
-          variantId: "persistent",
+          effectId: "unified-foam",
+          variantId: "source-resolved-persistent",
         },
         {
           effectId: "underwater-volume",
@@ -965,7 +965,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 86,
+        totalWork: 94,
       },
     });
   });
@@ -1633,7 +1633,7 @@ describe("prepareRealWater", () => {
 
     expect(Object.isFrozen(manifest)).toBe(true);
     expect(Object.isFrozen(manifest.drawingBuffer)).toBe(true);
-    expect(manifest.version).toBe(7);
+    expect(manifest.version).toBe(8);
     expect(manifest.drawingBuffer).toEqual({ width: 320, height: 180 });
     expect(Object.isFrozen(manifest.declarations)).toBe(true);
     expect(Object.isFrozen(first)).toBe(true);
@@ -1664,6 +1664,14 @@ describe("prepareRealWater", () => {
       "water-whitecap-stage-target",
       "water-whitecap-stage-route",
       "water-whitecap-probe",
+      "water-foam-local-field-a",
+      "water-foam-local-field-b",
+      "water-foam-source-history",
+      "water-foam-local-advection-route",
+      "water-foam-local-resolve-route",
+      "water-foam-source-identity-target",
+      "water-foam-source-identity-route",
+      "water-foam-source-identity-probe",
       "water-material",
       "water-optical-route",
       "water-waterline-state",

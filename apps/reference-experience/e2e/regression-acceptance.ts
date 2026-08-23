@@ -369,10 +369,10 @@ function assertQaPrewarmV11(prewarm: QaFramePrewarmReceipt): void {
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.captures) ||
     canonicalJson(prewarm.manifest.coreDeclarations) !==
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.coreDeclarations) ||
-    QA_FRAME_PREWARM_MANIFEST.captures.length !== 33
+    QA_FRAME_PREWARM_MANIFEST.captures.length !== 34
   ) {
     throw new Error(
-      "Regression acceptance requires the exact QA v11 33-name capture mapping.",
+      "Regression acceptance requires the exact QA v12 34-name capture mapping.",
     );
   }
   if (prewarm.rendererDevice === null || prewarm.rendererDevice === undefined) {

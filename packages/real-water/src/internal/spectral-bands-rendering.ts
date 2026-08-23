@@ -83,7 +83,7 @@ import {
   RADIAL_IMPACT_LIFETIME_SECONDS,
   type LocalInteractionRenderSnapshot,
 } from "./local-interaction.js";
-import type { SpectralWhitecapField } from "./spectral-whitecap-field.js";
+import type { UnifiedFoamField } from "./spectral-whitecap-field.js";
 
 const INITIAL_ARTISTIC_CONTROLS: ArtisticControls =
   createWaterPreset("swell").artisticControls;
@@ -92,7 +92,7 @@ export function createSpectralBandRendering(
   simulation: HostSimulationAdapter,
   presentation: HostPresentationAdapter,
   innerCellMetres: number,
-  whitecaps: SpectralWhitecapField,
+  foamField: UnifiedFoamField,
 ) {
   const originX = uniform(0);
   const originZ = uniform(0);
@@ -765,7 +765,11 @@ export function createSpectralBandRendering(
     ),
   );
   const detailStrengthNode = mix(nearWhite, farWhite, fragmentSlopeFade);
-  const whitecapStagesNode = whitecaps.sampleStages(
+  const whitecapStagesNode = foamField.sampleStages(
+    fragmentSample.hostX,
+    fragmentSample.hostZ,
+  );
+  const foamSourcesNode = foamField.sampleSources(
     fragmentSample.hostX,
     fragmentSample.hostZ,
   );
@@ -1017,10 +1021,10 @@ export function createSpectralBandRendering(
       desiredControls = snapshot.artisticControls;
       desiredSeaStateCutRevision = snapshot.seaStateCutRevision;
       desiredLocalInteraction = interaction;
-      whitecaps.runtimeStateSink.synchronize(snapshot, interaction);
+      foamField.runtimeStateSink.synchronize(snapshot, interaction);
     },
     observe(snapshot: OpenWaterRuntimeSnapshot): void {
-      whitecaps.runtimeStateSink.observe?.(snapshot);
+      foamField.runtimeStateSink.observe?.(snapshot);
     },
   });
 
@@ -1038,7 +1042,8 @@ export function createSpectralBandRendering(
     roughnessNode,
     detailStrengthNode,
     whitecapStagesNode,
-    whitecapDensityNode: whitecapStagesNode.a,
+    foamSourcesNode,
+    foamDensityNode: foamSourcesNode.a,
     sink,
     stagePrewarmLocalInteractionRoutes(): void {
       desiredLocalInteraction = Object.freeze({

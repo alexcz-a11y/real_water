@@ -278,7 +278,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       loading.snapshots.at(-1)?.status === "preparing"
         ? loading.snapshots.at(-1)?.progress.completedWork
         : undefined,
-    ).toBe(8);
+    ).toBe(13);
     releaseWarmup?.(Uint8Array.from([0, 96, 160, 255]));
     const lease = await run.ready;
 
@@ -322,14 +322,14 @@ describe("createThreeHostLifecycleAdapter", () => {
     }).toThrow(TypeError);
     expect(renderer.init).toHaveBeenCalledTimes(1);
     expect(renderer.onDeviceLost).not.toBe(previousOnDeviceLost);
-    expect(renderer.initTexture).toHaveBeenCalledTimes(5);
-    expect(renderer.computeAsync).toHaveBeenCalledTimes(8);
+    expect(renderer.initTexture).toHaveBeenCalledTimes(7);
+    expect(renderer.computeAsync).toHaveBeenCalledTimes(12);
     expect(renderer.compileAsync).toHaveBeenCalledWith(scene, camera);
     expect(
       renderer.compileAsync.mock.calls.some((call) => call[1] !== camera),
     ).toBe(true);
-    expect(renderer.render).toHaveBeenCalledTimes(141);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(35);
+    expect(renderer.render).toHaveBeenCalledTimes(142);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(37);
     const readbackTargets = renderer.readRenderTargetPixelsAsync.mock.calls.map(
       (call) =>
         call[0] as { texture?: { name?: string }; textures?: unknown[] },
@@ -342,7 +342,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(readbackTargets[3]?.texture?.name).toBe(
       "Real Water inverse linear depth",
     );
-    expect(readbackTargets[34]?.texture?.name).toBe("Real Water final color");
+    expect(readbackTargets[36]?.texture?.name).toBe("Real Water final color");
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -435,7 +435,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     );
     expect(queryResults.foam[0]).toBe(geometryBefore.foam);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(35);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(37);
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -673,7 +673,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     const texture = environment.texture as DataTexture;
     const expectedBytes = createSupportedHostEnvironmentRadianceBytes();
     expect(renderer.initTexture).toHaveBeenCalledWith(environment.texture);
-    expect(renderer.initTexture).toHaveBeenCalledTimes(5);
+    expect(renderer.initTexture).toHaveBeenCalledTimes(7);
     expect(Array.from(texture.image.data)).toEqual(Array.from(expectedBytes));
     expect(texture.name).toBe("test-environment-radiance");
     expect(texture.wrapS).toBe(RepeatWrapping);
@@ -1017,7 +1017,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     });
     expect(scene.children).toHaveLength(0);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(17);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(18);
     expect(renderer.dispose).not.toHaveBeenCalled();
   });
 
@@ -1396,8 +1396,8 @@ describe("createThreeHostLifecycleAdapter", () => {
 
     expect(lease).not.toHaveProperty("present");
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(35);
-    expect(renderer.render).toHaveBeenCalledTimes(141);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(37);
+    expect(renderer.render).toHaveBeenCalledTimes(142);
     expect(presentation.route).toBeDefined();
     const renderTargetsAtReady = renderer.setRenderTarget.mock.calls.length;
 
@@ -1438,7 +1438,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(second.temporal.historyEpoch).toBe(1);
     expect(second.temporal.resetReason).toBeNull();
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(35);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(37);
 
     simulation.assign({ tick: 8, timeSeconds: 8 / 60, paused: false });
     const continuousTick = readHostPresentedFrame(await presentation.present());
@@ -1549,7 +1549,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(queuedFirst.presentationId + 1).toBe(queuedSecond.presentationId);
 
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(35);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(37);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
     expect(scene.children).toHaveLength(1);
@@ -2026,8 +2026,8 @@ describe("createThreeHostLifecycleAdapter", () => {
         outputs: [...DIAGNOSTICS_CAPTURE_NAMES],
       }),
     );
-    expect(all.outputs).toHaveLength(33);
-    expect(all.diagnosticReadbackCount).toBe(31);
+    expect(all.outputs).toHaveLength(34);
+    expect(all.diagnosticReadbackCount).toBe(32);
     expect(all.sceneRenderCount).toBe(resetFrame.sceneRenderCount + 1);
     expect(
       renderer.setRenderTarget.mock.calls
@@ -3389,6 +3389,9 @@ function mockPresentationReadback(
     return new Uint16Array(pixels * 4);
   }
   if (name.includes("spectral whitecap stages")) {
+    return new Uint16Array(pixels * 4);
+  }
+  if (name.includes("unified foam sources")) {
     return new Uint16Array(pixels * 4);
   }
   if (

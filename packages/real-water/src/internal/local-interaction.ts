@@ -583,6 +583,13 @@ export function createLocalInteractionField(
         batch.results.velocities[vectorIndex + 1] =
           (batch.results.velocities[vectorIndex + 1] ?? 0) +
           correction.velocityY;
+        // Gameplay Query stays GPU-wait-free: compose the bounded current/
+        // previous source envelope with the CPU spectral reconstruction. The
+        // prepared field carries the longer-lived advected trail on the GPU.
+        batch.results.foam[point] = saturatingUnion(
+          clampUnit(batch.results.foam[point] ?? 0),
+          correction.foam,
+        );
       }
       return snapshotAge;
     },
@@ -810,11 +817,13 @@ function evaluateLocalCorrection(
   slopeX: number;
   slopeZ: number;
   velocityY: number;
+  foam: number;
 }> {
   let height = 0;
   let slopeX = 0;
   let slopeZ = 0;
   let velocityY = 0;
+  let foam = 0;
   for (const disturbance of disturbances) {
     if (disturbance === null) {
       continue;
@@ -829,6 +838,7 @@ function evaluateLocalCorrection(
     slopeX += correction.slopeX;
     slopeZ += correction.slopeZ;
     velocityY += correction.velocityY;
+    foam = saturatingUnion(foam, correction.foam);
   }
 
   const anchorDx = x - anchorX;
@@ -837,10 +847,10 @@ function evaluateLocalCorrection(
   const fadeStart =
     INTERACTION_FIELD_RADIUS_METRES - INTERACTION_FIELD_EDGE_FADE_METRES;
   if (anchorDistance >= INTERACTION_FIELD_RADIUS_METRES) {
-    return { height: 0, slopeX: 0, slopeZ: 0, velocityY: 0 };
+    return { height: 0, slopeX: 0, slopeZ: 0, velocityY: 0, foam: 0 };
   }
   if (anchorDistance <= fadeStart) {
-    return { height, slopeX, slopeZ, velocityY };
+    return { height, slopeX, slopeZ, velocityY, foam };
   }
   const fadeT =
     (anchorDistance - fadeStart) / INTERACTION_FIELD_EDGE_FADE_METRES;
@@ -857,6 +867,7 @@ function evaluateLocalCorrection(
       slopeZ * fade +
       height * fadeDerivative * anchorDz * inverseAnchorDistance,
     velocityY: velocityY * fade,
+    foam: foam * fade,
   };
 }
 
@@ -870,17 +881,18 @@ function evaluateRadialImpact(
   slopeX: number;
   slopeZ: number;
   velocityY: number;
+  foam: number;
 }> {
   const ageSeconds = timeSeconds - impact.startTimeSeconds;
   if (ageSeconds < 0 || ageSeconds >= RADIAL_IMPACT_LIFETIME_SECONDS) {
-    return { height: 0, slopeX: 0, slopeZ: 0, velocityY: 0 };
+    return { height: 0, slopeX: 0, slopeZ: 0, velocityY: 0, foam: 0 };
   }
   const dx = x - impact.x;
   const dz = z - impact.z;
   const distance = Math.hypot(dx, dz);
   const normalizedRadius = distance / impact.radius;
   if (normalizedRadius >= 1) {
-    return { height: 0, slopeX: 0, slopeZ: 0, velocityY: 0 };
+    return { height: 0, slopeX: 0, slopeZ: 0, velocityY: 0, foam: 0 };
   }
   const progress = ageSeconds / RADIAL_IMPACT_LIFETIME_SECONDS;
   const remaining = 1 - progress;
@@ -907,6 +919,7 @@ function evaluateRadialImpact(
     slopeX: heightDerivativeRadius * dx * inverseDistance,
     slopeZ: heightDerivativeRadius * dz * inverseDistance,
     velocityY,
+    foam: clampUnit(Math.abs(impact.amplitude) * 0.8 * decay * radialWindow),
   };
 }
 
@@ -920,6 +933,7 @@ function evaluateDirectionalWake(
   slopeX: number;
   slopeZ: number;
   velocityY: number;
+  foam: number;
 }> {
   const propeller = wake.kind === "propeller-wash";
   const ageSeconds = timeSeconds - wake.startTimeSeconds;
@@ -929,7 +943,7 @@ function evaluateDirectionalWake(
     !persistent &&
     (ageSeconds < 0 || ageSeconds >= RADIAL_IMPACT_LIFETIME_SECONDS)
   ) {
-    return { height: 0, slopeX: 0, slopeZ: 0, velocityY: 0 };
+    return { height: 0, slopeX: 0, slopeZ: 0, velocityY: 0, foam: 0 };
   }
   const dx = x - wake.x;
   const dz = z - wake.z;
@@ -948,7 +962,7 @@ function evaluateDirectionalWake(
   const alongT = along / length;
   const lateralT = Math.abs(lateral) / width;
   if (alongT < 0 || alongT >= 1 || lateralT >= 1) {
-    return { height: 0, slopeX: 0, slopeZ: 0, velocityY: 0 };
+    return { height: 0, slopeX: 0, slopeZ: 0, velocityY: 0, foam: 0 };
   }
   const longitudinalWindow = 1 - smoothHermite(alongT);
   const lateralWindow = 1 - smoothHermite(lateralT);
@@ -1000,7 +1014,22 @@ function evaluateDirectionalWake(
       longitudinalWindow *
       lateralWindow *
       (decayDerivative * cosine + decay * temporalFrequency * sine),
+    foam: clampUnit(
+      Math.abs(wake.amplitude) *
+        (propeller ? 0.9 : 0.65) *
+        decay *
+        longitudinalWindow *
+        lateralWindow,
+    ),
   };
+}
+
+function saturatingUnion(left: number, right: number): number {
+  return 1 - (1 - left) * (1 - right);
+}
+
+function clampUnit(value: number): number {
+  return Math.min(1, Math.max(0, value));
 }
 
 function smoothHermite(value: number): number {

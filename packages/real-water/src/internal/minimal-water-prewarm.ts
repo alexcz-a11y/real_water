@@ -48,8 +48,8 @@ import {
 import { createWaterOpticsRendering } from "./water-optics-rendering.js";
 import { createSpectralBandRendering } from "./spectral-bands-rendering.js";
 import {
-  createSpectralWhitecapField,
-  type SpectralWhitecapField,
+  createUnifiedFoamField,
+  type UnifiedFoamField,
 } from "./spectral-whitecap-field.js";
 import {
   createInitialWaterlineSampleState,
@@ -87,7 +87,7 @@ interface PreparedResources {
   readonly geometry: BufferGeometry;
   readonly material: NodeMaterial;
   readonly waterTexture: DataTexture;
-  readonly whitecapField: SpectralWhitecapField;
+  readonly foamField: UnifiedFoamField;
   readonly spectralBand: ReturnType<typeof createSpectralBandRendering>;
   readonly opticalPath: ReturnType<typeof createWaterOpticsRendering>;
   readonly waterline: ReturnType<typeof createWaterlineStateController>;
@@ -170,10 +170,10 @@ export async function prepareMinimalWaterPlane(
     );
     const waterTexture = createWaterTexture();
     partial.waterTexture = waterTexture;
-    const whitecapField = createSpectralWhitecapField(
+    const foamField = createUnifiedFoamField(
       options.request.manifest.qualityProfile.whitecaps,
     );
-    partial.whitecapField = whitecapField;
+    partial.foamField = foamField;
     const waterline = createWaterlineStateController();
     partial.waterline = waterline;
     const initialWaterline = waterline.commit(
@@ -192,7 +192,7 @@ export async function prepareMinimalWaterPlane(
       scene,
       camera,
       declaredDrawingBuffer,
-      whitecapField,
+      foamField,
       options.environment,
       options.request.manifest.qualityProfile.underwater,
       initialWaterline,
@@ -217,7 +217,7 @@ export async function prepareMinimalWaterPlane(
       options.simulation,
       options.presentation,
       innerCellMetres,
-      whitecapField,
+      foamField,
     );
     partial.spectralBand = spectralBand;
     const opticalPath = createWaterOpticsRendering(
@@ -251,11 +251,11 @@ export async function prepareMinimalWaterPlane(
     renderer.initTexture(waterTexture);
     renderer.initTexture(environmentRadiance);
     renderer.initTexture(createdPresentation.resources.planar.target.texture);
-    const preparationSnapshot = createPreparationWhitecapSnapshot(
+    const preparationSnapshot = createPreparationFoamSnapshot(
       options.simulation,
       options.presentation,
     );
-    await whitecapField.prewarm(renderer, preparationSnapshot);
+    await foamField.prewarm(renderer, preparationSnapshot);
     await completeDeclaredWork(options.request.progress, [
       "whitecapFieldA",
       "whitecapFieldB",
@@ -265,6 +265,11 @@ export async function prepareMinimalWaterPlane(
       "whitecapAdvectionRoute",
       "whitecapDiffusionRoute",
       "whitecapDecayRoute",
+      "foamLocalFieldA",
+      "foamLocalFieldB",
+      "foamSourceHistory",
+      "foamLocalAdvectionRoute",
+      "foamLocalResolveRoute",
     ]);
     spectralBand.stagePrewarmLocalInteractionRoutes();
     try {
@@ -296,6 +301,8 @@ export async function prepareMinimalWaterPlane(
       "spectralBandRipple",
       "whitecapStageTarget",
       "whitecapStageRoute",
+      "foamSourceIdentityTarget",
+      "foamSourceIdentityRoute",
       "material",
       "opticalRoute",
       "waterlineState",
@@ -374,6 +381,7 @@ export async function prepareMinimalWaterPlane(
       "ssrHistoryProbe",
       "underwaterProbe",
       "whitecapProbe",
+      "foamSourceIdentityProbe",
       "completionProbe",
     ]);
 
@@ -397,7 +405,7 @@ export async function prepareMinimalWaterPlane(
         geometry,
         material,
         waterTexture,
-        whitecapField,
+        foamField,
         spectralBand,
         opticalPath,
         waterline,
@@ -521,7 +529,7 @@ function disposePreparedResources(
   resources.material.dispose();
   resources.geometry.dispose();
   resources.waterTexture.dispose();
-  resources.whitecapField.dispose();
+  resources.foamField.dispose();
 }
 
 function disposePartialResourcesSilently(
@@ -548,7 +556,7 @@ function disposePartialResourcesSilently(
     () => resources.material?.dispose(),
     () => resources.geometry?.dispose(),
     () => resources.waterTexture?.dispose(),
-    () => resources.whitecapField?.dispose(),
+    () => resources.foamField?.dispose(),
   ];
   for (const dispose of disposals) {
     try {
@@ -559,7 +567,7 @@ function disposePartialResourcesSilently(
   }
 }
 
-function createPreparationWhitecapSnapshot(
+function createPreparationFoamSnapshot(
   simulation: HostSimulationAdapter,
   presentation: HostPresentationAdapter,
 ): OpenWaterRuntimeSnapshot {

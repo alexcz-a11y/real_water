@@ -27,7 +27,7 @@ export type {
 } from "./presentation.js";
 
 /**
- * The thirty-three named diagnostic outputs. Names and CPU shapes match the QA
+ * The thirty-four named diagnostic outputs. Names and CPU shapes match the QA
  * capture contract. Planar color and target-alpha occupancy are their own
  * prepared target. `planar-confidence` is reserved for a future screen-space
  * mask and is not a current capture. Current-frame SSR hit (stock raw
@@ -49,6 +49,7 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
   "whitecap-history",
   "whitecap-advection",
   "whitecap-decay",
+  "foam-source-identity",
   "waterline",
   "history-rejection",
   "optical-fresnel",
@@ -76,7 +77,7 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
 ] as const);
 
 /**
- * One of the thirty-three named diagnostic CPU outputs.
+ * One of the thirty-four named diagnostic CPU outputs.
  *
  * @public
  */
@@ -132,6 +133,11 @@ export const DIAGNOSTICS_CAPTURE_SHAPES = Object.freeze({
     format: "r32float-whitecap-stage" as const,
     elementType: "float32" as const,
     components: 1 as const,
+  }),
+  "foam-source-identity": Object.freeze({
+    format: "rgba32float-foam-source-identity" as const,
+    elementType: "float32" as const,
+    components: 4 as const,
   }),
   "waterline": Object.freeze({
     format: "r32float-waterline-coverage" as const,
@@ -410,6 +416,25 @@ export interface DiagnosticsWhitecapStageCapture extends DiagnosticsCaptureBase 
 }
 
 /**
+ * Canonical anchor-local contribution map and saturating union of the unified
+ * foam field. Unlike screen-space stage captures, this map covers the prepared
+ * 96-metre Interaction Field directly and is independent of camera jitter.
+ *
+ * @public
+ */
+export interface DiagnosticsFoamSourceIdentityCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "foam-source-identity";
+  /** Packed RGBA source-identity format. */
+  readonly format: "rgba32float-foam-source-identity";
+  /**
+   * Tightly packed anchor-local samples: R = spectral whitecap, G = vessel wake
+   * or propeller wash, B = local impact, A = saturating union.
+   */
+  readonly data: Float32Array;
+}
+
+/**
  * Waterline coverage read from the prepared water-only attachment channel.
  *
  * @public
@@ -605,6 +630,7 @@ export type DiagnosticsCapture =
   | DiagnosticsNormalCapture
   | DiagnosticsMotionVectorCapture
   | DiagnosticsWhitecapStageCapture
+  | DiagnosticsFoamSourceIdentityCapture
   | DiagnosticsWaterlineCapture
   | DiagnosticsHistoryRejectionCapture
   | DiagnosticsOpticalScalarCapture
@@ -685,7 +711,7 @@ export interface HostDiagnosticsRoute {
 }
 
 /**
- * Confirms `value` is one of the thirty-three diagnostic capture names.
+ * Confirms `value` is one of the thirty-four diagnostic capture names.
  *
  * @public
  */

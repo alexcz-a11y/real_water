@@ -930,7 +930,20 @@ describe("Regression acceptance version-3 reader", () => {
     );
     expect(document.qaPrewarmManifest).toMatchObject({
       capabilities: READY_CAPABILITIES,
+      manifest: {
+        version: 12,
+        captures: expect.arrayContaining([
+          {
+            name: "foam-source-identity",
+            preparedFormat: "rgba16float-foam-source-identity",
+          },
+        ]),
+        coreDeclarations: expect.objectContaining({
+          "foam-source-identity": "water-foam-source-identity-target",
+        }),
+      },
     });
+    expect(document.qaPrewarmManifest?.manifest.captures).toHaveLength(34);
   });
 
   it("rejects raw base64 capture payloads and a forged schema", () => {

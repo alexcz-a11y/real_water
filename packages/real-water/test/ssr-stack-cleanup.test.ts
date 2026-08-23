@@ -54,7 +54,8 @@ describe("current-frame SSR stack cleanup", () => {
       return originalDispose.call(this);
     };
     // Fail the first pipeline constructed after the SSR stack is allocated.
-    pipelineFailure.remaining = 6;
+    // Unified foam adds one source-identity diagnostics pipeline before SSR.
+    pipelineFailure.remaining = 7;
     const radiance = new DataTexture(
       createSupportedHostEnvironmentRadianceBytes(),
       8,
