@@ -451,6 +451,12 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
 test("rapid viewport changes reveal only the latest drawing buffer", async ({
   page,
 }) => {
+  // This test budgets 60s for the reveal below, which the 30s per-test cap in
+  // playwright.config.ts would cut short: the budget was never actually
+  // available, so the test could only ever pass when the real wait happened to
+  // land under the cap. Raise the cap past the budget it already asks for
+  // rather than shrinking the budget to fit the cap.
+  test.setTimeout(90_000);
   await page.setViewportSize(INITIAL);
   await page.goto("/?qa=1&host=memory&delay=0");
   test.skip(
