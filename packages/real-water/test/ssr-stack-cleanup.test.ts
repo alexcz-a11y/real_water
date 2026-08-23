@@ -53,7 +53,8 @@ describe("current-frame SSR stack cleanup", () => {
       disposeCounts.set(this, (disposeCounts.get(this) ?? 0) + 1);
       return originalDispose.call(this);
     };
-    pipelineFailure.remaining = 5;
+    // Fail the first pipeline constructed after the SSR stack is allocated.
+    pipelineFailure.remaining = 6;
     const radiance = new DataTexture(
       createSupportedHostEnvironmentRadianceBytes(),
       8,

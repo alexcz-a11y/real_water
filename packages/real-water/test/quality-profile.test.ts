@@ -50,6 +50,13 @@ const NATIVE_SSR_HISTORY = Object.freeze({
   ] as const),
   updateCadence: "host-present" as const,
 });
+// The four domains every shape committed before the waterline carried.
+const PRE_WATERLINE_RESET_DOMAINS = Object.freeze([
+  "simulation-reset",
+  "camera-cut",
+  "origin-shift",
+  "sea-state-cut",
+] as const);
 const NATIVE_SSR = Object.freeze({
   mode: "current-frame" as const,
   history: NATIVE_SSR_HISTORY,
@@ -94,9 +101,35 @@ const LOCAL_INTERACTION = Object.freeze({
   }),
 });
 const MINIMAL_PROFILE_HASH =
-  "sha256:f896b4033ed12264eabcc4e88fc2f41cdbd9e8a2d2a70698b296683b586d3c3f";
+  "sha256:b2e727a8016dbac41a2ea1036275f10c344cffc82b2a10bea2c4bc4807bc651d";
 const HIGH_DETAIL_PROFILE_HASH =
-  "sha256:d33533c3f740eb2d9ef0d4a516f8e242ce22ca83ce90f38fb72f74e57c9738b3";
+  "sha256:a760008c06d5c27ea2cd42f986aff9272f7eaf184e97c6aab6bedf1d73f96bcd";
+// The shape committed as version 7: interaction and whitecaps, no waterline.
+const LEGACY_V7_PROFILES = Object.freeze({
+  "minimal": Object.freeze({
+    profileHash:
+      "sha256:f896b4033ed12264eabcc4e88fc2f41cdbd9e8a2d2a70698b296683b586d3c3f",
+    segments: 128,
+  }),
+  "minimal-high-detail": Object.freeze({
+    profileHash:
+      "sha256:d33533c3f740eb2d9ef0d4a516f8e242ce22ca83ce90f38fb72f74e57c9738b3",
+    segments: 256,
+  }),
+} as const);
+// #31's version 6: no interaction, no whitecaps, waterline already present.
+const LEGACY_V6_WATERLINE_PROFILES = Object.freeze({
+  "minimal": Object.freeze({
+    profileHash:
+      "sha256:e09b96aea95dcf7f52f3220a07ec83a90f29f59c978814b5e107f86098e892c2",
+    segments: 128,
+  }),
+  "minimal-high-detail": Object.freeze({
+    profileHash:
+      "sha256:cb9323969633c4f8a5d6e44dfe9baf84bd3b61923dbc884e65f704e4d7e3b772",
+    segments: 256,
+  }),
+} as const);
 // The two shapes committed as version 6 on the two parallel branches: one
 // added interaction, the other added whitecaps.
 const LEGACY_V6_INTERACTION_PROFILES = Object.freeze({
@@ -259,11 +292,11 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-traa-resolve-jitter":
     "sha256:ba8bdc48d2842afd8f4f620e5296fce9bde9055047e4de7d593eec83dce25733",
   "water-render-route":
-    "sha256:6cac0421e8bfc58786596e077221136c4f29dc249e4c70b557836692958322b4",
+    "sha256:e4dbd7f0f777248b11f0b9a865689490379756efca30b56c288d6d025d695222",
   "water-current-color-conversion":
     "sha256:ea19f958120b52c05d673abcec39db3aa8ca7157f326d5d4449a4faa0457c57c",
   "water-named-output-routes":
-    "sha256:a5f86239f7b86685991bc1e5e0669cadc120c4acb3f9749c5dc70991735c444f",
+    "sha256:bab01729c0b83003c83d1cc96368ba5bfdbd19a8a198250aa0badea37a4f4b5d",
   "water-ssr-raw-target":
     "sha256:5229f76bc28be7b7aa032fadcb3adabfada2202dde29a88f499d16fac9ba659f",
   "water-ssr-blur-target":
@@ -531,10 +564,10 @@ describe("Quality Profiles", () => {
     const minimal = createMinimalWaterQualityProfile();
     const highDetail = createMinimalWaterQualityProfile("minimal-high-detail");
 
-    expect(QUALITY_PROFILE_VERSION).toBe(7);
+    expect(QUALITY_PROFILE_VERSION).toBe(8);
     expect(minimal).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 7,
+      version: 8,
       id: "minimal",
       profileHash: MINIMAL_PROFILE_HASH,
       surface: {
@@ -550,7 +583,7 @@ describe("Quality Profiles", () => {
     });
     expect(highDetail).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 7,
+      version: 8,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
       surface: {
@@ -602,7 +635,7 @@ describe("Quality Profiles", () => {
     expect(normalized).not.toBe(candidate);
     expect(identity).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 7,
+      version: 8,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
     });
@@ -747,6 +780,18 @@ describe("Quality Profiles", () => {
           heightSegments: withInteraction.segments,
         },
       };
+      // Both of these shipped before the waterline, so their reflection is the
+      // one they committed, not the current one.
+      const reflection = {
+        ...NATIVE_REFLECTION,
+        ssr: {
+          ...NATIVE_SSR,
+          history: {
+            ...NATIVE_SSR_HISTORY,
+            resetDomains: PRE_WATERLINE_RESET_DOMAINS,
+          },
+        },
+      };
       const whitecaps = {
         ...NATIVE_WHITECAPS,
         fieldResolution: withWhitecaps.segments,
@@ -761,7 +806,7 @@ describe("Quality Profiles", () => {
           surface,
           interaction: LOCAL_INTERACTION,
           temporal: NATIVE_TEMPORAL,
-          reflection: NATIVE_REFLECTION,
+          reflection,
         }),
       ).toEqual(createMinimalWaterQualityProfile(id));
 
@@ -773,8 +818,68 @@ describe("Quality Profiles", () => {
           profileHash: withWhitecaps.profileHash,
           surface,
           temporal: NATIVE_TEMPORAL,
-          reflection: NATIVE_REFLECTION,
+          reflection,
           whitecaps,
+        }),
+      ).toEqual(createMinimalWaterQualityProfile(id));
+    }
+  });
+
+  it("migrates #31's committed version 6 waterline Quality Profiles", () => {
+    for (const id of ["minimal", "minimal-high-detail"] as const) {
+      const legacy = LEGACY_V6_WATERLINE_PROFILES[id];
+
+      expect(
+        migrateQualityProfile({
+          schema: QUALITY_PROFILE_SCHEMA,
+          version: 6,
+          id,
+          profileHash: legacy.profileHash,
+          surface: {
+            geometry: {
+              widthSegments: legacy.segments,
+              heightSegments: legacy.segments,
+            },
+          },
+          temporal: NATIVE_TEMPORAL,
+          reflection: NATIVE_REFLECTION,
+        }),
+      ).toEqual(createMinimalWaterQualityProfile(id));
+    }
+  });
+
+  it("migrates the committed version 7 Quality Profiles", () => {
+    for (const id of ["minimal", "minimal-high-detail"] as const) {
+      const legacy = LEGACY_V7_PROFILES[id];
+
+      expect(
+        migrateQualityProfile({
+          schema: QUALITY_PROFILE_SCHEMA,
+          version: 7,
+          id,
+          profileHash: legacy.profileHash,
+          surface: {
+            geometry: {
+              widthSegments: legacy.segments,
+              heightSegments: legacy.segments,
+            },
+          },
+          interaction: LOCAL_INTERACTION,
+          temporal: NATIVE_TEMPORAL,
+          reflection: {
+            ...NATIVE_REFLECTION,
+            ssr: {
+              ...NATIVE_SSR,
+              history: {
+                ...NATIVE_SSR_HISTORY,
+                resetDomains: PRE_WATERLINE_RESET_DOMAINS,
+              },
+            },
+          },
+          whitecaps: {
+            ...NATIVE_WHITECAPS,
+            fieldResolution: legacy.segments,
+          },
         }),
       ).toEqual(createMinimalWaterQualityProfile(id));
     }
@@ -821,7 +926,7 @@ describe("Quality Profiles", () => {
       "unknown version 4",
       { ...createMinimalWaterQualityProfile(), version: 4 },
     ],
-    ["future version", { ...createMinimalWaterQualityProfile(), version: 8 }],
+    ["future version", { ...createMinimalWaterQualityProfile(), version: 9 }],
     [
       "version 1 hash tampering",
       {
@@ -1225,7 +1330,7 @@ describe("Quality Profile manifests", () => {
     const profile = createMinimalWaterQualityProfile();
     const manifest = createMinimalWaterPrewarmManifest(profile);
 
-    expect(QUALITY_PROFILE_VERSION).toBe(6);
+    expect(QUALITY_PROFILE_VERSION).toBe(8);
     expect(profile.reflection.ssr.history.resetDomains).toEqual([
       "simulation-reset",
       "camera-cut",
@@ -1286,7 +1391,7 @@ describe("Quality Profile manifests", () => {
     expect(minimal.effectVariants).toEqual(SUPPORTED_EFFECT_VARIANTS);
     expect(minimal.qualityProfile.temporal).toEqual(NATIVE_TEMPORAL);
     expect(minimal.qualityProfile.reflection).toEqual(NATIVE_REFLECTION);
-    expect(minimal.qualityProfile.version).toBe(7);
+    expect(minimal.qualityProfile.version).toBe(8);
 
     expect(minimal.qualityProfile.whitecaps).toEqual(NATIVE_WHITECAPS);
     expect(minimal.declarations.map(({ id }) => id)).toEqual([
@@ -1296,7 +1401,7 @@ describe("Quality Profile manifests", () => {
       minimal.declarations.find(
         (declaration) => declaration.id === "water-named-output-routes",
       )?.label,
-    ).toBe("Twenty-seven named diagnostics output routes");
+    ).toBe("Twenty-nine named diagnostics output routes");
     expect(
       Object.fromEntries(
         minimal.declarations
@@ -1366,7 +1471,7 @@ describe("Quality Profile manifests", () => {
         "Viewport pre-water scene color (viewportSharedTexture)",
       "water-scene-depth": "Viewport opaque scene depth (viewportDepthTexture)",
       "water-optical-route":
-        "Optical composition route (planar+environment fallback, projected refraction, RGB Beer-Lambert, whitecap reflection/transmission/roughness/micro detail)",
+        "Waterline optical composition route (planar+environment fallback, air/water refraction, underside Fresnel and TIR, RGB Beer-Lambert, whitecap reflection/transmission/roughness/micro detail)",
     });
     const highDetailClipmap = highDetail.declarations.find(
       (declaration) => declaration.id === "water-clipmap",
@@ -1398,9 +1503,9 @@ describe("Quality Profile manifests", () => {
       "water-environment-radiance":
         "sha256:3b4e72ce8470faf690ea64fa4f7e0e99c36517e5c93df2036bd80472021b777d",
       "water-material":
-        "sha256:20c6447eb1b1d8ea56fc606898ea49e9505013b24ede63e70535057d5c0050ec",
+        "sha256:815144ef7b32c8fa8f3415db408b9f0a056b4de797daddd9cd4e9a4a0f413f47",
       "water-optical-route":
-        "sha256:c2c89db1c48c537cd41aedafb7dc88cf1b3a55c96399f308ab94cc679a076e07",
+        "sha256:d3b5614e48527196fe1dffd9bd160ad7f5d903bfd1f1a1094d85ed7886f8515c",
       "water-traa-reset-route":
         "sha256:3f32ddae6ca9dde0bcfedf7e8c12e2d7f8c1c71d5fb53de9e2fb4e958e660239",
       "water-hidden-stabilization":

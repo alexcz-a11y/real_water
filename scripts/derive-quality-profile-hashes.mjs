@@ -51,6 +51,18 @@ const COMMITTED_LEGACY_HASHES = {
     "minimal-high-detail":
       "sha256:008a6a813e5e048fca87cce20a13ea7c1a2187a146a4fda7e2a441f4e7d71a37",
   },
+  "6 (waterline)": {
+    "minimal":
+      "sha256:e09b96aea95dcf7f52f3220a07ec83a90f29f59c978814b5e107f86098e892c2",
+    "minimal-high-detail":
+      "sha256:cb9323969633c4f8a5d6e44dfe9baf84bd3b61923dbc884e65f704e4d7e3b772",
+  },
+  "7": {
+    "minimal":
+      "sha256:f896b4033ed12264eabcc4e88fc2f41cdbd9e8a2d2a70698b296683b586d3c3f",
+    "minimal-high-detail":
+      "sha256:d33533c3f740eb2d9ef0d4a516f8e242ce22ca83ce90f38fb72f74e57c9738b3",
+  },
 };
 
 // The reset domains every shape committed so far. Held here as its own literal
@@ -96,6 +108,17 @@ function legacyV6Whitecaps(profile) {
   };
 }
 
+// #31's version 6 added no field; it is a distinct shape only because it
+// already carried waterline-crossing, so the current reset domains are correct
+// for it and only interaction and whitecaps are removed.
+function legacyV6Waterline(profile) {
+  return { ...omitKeys(profile, ["interaction", "whitecaps"]), version: 6 };
+}
+
+function legacyV7(profile) {
+  return { ...withLegacyResetDomains(profile), version: 7 };
+}
+
 let failures = 0;
 
 function report(label, id, canonical, expected) {
@@ -128,6 +151,18 @@ for (const id of PROFILE_IDS) {
     id,
     canonicalJson(legacyV6Whitecaps(profile)),
     COMMITTED_LEGACY_HASHES["6 (whitecaps)"][id],
+  );
+  report(
+    "6 (waterline)",
+    id,
+    canonicalJson(legacyV6Waterline(profile)),
+    COMMITTED_LEGACY_HASHES["6 (waterline)"][id],
+  );
+  report(
+    "7",
+    id,
+    canonicalJson(legacyV7(profile)),
+    COMMITTED_LEGACY_HASHES["7"][id],
   );
 }
 

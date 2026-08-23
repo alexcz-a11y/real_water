@@ -374,7 +374,7 @@ describe("ready local interaction runtime", () => {
     const manifest = createMinimalWaterPrewarmManifest();
 
     expect(manifest.version).toBe(5);
-    expect(manifest.qualityProfile.version).toBe(7);
+    expect(manifest.qualityProfile.version).toBe(8);
     expect(manifest.qualityProfile.interaction).toEqual({
       anchorCount: 1,
       field: {

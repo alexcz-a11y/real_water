@@ -342,7 +342,7 @@ describe("QA frame driver Core association", () => {
     expect(QA_TO_CORE_DECLARATION_IDS["history-rejection"]).toBe(
       "water-history-rejection-target",
     );
-    expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(5, 7)).toEqual([
+    expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(9, 11)).toEqual([
       {
         name: "waterline",
         preparedFormat: "rgba16float-waterline-coverage",
@@ -394,8 +394,8 @@ describe("QA frame driver Core association", () => {
       "water-ssr-history-resolved-capture-target",
       "water-ssr-history-beauty-target",
     ]);
-    expect(receipt.progress.completedWork).toBe(15);
-    expect(receipt.progress.totalWork).toBe(15);
+    expect(receipt.progress.completedWork).toBe(16);
+    expect(receipt.progress.totalWork).toBe(16);
   });
 
   it("rejects a Core manifest that is missing a mapped declaration", () => {

@@ -740,7 +740,7 @@ describe("prepareRealWater", () => {
       manifestHash: manifest.manifestHash,
       qualityProfile: {
         schema: "real-water/quality-profile",
-        version: 7,
+        version: 8,
         id: "minimal",
         profileHash: manifest.qualityProfile.profileHash,
       },

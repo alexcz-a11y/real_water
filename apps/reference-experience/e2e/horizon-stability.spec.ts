@@ -14,7 +14,7 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV10,
+  type QaHarnessV11,
 } from "../src/qa-harness.js";
 import { REFERENCE_ENVIRONMENT_LIGHTING } from "../src/reference-optical-inputs.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
@@ -95,7 +95,7 @@ async function captureHorizonTransitionRoute(
 ) {
   return page.evaluate(
     async ({ camera, artisticControls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV10 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -140,7 +140,7 @@ test("breaks repeating Open Water patches on the deterministic horizon route", a
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async (shiftMetres) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV10 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -252,7 +252,7 @@ test("preserves queried and rendered Open Water across a host origin shift", asy
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async (periodMetres) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV10 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -388,7 +388,7 @@ test("preserves queried and rendered Open Water across a billion-metre origin sh
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ baselineOrigin, periodMetres }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV10 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -719,7 +719,7 @@ test("keeps filtered slope detail and optical glints stable under camera motion"
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async (controls) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV10 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }

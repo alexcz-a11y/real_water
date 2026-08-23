@@ -886,7 +886,7 @@ export interface PrewarmManifestIdentity {
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 7;
+export const QUALITY_PROFILE_VERSION: 8;
 
 // @public
 export interface QualityProfile {

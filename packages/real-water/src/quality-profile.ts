@@ -17,7 +17,7 @@ export const QUALITY_PROFILE_SCHEMA = "real-water/quality-profile" as const;
  *
  * @public
  */
-export const QUALITY_PROFILE_VERSION = 7 as const;
+export const QUALITY_PROFILE_VERSION = 8 as const;
 
 /**
  * Built-in structural configurations for the minimal-water surface.
@@ -303,6 +303,14 @@ const NATIVE_REFLECTION: QualityProfileReflection = Object.freeze({
   }),
   ssr: CURRENT_FRAME_SSR_POLICY,
 });
+// "waterline-crossing" is deliberately absent here. Whitecap foam is simulated
+// in the wave field, so its history only has to be dropped when that field is
+// discontinuous — a reset, a reseed, a rewind, a sea-state cut. A waterline
+// crossing is a presentation-side, view-dependent event: the camera moves
+// through the surface while the field itself keeps evolving. Adding it would
+// silently throw away converged foam every time the camera dips, so do not add
+// it here "for consistency" with the SSR history reset domains, which are
+// view-dependent and therefore do list it.
 const SPECTRAL_WHITECAP_RESET_DOMAINS = Object.freeze([
   "simulation-reset",
   "seed-change",
@@ -315,14 +323,14 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:f896b4033ed12264eabcc4e88fc2f41cdbd9e8a2d2a70698b296683b586d3c3f",
+      "sha256:b2e727a8016dbac41a2ea1036275f10c344cffc82b2a10bea2c4bc4807bc651d",
     widthSegments: 128,
     heightSegments: 128,
     whitecapFieldResolution: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:d33533c3f740eb2d9ef0d4a516f8e242ce22ca83ce90f38fb72f74e57c9738b3",
+      "sha256:a760008c06d5c27ea2cd42f986aff9272f7eaf184e97c6aab6bedf1d73f96bcd",
     widthSegments: 256,
     heightSegments: 256,
     whitecapFieldResolution: 256,
@@ -404,12 +412,23 @@ interface LegacyQualityProfileVariant {
   >;
 }
 
-// Every shape committed so far carries these four, in this order.
+// Everything committed before the waterline carries these four, in this order.
 const LEGACY_SSR_HISTORY_RESET_DOMAINS = Object.freeze([
   "simulation-reset",
   "camera-cut",
   "origin-shift",
   "sea-state-cut",
+] as const);
+
+// #31 shipped a version 6 that already carried the waterline domain. Its own
+// literal, for the same reason the list above is its own: a variant is matched
+// against the contract it was committed under, never against the current one.
+const WATERLINE_SSR_HISTORY_RESET_DOMAINS = Object.freeze([
+  "simulation-reset",
+  "camera-cut",
+  "origin-shift",
+  "sea-state-cut",
+  "waterline-crossing",
 ] as const);
 
 // Version 5 was committed twice: once before the SSR history carried a
@@ -463,6 +482,32 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
 // Every exact payload remains recoverable, and no hash is an alias for
 // another's partially matching data. Version 7 is the first version that
 // carries both fields, which is why it exists at all.
+// Version 7 carried interaction and whitecaps but predates the waterline: its
+// SSR history reset domains stop at sea-state-cut. Version 8 is the first that
+// also resets on a waterline crossing.
+const LEGACY_V7_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:f896b4033ed12264eabcc4e88fc2f41cdbd9e8a2d2a70698b296683b586d3c3f",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:d33533c3f740eb2d9ef0d4a516f8e242ce22ca83ce90f38fb72f74e57c9738b3",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
 const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
@@ -498,6 +543,28 @@ const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "minimal-high-detail": Object.freeze({
           profileHash:
             "sha256:008a6a813e5e048fca87cce20a13ea7c1a2187a146a4fda7e2a441f4e7d71a37",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+    // The third version 6, from #31. It added no field -- its key set matches
+    // version 5 -- and is a distinct shape only because it added
+    // waterline-crossing to the reset domains, which moved the hash.
+    Object.freeze({
+      absentKeys: Object.freeze(["interaction", "whitecaps"] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:e09b96aea95dcf7f52f3220a07ec83a90f29f59c978814b5e107f86098e892c2",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:cb9323969633c4f8a5d6e44dfe9baf84bd3b61923dbc884e65f704e4d7e3b772",
           widthSegments: 256,
           heightSegments: 256,
         }),
@@ -799,6 +866,15 @@ export function migrateQualityProfile(candidate: unknown): QualityProfile {
 
   if (
     isRecord(candidate) &&
+    candidate.version === 7 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV7Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
     candidate.version === 6 &&
     isSupportedProfileId(candidate.id) &&
     matchesLegacyV6Profile(candidate, candidate.id)
@@ -935,6 +1011,15 @@ function matchesLegacyV2Temporal(value: unknown): boolean {
     value.dynamicResolution === false &&
     value.frameGeneration === false &&
     value.msaaSamples === 0
+  );
+}
+
+function matchesLegacyV7Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V7_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
   );
 }
 

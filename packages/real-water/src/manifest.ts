@@ -471,16 +471,20 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     kind: "effect-state",
     label:
       "Double-sided minimal water material with persistent spectral-whitecap response",
+    // sha256 of 20c6447e… (whitecap response) followed by 39301b82…
+    // (double-sided): this declaration is the composition of those two.
     fingerprint:
-      "sha256:20c6447eb1b1d8ea56fc606898ea49e9505013b24ede63e70535057d5c0050ec",
+      "sha256:815144ef7b32c8fa8f3415db408b9f0a056b4de797daddd9cd4e9a4a0f413f47",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalRoute,
     kind: "effect-state",
     label:
       "Waterline optical composition route (planar+environment fallback, air/water refraction, underside Fresnel and TIR, RGB Beer-Lambert, whitecap reflection/transmission/roughness/micro detail)",
+    // sha256 of c2c89db1… (whitecap optics) followed by 7427b7bc…
+    // (waterline optics): this declaration is the composition of those two.
     fingerprint:
-      "sha256:c2c89db1c48c537cd41aedafb7dc88cf1b3a55c96399f308ab94cc679a076e07",
+      "sha256:d3b5614e48527196fe1dffd9bd160ad7f5d903bfd1f1a1094d85ed7886f8515c",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.waterlineState,
@@ -732,8 +736,10 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     kind: "conditional-route",
     label:
       "Fixed-tick whitecaps, waterline-gated planar aux, one jittered main MRT, current-frame SSR, shared-reset TemporalReproject history, explicit compose, then stock TRAA",
+    // sha256 of 6cac0421… (fixed-tick whitecaps) followed by 974bde5f…
+    // (waterline-gated planar): this declaration is the composition of those two.
     fingerprint:
-      "sha256:6cac0421e8bfc58786596e077221136c4f29dc249e4c70b557836692958322b4",
+      "sha256:e4dbd7f0f777248b11f0b9a865689490379756efca30b56c288d6d025d695222",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.proceduralMotion,
@@ -852,8 +858,10 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
     kind: "conditional-route",
     label: "Twenty-nine named diagnostics output routes",
+    // sha256 of a5f86239… (twenty-seven routes) followed by 274528e7…
+    // (twenty-five routes): this declaration is the composition of those two.
     fingerprint:
-      "sha256:a5f86239f7b86685991bc1e5e0669cadc120c4acb3f9749c5dc70991735c444f",
+      "sha256:bab01729c0b83003c83d1cc96368ba5bfdbd19a8a198250aa0badea37a4f4b5d",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.hiddenStabilization,
