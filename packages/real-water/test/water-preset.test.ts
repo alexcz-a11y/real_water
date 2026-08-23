@@ -17,6 +17,38 @@ import {
   waterPresetIdentity,
   type WaterPreset,
 } from "../src/water-preset.js";
+import type { ArtisticControls } from "../src/runtime.js";
+
+// Versions 1 through 3 predate the spectral whitecap Artistic Controls, so a
+// repository-authentic historical payload carries only the thirteen optical
+// controls, in their original order.
+function withoutWhitecapControls(
+  controls: ArtisticControls,
+): Record<string, number> {
+  const legacy: Record<string, number> = { ...controls };
+  delete legacy.whitecapAmount;
+  delete legacy.foamPersistence;
+  return legacy;
+}
+
+// Version 3 was committed twice, in two different shapes, on two branches
+// developed in parallel: one derived presetHash at runtime over the thirteen
+// optical controls, the other added the two spectral whitecap controls. Both
+// hash sets are taken from the two commits, not recomputed here.
+const LEGACY_V3_PRE_WHITECAP_HASHES = {
+  calm: "sha256:4e857b4e7b20f4d2317e62980ef769d7d7547bf5b7b3aa7e3394bc4e8518aae5",
+  swell:
+    "sha256:7a24dac40f64cf2d8bef944832c661adefb49883d2ad541c13eaeb91254f580c",
+  storm:
+    "sha256:6eb0e333bf6a5b3242002057c8380800eaa0b2aad7e4dacf39ffb73f408a5fe5",
+} as const;
+const LEGACY_V3_WHITECAP_HASHES = {
+  calm: "sha256:2636557cea16c0c4c8fc249e486192db8b205737d2679df95e36ee10baeb2825",
+  swell:
+    "sha256:a271f14c1aad0eaf6681b9499cb962b94b19531870cf5b4bca3a6061636ccbeb",
+  storm:
+    "sha256:04ba3bb41ea6ca9c9f6b54bd7bf8888c0b634df026379be67bad284143f2d3e9",
+} as const;
 
 const LEGACY_V2_BUILT_INS = [
   {
@@ -150,13 +182,13 @@ describe("Water Presets", () => {
 
     expect(authored).toEqual({
       schema: WATER_PRESET_SCHEMA,
-      version: 3,
+      version: 4,
       id: "storm",
       presetHash:
-        "sha256:a8ed886b6e83006c268b1f72308d7956b446b74c6caecc10e3def887266dde34",
+        "sha256:4f7b89f0a5f836dff2371e451991e129a3d8e3a1e847b4077dee63dfa4fccb12",
       artisticControls: controls,
     });
-    expect(WATER_PRESET_VERSION).toBe(3);
+    expect(WATER_PRESET_VERSION).toBe(4);
     expect(Object.isFrozen(authored)).toBe(true);
     expect(Object.isFrozen(authored.artisticControls)).toBe(true);
   });
@@ -197,7 +229,7 @@ describe("Water Presets", () => {
       version: WATER_PRESET_VERSION,
       id: "swell",
       presetHash:
-        "sha256:a271f14c1aad0eaf6681b9499cb962b94b19531870cf5b4bca3a6061636ccbeb",
+        "sha256:1aec06c6bf80dd58fe969671ecc3c7384dbc0629c73a3e587d2340f3df937add",
       artisticControls: {
         waveStrength: 1,
         swellDrama: 1,
@@ -217,9 +249,9 @@ describe("Water Presets", () => {
       },
     });
     expect(calm.id).toBe("calm");
-    expect(WATER_PRESET_VERSION).toBe(3);
+    expect(WATER_PRESET_VERSION).toBe(4);
     expect(calm.presetHash).toBe(
-      "sha256:2636557cea16c0c4c8fc249e486192db8b205737d2679df95e36ee10baeb2825",
+      "sha256:1bb0868a4be1fb6a0ede1528dd37a43e42da9ac7e1837b9f3ac42b6d670b7804",
     );
     expect(calm.artisticControls).toMatchObject({
       grazingReflection: 0.7,
@@ -233,7 +265,7 @@ describe("Water Presets", () => {
     });
     expect(storm.id).toBe("storm");
     expect(storm.presetHash).toBe(
-      "sha256:04ba3bb41ea6ca9c9f6b54bd7bf8888c0b634df026379be67bad284143f2d3e9",
+      "sha256:037b3c79396891e2d93f795e0af78b84e9183123bf8352c3273bef8736c7b817",
     );
     expect(storm.artisticControls).toMatchObject({
       grazingReflection: 1.15,
@@ -264,7 +296,7 @@ describe("Water Presets", () => {
       version: WATER_PRESET_VERSION,
       id: "storm",
       presetHash:
-        "sha256:04ba3bb41ea6ca9c9f6b54bd7bf8888c0b634df026379be67bad284143f2d3e9",
+        "sha256:037b3c79396891e2d93f795e0af78b84e9183123bf8352c3273bef8736c7b817",
     });
     expect(Object.isFrozen(normalized)).toBe(true);
     expect(Object.isFrozen(identity)).toBe(true);
@@ -308,7 +340,7 @@ describe("Water Presets", () => {
       const migrated = migrateWaterPreset(structuredClone(legacy));
 
       expect(migrated).toEqual(createWaterPreset(legacy.id));
-      expect(migrated.version).toBe(3);
+      expect(migrated.version).toBe(4);
       expect(Object.isFrozen(migrated)).toBe(true);
       expect(Object.isFrozen(migrated.artisticControls)).toBe(true);
     },
@@ -320,18 +352,71 @@ describe("Water Presets", () => {
       const migrated = migrateWaterPreset(structuredClone(legacy));
 
       expect(migrated).toEqual(createWaterPreset(legacy.id));
-      expect(migrated.version).toBe(3);
+      expect(migrated.version).toBe(4);
       expect(Object.isFrozen(migrated)).toBe(true);
       expect(Object.isFrozen(migrated.artisticControls)).toBe(true);
     },
   );
+
+  it.each(["calm", "swell", "storm"] as const)(
+    "migrates both committed v3 %s built-in snapshots",
+    (id) => {
+      const current = createWaterPreset(id);
+      const preWhitecap = withoutWhitecapControls(current.artisticControls);
+
+      expect(
+        migrateWaterPreset({
+          schema: WATER_PRESET_SCHEMA,
+          version: 3,
+          id,
+          presetHash: LEGACY_V3_PRE_WHITECAP_HASHES[id],
+          artisticControls: preWhitecap,
+        }),
+      ).toEqual(current);
+
+      expect(
+        migrateWaterPreset({
+          schema: WATER_PRESET_SCHEMA,
+          version: 3,
+          id,
+          presetHash: LEGACY_V3_WHITECAP_HASHES[id],
+          artisticControls: { ...current.artisticControls },
+        }),
+      ).toEqual(current);
+    },
+  );
+
+  it("refuses to mix the two committed v3 shapes", () => {
+    const current = createWaterPreset("calm");
+    const preWhitecap = withoutWhitecapControls(current.artisticControls);
+
+    expect(() =>
+      migrateWaterPreset({
+        schema: WATER_PRESET_SCHEMA,
+        version: 3,
+        id: "calm",
+        presetHash: LEGACY_V3_WHITECAP_HASHES.calm,
+        artisticControls: preWhitecap,
+      }),
+    ).toThrow(TypeError);
+
+    expect(() =>
+      migrateWaterPreset({
+        schema: WATER_PRESET_SCHEMA,
+        version: 3,
+        id: "calm",
+        presetHash: LEGACY_V3_PRE_WHITECAP_HASHES.calm,
+        artisticControls: { ...current.artisticControls },
+      }),
+    ).toThrow(TypeError);
+  });
 
   it.each([
     [
       "a future version",
       {
         ...createWaterPreset("storm"),
-        version: 4,
+        version: 5,
       },
     ],
     [

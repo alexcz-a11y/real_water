@@ -14,6 +14,19 @@ import {
   LOCAL_PRESET_BUILT_IN_RECORD_IDS,
   type LocalPresetStorageAdapter,
 } from "./local-preset-library.js";
+import type { ArtisticControls } from "real-water";
+
+// Versions 1 through 3 predate the spectral whitecap Artistic Controls, so a
+// repository-authentic historical payload carries only the thirteen optical
+// controls, in their original order.
+function withoutWhitecapControls(
+  controls: ArtisticControls,
+): Record<string, number> {
+  const legacy: Record<string, number> = { ...controls };
+  delete legacy.whitecapAmount;
+  delete legacy.foamPersistence;
+  return legacy;
+}
 
 describe("Local Preset Library", () => {
   it("keeps record identity and display name separate from the Core preset payload", () => {
@@ -207,11 +220,14 @@ describe("Local Preset Library", () => {
       createRecordId: createSequentialRecordId(),
       builtIns: [],
     });
+    const calm = createWaterPreset("calm");
     const historicalJson = `${JSON.stringify({
-      ...createWaterPreset("calm"),
+      schema: calm.schema,
       version: 2,
+      id: calm.id,
       presetHash:
         "sha256:7823cba17b46a26315541babfde3d3b7fda6a937794df7a32cbc3bf3d28df047",
+      artisticControls: withoutWhitecapControls(calm.artisticControls),
     })}\n`;
 
     const imported = library.importJson({

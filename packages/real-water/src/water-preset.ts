@@ -18,7 +18,14 @@ const ARTISTIC_CONTROL_KEYS = [
   "depthColoring",
   "inWaterGlow",
   "crestGlow",
+  "whitecapAmount",
+  "foamPersistence",
 ] as const;
+
+// Versions 1 through 3 all predate the spectral whitecap Artistic Controls.
+const LEGACY_PRE_WHITECAP_ARTISTIC_CONTROL_KEYS = ARTISTIC_CONTROL_KEYS.filter(
+  (key) => key !== "whitecapAmount" && key !== "foamPersistence",
+);
 
 const LEGACY_V1_ARTISTIC_CONTROL_KEYS = [
   "waveStrength",
@@ -29,6 +36,11 @@ const LEGACY_V1_ARTISTIC_CONTROL_KEYS = [
   "microDetail",
   "timeScale",
 ] as const;
+
+type LegacyPreWhitecapArtisticControls = Omit<
+  ArtisticControls,
+  "whitecapAmount" | "foamPersistence"
+>;
 
 /**
  * The discriminator for supported Water Presets.
@@ -42,7 +54,7 @@ export const WATER_PRESET_SCHEMA = "real-water/water-preset" as const;
  *
  * @public
  */
-export const WATER_PRESET_VERSION = 3 as const;
+export const WATER_PRESET_VERSION = 4 as const;
 
 /**
  * Built-in named sea characters stored as hot Artistic Controls.
@@ -251,6 +263,9 @@ export function migrateWaterPreset(candidate: unknown): WaterPreset {
   if (candidate.version === WATER_PRESET_VERSION) {
     return normalizeWaterPreset(candidate as unknown as WaterPreset);
   }
+  if (candidate.version === 3) {
+    return migrateBuiltInWaterPresetV3(candidate);
+  }
   if (candidate.version === 2) {
     return migrateBuiltInWaterPresetV2(candidate);
   }
@@ -329,8 +344,41 @@ function readArtisticControls(candidate: unknown): ArtisticControls {
   assertControlRange(candidate.depthColoring, 0, 2, "depthColoring");
   assertControlRange(candidate.inWaterGlow, 0, 2, "inWaterGlow");
   assertControlRange(candidate.crestGlow, 0, 2, "crestGlow");
+  assertControlRange(candidate.whitecapAmount, 0, 2, "whitecapAmount");
+  assertControlRange(candidate.foamPersistence, 0, 2, "foamPersistence");
 
   return copyArtisticControls(candidate as unknown as ArtisticControls);
+}
+
+// A pre-whitecap snapshot carries thirteen controls, so the current reader's
+// exact-key check cannot be used directly. Range validation is still shared
+// with it by attaching the canonical default whitecap pair: createWaterPreset
+// defaults to "swell", whose whitecapAmount and foamPersistence are both 1.
+// That pair is then discarded -- the returned record, the content hash, and the
+// built-in comparison all stay on the thirteen controls actually committed, so
+// the migrated preset's whitecap values are its own, not a substituted default.
+function readLegacyPreWhitecapArtisticControls(
+  candidate: unknown,
+): LegacyPreWhitecapArtisticControls {
+  if (
+    !isRecord(candidate) ||
+    !hasExactKeys(candidate, LEGACY_PRE_WHITECAP_ARTISTIC_CONTROL_KEYS)
+  ) {
+    throw new TypeError(
+      "Artistic Controls must use the complete supported control set.",
+    );
+  }
+
+  const validated = readArtisticControls({
+    ...candidate,
+    whitecapAmount: 1,
+    foamPersistence: 1,
+  });
+  const legacy: Partial<Record<string, number>> = {};
+  for (const key of LEGACY_PRE_WHITECAP_ARTISTIC_CONTROL_KEYS) {
+    legacy[key] = validated[key];
+  }
+  return legacy as LegacyPreWhitecapArtisticControls;
 }
 
 function assertControlRange(
@@ -367,7 +415,9 @@ function migrateBuiltInWaterPresetV2(candidate: Record<string, unknown>) {
     throw new TypeError("The Water Preset v2 snapshot cannot be migrated.");
   }
 
-  const artisticControls = readArtisticControls(candidate.artisticControls);
+  const artisticControls = readLegacyPreWhitecapArtisticControls(
+    candidate.artisticControls,
+  );
   const supported = BUILT_IN_WATER_PRESETS[candidate.id].artisticControls;
   const canonical = {
     schema: WATER_PRESET_SCHEMA,
@@ -377,11 +427,60 @@ function migrateBuiltInWaterPresetV2(candidate: Record<string, unknown>) {
   };
   if (
     candidate.presetHash !== sha256Identifier(JSON.stringify(canonical)) ||
-    ARTISTIC_CONTROL_KEYS.some(
+    LEGACY_PRE_WHITECAP_ARTISTIC_CONTROL_KEYS.some(
       (key) => artisticControls[key] !== supported[key],
     )
   ) {
     throw new TypeError("The Water Preset v2 snapshot cannot be migrated.");
+  }
+
+  return createWaterPreset(candidate.id);
+}
+
+// Version 3 was committed twice, in two different shapes, on two branches that
+// were developed in parallel: one derived presetHash at runtime over the
+// thirteen optical controls, the other added the two spectral whitecap
+// controls. Both exact payloads remain recoverable. Version 4 is the first
+// version that carries both, which is why it exists at all.
+function migrateBuiltInWaterPresetV3(candidate: Record<string, unknown>) {
+  if (
+    !hasExactKeys(candidate, [
+      "schema",
+      "version",
+      "id",
+      "presetHash",
+      "artisticControls",
+    ]) ||
+    candidate.schema !== WATER_PRESET_SCHEMA ||
+    candidate.version !== 3 ||
+    !isSupportedPresetId(candidate.id) ||
+    !isRecord(candidate.artisticControls)
+  ) {
+    throw new TypeError("The Water Preset v3 snapshot cannot be migrated.");
+  }
+
+  const supported = BUILT_IN_WATER_PRESETS[candidate.id].artisticControls;
+  const withWhitecaps = hasExactKeys(
+    candidate.artisticControls,
+    ARTISTIC_CONTROL_KEYS,
+  );
+  const keys = withWhitecaps
+    ? ARTISTIC_CONTROL_KEYS
+    : LEGACY_PRE_WHITECAP_ARTISTIC_CONTROL_KEYS;
+  const artisticControls: Record<string, number> = withWhitecaps
+    ? readArtisticControls(candidate.artisticControls)
+    : readLegacyPreWhitecapArtisticControls(candidate.artisticControls);
+  const canonical = {
+    schema: WATER_PRESET_SCHEMA,
+    version: 3,
+    id: candidate.id,
+    artisticControls,
+  };
+  if (
+    candidate.presetHash !== sha256Identifier(JSON.stringify(canonical)) ||
+    keys.some((key) => artisticControls[key] !== supported[key])
+  ) {
+    throw new TypeError("The Water Preset v3 snapshot cannot be migrated.");
   }
 
   return createWaterPreset(candidate.id);

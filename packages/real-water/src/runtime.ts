@@ -413,7 +413,8 @@ export function createRealWaterRuntime(
           ),
         );
       }
-      return receipt;    },
+      return receipt;
+    },
     submitDisturbances(batch: DisturbanceBatch): DisturbanceSubmissionReceipt {
       assertActive();
       readHostPresentationState(presentation);

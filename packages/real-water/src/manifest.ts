@@ -25,9 +25,15 @@ export const PREWARM_MANIFEST_SCHEMA = "real-water/prewarm" as const;
 /**
  * The only Prewarm Manifest version accepted by this release.
  *
+ * Version 4 and version 3 were declared in parallel on two branches, each
+ * describing a different work-unit set. This version describes the merged set,
+ * which neither of them did. There is no migration rung: the only consumer is
+ * an equality gate that rejects any other value, so the number is an identity
+ * stamp for a declaration set, not a payload that can be carried forward.
+ *
  * @public
  */
-export const PREWARM_MANIFEST_VERSION = 4 as const;
+export const PREWARM_MANIFEST_VERSION = 5 as const;
 
 /**
  * Immutable physical drawing-buffer dimensions bound into a Prewarm Manifest.

@@ -805,7 +805,7 @@ export type PresetRecoveryReason = "invalid-json" | "unknown-schema" | "invalid-
 export const PREWARM_MANIFEST_SCHEMA: "real-water/prewarm";
 
 // @public
-export const PREWARM_MANIFEST_VERSION: 4;
+export const PREWARM_MANIFEST_VERSION: 5;
 
 // @public
 export interface PrewarmDeclaration {
@@ -884,7 +884,7 @@ export interface PrewarmManifestIdentity {
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 6;
+export const QUALITY_PROFILE_VERSION: 7;
 
 // @public
 export interface QualityProfile {
@@ -1531,7 +1531,7 @@ export interface ThreeHostScene {
 export const WATER_PRESET_SCHEMA: "real-water/water-preset";
 
 // @public
-export const WATER_PRESET_VERSION: 3;
+export const WATER_PRESET_VERSION: 4;
 
 // @public
 export interface WaterPreset {

@@ -8,6 +8,19 @@ import {
   importPresetJson,
   type PresetDocument,
 } from "../src/preset-codec.js";
+import type { ArtisticControls } from "../src/runtime.js";
+
+// Versions 1 through 3 predate the spectral whitecap Artistic Controls, so a
+// repository-authentic historical payload carries only the thirteen optical
+// controls, in their original order.
+function withoutWhitecapControls(
+  controls: ArtisticControls,
+): Record<string, number> {
+  const legacy: Record<string, number> = { ...controls };
+  delete legacy.whitecapAmount;
+  delete legacy.foamPersistence;
+  return legacy;
+}
 
 describe("Preset JSON codec", () => {
   it("round-trips every current preset schema through one public seam", () => {
@@ -37,10 +50,12 @@ describe("Preset JSON codec", () => {
   it("imports a known historical Water Preset through the explicit migration", () => {
     const current = createWaterPreset("storm");
     const rawJson = JSON.stringify({
-      ...current,
+      schema: current.schema,
       version: 2,
+      id: current.id,
       presetHash:
         "sha256:85ff6bf8c652aaecb3d7aa3e3bf35c693264365c19cec1683c42fe2fb1164f9e",
+      artisticControls: withoutWhitecapControls(current.artisticControls),
     });
 
     expect(importPresetJson(rawJson)).toEqual({

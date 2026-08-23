@@ -17,7 +17,7 @@ export const QUALITY_PROFILE_SCHEMA = "real-water/quality-profile" as const;
  *
  * @public
  */
-export const QUALITY_PROFILE_VERSION = 6 as const;
+export const QUALITY_PROFILE_VERSION = 7 as const;
 
 /**
  * Built-in structural configurations for the minimal-water surface.
@@ -217,10 +217,17 @@ export interface QualityProfileIdentity {
   readonly profileHash: string;
 }
 
-interface SupportedQualityProfile {
+// Every committed snapshot predating the spectral whitecap field is described
+// by geometry identity alone. Keeping that the narrow type -- rather than
+// making whitecapFieldResolution optional -- is what stops `undefined` from
+// reaching the current profile's whitecaps.fieldResolution.
+interface LegacyQualityProfileSnapshot {
   readonly profileHash: string;
   readonly widthSegments: number;
   readonly heightSegments: number;
+}
+
+interface SupportedQualityProfile extends LegacyQualityProfileSnapshot {
   readonly whitecapFieldResolution: 128 | 256;
 }
 
@@ -306,14 +313,14 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:e89f6484cb983b184dee0ee46a77f8f05561b97df2a37c4686525b73b53eda28",
+      "sha256:f896b4033ed12264eabcc4e88fc2f41cdbd9e8a2d2a70698b296683b586d3c3f",
     widthSegments: 128,
     heightSegments: 128,
     whitecapFieldResolution: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:008a6a813e5e048fca87cce20a13ea7c1a2187a146a4fda7e2a441f4e7d71a37",
+      "sha256:d33533c3f740eb2d9ef0d4a516f8e242ce22ca83ce90f38fb72f74e57c9738b3",
     widthSegments: 256,
     heightSegments: 256,
     whitecapFieldResolution: 256,
@@ -324,7 +331,7 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 // schema acquired temporal and reflection policies. Both exact payloads remain
 // recoverable; their hashes are not aliases for partially matching data.
 const LEGACY_V1_QUALITY_PROFILES: readonly Readonly<
-  Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
+  Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
 >[] = Object.freeze([
   Object.freeze({
     "minimal": Object.freeze({
@@ -356,7 +363,7 @@ const LEGACY_V1_QUALITY_PROFILES: readonly Readonly<
   }),
 ]);
 const LEGACY_V2_QUALITY_PROFILES: Readonly<
-  Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
+  Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
@@ -375,7 +382,7 @@ const LEGACY_V2_QUALITY_PROFILES: Readonly<
 // and whitecap fields existed, so they cover the version 5 field order:
 // schema, version, id, surface, temporal, reflection.
 const LEGACY_V5_QUALITY_PROFILES: Readonly<
-  Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
+  Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
@@ -392,7 +399,7 @@ const LEGACY_V5_QUALITY_PROFILES: Readonly<
 });
 
 const LEGACY_PRE_RESET_V5_QUALITY_PROFILES: Readonly<
-  Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
+  Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
@@ -407,6 +414,61 @@ const LEGACY_PRE_RESET_V5_QUALITY_PROFILES: Readonly<
     heightSegments: 256,
   }),
 });
+
+// Version 6 was committed more than once, in more than one shape, on branches
+// developed in parallel: one added `interaction`, another added `whitecaps`.
+// Every exact payload remains recoverable, and no hash is an alias for
+// another's partially matching data. Version 7 is the first version that
+// carries both fields, which is why it exists at all.
+//
+// A variant is described by the current-schema fields it did NOT carry, so a
+// further version 6 shape is one more entry here rather than a new table.
+type QualityProfileKey = (typeof QUALITY_PROFILE_KEYS)[number];
+
+interface LegacyQualityProfileVariant {
+  readonly absentKeys: readonly QualityProfileKey[];
+  readonly profiles: Readonly<
+    Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
+  >;
+}
+
+const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze(["whitecaps"] as const),
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:c60b0a30fa310fbc1f21270c413a35b5b6265d6f157e5f41233be4b8042d8ec5",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:4cba756cba61d7f4e071605c4d6939c1ba76b2cab0ef500bcf5ed1be7404d7f4",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+    Object.freeze({
+      absentKeys: Object.freeze(["interaction"] as const),
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:e89f6484cb983b184dee0ee46a77f8f05561b97df2a37c4686525b73b53eda28",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:008a6a813e5e048fca87cce20a13ea7c1a2187a146a4fda7e2a441f4e7d71a37",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
 
 const QUALITY_PROFILE_KEYS = [
   "schema",
@@ -510,7 +572,7 @@ const SSR_HISTORY_KEYS = [
   "updateCadence",
 ] as const;
 const LEGACY_V5_QUALITY_PROFILE_KEYS = QUALITY_PROFILE_KEYS.filter(
-  (key) => key !== "interaction",
+  (key) => key !== "interaction" && key !== "whitecaps",
 );
 const LEGACY_PRE_RESET_SSR_HISTORY_KEYS = SSR_HISTORY_KEYS.filter(
   (key) => key !== "resetVelocityFormat",
@@ -708,6 +770,15 @@ export function migrateQualityProfile(candidate: unknown): QualityProfile {
 
   if (
     isRecord(candidate) &&
+    candidate.version === 6 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV6Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
     candidate.version === 5 &&
     isSupportedProfileId(candidate.id) &&
     (matchesLegacyV5Profile(candidate, candidate.id) ||
@@ -803,7 +874,7 @@ function isSupportedSsrHistory(
 
 function matchesLegacySurface(
   value: Record<string, unknown>,
-  supported: SupportedQualityProfile,
+  supported: LegacyQualityProfileSnapshot,
 ): boolean {
   return (
     value.profileHash === supported.profileHash &&
@@ -836,6 +907,63 @@ function matchesLegacyV2Temporal(value: unknown): boolean {
     value.dynamicResolution === false &&
     value.frameGeneration === false &&
     value.msaaSamples === 0
+  );
+}
+
+function matchesLegacyV6Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V6_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
+function matchesLegacyVariant(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+  variant: LegacyQualityProfileVariant,
+): boolean {
+  const carriesInteraction = !variant.absentKeys.includes("interaction");
+  const carriesWhitecaps = !variant.absentKeys.includes("whitecaps");
+  return (
+    hasExactKeys(
+      value,
+      QUALITY_PROFILE_KEYS.filter((key) => !variant.absentKeys.includes(key)),
+    ) &&
+    value.schema === QUALITY_PROFILE_SCHEMA &&
+    matchesLegacySurface(value, variant.profiles[id]) &&
+    matchesCurrentTemporal(value.temporal) &&
+    matchesCurrentReflection(value.reflection) &&
+    (!carriesInteraction || matchesCurrentInteraction(value.interaction, id)) &&
+    (!carriesWhitecaps ||
+      isSupportedSpectralWhitecaps(
+        value.whitecaps,
+        createMinimalWaterQualityProfile(id).whitecaps,
+      ))
+  );
+}
+
+// The interaction and whitecap policies are unchanged between the two committed
+// version 6 shapes and version 7, so the current profile is the comparand.
+function matchesCurrentInteraction(
+  value: unknown,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  const supported = createMinimalWaterQualityProfile(id).interaction;
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, INTERACTION_KEYS) &&
+    value.anchorCount === supported.anchorCount &&
+    isRecord(value.field) &&
+    hasExactKeys(value.field, INTERACTION_FIELD_KEYS) &&
+    value.field.radiusMetres === supported.field.radiusMetres &&
+    value.field.edgeFadeMetres === supported.field.edgeFadeMetres &&
+    value.field.maxActiveDisturbances ===
+      supported.field.maxActiveDisturbances &&
+    value.field.snapshotBanks === supported.field.snapshotBanks &&
+    value.field.maxSnapshotAgeTicks === supported.field.maxSnapshotAgeTicks &&
+    value.field.radialImpactRoute === supported.field.radialImpactRoute
   );
 }
 

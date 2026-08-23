@@ -71,7 +71,7 @@ Issue #18 extended the coherent spectral runtime and deterministic QA
 foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly sixty-eight work
+- the canonical minimal-water Prewarm Manifest declares exactly seventy-one work
   units: a texture, Host equirect environment radiance, viewport scene color,
   viewport scene depth, 6-attachment MRT, camera-relative clipmap, four spectral
   bands, two fixed RGBA16F whitecap fields, reset/generate/history/advect/
@@ -90,7 +90,7 @@ foundation:
   twenty-seven named diagnostics output routes, eight hidden temporal
   stabilization frames, named-output completion probes, and main-camera guard
   frame, plus the local interaction field, its fixed current/previous uniform
-  buffers, and the hidden-executed radial-impact route. Version 4 binds the
+  buffers, and the hidden-executed radial-impact route. Version 5 binds the
   physical drawing buffer into that work plan; a viewport change creates a new
   manifest and lease;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
