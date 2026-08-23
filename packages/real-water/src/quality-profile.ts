@@ -23,7 +23,7 @@ export const QUALITY_PROFILE_SCHEMA = "real-water/quality-profile" as const;
  *
  * @public
  */
-export const QUALITY_PROFILE_VERSION = 9 as const;
+export const QUALITY_PROFILE_VERSION = 10 as const;
 
 /**
  * Built-in structural configurations for the minimal-water surface.
@@ -212,6 +212,25 @@ export interface QualityProfileSpectralWhitecaps {
 }
 
 /**
+ * Fixed full-frame underwater composition prepared before visibility. Haze,
+ * turbidity, shaft strength, color, and exposure remain hot Artistic Controls.
+ *
+ * @public
+ */
+export interface QualityProfileUnderwaterVolume {
+  readonly mode: "depth-aware-post-volume";
+  readonly composition: "post-ssr-pre-traa";
+  readonly resolutionPolicy: "drawing-buffer-exact";
+  readonly colorFormat: "rgba16float";
+  readonly diagnosticsFormat: "rgba16float";
+  readonly samples: 0;
+  readonly maxDistanceMetres: 96;
+  readonly shadowRoute: "screen-space-depth-occlusion";
+  readonly shaftRoute: "deterministic-epipolar";
+  readonly updateCadence: "host-present";
+}
+
+/**
  * A closed, versioned structural configuration prepared by the Readiness Gate.
  *
  * @public
@@ -227,6 +246,7 @@ export interface QualityProfile {
   readonly temporal: QualityProfileTemporal;
   readonly reflection: QualityProfileReflection;
   readonly whitecaps: QualityProfileSpectralWhitecaps;
+  readonly underwater: QualityProfileUnderwaterVolume;
 }
 
 /**
@@ -305,7 +325,7 @@ export const CURRENT_FRAME_SSR_POLICY: QualityProfileReflectionSsr =
 // Each static hash is the SHA-256 digest of the profile's canonical JSON,
 // excluding profileHash and preserving the public field order:
 // schema, version, id, surface, interaction, bodyCoupling, temporal,
-// reflection, whitecaps.
+// reflection, whitecaps, underwater.
 const NATIVE_TEMPORAL: QualityProfileTemporal = Object.freeze({
   mode: "TRAA",
   renderScale: 1,
@@ -327,6 +347,18 @@ const NATIVE_REFLECTION: QualityProfileReflection = Object.freeze({
   }),
   ssr: CURRENT_FRAME_SSR_POLICY,
 });
+const NATIVE_UNDERWATER: QualityProfileUnderwaterVolume = Object.freeze({
+  mode: "depth-aware-post-volume",
+  composition: "post-ssr-pre-traa",
+  resolutionPolicy: "drawing-buffer-exact",
+  colorFormat: "rgba16float",
+  diagnosticsFormat: "rgba16float",
+  samples: 0,
+  maxDistanceMetres: 96,
+  shadowRoute: "screen-space-depth-occlusion",
+  shaftRoute: "deterministic-epipolar",
+  updateCadence: "host-present",
+});
 // "waterline-crossing" is deliberately absent here. Whitecap foam is simulated
 // in the wave field, so its history only has to be dropped when that field is
 // discontinuous — a reset, a reseed, a rewind, a sea-state cut. A waterline
@@ -347,14 +379,14 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:6a3385d04d854e423957d290f562696ce4041c0ad1eb38e3f26fc9306a950978",
+      "sha256:ab07356cb71f4cdf9dabad49af2c9aa1c89ee2405588830c4c3493d1fe7280a4",
     widthSegments: 128,
     heightSegments: 128,
     whitecapFieldResolution: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:3ef8c9bbcb9e5895de1a42425aa67ce69ed171c037ce29f21f82cefae398f637",
+      "sha256:294f30cbd88b56da8b81cf5e8201fd2ea250faf0f25a35f869820cf87b9f2742",
     widthSegments: 256,
     heightSegments: 256,
     whitecapFieldResolution: 256,
@@ -471,6 +503,7 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "interaction",
         "bodyCoupling",
         "whitecaps",
+        "underwater",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([] as const),
@@ -495,6 +528,7 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "interaction",
         "bodyCoupling",
         "whitecaps",
+        "underwater",
       ] as const),
       absentSsrHistoryKeys: Object.freeze(["resetVelocityFormat"] as const),
       absentInteractionFieldKeys: Object.freeze([] as const),
@@ -526,13 +560,66 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
 // also resets on a waterline crossing, and version 9 the first that carries
 // Body coupling and a directional wake route.
 //
+// Version 9 was committed twice, in two shapes, on branches developed in
+// parallel, exactly as versions 6 and 7 were: #25's 9 added bodyCoupling and a
+// directional wake route to version 8, and #32's 9 added the underwater volume
+// to the same version 8. Neither saw the other's field. Version 10 is the first
+// that carries both.
+const LEGACY_V9_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze(["underwater"] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([] as const),
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:6a3385d04d854e423957d290f562696ce4041c0ad1eb38e3f26fc9306a950978",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:3ef8c9bbcb9e5895de1a42425aa67ce69ed171c037ce29f21f82cefae398f637",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+    // #32's version 9: the underwater volume, and neither bodyCoupling nor the
+    // directional wake route.
+    Object.freeze({
+      absentKeys: Object.freeze(["bodyCoupling"] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([
+        "directionalWakeRoute",
+      ] as const),
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:9ec18552c76f5c2df7da7798b9d18148f27d247b97fff2b252742a321daa1bed",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:98d424b79e24f5b785e9305eb7f50e83057a30ce3d37d50c90e1ce8dd72954b3",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
 // Version 8 was committed once, on this branch, before #25 arrived. It is the
 // only shape that carries every field except bodyCoupling and still resets on a
 // waterline crossing.
 const LEGACY_V8_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
-      absentKeys: Object.freeze(["bodyCoupling"] as const),
+      absentKeys: Object.freeze(["bodyCoupling", "underwater"] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([
         "directionalWakeRoute",
@@ -563,7 +650,7 @@ const LEGACY_V8_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
 const LEGACY_V7_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
-      absentKeys: Object.freeze(["bodyCoupling"] as const),
+      absentKeys: Object.freeze(["bodyCoupling", "underwater"] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([
         "directionalWakeRoute",
@@ -587,7 +674,7 @@ const LEGACY_V7_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
     // #25's version 7: interaction with a directional wake route, plus
     // bodyCoupling, and no whitecaps.
     Object.freeze({
-      absentKeys: Object.freeze(["whitecaps"] as const),
+      absentKeys: Object.freeze(["whitecaps", "underwater"] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([] as const),
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
@@ -611,7 +698,11 @@ const LEGACY_V7_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
 const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
-      absentKeys: Object.freeze(["bodyCoupling", "whitecaps"] as const),
+      absentKeys: Object.freeze([
+        "bodyCoupling",
+        "whitecaps",
+        "underwater",
+      ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([
         "directionalWakeRoute",
@@ -633,7 +724,11 @@ const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
       }),
     }),
     Object.freeze({
-      absentKeys: Object.freeze(["interaction", "bodyCoupling"] as const),
+      absentKeys: Object.freeze([
+        "interaction",
+        "bodyCoupling",
+        "underwater",
+      ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([] as const),
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
@@ -660,6 +755,7 @@ const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "interaction",
         "bodyCoupling",
         "whitecaps",
+        "underwater",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([] as const),
@@ -692,6 +788,7 @@ const QUALITY_PROFILE_KEYS = [
   "temporal",
   "reflection",
   "whitecaps",
+  "underwater",
 ] as const;
 const SPECTRAL_WHITECAP_KEYS = [
   "mode",
@@ -705,6 +802,18 @@ const SPECTRAL_WHITECAP_KEYS = [
   "captureResolutionPolicy",
   "captureFormat",
   "resetDomains",
+] as const;
+const UNDERWATER_KEYS = [
+  "mode",
+  "composition",
+  "resolutionPolicy",
+  "colorFormat",
+  "diagnosticsFormat",
+  "samples",
+  "maxDistanceMetres",
+  "shadowRoute",
+  "shaftRoute",
+  "updateCadence",
 ] as const;
 const INTERACTION_KEYS = ["anchorCount", "field"] as const;
 const INTERACTION_FIELD_KEYS = [
@@ -857,6 +966,7 @@ export function createMinimalWaterQualityProfile(
       captureFormat: "rgba16float",
       resetDomains: SPECTRAL_WHITECAP_RESET_DOMAINS,
     },
+    underwater: NATIVE_UNDERWATER,
   });
 }
 
@@ -951,7 +1061,8 @@ export function normalizeQualityProfile(
     value.reflection.planar.format !== supported.reflection.planar.format ||
     value.reflection.planar.samples !== supported.reflection.planar.samples ||
     !isSupportedSsrPolicy(value.reflection.ssr, supported.reflection.ssr) ||
-    !isSupportedSpectralWhitecaps(value.whitecaps, supported.whitecaps)
+    !isSupportedSpectralWhitecaps(value.whitecaps, supported.whitecaps) ||
+    !isSupportedUnderwaterVolume(value.underwater, supported.underwater)
   ) {
     throw new TypeError(
       "The Quality Profile does not match a supported structural configuration.",
@@ -959,6 +1070,26 @@ export function normalizeQualityProfile(
   }
 
   return supported;
+}
+
+function isSupportedUnderwaterVolume(
+  value: unknown,
+  supported: QualityProfileUnderwaterVolume,
+): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, UNDERWATER_KEYS) &&
+    value.mode === supported.mode &&
+    value.composition === supported.composition &&
+    value.resolutionPolicy === supported.resolutionPolicy &&
+    value.colorFormat === supported.colorFormat &&
+    value.diagnosticsFormat === supported.diagnosticsFormat &&
+    value.samples === supported.samples &&
+    value.maxDistanceMetres === supported.maxDistanceMetres &&
+    value.shadowRoute === supported.shadowRoute &&
+    value.shaftRoute === supported.shaftRoute &&
+    value.updateCadence === supported.updateCadence
+  );
 }
 
 function isSupportedSpectralWhitecaps(
@@ -1004,6 +1135,15 @@ export function migrateQualityProfile(candidate: unknown): QualityProfile {
     } catch {
       throw new TypeError("The Quality Profile cannot be migrated.");
     }
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 9 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV9Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
   }
 
   if (
@@ -1183,6 +1323,15 @@ function matchesLegacyV8Profile(
   );
 }
 
+function matchesLegacyV9Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V9_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
 function matchesLegacyV6Profile(
   value: Record<string, unknown>,
   id: MinimalWaterQualityProfileId,
@@ -1199,6 +1348,9 @@ function matchesLegacyVariant(
 ): boolean {
   const carriesInteraction = !variant.absentKeys.includes("interaction");
   const carriesWhitecaps = !variant.absentKeys.includes("whitecaps");
+  const carriesBodyCoupling = !variant.absentKeys.includes("bodyCoupling");
+  const carriesUnderwater = !variant.absentKeys.includes("underwater");
+  const supported = createMinimalWaterQualityProfile(id);
   return (
     hasExactKeys(
       value,
@@ -1211,10 +1363,30 @@ function matchesLegacyVariant(
     (!carriesInteraction ||
       matchesVariantInteraction(value.interaction, id, variant)) &&
     (!carriesWhitecaps ||
-      isSupportedSpectralWhitecaps(
-        value.whitecaps,
-        createMinimalWaterQualityProfile(id).whitecaps,
-      ))
+      isSupportedSpectralWhitecaps(value.whitecaps, supported.whitecaps)) &&
+    // A variant that carries a policy has its policy checked, not just its key
+    // set. Without these two, a legacy payload could name bodyCoupling or
+    // underwater and put anything inside them and still migrate.
+    (!carriesBodyCoupling ||
+      isSupportedBodyCoupling(value.bodyCoupling, supported.bodyCoupling)) &&
+    (!carriesUnderwater ||
+      isSupportedUnderwaterVolume(value.underwater, supported.underwater))
+  );
+}
+
+function isSupportedBodyCoupling(
+  value: unknown,
+  supported: QualityProfileBodyCoupling,
+): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, BODY_COUPLING_KEYS) &&
+    value.fixedTickHz === supported.fixedTickHz &&
+    value.maxAttachedBodies === supported.maxAttachedBodies &&
+    value.maxShapeSamplesPerBody === supported.maxShapeSamplesPerBody &&
+    value.maxConvexHullVertices === supported.maxConvexHullVertices &&
+    value.maxSocketsPerBody === supported.maxSocketsPerBody &&
+    value.socketRoute === supported.socketRoute
   );
 }
 
@@ -1442,6 +1614,7 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
         ...profile.whitecaps.resetDomains,
       ]) as QualityProfileSpectralWhitecaps["resetDomains"],
     }),
+    underwater: Object.freeze({ ...profile.underwater }),
   });
 }
 

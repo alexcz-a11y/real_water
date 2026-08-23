@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createWaterPreset } from "real-water";
-import type { QaCameraV1, QaHarnessV11 } from "../src/qa-harness.js";
+import type { QaCameraV1, QaHarnessV12 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
 
@@ -36,7 +36,7 @@ test("captures deterministic nonzero spectral-whitecap generation at a fixed tic
 
   const result = await page.evaluate(
     async ({ camera, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -88,16 +88,26 @@ test("spectral-whitecap density drives every prepared surface material response"
     ...STORM_CONTROLS,
     whitecapAmount: 0,
     foamPersistence: 0,
+    underwaterHaze: 1,
+    underwaterTurbidity: 1,
+    underwaterLightShafts: 1,
+    underwaterColor: 1,
+    underwaterExposure: 1,
   };
   const controlsOn = {
     ...STORM_CONTROLS,
     whitecapAmount: 2,
     foamPersistence: 2,
+    underwaterHaze: 1,
+    underwaterTurbidity: 1,
+    underwaterLightShafts: 1,
+    underwaterColor: 1,
+    underwaterExposure: 1,
   };
 
   const result = await page.evaluate(
     async ({ camera, off, on }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -185,7 +195,7 @@ test("captures transported history and lets hot persistence control its decay", 
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ camera, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -298,7 +308,7 @@ test("keeps the world-domain whitecap field stable through continuous camera rot
   };
   const result = await page.evaluate(
     async ({ firstCamera, secondCamera, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

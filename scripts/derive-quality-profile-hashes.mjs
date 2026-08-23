@@ -40,6 +40,7 @@ const CANONICAL_QUALITY_PROFILE_FIELDS = Object.freeze([
   "temporal",
   "reflection",
   "whitecaps",
+  "underwater",
 ]);
 
 const CANONICAL_INTERACTION_FIELD_KEYS = Object.freeze([
@@ -128,12 +129,13 @@ const WATERLINE_SSR_HISTORY_RESET_DOMAINS = [
 // were each committed more than once, in more than one shape, on branches
 // developed in parallel - #24 added interaction, #26 added whitecaps, #31
 // added the waterline domain, #25 added bodyCoupling and a directional wake
-// route. Same numbers, different payloads, all still recoverable.
+// route, #32 added the underwater volume. Same numbers, different payloads,
+// all still recoverable.
 const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "6 (interaction)",
     version: 6,
-    absentKeys: ["bodyCoupling", "whitecaps"],
+    absentKeys: ["bodyCoupling", "whitecaps", "underwater"],
     absentInteractionFieldKeys: ["directionalWakeRoute"],
     ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
     hashes: {
@@ -146,7 +148,7 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "6 (whitecaps)",
     version: 6,
-    absentKeys: ["interaction", "bodyCoupling"],
+    absentKeys: ["interaction", "bodyCoupling", "underwater"],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
     hashes: {
@@ -159,7 +161,7 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "6 (waterline)",
     version: 6,
-    absentKeys: ["interaction", "bodyCoupling", "whitecaps"],
+    absentKeys: ["interaction", "bodyCoupling", "whitecaps", "underwater"],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
     hashes: {
@@ -172,7 +174,7 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "7 (whitecaps)",
     version: 7,
-    absentKeys: ["bodyCoupling"],
+    absentKeys: ["bodyCoupling", "underwater"],
     absentInteractionFieldKeys: ["directionalWakeRoute"],
     ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
     hashes: {
@@ -185,7 +187,7 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "7 (body coupling)",
     version: 7,
-    absentKeys: ["whitecaps"],
+    absentKeys: ["whitecaps", "underwater"],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
     hashes: {
@@ -198,7 +200,7 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "8",
     version: 8,
-    absentKeys: ["bodyCoupling"],
+    absentKeys: ["bodyCoupling", "underwater"],
     absentInteractionFieldKeys: ["directionalWakeRoute"],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
     hashes: {
@@ -206,6 +208,32 @@ const COMMITTED_LEGACY_VARIANTS = [
         "sha256:b2e727a8016dbac41a2ea1036275f10c344cffc82b2a10bea2c4bc4807bc651d",
       "minimal-high-detail":
         "sha256:a760008c06d5c27ea2cd42f986aff9272f7eaf184e97c6aab6bedf1d73f96bcd",
+    },
+  },
+  {
+    label: "9 (body coupling)",
+    version: 9,
+    absentKeys: ["underwater"],
+    absentInteractionFieldKeys: [],
+    ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    hashes: {
+      "minimal":
+        "sha256:6a3385d04d854e423957d290f562696ce4041c0ad1eb38e3f26fc9306a950978",
+      "minimal-high-detail":
+        "sha256:3ef8c9bbcb9e5895de1a42425aa67ce69ed171c037ce29f21f82cefae398f637",
+    },
+  },
+  {
+    label: "9 (underwater)",
+    version: 9,
+    absentKeys: ["bodyCoupling"],
+    absentInteractionFieldKeys: ["directionalWakeRoute"],
+    ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    hashes: {
+      "minimal":
+        "sha256:9ec18552c76f5c2df7da7798b9d18148f27d247b97fff2b252742a321daa1bed",
+      "minimal-high-detail":
+        "sha256:98d424b79e24f5b785e9305eb7f50e83057a30ce3d37d50c90e1ce8dd72954b3",
     },
   },
 ];
@@ -298,9 +326,9 @@ for (const variant of COMMITTED_LEGACY_VARIANTS) {
 // public fields in declared order, with manifestHash itself excluded.
 const COMMITTED_MANIFEST_HASHES = {
   "minimal":
-    "sha256:2acc2b56f364f8525f54e39db324b247f5b4a4a759bee8a6933e507367ebebd2",
+    "sha256:89aabea22190709212c3e3222628e0f0f702d051dcb9d9b214bdbc0e212ff6f8",
   "minimal-high-detail":
-    "sha256:079b894f0c4f487d236496a3f8449a4abdeb3e165167d241e672ed740cfc5382",
+    "sha256:ddb087200961c122d6c97cf55627aa2a614c0ca2c7075cdf70676b73f1f9eda2",
 };
 
 function canonicalManifestJson(manifest) {

@@ -10,7 +10,7 @@ import {
 import {
   QA_CAPTURE_VERSION,
   type QaCameraV1,
-  type QaHarnessV11,
+  type QaHarnessV12,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
@@ -98,7 +98,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
     // value. Everywhere else compares against the exported constant, so this
     // assertion is what makes a bump deliberate instead of self-confirming.
     // eslint-disable-next-line no-restricted-syntax
-    version: 11,
+    version: 12,
     fixedTickHz: 60,
     captureNames: [
       "final-color",
@@ -119,6 +119,10 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "optical-crest-transmission",
       "optical-transmittance",
       "optical-glint",
+      "underwater-transmittance",
+      "underwater-scattering",
+      "underwater-light-shafts",
+      "underwater-shadow",
       "planar-color",
       "planar-target-alpha",
       "ssr-hit",
@@ -135,7 +139,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
     // Pinned for the same reason as `version` above: this contract test is
     // where a QA frame prewarm bump has to be stated, not inferred.
     // eslint-disable-next-line no-restricted-syntax
-    prewarmVersion: 10,
+    prewarmVersion: 11,
     prewarmCoreDeclarations: {
       "final-color": "water-final-color-target",
       "current-color": "water-current-color-target",
@@ -155,6 +159,10 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "optical-crest-transmission": "water-optical-diagnostics-a",
       "optical-transmittance": "water-optical-diagnostics-a",
       "optical-glint": "water-optical-factors-target",
+      "underwater-transmittance": "water-underwater-diagnostics-target",
+      "underwater-scattering": "water-underwater-diagnostics-target",
+      "underwater-light-shafts": "water-underwater-diagnostics-target",
+      "underwater-shadow": "water-underwater-diagnostics-target",
       "planar-color": "water-planar-reflection-target",
       "planar-target-alpha": "water-planar-reflection-target",
       "ssr-hit": "water-ssr-raw-target",
@@ -222,6 +230,22 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
         preparedFormat: "rg8unorm-optical-diagnostics-a",
       },
       { name: "optical-glint", preparedFormat: "rgba16float-optical-factors" },
+      {
+        name: "underwater-transmittance",
+        preparedFormat: "rgba16float-underwater-volume-diagnostics",
+      },
+      {
+        name: "underwater-scattering",
+        preparedFormat: "rgba16float-underwater-volume-diagnostics",
+      },
+      {
+        name: "underwater-light-shafts",
+        preparedFormat: "rgba16float-underwater-volume-diagnostics",
+      },
+      {
+        name: "underwater-shadow",
+        preparedFormat: "rgba16float-underwater-volume-diagnostics",
+      },
       { name: "planar-color", preparedFormat: "rgba8unorm-srgb" },
       { name: "planar-target-alpha", preparedFormat: "rgba8unorm-srgb" },
       { name: "ssr-hit", preparedFormat: "rgba16float-ssr-raw" },
@@ -271,7 +295,7 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
     const harness = window.__REAL_WATER_QA__ as
-      | (QaHarnessV11 & {
+      | (QaHarnessV12 & {
           updateArtisticControls(
             controls: {
               readonly waveStrength: number;
@@ -289,6 +313,11 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
               readonly crestGlow: number;
               readonly whitecapAmount: number;
               readonly foamPersistence: number;
+              readonly underwaterHaze: number;
+              readonly underwaterTurbidity: number;
+              readonly underwaterLightShafts: number;
+              readonly underwaterColor: number;
+              readonly underwaterExposure: number;
             },
             options: { readonly transition: "continuous" | "sea-state-cut" },
           ): Promise<{ readonly revision: number }>;
@@ -327,6 +356,11 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
         crestGlow: 1,
         whitecapAmount: 1,
         foamPersistence: 1,
+        underwaterHaze: 1,
+        underwaterTurbidity: 1,
+        underwaterLightShafts: 1,
+        underwaterColor: 1,
+        underwaterExposure: 1,
       },
       {
         transition: "continuous",
@@ -396,8 +430,8 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   expect(normalValues[normalIndex + 2]).toBeCloseTo(result.query.normal[1], 1);
   expect(result.after).toEqual(result.before);
   expect(result.presentation.prewarm.progress).toMatchObject({
-    completedWork: 16,
-    totalWork: 16,
+    completedWork: 17,
+    totalWork: 17,
   });
   const encodedRg8ByteLength = result.depth.width * result.depth.height * 4;
   for (const capture of [
@@ -434,7 +468,7 @@ test("presents camera-relative Open Water through the horizon", async ({
   await page.goto("/?qa=1&host=three");
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -490,7 +524,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -542,6 +576,10 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       "optical-crest-transmission",
       "optical-transmittance",
       "optical-glint",
+      "underwater-transmittance",
+      "underwater-scattering",
+      "underwater-light-shafts",
+      "underwater-shadow",
       "planar-color",
       "planar-target-alpha",
       "ssr-hit",
@@ -558,8 +596,8 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       width: 320,
       height: 180,
       progress: {
-        completedWork: 16,
-        totalWork: 16,
+        completedWork: 17,
+        totalWork: 17,
       },
     },
   });
@@ -590,6 +628,10 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "optical-crest-transmission",
     "optical-transmittance",
     "optical-glint",
+    "underwater-transmittance",
+    "underwater-scattering",
+    "underwater-light-shafts",
+    "underwater-shadow",
     "planar-color",
     "planar-target-alpha",
     "ssr-hit",
@@ -603,7 +645,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "ssr-history-input-color",
   ]);
   expect(result.first.captures.map(({ version }) => version)).toEqual(
-    new Array<number>(29).fill(QA_CAPTURE_VERSION),
+    new Array<number>(33).fill(QA_CAPTURE_VERSION),
   );
   expect(result.first.captures.map(({ format }) => format)).toEqual([
     "rgba8unorm-srgb",
@@ -624,6 +666,10 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "r32float-optical",
     "r32float-optical",
     "r32float-optical",
+    "r32float-underwater-volume",
+    "r32float-underwater-volume",
+    "r32float-underwater-volume",
+    "r32float-underwater-volume",
     "rgba8unorm-srgb",
     "r32float-optical",
     "r32float-optical",
@@ -793,7 +839,7 @@ test("matches the visible WebGPU canvas RGB to the same-frame final-color captur
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }

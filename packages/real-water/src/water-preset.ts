@@ -20,12 +20,56 @@ const ARTISTIC_CONTROL_KEYS = [
   "crestGlow",
   "whitecapAmount",
   "foamPersistence",
+  "underwaterHaze",
+  "underwaterTurbidity",
+  "underwaterLightShafts",
+  "underwaterColor",
+  "underwaterExposure",
 ] as const;
 
-// Versions 1 through 3 all predate the spectral whitecap Artistic Controls.
-const LEGACY_PRE_WHITECAP_ARTISTIC_CONTROL_KEYS = ARTISTIC_CONTROL_KEYS.filter(
-  (key) => key !== "whitecapAmount" && key !== "foamPersistence",
-);
+const DEFAULT_UNDERWATER_ARTISTIC_CONTROLS = Object.freeze({
+  underwaterHaze: 1,
+  underwaterTurbidity: 1,
+  underwaterLightShafts: 1,
+  underwaterColor: 1,
+  underwaterExposure: 1,
+});
+
+// Version 4 predates the underwater-volume Artistic Controls.
+const LEGACY_V4_ARTISTIC_CONTROL_KEYS = [
+  "waveStrength",
+  "swellDrama",
+  "directionality",
+  "choppiness",
+  "crestSharpness",
+  "microDetail",
+  "timeScale",
+  "grazingReflection",
+  "environmentReflection",
+  "depthSeeThrough",
+  "depthColoring",
+  "inWaterGlow",
+  "crestGlow",
+  "whitecapAmount",
+  "foamPersistence",
+] as const;
+
+// Versions 1 through 3 also predate the spectral whitecap Artistic Controls.
+const LEGACY_PRE_WHITECAP_ARTISTIC_CONTROL_KEYS = [
+  "waveStrength",
+  "swellDrama",
+  "directionality",
+  "choppiness",
+  "crestSharpness",
+  "microDetail",
+  "timeScale",
+  "grazingReflection",
+  "environmentReflection",
+  "depthSeeThrough",
+  "depthColoring",
+  "inWaterGlow",
+  "crestGlow",
+] as const;
 
 const LEGACY_V1_ARTISTIC_CONTROL_KEYS = [
   "waveStrength",
@@ -38,8 +82,18 @@ const LEGACY_V1_ARTISTIC_CONTROL_KEYS = [
 ] as const;
 
 type LegacyPreWhitecapArtisticControls = Omit<
-  ArtisticControls,
+  LegacyV4ArtisticControls,
   "whitecapAmount" | "foamPersistence"
+>;
+type UnderwaterArtisticControlKey =
+  | "underwaterHaze"
+  | "underwaterTurbidity"
+  | "underwaterLightShafts"
+  | "underwaterColor"
+  | "underwaterExposure";
+type LegacyV4ArtisticControls = Omit<
+  ArtisticControls,
+  UnderwaterArtisticControlKey
 >;
 
 /**
@@ -54,7 +108,7 @@ export const WATER_PRESET_SCHEMA = "real-water/water-preset" as const;
  *
  * @public
  */
-export const WATER_PRESET_VERSION = 4 as const;
+export const WATER_PRESET_VERSION = 5 as const;
 
 /**
  * Built-in named sea characters stored as hot Artistic Controls.
@@ -112,6 +166,11 @@ const BUILT_IN_WATER_PRESETS: Readonly<
       crestGlow: 0.25,
       whitecapAmount: 0.25,
       foamPersistence: 0.45,
+      underwaterHaze: 0.45,
+      underwaterTurbidity: 0.35,
+      underwaterLightShafts: 0.65,
+      underwaterColor: 0.7,
+      underwaterExposure: 1.15,
     }),
   }),
   swell: Object.freeze({
@@ -131,6 +190,11 @@ const BUILT_IN_WATER_PRESETS: Readonly<
       crestGlow: 1,
       whitecapAmount: 1,
       foamPersistence: 1,
+      underwaterHaze: 1,
+      underwaterTurbidity: 1,
+      underwaterLightShafts: 1,
+      underwaterColor: 1,
+      underwaterExposure: 1,
     }),
   }),
   storm: Object.freeze({
@@ -150,6 +214,11 @@ const BUILT_IN_WATER_PRESETS: Readonly<
       crestGlow: 1.6,
       whitecapAmount: 1.65,
       foamPersistence: 1.6,
+      underwaterHaze: 1.45,
+      underwaterTurbidity: 1.7,
+      underwaterLightShafts: 0.55,
+      underwaterColor: 1.35,
+      underwaterExposure: 0.8,
     }),
   }),
 });
@@ -263,6 +332,9 @@ export function migrateWaterPreset(candidate: unknown): WaterPreset {
   if (candidate.version === WATER_PRESET_VERSION) {
     return normalizeWaterPreset(candidate as unknown as WaterPreset);
   }
+  if (candidate.version === 4) {
+    return migrateAuthoredWaterPresetV4(candidate);
+  }
   if (candidate.version === 3) {
     return migrateBuiltInWaterPresetV3(candidate);
   }
@@ -316,6 +388,11 @@ function copyArtisticControls(
     crestGlow: artisticControls.crestGlow,
     whitecapAmount: artisticControls.whitecapAmount,
     foamPersistence: artisticControls.foamPersistence,
+    underwaterHaze: artisticControls.underwaterHaze,
+    underwaterTurbidity: artisticControls.underwaterTurbidity,
+    underwaterLightShafts: artisticControls.underwaterLightShafts,
+    underwaterColor: artisticControls.underwaterColor,
+    underwaterExposure: artisticControls.underwaterExposure,
   };
 }
 
@@ -346,6 +423,21 @@ function readArtisticControls(candidate: unknown): ArtisticControls {
   assertControlRange(candidate.crestGlow, 0, 2, "crestGlow");
   assertControlRange(candidate.whitecapAmount, 0, 2, "whitecapAmount");
   assertControlRange(candidate.foamPersistence, 0, 2, "foamPersistence");
+  assertControlRange(candidate.underwaterHaze, 0, 2, "underwaterHaze");
+  assertControlRange(
+    candidate.underwaterTurbidity,
+    0,
+    2,
+    "underwaterTurbidity",
+  );
+  assertControlRange(
+    candidate.underwaterLightShafts,
+    0,
+    2,
+    "underwaterLightShafts",
+  );
+  assertControlRange(candidate.underwaterColor, 0, 2, "underwaterColor");
+  assertControlRange(candidate.underwaterExposure, 0, 2, "underwaterExposure");
 
   return copyArtisticControls(candidate as unknown as ArtisticControls);
 }
@@ -369,7 +461,7 @@ function readLegacyPreWhitecapArtisticControls(
     );
   }
 
-  const validated = readArtisticControls({
+  const validated = readLegacyV4ArtisticControls({
     ...candidate,
     whitecapAmount: 1,
     foamPersistence: 1,
@@ -379,6 +471,29 @@ function readLegacyPreWhitecapArtisticControls(
     legacy[key] = validated[key];
   }
   return legacy as LegacyPreWhitecapArtisticControls;
+}
+
+function readLegacyV4ArtisticControls(
+  candidate: unknown,
+): LegacyV4ArtisticControls {
+  if (
+    !isRecord(candidate) ||
+    !hasExactKeys(candidate, LEGACY_V4_ARTISTIC_CONTROL_KEYS)
+  ) {
+    throw new TypeError(
+      "Artistic Controls must use the complete supported control set.",
+    );
+  }
+
+  const validated = readArtisticControls({
+    ...candidate,
+    ...DEFAULT_UNDERWATER_ARTISTIC_CONTROLS,
+  });
+  const legacy: Partial<Record<keyof LegacyV4ArtisticControls, number>> = {};
+  for (const key of LEGACY_V4_ARTISTIC_CONTROL_KEYS) {
+    legacy[key] = validated[key];
+  }
+  return legacy as LegacyV4ArtisticControls;
 }
 
 function assertControlRange(
@@ -397,6 +512,41 @@ function assertControlRange(
       `Artistic Control ${label} must be finite and between ${minimum} and ${maximum}.`,
     );
   }
+}
+
+function migrateAuthoredWaterPresetV4(candidate: Record<string, unknown>) {
+  if (
+    !hasExactKeys(candidate, [
+      "schema",
+      "version",
+      "id",
+      "presetHash",
+      "artisticControls",
+    ]) ||
+    candidate.schema !== WATER_PRESET_SCHEMA ||
+    candidate.version !== 4 ||
+    !isSupportedPresetId(candidate.id)
+  ) {
+    throw new TypeError("The Water Preset v4 snapshot cannot be migrated.");
+  }
+
+  const artisticControls = readLegacyV4ArtisticControls(
+    candidate.artisticControls,
+  );
+  const canonical = {
+    schema: WATER_PRESET_SCHEMA,
+    version: 4,
+    id: candidate.id,
+    artisticControls,
+  };
+  if (candidate.presetHash !== sha256Identifier(JSON.stringify(canonical))) {
+    throw new TypeError("The Water Preset v4 snapshot cannot be migrated.");
+  }
+
+  return createAuthoredWaterPreset(candidate.id, {
+    ...artisticControls,
+    ...DEFAULT_UNDERWATER_ARTISTIC_CONTROLS,
+  });
 }
 
 function migrateBuiltInWaterPresetV2(candidate: Record<string, unknown>) {
@@ -462,13 +612,13 @@ function migrateBuiltInWaterPresetV3(candidate: Record<string, unknown>) {
   const supported = BUILT_IN_WATER_PRESETS[candidate.id].artisticControls;
   const withWhitecaps = hasExactKeys(
     candidate.artisticControls,
-    ARTISTIC_CONTROL_KEYS,
+    LEGACY_V4_ARTISTIC_CONTROL_KEYS,
   );
   const keys = withWhitecaps
-    ? ARTISTIC_CONTROL_KEYS
+    ? LEGACY_V4_ARTISTIC_CONTROL_KEYS
     : LEGACY_PRE_WHITECAP_ARTISTIC_CONTROL_KEYS;
   const artisticControls: Record<string, number> = withWhitecaps
-    ? readArtisticControls(candidate.artisticControls)
+    ? readLegacyV4ArtisticControls(candidate.artisticControls)
     : readLegacyPreWhitecapArtisticControls(candidate.artisticControls);
   const canonical = {
     schema: WATER_PRESET_SCHEMA,

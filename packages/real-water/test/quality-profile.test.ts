@@ -123,9 +123,9 @@ const BODY_COUPLING = Object.freeze({
   socketRoute: "stable-slot-upsert" as const,
 });
 const MINIMAL_PROFILE_HASH =
-  "sha256:6a3385d04d854e423957d290f562696ce4041c0ad1eb38e3f26fc9306a950978";
+  "sha256:ab07356cb71f4cdf9dabad49af2c9aa1c89ee2405588830c4c3493d1fe7280a4";
 const HIGH_DETAIL_PROFILE_HASH =
-  "sha256:3ef8c9bbcb9e5895de1a42425aa67ce69ed171c037ce29f21f82cefae398f637";
+  "sha256:294f30cbd88b56da8b81cf5e8201fd2ea250faf0f25a35f869820cf87b9f2742";
 // The shape this branch committed as version 7: interaction and whitecaps, no
 // waterline, no Body coupling.
 const LEGACY_V7_PROFILES = Object.freeze({
@@ -156,6 +156,33 @@ const LEGACY_V7_BODY_COUPLING_PROFILES = Object.freeze({
 } as const);
 // Version 8: everything except Body coupling and the directional wake route,
 // and the first shape whose SSR history resets on a waterline crossing.
+// The two shapes committed as version 9 on branches developed in parallel:
+// #25's added Body coupling and a directional wake route, #32's added the
+// underwater volume. Neither saw the other's field.
+const LEGACY_V9_BODY_COUPLING_PROFILES = Object.freeze({
+  "minimal": Object.freeze({
+    profileHash:
+      "sha256:6a3385d04d854e423957d290f562696ce4041c0ad1eb38e3f26fc9306a950978",
+    segments: 128,
+  }),
+  "minimal-high-detail": Object.freeze({
+    profileHash:
+      "sha256:3ef8c9bbcb9e5895de1a42425aa67ce69ed171c037ce29f21f82cefae398f637",
+    segments: 256,
+  }),
+} as const);
+const LEGACY_V9_UNDERWATER_PROFILES = Object.freeze({
+  "minimal": Object.freeze({
+    profileHash:
+      "sha256:9ec18552c76f5c2df7da7798b9d18148f27d247b97fff2b252742a321daa1bed",
+    segments: 128,
+  }),
+  "minimal-high-detail": Object.freeze({
+    profileHash:
+      "sha256:98d424b79e24f5b785e9305eb7f50e83057a30ce3d37d50c90e1ce8dd72954b3",
+    segments: 256,
+  }),
+} as const);
 const LEGACY_V8_PROFILES = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
@@ -338,6 +365,18 @@ const NATIVE_WHITECAPS = Object.freeze({
     "sea-state-cut",
   ] as const),
 });
+const NATIVE_UNDERWATER = Object.freeze({
+  mode: "depth-aware-post-volume" as const,
+  composition: "post-ssr-pre-traa" as const,
+  resolutionPolicy: "drawing-buffer-exact" as const,
+  colorFormat: "rgba16float" as const,
+  diagnosticsFormat: "rgba16float" as const,
+  samples: 0 as const,
+  maxDistanceMetres: 96 as const,
+  shadowRoute: "screen-space-depth-occlusion" as const,
+  shaftRoute: "deterministic-epipolar" as const,
+  updateCadence: "host-present" as const,
+});
 const MEMORY_PREWARM_DRAWING_BUFFER = Object.freeze({
   width: 320,
   height: 180,
@@ -378,11 +417,11 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-traa-resolve-jitter":
     "sha256:ba8bdc48d2842afd8f4f620e5296fce9bde9055047e4de7d593eec83dce25733",
   "water-render-route":
-    "sha256:e4dbd7f0f777248b11f0b9a865689490379756efca30b56c288d6d025d695222",
+    "sha256:f7f44a7ddf3041a2cda3654fb87e9181f0ca87730eb64017725c664995bafb91",
   "water-current-color-conversion":
-    "sha256:ea19f958120b52c05d673abcec39db3aa8ca7157f326d5d4449a4faa0457c57c",
+    "sha256:750febf150f950dd006fc0a7df54e7e5faa9aace9e026c452f1b9aa0f639a0c8",
   "water-named-output-routes":
-    "sha256:bab01729c0b83003c83d1cc96368ba5bfdbd19a8a198250aa0badea37a4f4b5d",
+    "sha256:e4de9d999b2fb129152afd200be776ecacddd3c31f94b47886c3b2a531670dbd",
   "water-ssr-raw-target":
     "sha256:5229f76bc28be7b7aa032fadcb3adabfada2202dde29a88f499d16fac9ba659f",
   "water-ssr-blur-target":
@@ -429,6 +468,16 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
     "sha256:0eb74170734227ae0812e75df3cfcbd8a4bdceb09b3f62f97cabf97faa38403b",
   "water-ssr-history-probe":
     "sha256:42eac93d1c673fe058eb09c61f470083df6b7afa3683328e788656732491a2e6",
+  "water-underwater-volume-target":
+    "sha256:6a75542631256bd1f689adb7a8e6b8c81cbc6a9d11f41d22b874b596dfa49474",
+  "water-underwater-volume-route":
+    "sha256:07b5b5d14dac572c25546f04cf86ce2cf41c8e895bfc95d7f90806f42ee52821",
+  "water-underwater-diagnostics-target":
+    "sha256:585994ca2c4858380903d9e94f20b0a880378b411ad7a2b2ad60cb931abda5f4",
+  "water-underwater-diagnostics-route":
+    "sha256:803a8e7688fa35fea43ca767b364b836d2c29a028c6d0509fa3c8169e4b79e90",
+  "water-underwater-probe":
+    "sha256:e634ca001324670cad2f7ef46a7b011bb753692940733a1e108ebbf8d53f422d",
   "water-planar-reflection-target":
     "sha256:380ced36a62272cecd356b28c02587cb24d24d7390b6d79ac5051cad272a52ba",
   "water-planar-reflection-route":
@@ -436,9 +485,9 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-planar-reflection-probe":
     "sha256:f203f71435dfe40d3d14d3b19b853fd13f8338aba138c1eee29400570074311e",
   "water-completion-probe":
-    "sha256:d80c56dde025d2eeb391c93648ef11eda60ee07a9b9337afa1375484bd5268f3",
+    "sha256:13b8de5162b3d884d6235addcfbd0ef06373c8d124fd3b85a42149c92d6161ef",
   "water-main-camera-guard":
-    "sha256:ef72fd8cb5959aa73eeef6a857f67edc3f32b1b9f7e73b76b295f913ae6aca25",
+    "sha256:e59db4a839b5f36edfaec493a1f334f44ba6bae5a5046a758c0ceb69ea143841",
   "water-whitecap-stage-target":
     "sha256:731d234e5ce0ccd2bb8c4102219849e318b619dc1ea21723562e9a0ebbd08969",
   "water-whitecap-stage-route":
@@ -493,6 +542,11 @@ const DRAWING_BUFFER_BOUND_IDS = [
   "water-ssr-history-reset-velocity-target",
   "water-ssr-history-reset-velocity-route",
   "water-ssr-history-probe",
+  "water-underwater-volume-target",
+  "water-underwater-volume-route",
+  "water-underwater-diagnostics-target",
+  "water-underwater-diagnostics-route",
+  "water-underwater-probe",
   "water-whitecap-stage-target",
   "water-whitecap-stage-route",
   "water-whitecap-probe",
@@ -513,6 +567,7 @@ function canonicalQualityProfileHashInput(profile: QualityProfile) {
     temporal: profile.temporal,
     reflection: profile.reflection,
     whitecaps: profile.whitecaps,
+    underwater: profile.underwater,
   };
 }
 
@@ -609,6 +664,13 @@ const CORE_PREWARM_DECLARATION_IDS = [
   "water-ssr-history-reset-velocity-target",
   "water-ssr-history-reset-velocity-route",
   "water-ssr-history-probe",
+  "water-underwater-volume-target",
+  "water-underwater-volume-route",
+  "water-underwater-depth-composition-route",
+  "water-underwater-sun-shaft-shadow-route",
+  "water-underwater-diagnostics-target",
+  "water-underwater-diagnostics-route",
+  "water-underwater-probe",
   "water-render-route",
   "water-procedural-motion",
   "water-motion-vectors",
@@ -632,6 +694,19 @@ const CORE_PREWARM_DECLARATION_IDS = [
 ] as const;
 
 describe("Quality Profiles", () => {
+  it("pins the depth-aware underwater volume outside hot Artistic Controls", () => {
+    const profile = createMinimalWaterQualityProfile();
+
+    expect(QUALITY_PROFILE_VERSION).toBe(10);
+    expect(profile.underwater).toEqual(NATIVE_UNDERWATER);
+    expect(Object.isFrozen(profile.underwater)).toBe(true);
+    expect(profile.underwater).not.toHaveProperty("haze");
+    expect(profile.underwater).not.toHaveProperty("turbidity");
+    expect(profile.underwater).not.toHaveProperty("lightShafts");
+    expect(profile.underwater).not.toHaveProperty("color");
+    expect(profile.underwater).not.toHaveProperty("exposure");
+  });
+
   it("pins spectral-whitecap history structure outside hot Artistic Controls", () => {
     const profile = createMinimalWaterQualityProfile();
 
@@ -666,10 +741,10 @@ describe("Quality Profiles", () => {
     const minimal = createMinimalWaterQualityProfile();
     const highDetail = createMinimalWaterQualityProfile("minimal-high-detail");
 
-    expect(QUALITY_PROFILE_VERSION).toBe(9);
+    expect(QUALITY_PROFILE_VERSION).toBe(10);
     expect(minimal).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 9,
+      version: 10,
       id: "minimal",
       profileHash: MINIMAL_PROFILE_HASH,
       surface: {
@@ -683,10 +758,11 @@ describe("Quality Profiles", () => {
       temporal: NATIVE_TEMPORAL,
       reflection: NATIVE_REFLECTION,
       whitecaps: NATIVE_WHITECAPS,
+      underwater: NATIVE_UNDERWATER,
     });
     expect(highDetail).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 9,
+      version: 10,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
       surface: {
@@ -703,6 +779,7 @@ describe("Quality Profiles", () => {
         ...NATIVE_WHITECAPS,
         fieldResolution: 256,
       },
+      underwater: NATIVE_UNDERWATER,
     });
     expect(createMinimalWaterQualityProfile()).toEqual(minimal);
     expect(minimal.profileHash).toBe(
@@ -727,6 +804,7 @@ describe("Quality Profiles", () => {
     expect(Object.isFrozen(minimal.reflection.ssr)).toBe(true);
     expect(minimal.reflection.ssr.history).toEqual(NATIVE_SSR_HISTORY);
     expect(Object.isFrozen(minimal.reflection.ssr.history)).toBe(true);
+    expect(Object.isFrozen(minimal.underwater)).toBe(true);
     expect(minimal.reflection.ssr.mode).toBe("current-frame");
     expect(Object.isFrozen(highDetail)).toBe(true);
     expect(() => {
@@ -750,7 +828,7 @@ describe("Quality Profiles", () => {
     expect(normalized).not.toBe(candidate);
     expect(identity).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 9,
+      version: 10,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
     });
@@ -1095,6 +1173,98 @@ describe("Quality Profiles", () => {
     }
   });
 
+  it("migrates #25's committed version 9 Quality Profiles", () => {
+    for (const id of ["minimal", "minimal-high-detail"] as const) {
+      const legacy = LEGACY_V9_BODY_COUPLING_PROFILES[id];
+
+      expect(
+        migrateQualityProfile({
+          schema: QUALITY_PROFILE_SCHEMA,
+          version: 9,
+          id,
+          profileHash: legacy.profileHash,
+          surface: {
+            geometry: {
+              widthSegments: legacy.segments,
+              heightSegments: legacy.segments,
+            },
+          },
+          interaction: LOCAL_INTERACTION,
+          bodyCoupling: BODY_COUPLING,
+          temporal: NATIVE_TEMPORAL,
+          reflection: NATIVE_REFLECTION,
+          whitecaps: {
+            ...NATIVE_WHITECAPS,
+            fieldResolution: legacy.segments,
+          },
+        }),
+      ).toEqual(createMinimalWaterQualityProfile(id));
+    }
+  });
+
+  it("migrates #32's committed version 9 Quality Profiles", () => {
+    for (const id of ["minimal", "minimal-high-detail"] as const) {
+      const legacy = LEGACY_V9_UNDERWATER_PROFILES[id];
+
+      expect(
+        migrateQualityProfile({
+          schema: QUALITY_PROFILE_SCHEMA,
+          version: 9,
+          id,
+          profileHash: legacy.profileHash,
+          surface: {
+            geometry: {
+              widthSegments: legacy.segments,
+              heightSegments: legacy.segments,
+            },
+          },
+          interaction: PRE_WAKE_INTERACTION,
+          temporal: NATIVE_TEMPORAL,
+          reflection: NATIVE_REFLECTION,
+          whitecaps: {
+            ...NATIVE_WHITECAPS,
+            fieldResolution: legacy.segments,
+          },
+          underwater: NATIVE_UNDERWATER,
+        }),
+      ).toEqual(createMinimalWaterQualityProfile(id));
+    }
+  });
+
+  it("refuses a legacy shape whose carried policy was tampered with", () => {
+    const legacy = LEGACY_V9_UNDERWATER_PROFILES.minimal;
+    const candidate = {
+      schema: QUALITY_PROFILE_SCHEMA,
+      version: 9,
+      id: "minimal",
+      profileHash: legacy.profileHash,
+      surface: {
+        geometry: {
+          widthSegments: legacy.segments,
+          heightSegments: legacy.segments,
+        },
+      },
+      interaction: PRE_WAKE_INTERACTION,
+      temporal: NATIVE_TEMPORAL,
+      reflection: NATIVE_REFLECTION,
+      whitecaps: NATIVE_WHITECAPS,
+      underwater: { ...NATIVE_UNDERWATER, maxDistanceMetres: 97 },
+    };
+
+    expect(() => migrateQualityProfile(candidate)).toThrow(TypeError);
+
+    const bodyCoupled = {
+      ...candidate,
+      profileHash: LEGACY_V9_BODY_COUPLING_PROFILES.minimal.profileHash,
+      interaction: LOCAL_INTERACTION,
+      bodyCoupling: { ...BODY_COUPLING, maxSocketsPerBody: 9 },
+      underwater: undefined,
+    };
+    delete (bodyCoupled as { underwater?: unknown }).underwater;
+
+    expect(() => migrateQualityProfile(bodyCoupled)).toThrow(TypeError);
+  });
+
   it("refuses to mix the two committed version 6 shapes", () => {
     const surface = {
       geometry: { widthSegments: 128, heightSegments: 128 },
@@ -1136,7 +1306,7 @@ describe("Quality Profiles", () => {
       "unknown version 4",
       { ...createMinimalWaterQualityProfile(), version: 4 },
     ],
-    ["future version", { ...createMinimalWaterQualityProfile(), version: 10 }],
+    ["future version", { ...createMinimalWaterQualityProfile(), version: 11 }],
     [
       "version 1 hash tampering",
       {
@@ -1553,6 +1723,48 @@ describe("Quality Profiles", () => {
 });
 
 describe("Quality Profile manifests", () => {
+  it("declares the complete underwater volume and diagnostics route", () => {
+    const manifest = createMinimalWaterPrewarmManifest();
+    const declarations = Object.fromEntries(
+      manifest.declarations.map(({ id, kind }) => [id, kind]),
+    );
+
+    expect(PREWARM_MANIFEST_VERSION).toBe(7);
+    expect(manifest.effectVariants).toContainEqual({
+      effectId: "underwater-volume",
+      variantId: "depth-aware",
+    });
+    expect(declarations).toMatchObject({
+      "water-underwater-volume-target": "resource",
+      "water-underwater-volume-route": "conditional-route",
+      "water-underwater-depth-composition-route": "effect-state",
+      "water-underwater-sun-shaft-shadow-route": "conditional-route",
+      "water-underwater-diagnostics-target": "resource",
+      "water-underwater-diagnostics-route": "conditional-route",
+      "water-underwater-probe": "conditional-route",
+    });
+
+    const resized = createMinimalWaterPrewarmManifest(
+      createMinimalWaterQualityProfile(),
+      NEXT_DRAWING_BUFFER,
+    );
+    for (const id of [
+      "water-underwater-volume-target",
+      "water-underwater-volume-route",
+      "water-underwater-diagnostics-target",
+      "water-underwater-diagnostics-route",
+      "water-underwater-probe",
+    ]) {
+      expect(
+        resized.declarations.find((declaration) => declaration.id === id)
+          ?.fingerprint,
+      ).not.toBe(
+        manifest.declarations.find((declaration) => declaration.id === id)
+          ?.fingerprint,
+      );
+    }
+  });
+
   it("declares every prepared spectral-whitecap field and capture route", () => {
     const manifest = createMinimalWaterPrewarmManifest();
     const declarations = new Map(
@@ -1599,7 +1811,7 @@ describe("Quality Profile manifests", () => {
     const profile = createMinimalWaterQualityProfile();
     const manifest = createMinimalWaterPrewarmManifest(profile);
 
-    expect(QUALITY_PROFILE_VERSION).toBe(9);
+    expect(QUALITY_PROFILE_VERSION).toBe(10);
     expect(profile.reflection.ssr.history.resetDomains).toEqual([
       "simulation-reset",
       "camera-cut",
@@ -1639,8 +1851,8 @@ describe("Quality Profile manifests", () => {
     );
     const highDetail = createMinimalWaterPrewarmManifest(highDetailProfile);
 
-    expect(PREWARM_MANIFEST_VERSION).toBe(6);
-    expect(minimal.version).toBe(6);
+    expect(PREWARM_MANIFEST_VERSION).toBe(7);
+    expect(minimal.version).toBe(7);
     expect(minimal.drawingBuffer).toEqual(MEMORY_PREWARM_DRAWING_BUFFER);
     expect(Object.isFrozen(minimal.drawingBuffer)).toBe(true);
     expect(minimal.manifestHash).toBe(
@@ -1656,13 +1868,15 @@ describe("Quality Profile manifests", () => {
     expect(minimal.effectVariants).toEqual([
       { effectId: "minimal-water-surface", variantId: "basic" },
       { effectId: "spectral-whitecaps", variantId: "persistent" },
+      { effectId: "underwater-volume", variantId: "depth-aware" },
     ]);
     expect(minimal.effectVariants).toEqual(SUPPORTED_EFFECT_VARIANTS);
     expect(minimal.qualityProfile.temporal).toEqual(NATIVE_TEMPORAL);
     expect(minimal.qualityProfile.reflection).toEqual(NATIVE_REFLECTION);
-    expect(minimal.qualityProfile.version).toBe(9);
+    expect(minimal.qualityProfile.version).toBe(10);
 
     expect(minimal.qualityProfile.whitecaps).toEqual(NATIVE_WHITECAPS);
+    expect(minimal.qualityProfile.underwater).toEqual(NATIVE_UNDERWATER);
     expect(minimal.declarations.map(({ id }) => id)).toEqual([
       ...CORE_PREWARM_DECLARATION_IDS,
     ]);
@@ -1670,7 +1884,7 @@ describe("Quality Profile manifests", () => {
       minimal.declarations.find(
         (declaration) => declaration.id === "water-named-output-routes",
       )?.label,
-    ).toBe("Twenty-nine named diagnostics output routes");
+    ).toBe("Thirty-three named diagnostics output routes");
     expect(
       Object.fromEntries(
         minimal.declarations
@@ -1778,7 +1992,7 @@ describe("Quality Profile manifests", () => {
       "water-traa-reset-route":
         "sha256:3f32ddae6ca9dde0bcfedf7e8c12e2d7f8c1c71d5fb53de9e2fb4e958e660239",
       "water-hidden-stabilization":
-        "sha256:f35d6cdd70b97589e93e16f61bb2ecb684031f9681d47d324413e2617810c726",
+        "sha256:caf44b79f85f7ef51388340b5a0b802e9f6d1974d25d28e3e3644c9856fcc441",
     });
     expect(
       minimal.declarations.find(
@@ -1793,7 +2007,7 @@ describe("Quality Profile manifests", () => {
     );
     expect(manifestIdentity(highDetail)).toEqual({
       schema: "real-water/prewarm",
-      version: 6,
+      version: 7,
       id: "reference-minimal-water",
       manifestHash: highDetail.manifestHash,
       qualityProfile: qualityProfileIdentity(highDetailProfile),
@@ -1802,6 +2016,7 @@ describe("Quality Profile manifests", () => {
       effectVariants: [
         { effectId: "minimal-water-surface", variantId: "basic" },
         { effectId: "spectral-whitecaps", variantId: "persistent" },
+        { effectId: "underwater-volume", variantId: "depth-aware" },
       ],
     });
     expect(Object.isFrozen(minimal.drawingBuffer)).toBe(true);
@@ -1811,6 +2026,7 @@ describe("Quality Profile manifests", () => {
     expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS)).toBe(true);
     expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[0])).toBe(true);
     expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[1])).toBe(true);
+    expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[2])).toBe(true);
   });
 
   it("binds drawing-buffer-exact fingerprints and hashes to each physical size", () => {

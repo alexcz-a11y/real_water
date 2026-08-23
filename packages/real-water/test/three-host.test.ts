@@ -328,8 +328,8 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(
       renderer.compileAsync.mock.calls.some((call) => call[1] !== camera),
     ).toBe(true);
-    expect(renderer.render).toHaveBeenCalledTimes(130);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(31);
+    expect(renderer.render).toHaveBeenCalledTimes(141);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(35);
     const readbackTargets = renderer.readRenderTargetPixelsAsync.mock.calls.map(
       (call) =>
         call[0] as { texture?: { name?: string }; textures?: unknown[] },
@@ -342,7 +342,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(readbackTargets[3]?.texture?.name).toBe(
       "Real Water inverse linear depth",
     );
-    expect(readbackTargets[30]?.texture?.name).toBe("Real Water final color");
+    expect(readbackTargets[34]?.texture?.name).toBe("Real Water final color");
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -435,7 +435,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     );
     expect(queryResults.foam[0]).toBe(geometryBefore.foam);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(31);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(35);
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -1017,7 +1017,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     });
     expect(scene.children).toHaveLength(0);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(15);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(17);
     expect(renderer.dispose).not.toHaveBeenCalled();
   });
 
@@ -1396,12 +1396,27 @@ describe("createThreeHostLifecycleAdapter", () => {
 
     expect(lease).not.toHaveProperty("present");
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(31);
-    expect(renderer.render).toHaveBeenCalledTimes(130);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(35);
+    expect(renderer.render).toHaveBeenCalledTimes(141);
     expect(presentation.route).toBeDefined();
+    const renderTargetsAtReady = renderer.setRenderTarget.mock.calls.length;
 
     const first = readHostPresentedFrame(await presentation.present());
     const second = readHostPresentedFrame(await presentation.present());
+    const readyFrameTargetNames = renderer.setRenderTarget.mock.calls
+      .slice(renderTargetsAtReady)
+      .map((call) =>
+        String(
+          (call[0] as { readonly texture?: { readonly name?: string } } | null)
+            ?.texture?.name ?? "canvas",
+        ),
+      );
+    expect(readyFrameTargetNames).toContain(
+      "Real Water underwater volume color",
+    );
+    expect(readyFrameTargetNames).not.toContain(
+      "Real Water underwater volume diagnostics",
+    );
     expect(first).toMatchObject({
       presentationId: 1,
       manifestHash: manifest.manifestHash,
@@ -1423,7 +1438,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(second.temporal.historyEpoch).toBe(1);
     expect(second.temporal.resetReason).toBeNull();
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(31);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(35);
 
     simulation.assign({ tick: 8, timeSeconds: 8 / 60, paused: false });
     const continuousTick = readHostPresentedFrame(await presentation.present());
@@ -1534,7 +1549,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(queuedFirst.presentationId + 1).toBe(queuedSecond.presentationId);
 
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(31);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(35);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
     expect(scene.children).toHaveLength(1);
@@ -2004,14 +2019,29 @@ describe("createThreeHostLifecycleAdapter", () => {
       }),
     ).rejects.toThrowError(/unique/i);
 
+    const renderTargetsBeforeAllCaptures =
+      renderer.setRenderTarget.mock.calls.length;
     const all = readHostDiagnosticsPresentedFrame(
       await diagnostics.present({
         outputs: [...DIAGNOSTICS_CAPTURE_NAMES],
       }),
     );
-    expect(all.outputs).toHaveLength(29);
-    expect(all.diagnosticReadbackCount).toBe(30);
+    expect(all.outputs).toHaveLength(33);
+    expect(all.diagnosticReadbackCount).toBe(31);
     expect(all.sceneRenderCount).toBe(resetFrame.sceneRenderCount + 1);
+    expect(
+      renderer.setRenderTarget.mock.calls
+        .slice(renderTargetsBeforeAllCaptures)
+        .map((call) =>
+          String(
+            (
+              call[0] as {
+                readonly texture?: { readonly name?: string };
+              } | null
+            )?.texture?.name ?? "canvas",
+          ),
+        ),
+    ).toContain("Real Water underwater volume diagnostics");
 
     await lease.dispose();
     await expect(diagnostics.present({ outputs: [] })).rejects.toThrow(
@@ -3385,6 +3415,9 @@ function mockPresentationReadback(
       data[pixel * 4 + 3] = one;
     }
     return data;
+  }
+  if (name.includes("underwater volume diagnostics")) {
+    return new Uint16Array(pixels * 4);
   }
   if (name.includes("diagnostics")) {
     return new Uint8Array(pixels * 2);

@@ -264,6 +264,21 @@ function createCapture(
       data: new Float32Array(width * height),
     };
   }
+  if (
+    name === "underwater-transmittance" ||
+    name === "underwater-scattering" ||
+    name === "underwater-light-shafts" ||
+    name === "underwater-shadow"
+  ) {
+    return {
+      name,
+      format: "r32float-underwater-volume",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
   return {
     name,
     format: "r32float-optical",
@@ -340,8 +355,8 @@ function coreFrame(
 }
 
 describe("QA frame driver Core association", () => {
-  it("publishes a v10 capture-contract mapped to actual Core declaration IDs", () => {
-    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(10);
+  it("publishes a v11 capture-contract mapped to actual Core declaration IDs", () => {
+    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(11);
     expect(QA_FRAME_PREWARM_MANIFEST.coreDeclarations).toEqual(
       QA_TO_CORE_DECLARATION_IDS,
     );
@@ -396,6 +411,7 @@ describe("QA frame driver Core association", () => {
       "water-history-rejection-target",
       "water-optical-diagnostics-b",
       "water-optical-diagnostics-a",
+      "water-underwater-diagnostics-target",
       "water-planar-reflection-target",
       "water-ssr-raw-target",
       "water-ssr-composite-target",
@@ -403,8 +419,8 @@ describe("QA frame driver Core association", () => {
       "water-ssr-history-resolved-capture-target",
       "water-ssr-history-beauty-target",
     ]);
-    expect(receipt.progress.completedWork).toBe(16);
-    expect(receipt.progress.totalWork).toBe(16);
+    expect(receipt.progress.completedWork).toBe(17);
+    expect(receipt.progress.totalWork).toBe(17);
   });
 
   it("rejects a Core manifest that is missing a mapped declaration", () => {

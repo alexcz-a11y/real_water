@@ -19,6 +19,11 @@ export interface ArtisticControls {
     readonly microDetail: number;
     readonly swellDrama: number;
     readonly timeScale: number;
+    readonly underwaterColor: number;
+    readonly underwaterExposure: number;
+    readonly underwaterHaze: number;
+    readonly underwaterLightShafts: number;
+    readonly underwaterTurbidity: number;
     readonly waveStrength: number;
     readonly whitecapAmount: number;
 }
@@ -995,7 +1000,7 @@ export type PresetRecoveryReason = "invalid-json" | "unknown-schema" | "invalid-
 export const PREWARM_MANIFEST_SCHEMA: "real-water/prewarm";
 
 // @public
-export const PREWARM_MANIFEST_VERSION: 6;
+export const PREWARM_MANIFEST_VERSION: 7;
 
 // @public
 export interface PrewarmDeclaration {
@@ -1077,7 +1082,7 @@ export type PrimitiveInteractionShape = SphereInteractionShape | BoxInteractionS
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 9;
+export const QUALITY_PROFILE_VERSION: 10;
 
 // @public
 export interface QualityProfile {
@@ -1097,6 +1102,8 @@ export interface QualityProfile {
     readonly surface: QualityProfileSurface;
     // (undocumented)
     readonly temporal: QualityProfileTemporal;
+    // (undocumented)
+    readonly underwater: QualityProfileUnderwaterVolume;
     // (undocumented)
     readonly version: typeof QUALITY_PROFILE_VERSION;
     // (undocumented)
@@ -1310,6 +1317,30 @@ export interface QualityProfileTemporal {
     readonly resolutionPolicy: "drawing-buffer-exact";
     // (undocumented)
     readonly taau: false;
+    // (undocumented)
+    readonly updateCadence: "host-present";
+}
+
+// @public
+export interface QualityProfileUnderwaterVolume {
+    // (undocumented)
+    readonly colorFormat: "rgba16float";
+    // (undocumented)
+    readonly composition: "post-ssr-pre-traa";
+    // (undocumented)
+    readonly diagnosticsFormat: "rgba16float";
+    // (undocumented)
+    readonly maxDistanceMetres: 96;
+    // (undocumented)
+    readonly mode: "depth-aware-post-volume";
+    // (undocumented)
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly samples: 0;
+    // (undocumented)
+    readonly shadowRoute: "screen-space-depth-occlusion";
+    // (undocumented)
+    readonly shaftRoute: "deterministic-epipolar";
     // (undocumented)
     readonly updateCadence: "host-present";
 }
@@ -1746,7 +1777,7 @@ export interface ThreeHostScene {
 export const WATER_PRESET_SCHEMA: "real-water/water-preset";
 
 // @public
-export const WATER_PRESET_VERSION: 4;
+export const WATER_PRESET_VERSION: 5;
 
 // @public
 export interface WaterPreset {

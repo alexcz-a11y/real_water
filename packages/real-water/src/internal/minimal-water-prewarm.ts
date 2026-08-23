@@ -32,6 +32,7 @@ import {
   readHostSimulationState,
   type HostSimulationAdapter,
   type OpenWaterRuntimeSnapshot,
+  type RuntimeStateSink,
 } from "../runtime.js";
 import {
   readHostPresentationState,
@@ -192,6 +193,8 @@ export async function prepareMinimalWaterPlane(
       camera,
       declaredDrawingBuffer,
       whitecapField,
+      options.environment,
+      options.request.manifest.qualityProfile.underwater,
       initialWaterline,
     );
     partial.presentation = createdPresentation.resources;
@@ -307,6 +310,12 @@ export async function prepareMinimalWaterPlane(
       "ssrCompositeTarget",
       "ssrRoute",
       "ssrCompositeRoute",
+      "underwaterVolumeTarget",
+      "underwaterVolumeRoute",
+      "underwaterDepthCompositionRoute",
+      "underwaterSunShaftShadowRoute",
+      "underwaterDiagnosticsTarget",
+      "underwaterDiagnosticsRoute",
       "renderRoute",
       "proceduralMotion",
       "motionVectors",
@@ -363,6 +372,7 @@ export async function prepareMinimalWaterPlane(
       "ssrHistoryResetVelocityTarget",
       "ssrHistoryResetVelocityRoute",
       "ssrHistoryProbe",
+      "underwaterProbe",
       "whitecapProbe",
       "completionProbe",
     ]);
@@ -453,19 +463,40 @@ function createPreparedLease(
   drawingBuffer: Readonly<{ width: number; height: number }>,
   manifestHash: string,
 ): HostPreparedLease {
+  const waterlineComposition = Object.freeze({
+    synchronize(
+      state: Parameters<typeof resources.opticalPath.waterline.synchronize>[0],
+    ): void {
+      resources.opticalPath.waterline.synchronize(state);
+      resources.presentation.underwater.waterline.synchronize(state);
+    },
+  });
+  const runtimeSink: RuntimeStateSink = Object.freeze({
+    synchronize(
+      snapshot: Parameters<RuntimeStateSink["synchronize"]>[0],
+      interaction: Parameters<RuntimeStateSink["synchronize"]>[1],
+    ): void {
+      resources.opticalPath.sink.synchronize(snapshot, interaction);
+      resources.presentation.underwater.sink.synchronize(snapshot, interaction);
+    },
+    observe(snapshot: OpenWaterRuntimeSnapshot): void {
+      resources.opticalPath.sink.observe?.(snapshot);
+      resources.presentation.underwater.sink.observe?.(snapshot);
+    },
+  });
   const presentationRoute = createPresentationRouteBridge(
     renderer,
     scene,
     camera,
     resources.presentation,
     resources.waterline,
-    resources.opticalPath.waterline,
+    waterlineComposition,
     drawingBuffer,
     manifestHash,
   );
   let disposal: Promise<void> | undefined;
   return Object.freeze({
-    [HOST_RUNTIME_STATE_BRIDGE]: resources.opticalPath.sink,
+    [HOST_RUNTIME_STATE_BRIDGE]: runtimeSink,
     [HOST_PRESENTATION_ROUTE_BRIDGE]: presentationRoute,
     invalidated,
     simulation,

@@ -44,6 +44,10 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
   "optical-crest-transmission": "water-optical-diagnostics-a",
   "optical-transmittance": "water-optical-diagnostics-a",
   "optical-glint": "water-optical-factors-target",
+  "underwater-transmittance": "water-underwater-diagnostics-target",
+  "underwater-scattering": "water-underwater-diagnostics-target",
+  "underwater-light-shafts": "water-underwater-diagnostics-target",
+  "underwater-shadow": "water-underwater-diagnostics-target",
   "planar-color": "water-planar-reflection-target",
   "planar-target-alpha": "water-planar-reflection-target",
   "ssr-hit": "water-ssr-raw-target",
@@ -59,7 +63,7 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
 
 export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
   schema: "real-water/qa-frame-prewarm" as const,
-  version: 10 as const,
+  version: 11 as const,
   id: "reference-qa-frame" as const,
   captures: Object.freeze([
     Object.freeze({
@@ -133,6 +137,22 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
     Object.freeze({
       name: "optical-glint" as const,
       preparedFormat: "rgba16float-optical-factors" as const,
+    }),
+    Object.freeze({
+      name: "underwater-transmittance" as const,
+      preparedFormat: "rgba16float-underwater-volume-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "underwater-scattering" as const,
+      preparedFormat: "rgba16float-underwater-volume-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "underwater-light-shafts" as const,
+      preparedFormat: "rgba16float-underwater-volume-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "underwater-shadow" as const,
+      preparedFormat: "rgba16float-underwater-volume-diagnostics" as const,
     }),
     Object.freeze({
       name: "planar-color" as const,
@@ -264,6 +284,16 @@ export interface QaFrameDriverOpticalScalarCapture extends QaFrameDriverCaptureB
   readonly data: Float32Array;
 }
 
+export interface QaFrameDriverUnderwaterVolumeCapture extends QaFrameDriverCaptureBase {
+  readonly name:
+    | "underwater-transmittance"
+    | "underwater-scattering"
+    | "underwater-light-shafts"
+    | "underwater-shadow";
+  readonly format: "r32float-underwater-volume";
+  readonly data: Float32Array;
+}
+
 export interface QaFrameDriverSsrColorCapture extends QaFrameDriverCaptureBase {
   readonly name: "ssr-color";
   readonly format: "rgb32float-linear-ssr";
@@ -323,7 +353,8 @@ export type QaFrameDriverCapture =
   | QaFrameDriverWhitecapStageCapture
   | QaFrameDriverWaterlineCapture
   | QaFrameDriverHistoryRejectionCapture
-  | QaFrameDriverOpticalScalarCapture;
+  | QaFrameDriverOpticalScalarCapture
+  | QaFrameDriverUnderwaterVolumeCapture;
 
 export interface QaFrameDriverStateReceipt {
   readonly seed: number;

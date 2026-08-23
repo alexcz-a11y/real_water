@@ -9,7 +9,7 @@ import type {
   QaCameraV1,
   QaCurrentSsrFixtureHotColor,
   QaCurrentSsrFixtureState,
-  QaHarnessV11,
+  QaHarnessV12,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
@@ -37,11 +37,21 @@ const SSR_CONTROLS = {
   ...createWaterPreset("swell").artisticControls,
   whitecapAmount: 0,
   foamPersistence: 0,
+  underwaterHaze: 1,
+  underwaterTurbidity: 1,
+  underwaterLightShafts: 1,
+  underwaterColor: 1,
+  underwaterExposure: 1,
 } satisfies ArtisticControls;
 const FAR_WATER_CONTROLS = {
   ...createWaterPreset("storm").artisticControls,
   whitecapAmount: 0,
   foamPersistence: 0,
+  underwaterHaze: 1,
+  underwaterTurbidity: 1,
+  underwaterLightShafts: 1,
+  underwaterColor: 1,
+  underwaterExposure: 1,
 } satisfies ArtisticControls;
 const OFFSCREEN_CAMERA = {
   ...HIT_CAMERA,
@@ -92,7 +102,7 @@ async function presentCurrentSsrEvidence(
 ): Promise<CurrentSsrEvidence> {
   return page.evaluate(
     async ({ fixtureEnabled, fixtureColor, cameraPose, artisticControls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -181,7 +191,7 @@ async function presentFarWaterSsrEvidence(
 ): Promise<CurrentSsrEvidence> {
   return page.evaluate(
     async ({ fixtureEnabled, cameraPose, artisticControls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -416,7 +426,7 @@ test("keeps the FrontSide current-frame SSR fixture visible and scale-disabled t
 }) => {
   await openQaStage(page);
   const ready = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -957,7 +967,7 @@ test("updates raw SSR and TRAA final on the same JS task after a miss-to-hit pre
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ cameraPose, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

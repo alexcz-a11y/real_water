@@ -33,6 +33,7 @@ import {
   type DiagnosticsMotionVectorCapture,
   type DiagnosticsOpticalScalarCapture,
   type DiagnosticsSsrRoughnessCapture,
+  type DiagnosticsUnderwaterVolumeCapture,
   type DiagnosticsWhitecapStageCapture,
   type HostDiagnosticsPresentRequest,
   type HostDiagnosticsPresentedFrame,
@@ -44,6 +45,8 @@ import type {
   HostTemporalResetReason,
 } from "../presentation.js";
 import type { OpenWaterRuntimeSnapshot } from "../runtime.js";
+import type { HostEnvironmentAdapter } from "../environment.js";
+import type { QualityProfileUnderwaterVolume } from "../quality-profile.js";
 import { unpackPackedViewNormalRgb } from "../ssr.js";
 import { installHostDiagnosticsRoute } from "./diagnostics-route-bridge.js";
 import type { HostPresentationRouteBridge } from "./presentation-route-bridge.js";
@@ -82,6 +85,7 @@ import type {
   WaterlineFrameState,
   WaterlineStateController,
 } from "./waterline-state.js";
+import { createUnderwaterVolumeRendering } from "./underwater-volume-rendering.js";
 
 export const PREWARM_HISTORY_EPOCH = 1;
 export const HIDDEN_STABILIZATION_FRAME_COUNT = 8;
@@ -116,6 +120,11 @@ export interface PreparedWaterPresentationResources {
   readonly finalColorTarget: RenderTarget;
   readonly scenePass: ReturnType<typeof pass>;
   readonly ssr: CurrentFrameSsrStack;
+  readonly underwater: ReturnType<typeof createUnderwaterVolumeRendering>;
+  readonly underwaterVolumePipeline: RenderPipeline;
+  readonly underwaterVolumeTarget: RenderTarget;
+  readonly underwaterDiagnosticsPipeline: RenderPipeline;
+  readonly underwaterDiagnosticsTarget: RenderTarget;
   readonly whitecapField: SpectralWhitecapField;
   readonly whitecapDiagnostics: SpectralWhitecapDiagnostics;
   readonly inverseLinearDepthTextureIndex: number;
@@ -143,6 +152,8 @@ export function createPreparedWaterPresentationResources(
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
   whitecapField: SpectralWhitecapField,
+  environment: HostEnvironmentAdapter,
+  underwaterPolicy: QualityProfileUnderwaterVolume,
   initialWaterline: WaterlineFrameState,
 ): {
   readonly resources: PreparedWaterPresentationResources;
@@ -156,6 +167,8 @@ export function createPreparedWaterPresentationResources(
       camera,
       drawingBuffer,
       whitecapField,
+      environment,
+      underwaterPolicy,
       initialWaterline,
       partial,
     );
@@ -171,6 +184,8 @@ function constructPreparedWaterPresentationResources(
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
   whitecapField: SpectralWhitecapField,
+  environment: HostEnvironmentAdapter,
+  underwaterPolicy: QualityProfileUnderwaterVolume,
   initialWaterline: WaterlineFrameState,
   partial: PartialPreparedWaterPresentationResources,
 ): {
@@ -270,8 +285,54 @@ function constructPreparedWaterPresentationResources(
     },
   );
   partial.ssr = ssr;
+  const underwater = createUnderwaterVolumeRendering(
+    ssr.compositeTarget.texture,
+    scenePass.getTexture("depth"),
+    camera,
+    environment,
+    initialWaterline,
+    underwaterPolicy,
+  );
+  partial.underwater = underwater;
+  const underwaterVolumeTarget = new RenderTarget(
+    drawingBuffer.width,
+    drawingBuffer.height,
+    {
+      depthBuffer: false,
+      stencilBuffer: false,
+      type: HalfFloatType,
+      format: RGBAFormat,
+    },
+  );
+  partial.underwaterVolumeTarget = underwaterVolumeTarget;
+  underwaterVolumeTarget.texture.name = "Real Water underwater volume color";
+  const underwaterVolumePipeline = new RenderPipeline(
+    renderer,
+    underwater.colorNode,
+  );
+  partial.underwaterVolumePipeline = underwaterVolumePipeline;
+  underwaterVolumePipeline.outputColorTransform = false;
+  const underwaterDiagnosticsTarget = new RenderTarget(
+    drawingBuffer.width,
+    drawingBuffer.height,
+    {
+      depthBuffer: false,
+      stencilBuffer: false,
+      type: HalfFloatType,
+      format: RGBAFormat,
+    },
+  );
+  partial.underwaterDiagnosticsTarget = underwaterDiagnosticsTarget;
+  underwaterDiagnosticsTarget.texture.name =
+    "Real Water underwater volume diagnostics";
+  const underwaterDiagnosticsPipeline = new RenderPipeline(
+    renderer,
+    underwater.diagnosticsNode,
+  );
+  partial.underwaterDiagnosticsPipeline = underwaterDiagnosticsPipeline;
+  underwaterDiagnosticsPipeline.outputColorTransform = false;
   const traaNode = traa(
-    vec4(texture(ssr.compositeTarget.texture).rgb, texture(outputTexture).a),
+    vec4(texture(underwaterVolumeTarget.texture).rgb, texture(outputTexture).a),
     texture(scenePass.getTexture("depth")),
     createResettableVelocityTextureNode(
       texture(motionVectorsTexture),
@@ -309,7 +370,7 @@ function constructPreparedWaterPresentationResources(
   currentColorTarget.texture.name = "Real Water current color";
   const currentColorPipeline = new RenderPipeline(
     renderer,
-    vec4(texture(ssr.compositeTarget.texture).rgb, texture(outputTexture).a),
+    vec4(texture(underwaterVolumeTarget.texture).rgb, texture(outputTexture).a),
   );
   partial.currentColorPipeline = currentColorPipeline;
   const presentationPipeline = new RenderPipeline(
@@ -334,6 +395,11 @@ function constructPreparedWaterPresentationResources(
     finalColorTarget,
     scenePass,
     ssr,
+    underwater,
+    underwaterVolumePipeline,
+    underwaterVolumeTarget,
+    underwaterDiagnosticsPipeline,
+    underwaterDiagnosticsTarget,
     whitecapField,
     whitecapDiagnostics,
     inverseLinearDepthTextureIndex: 0,
@@ -388,7 +454,7 @@ export async function compileAndPrimePreparedWaterPresentation(
   throwIfAborted(signal);
   resources.ssr.ensureGraphPrepared(renderer);
   resources.resetUniform.value = 1;
-  renderTemporalFrame(renderer, scene, camera, resources, true);
+  renderTemporalFrame(renderer, scene, camera, resources, true, true);
   renderHistoryRejection(renderer, resources);
   resources.resetUniform.value = 0;
   renderCurrentColorConversion(renderer, resources);
@@ -411,7 +477,7 @@ export function renderHiddenStabilizationFrames(
       resources.jitterAdapter.realign();
     }
     try {
-      renderTemporalFrame(renderer, scene, camera, resources, false);
+      renderTemporalFrame(renderer, scene, camera, resources, false, false);
     } finally {
       if (resetFrame) {
         resources.resetUniform.value = 0;
@@ -437,7 +503,7 @@ export async function renderMainCameraGuard(
   resources: PreparedWaterPresentationResources,
   signal: AbortSignal,
 ): Promise<void> {
-  renderTemporalFrame(renderer, scene, camera, resources, false);
+  renderTemporalFrame(renderer, scene, camera, resources, false, false);
   renderCurrentColorConversion(renderer, resources);
   renderer.setRenderTarget(null);
   resources.presentationPipeline.render();
@@ -514,6 +580,7 @@ export function createPresentationRouteBridge(
         camera,
         resources,
         accepted.outputs.some(isWhitecapCaptureName),
+        accepted.outputs.some(isUnderwaterVolumeCaptureName),
       );
       if (accepted.outputs.includes("current-color")) {
         renderCurrentColorConversion(renderer, resources);
@@ -526,12 +593,26 @@ export function createPresentationRouteBridge(
       const whitecapCaptures = accepted.outputs.some(isWhitecapCaptureName)
         ? await readWhitecapStageCaptures(renderer, resources)
         : undefined;
+      const underwaterCaptures = accepted.outputs.some(
+        isUnderwaterVolumeCaptureName,
+      )
+        ? await readUnderwaterVolumeCaptures(renderer, resources)
+        : undefined;
       if (whitecapCaptures !== undefined) {
+        resources.counters.diagnosticReadbackCount += 1;
+      }
+      if (underwaterCaptures !== undefined) {
         resources.counters.diagnosticReadbackCount += 1;
       }
       for (const name of accepted.outputs) {
         if (isWhitecapCaptureName(name)) {
           const capture = whitecapCaptures?.get(name);
+          if (capture === undefined) {
+            throw new Error(`The ${name} packed capture is unavailable.`);
+          }
+          outputs.push(capture);
+        } else if (isUnderwaterVolumeCaptureName(name)) {
+          const capture = underwaterCaptures?.get(name);
           if (capture === undefined) {
             throw new Error(`The ${name} packed capture is unavailable.`);
           }
@@ -647,6 +728,10 @@ export function disposePreparedWaterPresentationResources(
   resources: PreparedWaterPresentationResources,
 ): void {
   resources.presentationPipeline.dispose();
+  resources.underwaterDiagnosticsPipeline.dispose();
+  resources.underwaterDiagnosticsTarget.dispose();
+  resources.underwaterVolumePipeline.dispose();
+  resources.underwaterVolumeTarget.dispose();
   resources.historyRejectionPipeline.dispose();
   resources.historyRejectionTarget.dispose();
   resources.currentColorPipeline.dispose();
@@ -665,6 +750,10 @@ export function disposePartialPreparedWaterPresentationResources(
 ): void {
   const disposals = [
     () => resources.presentationPipeline?.dispose(),
+    () => resources.underwaterDiagnosticsPipeline?.dispose(),
+    () => resources.underwaterDiagnosticsTarget?.dispose(),
+    () => resources.underwaterVolumePipeline?.dispose(),
+    () => resources.underwaterVolumeTarget?.dispose(),
     () => resources.historyRejectionPipeline?.dispose(),
     () => resources.historyRejectionTarget?.dispose(),
     () => resources.currentColorPipeline?.dispose(),
@@ -764,6 +853,7 @@ function renderTemporalFrame(
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
   captureWhitecaps: boolean,
+  captureUnderwaterDiagnostics: boolean,
 ): void {
   const actual = readDrawingBufferSize(renderer);
   if (actual.width !== resources.width || actual.height !== resources.height) {
@@ -809,6 +899,13 @@ function renderTemporalFrame(
       renderer.setRenderTarget(resources.ssr.compositeTarget);
       resources.ssr.compositePipeline.render();
       assertCurrentFrameSsrPreparedSize(resources.ssr);
+      resources.underwater.syncCamera(camera);
+      renderer.setRenderTarget(resources.underwaterVolumeTarget);
+      resources.underwaterVolumePipeline.render();
+      if (captureUnderwaterDiagnostics) {
+        renderer.setRenderTarget(resources.underwaterDiagnosticsTarget);
+        resources.underwaterDiagnosticsPipeline.render();
+      }
       renderer.setRenderTarget(resources.ssr.depthConversionTarget);
       resources.ssr.depthConversionPipeline.render();
       resources.jitterAdapter.clearHostCameraViewOffset(camera);
@@ -885,6 +982,16 @@ async function probeNamedOutputRoutes(
     resources.ssr.ssrNode.getRenderTarget(),
   );
   await probeCompletedFrame(renderer, resources, resources.ssr.compositeTarget);
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.underwaterVolumeTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.underwaterDiagnosticsTarget,
+  );
   await probeCompletedFrame(renderer, resources, resources.ssr.beautyTarget);
   await probeCompletedFrame(
     renderer,
@@ -935,6 +1042,17 @@ function isWhitecapCaptureName(name: DiagnosticsCaptureName): boolean {
     name === "whitecap-history" ||
     name === "whitecap-advection" ||
     name === "whitecap-decay"
+  );
+}
+
+function isUnderwaterVolumeCaptureName(
+  name: DiagnosticsCaptureName,
+): name is DiagnosticsUnderwaterVolumeCapture["name"] {
+  return (
+    name === "underwater-transmittance" ||
+    name === "underwater-scattering" ||
+    name === "underwater-light-shafts" ||
+    name === "underwater-shadow"
   );
 }
 
@@ -1146,6 +1264,13 @@ async function readNamedOutput(
         resources.opticalFactorsTextureIndex,
         2,
       );
+    case "underwater-transmittance":
+    case "underwater-scattering":
+    case "underwater-light-shafts":
+    case "underwater-shadow":
+      throw new Error(
+        "The packed underwater diagnostic route has not been prepared.",
+      );
     case "planar-color":
       return readPlanarColorCapture(renderer, resources);
     case "planar-target-alpha":
@@ -1299,6 +1424,64 @@ async function readWhitecapStageCaptures(
     );
   }
   return result;
+}
+
+async function readUnderwaterVolumeCaptures(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<
+  ReadonlyMap<
+    DiagnosticsUnderwaterVolumeCapture["name"],
+    DiagnosticsUnderwaterVolumeCapture
+  >
+> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.underwaterDiagnosticsTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array)) {
+    throw new TypeError(
+      "Underwater diagnostics readback did not return Float16 RGBA data.",
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const names = [
+    "underwater-transmittance",
+    "underwater-scattering",
+    "underwater-light-shafts",
+    "underwater-shadow",
+  ] as const;
+  const captures = new Map<
+    DiagnosticsUnderwaterVolumeCapture["name"],
+    DiagnosticsUnderwaterVolumeCapture
+  >();
+  for (const [channel, name] of names.entries()) {
+    const data = new Float32Array(resources.width * resources.height);
+    for (let pixel = 0; pixel < data.length; pixel += 1) {
+      const value = DataUtils.fromHalfFloat(rgba[pixel * 4 + channel] ?? 0);
+      if (!Number.isFinite(value) || value < 0 || value > 1) {
+        throw new RangeError(
+          `The ${name} capture must contain finite normalized volume data.`,
+        );
+      }
+      data[pixel] = value;
+    }
+    captures.set(
+      name,
+      Object.freeze({
+        name,
+        width: resources.width,
+        height: resources.height,
+        origin: "top-left",
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+        data,
+      }),
+    );
+  }
+  return captures;
 }
 
 async function readWaterlineCapture(

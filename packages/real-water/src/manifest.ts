@@ -145,6 +145,10 @@ export const SUPPORTED_EFFECT_VARIANTS: readonly PrewarmEffectVariant[] =
       effectId: "spectral-whitecaps",
       variantId: "persistent",
     }),
+    Object.freeze({
+      effectId: "underwater-volume",
+      variantId: "depth-aware",
+    }),
   ]);
 
 export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
@@ -209,6 +213,13 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   ssrHistoryResetVelocityRoute: "water-ssr-history-reset-velocity-route",
   ssrHistoryProbe: "water-ssr-history-probe",
   ssrProbe: "water-ssr-probe",
+  underwaterVolumeTarget: "water-underwater-volume-target",
+  underwaterVolumeRoute: "water-underwater-volume-route",
+  underwaterDepthCompositionRoute: "water-underwater-depth-composition-route",
+  underwaterSunShaftShadowRoute: "water-underwater-sun-shaft-shadow-route",
+  underwaterDiagnosticsTarget: "water-underwater-diagnostics-target",
+  underwaterDiagnosticsRoute: "water-underwater-diagnostics-route",
+  underwaterProbe: "water-underwater-probe",
   renderRoute: "water-render-route",
   proceduralMotion: "water-procedural-motion",
   motionVectors: "water-motion-vectors",
@@ -288,6 +299,11 @@ const DRAWING_BUFFER_BOUND_DECLARATION_IDS: ReadonlySet<string> = new Set([
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResetVelocityRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryProbe,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrProbe,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterVolumeTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterVolumeRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterDiagnosticsTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterDiagnosticsRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterProbe,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapStageTarget,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapStageRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapProbe,
@@ -751,14 +767,68 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
       "sha256:42eac93d1c673fe058eb09c61f470083df6b7afa3683328e788656732491a2e6",
   },
   {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterVolumeTarget,
+    kind: "resource",
+    label:
+      "Underwater volume color (RGBA16F, samples 0, drawing-buffer-exact, post-SSR pre-TRAA)",
+    fingerprint:
+      "sha256:6a75542631256bd1f689adb7a8e6b8c81cbc6a9d11f41d22b874b596dfa49474",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterVolumeRoute,
+    kind: "conditional-route",
+    label:
+      "Per-ray underwater absorption, haze, scattering, color, and exposure composition from scene depth, local interface, and Host Environment",
+    fingerprint:
+      "sha256:07b5b5d14dac572c25546f04cf86ce2cf41c8e895bfc95d7f90806f42ee52821",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterDepthCompositionRoute,
+    kind: "effect-state",
+    label:
+      "Bounded 96m scene-depth and local horizontal-interface ray termination for geometry, water surface, and far-plane volume composition",
+    fingerprint:
+      "sha256:bf8d34efc551a99f04c2c54c3332689078a2a0acbd38ec1c80fa0a538ca4dac0",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterSunShaftShadowRoute,
+    kind: "conditional-route",
+    label:
+      "Deterministic epipolar sun shafts with screen-space scene-depth occlusion from Host sun",
+    fingerprint:
+      "sha256:a0e96cb179c2597702862df89cf330d8330224b1c7e8bb6b8050d09b0002afd2",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterDiagnosticsTarget,
+    kind: "resource",
+    label:
+      "Underwater volume diagnostics (RGBA16F transmittance/scattering/shaft/shadow, drawing-buffer-exact)",
+    fingerprint:
+      "sha256:585994ca2c4858380903d9e94f20b0a880378b411ad7a2b2ad60cb931abda5f4",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterDiagnosticsRoute,
+    kind: "conditional-route",
+    label:
+      "On-request packed underwater transmittance, scattering, sun-shaft, and shadow diagnostics",
+    fingerprint:
+      "sha256:803a8e7688fa35fea43ca767b364b836d2c29a028c6d0509fa3c8169e4b79e90",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterProbe,
+    kind: "conditional-route",
+    label:
+      "GPU completion probe of underwater volume color and diagnostics targets",
+    fingerprint:
+      "sha256:e634ca001324670cad2f7ef46a7b011bb753692940733a1e108ebbf8d53f422d",
+  },
+  {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
     kind: "conditional-route",
     label:
-      "Fixed-tick whitecaps, waterline-gated planar aux, one jittered main MRT, current-frame SSR, shared-reset TemporalReproject history, explicit compose, then stock TRAA",
-    // sha256 of 6cac0421… (fixed-tick whitecaps) followed by 974bde5f…
-    // (waterline-gated planar): this declaration is the composition of those two.
+      "Fixed-tick whitecaps, waterline-gated planar aux, one jittered main MRT, current-frame SSR, per-ray underwater volume with on-request diagnostics, then stock TRAA",
     fingerprint:
-      "sha256:e4dbd7f0f777248b11f0b9a865689490379756efca30b56c288d6d025d695222",
+      "sha256:f7f44a7ddf3041a2cda3654fb87e9181f0ca87730eb64017725c664995bafb91",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.proceduralMotion,
@@ -869,40 +939,39 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.currentColorConversion,
     kind: "conditional-route",
     label:
-      "Current-color conversion sampling pre-TRAA SSR composite RGB with restored scene alpha",
+      "Current-color conversion sampling pre-TRAA underwater-volume RGB with restored scene alpha",
     fingerprint:
-      "sha256:ea19f958120b52c05d673abcec39db3aa8ca7157f326d5d4449a4faa0457c57c",
+      "sha256:750febf150f950dd006fc0a7df54e7e5faa9aace9e026c452f1b9aa0f639a0c8",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
     kind: "conditional-route",
-    label: "Twenty-nine named diagnostics output routes",
-    // sha256 of a5f86239… (twenty-seven routes) followed by 274528e7…
-    // (twenty-five routes): this declaration is the composition of those two.
+    label: "Thirty-three named diagnostics output routes",
     fingerprint:
-      "sha256:bab01729c0b83003c83d1cc96368ba5bfdbd19a8a198250aa0badea37a4f4b5d",
+      "sha256:e4de9d999b2fb129152afd200be776ecacddd3c31f94b47886c3b2a531670dbd",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.hiddenStabilization,
     kind: "effect-state",
-    label: "Eight hidden TRAA and SSR history stabilization frames",
+    label:
+      "Eight hidden underwater-composition, TRAA, and SSR history stabilization frames",
     fingerprint:
-      "sha256:f35d6cdd70b97589e93e16f61bb2ecb684031f9681d47d324413e2617810c726",
+      "sha256:caf44b79f85f7ef51388340b5a0b802e9f6d1974d25d28e3e3644c9856fcc441",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.completionProbe,
     kind: "conditional-route",
     label:
-      "GPU completion probe of every named output route including whitecaps",
+      "GPU completion probe of every named output route including underwater volume and whitecaps",
     fingerprint:
-      "sha256:d80c56dde025d2eeb391c93648ef11eda60ee07a9b9337afa1375484bd5268f3",
+      "sha256:13b8de5162b3d884d6235addcfbd0ef06373c8d124fd3b85a42149c92d6161ef",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.mainCameraGuard,
     kind: "conditional-route",
-    label: "Main-camera guard frame",
+    label: "Main-camera guard frame including the underwater volume",
     fingerprint:
-      "sha256:ef72fd8cb5959aa73eeef6a857f67edc3f32b1b9f7e73b76b295f913ae6aca25",
+      "sha256:e59db4a839b5f36edfaec493a1f334f44ba6bae5a5046a758c0ceb69ea143841",
   },
 ];
 

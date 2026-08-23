@@ -400,6 +400,48 @@ describe("ready Open Water runtime", () => {
     expect(sink.synchronize).toHaveBeenCalledTimes(1);
   });
 
+  it("updates underwater atmosphere through bounded hot Artistic Controls", () => {
+    const sink = { synchronize: vi.fn() };
+    const runtime = createRealWaterRuntime(
+      () => {},
+      STATIC_SIMULATION,
+      createStaticHostPresentationAdapter(),
+      sink,
+    );
+    const initial = runtime.inspectRuntime().artisticControls;
+    const underwater = {
+      ...initial,
+      underwaterHaze: 0.35,
+      underwaterTurbidity: 1.4,
+      underwaterLightShafts: 1.65,
+      underwaterColor: 0.8,
+      underwaterExposure: 1.2,
+    };
+
+    expect(runtime.updateArtisticControls(underwater)).toMatchObject({
+      artisticControls: underwater,
+      changed: true,
+      revision: 1,
+    });
+    expect(runtime.inspectRuntime().artisticControls).toEqual(underwater);
+    expect(sink.synchronize).toHaveBeenCalledTimes(1);
+
+    for (const key of [
+      "underwaterHaze",
+      "underwaterTurbidity",
+      "underwaterLightShafts",
+      "underwaterColor",
+      "underwaterExposure",
+    ] as const) {
+      expect(() =>
+        runtime.updateArtisticControls({
+          ...underwater,
+          [key]: 2.01,
+        }),
+      ).toThrowError(new RegExp(`${key} must be between 0 and 2`, "i"));
+    }
+  });
+
   it("fails before writes when a tick exceeds its prepared query capacity", async () => {
     let simulation = Object.freeze({
       seed: 0,

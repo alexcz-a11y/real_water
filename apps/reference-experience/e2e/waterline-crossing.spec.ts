@@ -7,7 +7,7 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV11,
+  type QaHarnessV12,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
@@ -37,6 +37,11 @@ const WATERLINE_CONTROLS = Object.freeze({
   // before the whitecap controls existed, so zero is what it actually measured.
   whitecapAmount: 0,
   foamPersistence: 0,
+  underwaterHaze: 1,
+  underwaterTurbidity: 1,
+  underwaterLightShafts: 1,
+  underwaterColor: 1,
+  underwaterExposure: 1,
 }) satisfies ArtisticControls;
 
 async function openQaStage(page: Page): Promise<void> {
@@ -56,7 +61,7 @@ test("renders a stable non-black underside and bounds crossing rejection", async
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ controls, seed, tick }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -107,14 +112,20 @@ test("renders a stable non-black underside and bounds crossing rejection", async
           historyInput: (await harness.capture("ssr-history-input-color")).data,
           historyWeight: (await harness.capture("ssr-history-frame-weight"))
             .data,
+          underwaterTransmittance: (
+            await harness.capture("underwater-transmittance")
+          ).data,
+          underwaterScattering: (await harness.capture("underwater-scattering"))
+            .data,
         };
       };
 
       const above = await presentAt(0.5);
       const crossing = await presentAt(0.05);
+      const crossingBelow = await presentAt(-0.05);
       const below = await presentAt(-0.5);
       const stableBelow = await presentAt(-0.45);
-      return { query, above, crossing, below, stableBelow };
+      return { query, above, crossing, crossingBelow, below, stableBelow };
     },
     { controls: WATERLINE_CONTROLS, seed: SEED, tick: TICK },
   );
@@ -131,6 +142,10 @@ test("renders a stable non-black underside and bounds crossing rejection", async
   expect(result.crossing.presentation.temporal.resetReason).toBe(
     "waterline-crossing",
   );
+  expect(result.crossingBelow.presentation).toMatchObject({
+    waterline: { classification: "crossing" },
+    temporal: { resetReason: null, resetFrame: false },
+  });
   expect(result.below.presentation.temporal.resetReason).toBe(
     "waterline-crossing",
   );
@@ -138,6 +153,19 @@ test("renders a stable non-black underside and bounds crossing rejection", async
     resetReason: null,
     resetFrame: false,
   });
+
+  const crossingBelowTransmittance = decodeFloat32(
+    result.crossingBelow.underwaterTransmittance,
+  );
+  const crossingBelowScattering = decodeFloat32(
+    result.crossingBelow.underwaterScattering,
+  );
+  expect(meanHorizontalBand(crossingBelowTransmittance, "air")).toBeGreaterThan(
+    meanHorizontalBand(crossingBelowTransmittance, "water") + 0.05,
+  );
+  expect(meanHorizontalBand(crossingBelowScattering, "water")).toBeGreaterThan(
+    meanHorizontalBand(crossingBelowScattering, "air") + 0.05,
+  );
 
   const belowWaterline = decodeFloat32(result.below.waterline);
   const belowRejection = decodeFloat32(result.below.rejection);
@@ -267,13 +295,32 @@ test("renders a stable non-black underside and bounds crossing rejection", async
   });
 });
 
+function meanHorizontalBand(
+  values: readonly number[],
+  band: "air" | "water",
+): number {
+  const x0 = Math.floor(VIEWPORT.width * 0.1);
+  const x1 = Math.ceil(VIEWPORT.width * 0.9);
+  const y0 = Math.floor(VIEWPORT.height * (band === "air" ? 0.05 : 0.5));
+  const y1 = Math.ceil(VIEWPORT.height * (band === "air" ? 0.25 : 0.7));
+  let total = 0;
+  let count = 0;
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = x0; x < x1; x += 1) {
+      total += values[y * VIEWPORT.width + x] ?? 0;
+      count += 1;
+    }
+  }
+  return count === 0 ? 0 : total / count;
+}
+
 test("keeps rendering, queries, and classification coherent at a nonzero sea level", async ({
   page,
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ controls, seed, tick }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -372,7 +419,7 @@ test("replays repeated crossings and treats a teleport as one camera-cut reset",
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ controls, seed, tick }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
