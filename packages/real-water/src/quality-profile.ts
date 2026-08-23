@@ -108,6 +108,7 @@ export interface QualityProfileReflectionSsrHistory {
     "camera-cut",
     "origin-shift",
     "sea-state-cut",
+    "waterline-crossing",
   ];
   readonly updateCadence: "host-present";
 }
@@ -248,6 +249,7 @@ export const CURRENT_FRAME_SSR_HISTORY_POLICY: QualityProfileReflectionSsrHistor
       "camera-cut",
       "origin-shift",
       "sea-state-cut",
+      "waterline-crossing",
     ] as const),
     updateCadence: "host-present",
   });

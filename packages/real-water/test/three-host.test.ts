@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ClampToEdgeWrapping,
+  DataUtils,
   DataTexture,
   LinearSRGBColorSpace,
   Mesh,
@@ -93,6 +94,7 @@ const CORE_READY_REFLECTION = Object.freeze({
         "camera-cut",
         "origin-shift",
         "sea-state-cut",
+        "waterline-crossing",
       ] as const),
       updateCadence: "host-present" as const,
     }),
@@ -320,6 +322,9 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(readbackTargets[0]?.texture?.name).toBe("Real Water final color");
     expect(readbackTargets[1]?.texture?.name).toBe("Real Water current color");
     expect(readbackTargets[2]?.texture?.name).toBe(
+      "Real Water history rejection",
+    );
+    expect(readbackTargets[3]?.texture?.name).toBe(
       "Real Water inverse linear depth",
     );
     expect(readbackTargets[28]?.texture?.name).toBe("Real Water final color");
@@ -1764,6 +1769,130 @@ describe("createThreeHostLifecycleAdapter", () => {
     await lease.dispose();
   });
 
+  it("classifies a stable waterline and resets shared history once per crossing state", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    camera.position.set(0, 8, 0);
+    camera.updateMatrixWorld(true);
+    const simulation = createMutableSimulationAdapter();
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        simulation,
+        presentation,
+      }),
+    }).ready;
+    const query = {
+      count: 1,
+      positions: new Float32Array([0, 0, 0]),
+      results: {
+        heights: new Float32Array(1),
+        normals: new Float32Array(3),
+        velocities: new Float32Array(3),
+        foam: new Float32Array(1),
+        ticks: new Float64Array(1),
+        controlRevisions: new Float64Array(1),
+        snapshotAges: new Uint8Array(1),
+      },
+    };
+    const surfaceHeight = lease.queryGameplay(query).heights[0] ?? 0;
+    const diagnostics = readHostDiagnosticsRoute(
+      presentation.route as HostPresentationRoute,
+    );
+    const presentAt = async (offsetMetres: number) => {
+      camera.position.y = surfaceHeight + offsetMetres;
+      camera.updateMatrixWorld(true);
+      return readHostDiagnosticsPresentedFrame(
+        await diagnostics.present({
+          outputs: ["waterline", "history-rejection"],
+        }),
+      );
+    };
+
+    const above = await presentAt(0.5);
+    expect(above.waterline).toMatchObject({
+      classification: "above",
+      transitionRevision: 0,
+      lensWetnessImpulse: false,
+    });
+    expect(above.waterline.submersion).toBe(0);
+    expect(above.temporal).toEqual({
+      historyEpoch: 1,
+      resetReason: null,
+      resetFrame: false,
+    });
+
+    const crossing = await presentAt(0.05);
+    expect(crossing.waterline).toMatchObject({
+      classification: "crossing",
+      transitionRevision: 1,
+      lensWetnessImpulse: false,
+    });
+    expect(crossing.waterline.submersion).toBeGreaterThan(0);
+    expect(crossing.waterline.submersion).toBeLessThan(1);
+    expect(crossing.temporal).toEqual({
+      historyEpoch: 2,
+      resetReason: "waterline-crossing",
+      resetFrame: true,
+    });
+
+    const crossingJitter = await presentAt(0.07);
+    expect(crossingJitter.waterline.classification).toBe("crossing");
+    expect(crossingJitter.waterline.transitionRevision).toBe(1);
+    expect(crossingJitter.temporal).toEqual({
+      historyEpoch: 2,
+      resetReason: null,
+      resetFrame: false,
+    });
+
+    const below = await presentAt(-0.5);
+    expect(below.waterline).toMatchObject({
+      classification: "below",
+      transitionRevision: 2,
+      lensWetnessImpulse: false,
+      submersion: 1,
+    });
+    expect(below.temporal).toEqual({
+      historyEpoch: 3,
+      resetReason: "waterline-crossing",
+      resetFrame: true,
+    });
+
+    const stableBelow = await presentAt(-0.4);
+    expect(stableBelow.waterline.classification).toBe("below");
+    expect(stableBelow.waterline.transitionRevision).toBe(2);
+    expect(stableBelow.temporal.resetFrame).toBe(false);
+
+    const emerging = await presentAt(-0.05);
+    expect(emerging.waterline).toMatchObject({
+      classification: "crossing",
+      transitionRevision: 3,
+      lensWetnessImpulse: true,
+    });
+    expect(emerging.temporal.resetReason).toBe("waterline-crossing");
+
+    const dry = await presentAt(0.5);
+    expect(dry.waterline).toMatchObject({
+      classification: "above",
+      transitionRevision: 4,
+      lensWetnessImpulse: false,
+      submersion: 0,
+    });
+    expect(dry.temporal).toEqual({
+      historyEpoch: 5,
+      resetReason: "waterline-crossing",
+      resetFrame: true,
+    });
+
+    await lease.dispose();
+  });
+
   it("presents diagnostics outputs from the bound Core route without a second scene render", async () => {
     const scene = new Scene();
     const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
@@ -1865,8 +1994,8 @@ describe("createThreeHostLifecycleAdapter", () => {
         outputs: [...DIAGNOSTICS_CAPTURE_NAMES],
       }),
     );
-    expect(all.outputs).toHaveLength(27);
-    expect(all.diagnosticReadbackCount).toBe(28);
+    expect(all.outputs).toHaveLength(29);
+    expect(all.diagnosticReadbackCount).toBe(30);
     expect(all.sceneRenderCount).toBe(resetFrame.sceneRenderCount + 1);
 
     await lease.dispose();
@@ -2222,6 +2351,42 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(camera.projectionMatrix.equals(projectionAfterReady)).toBe(true);
     expect(camera.projectionMatrixInverse.equals(inverseAfterReady)).toBe(true);
     expect(camera.parent).toBe(parent);
+    await lease.dispose();
+  });
+
+  it("mirrors the planar camera around the authoritative Host sea level", async () => {
+    const scene = new Scene();
+    scene.add(new Mesh());
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    camera.position.set(0, 12, 8);
+    camera.lookAt(0, 5, 0);
+    camera.updateMatrixWorld(true);
+    const simulation = createMutableSimulationAdapter();
+    simulation.assign({ seaLevelMetres: 5 });
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        simulation,
+        presentation,
+      }),
+    }).ready;
+    const preparedPlanarCamera = renderer.compileAsync.mock.calls.find(
+      ([usedScene, usedCamera]) => usedScene === scene && usedCamera !== camera,
+    )?.[1] as PerspectiveCamera | undefined;
+    expect(preparedPlanarCamera?.position.y).toBeCloseTo(-2);
+
+    renderer.render.mockClear();
+    await presentation.present();
+    const readyPlanarCamera = renderer.render.mock.calls.find(
+      ([usedScene, usedCamera]) => usedScene === scene && usedCamera !== camera,
+    )?.[1] as PerspectiveCamera | undefined;
+    expect(readyPlanarCamera?.position.y).toBeCloseTo(-2);
     await lease.dispose();
   });
 
@@ -3199,7 +3364,12 @@ function mockPresentationReadback(
     return data;
   }
   if (name.includes("optical factors")) {
-    return new Uint16Array(pixels * 4);
+    const data = new Uint16Array(pixels * 4);
+    const one = DataUtils.toHalfFloat(1);
+    for (let pixel = 0; pixel < pixels; pixel += 1) {
+      data[pixel * 4 + 3] = one;
+    }
+    return data;
   }
   if (name.includes("diagnostics")) {
     return new Uint8Array(pixels * 2);
@@ -3217,6 +3387,7 @@ function createMutableSimulationAdapter(): HostSimulationAdapter & {
     paused: true,
     originX: 0,
     originZ: 0,
+    seaLevelMetres: 0,
     simulationResetRevision: 0,
   };
   return {

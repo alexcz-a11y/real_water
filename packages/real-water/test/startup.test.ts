@@ -69,6 +69,7 @@ const TEST_REFLECTION_CAPABILITIES = Object.freeze({
         "camera-cut",
         "origin-shift",
         "sea-state-cut",
+        "waterline-crossing",
       ] as const),
       updateCadence: "host-present" as const,
     }),
@@ -933,7 +934,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 71,
+        totalWork: 77,
       },
     });
   });
@@ -1632,6 +1633,10 @@ describe("prepareRealWater", () => {
       "water-whitecap-probe",
       "water-material",
       "water-optical-route",
+      "water-waterline-state",
+      "water-underside-optical-route",
+      "water-waterline-history-reset-route",
+      "water-lens-wetness-transition",
       "water-planar-reflection-target",
       "water-planar-reflection-route",
       "water-planar-environment-fallback",
@@ -1665,6 +1670,8 @@ describe("prepareRealWater", () => {
       "water-inverse-linear-depth",
       "water-view-normal",
       "water-optical-factors-target",
+      "water-history-rejection-target",
+      "water-history-rejection-route",
       "water-optical-diagnostics-a",
       "water-optical-diagnostics-b",
       "water-final-color-target",

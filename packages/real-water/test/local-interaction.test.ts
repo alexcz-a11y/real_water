@@ -18,6 +18,7 @@ describe("ready local interaction runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -77,6 +78,7 @@ describe("ready local interaction runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -141,6 +143,7 @@ describe("ready local interaction runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -198,6 +201,7 @@ describe("ready local interaction runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -246,6 +250,7 @@ describe("ready local interaction runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const createLease = () =>
@@ -289,6 +294,7 @@ describe("ready local interaction runtime", () => {
       ...state,
       tick: 0,
       timeSeconds: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 1,
     });
     expect(lease.inspectRuntime().activeDisturbanceCount).toBe(0);
@@ -297,6 +303,7 @@ describe("ready local interaction runtime", () => {
 
     state = Object.freeze({
       ...state,
+      seaLevelMetres: 0,
       simulationResetRevision: 2,
     });
     expect(lease.inspectRuntime().activeDisturbanceCount).toBe(0);
@@ -316,6 +323,7 @@ describe("ready local interaction runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const createLease = () =>

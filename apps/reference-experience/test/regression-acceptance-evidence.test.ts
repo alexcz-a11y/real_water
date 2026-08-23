@@ -121,6 +121,7 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
             "camera-cut",
             "origin-shift",
             "sea-state-cut",
+            "waterline-crossing",
           ],
           updateCadence: "host-present",
         },
@@ -864,7 +865,7 @@ describe("isolated presentation-frame evidence", () => {
   });
 });
 
-describe("Regression acceptance version-2 reader", () => {
+describe("Regression acceptance version-3 reader", () => {
   it("accepts the exact schema/version contract with actual capabilities and no raw captures", () => {
     const prewarm = createBoundCoreDiagnosticsPrewarmReceipt(
       CORE,
@@ -897,6 +898,7 @@ describe("Regression acceptance version-2 reader", () => {
       powerState: "ac",
       lowPowerMode: 0,
       screenshotProfile: screenshotProfile(),
+      seaLevelMetres: 0,
       seed: 0x4000_0000,
       tick: 24,
       camera: HORIZON,
@@ -913,7 +915,7 @@ describe("Regression acceptance version-2 reader", () => {
       temporalStress: null,
     });
     expect(document.schema).toBe("real-water/regression-acceptance");
-    expect(document.version).toBe(2);
+    expect(document.version).toBe(3);
     expect(document.temporalPolicy).toEqual(
       prewarm.capabilities.rendering.temporal,
     );
@@ -954,6 +956,7 @@ describe("Regression acceptance version-2 reader", () => {
       powerState: "ac",
       lowPowerMode: 0,
       screenshotProfile: screenshotProfile(),
+      seaLevelMetres: 0,
       seed: 1,
       tick: 0,
       camera: HORIZON,
@@ -971,7 +974,7 @@ describe("Regression acceptance version-2 reader", () => {
     };
     expect(() =>
       readRegressionAcceptanceEvidence({ ...base, version: 1 }),
-    ).toThrowError(/version 2/i);
+    ).toThrowError(/version 3/i);
     expect(() =>
       readRegressionAcceptanceEvidence({
         ...base,
@@ -1014,6 +1017,7 @@ describe("Regression acceptance version-2 reader", () => {
       powerState: "ac",
       lowPowerMode: 0,
       screenshotProfile: screenshotProfile(),
+      seaLevelMetres: 0,
       seed: 0x4000_0000,
       tick: 24,
       camera: HORIZON,
@@ -1087,6 +1091,7 @@ describe("Regression acceptance version-2 reader", () => {
       powerState: "ac",
       lowPowerMode: 0,
       screenshotProfile: screenshotProfile(),
+      seaLevelMetres: 0,
       seed: 0x4000_0000,
       tick: 24,
       camera: HORIZON,

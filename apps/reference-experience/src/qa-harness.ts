@@ -24,6 +24,7 @@ import {
   type PrewarmManifest,
   type RealWaterLease,
 } from "real-water";
+import type { DiagnosticsWaterlineState } from "real-water/diagnostics";
 import {
   QA_FRAME_PREWARM_MANIFEST,
   createBoundCoreDiagnosticsPrewarmReceipt,
@@ -98,13 +99,14 @@ export interface QaCameraV1 {
   readonly far: number;
 }
 
-export interface QaFrameStateReceiptV4 {
+export interface QaFrameStateReceiptV10 {
   readonly seed: number;
   readonly tick: number;
   readonly timeSeconds: number;
   readonly simulationResetRevision: number;
   readonly originX: number;
   readonly originZ: number;
+  readonly seaLevelMetres: number;
   readonly originRevision: number;
 }
 
@@ -116,6 +118,10 @@ export interface QaOriginReceiptV4 {
   readonly originX: number;
   readonly originZ: number;
   readonly originRevision: number;
+}
+
+export interface QaSeaLevelReceiptV10 {
+  readonly seaLevelMetres: number;
 }
 
 export type QaCameraTransition = "continuous" | "camera-cut";
@@ -138,13 +144,13 @@ export interface QaMotionAssociationV5 {
   readonly current: QaPresentedMotionStateV5;
 }
 
-export interface QaTemporalReceiptV5 {
+export interface QaTemporalReceiptV10 {
   readonly historyEpoch: number;
   readonly resetReason: QaTemporalResetReason | null;
   readonly resetFrame: boolean;
 }
 
-export interface QaPresentationReceiptV10 extends QaFrameStateReceiptV4 {
+export interface QaPresentationReceiptV10 extends QaFrameStateReceiptV10 {
   readonly generation: number;
   readonly presentationId: number;
   readonly manifestHash: string;
@@ -157,7 +163,8 @@ export interface QaPresentationReceiptV10 extends QaFrameStateReceiptV4 {
   readonly captureNames: typeof QA_HARNESS_CAPTURE_NAMES;
   readonly prewarm: QaFramePrewarmReceipt;
   readonly motion: QaMotionAssociationV5;
-  readonly temporal: QaTemporalReceiptV5;
+  readonly waterline: DiagnosticsWaterlineState;
+  readonly temporal: QaTemporalReceiptV10;
 }
 
 export interface QaCaptureV10 extends QaPresentationReceiptV10 {
@@ -173,6 +180,8 @@ export interface QaCaptureV10 extends QaPresentationReceiptV10 {
     | "rgb32float-view-normal"
     | "rg32float-ndc"
     | "r32float-whitecap-stage"
+    | "r32float-waterline-coverage"
+    | "r32float-history-rejection"
     | "r32float-optical"
     | "rgb32float-linear-ssr"
     | "r32float-ssr-roughness"
@@ -196,6 +205,7 @@ export interface QaFrameSource {
   setCamera(camera: QaCameraV1): void;
   incrementCameraCut(): void;
   setOrigin(originX: number, originZ: number): void;
+  setSeaLevel(seaLevelMetres: number): void;
   setEnvironmentLighting(state: HostEnvironmentState): void;
   setHostSceneLightingDecoy(enabled: boolean): void;
   setHostSceneForegroundFixture(visible: boolean): void;
@@ -239,8 +249,8 @@ export interface QaHarnessV10 {
   readonly fixedTickHz: typeof QA_HARNESS_FIXED_TICK_HZ;
   readonly captureNames: typeof QA_HARNESS_CAPTURE_NAMES;
   readonly prewarmManifest: typeof QA_FRAME_PREWARM_MANIFEST;
-  reset(request: { readonly seed: number }): Promise<QaFrameStateReceiptV4>;
-  advanceTicks(count: number): Promise<QaFrameStateReceiptV4>;
+  reset(request: { readonly seed: number }): Promise<QaFrameStateReceiptV10>;
+  advanceTicks(count: number): Promise<QaFrameStateReceiptV10>;
   setCamera(
     camera: QaCameraV1,
     options: QaCameraUpdateOptions,
@@ -249,6 +259,9 @@ export interface QaHarnessV10 {
     readonly x: number;
     readonly z: number;
   }): Promise<QaOriginReceiptV4>;
+  setSeaLevel(seaLevel: {
+    readonly metres: number;
+  }): Promise<QaSeaLevelReceiptV10>;
   present(): Promise<QaPresentationReceiptV10>;
   capture(name: QaCaptureName): Promise<QaCaptureV10>;
   updateArtisticControls(
@@ -294,6 +307,7 @@ interface ActiveRecipe {
   tick: number;
   originX: number;
   originZ: number;
+  seaLevelMetres: number;
   pendingTicks: number;
   cameraRevision: number;
   cameraSet: boolean;
@@ -349,6 +363,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV10 {
           tick: receipt.tick,
           originX: 0,
           originZ: 0,
+          seaLevelMetres: 0,
           pendingTicks: 0,
           cameraRevision: 0,
           cameraSet: false,
@@ -364,6 +379,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV10 {
           simulationResetRevision: receipt.simulationResetRevision,
           originX: 0,
           originZ: 0,
+          seaLevelMetres: 0,
           originRevision: runtime.originRevision,
         });
       });
@@ -390,6 +406,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV10 {
           simulationResetRevision: runtime.simulationResetRevision,
           originX: recipe.originX,
           originZ: recipe.originZ,
+          seaLevelMetres: recipe.seaLevelMetres,
           originRevision: runtime.originRevision,
         });
       });
@@ -415,6 +432,23 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV10 {
           originZ: runtime.originZ,
           originRevision: runtime.originRevision,
         });
+      });
+    },
+    setSeaLevel(seaLevel) {
+      const seaLevelMetres = seaLevel.metres;
+      if (!Number.isFinite(seaLevelMetres)) {
+        return Promise.reject(
+          qaError("QA_INVALID_ARGUMENT", "The QA sea level must be finite."),
+        );
+      }
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        recipe.source.setSeaLevel(seaLevelMetres);
+        recipe.seaLevelMetres = seaLevelMetres;
+        recipe.captures = null;
+        recipe.presentation = null;
+        const runtime = recipe.lease.inspectRuntime();
+        return Object.freeze({ seaLevelMetres: runtime.seaLevelMetres });
       });
     },
     setCamera(camera, cameraOptions) {
@@ -464,6 +498,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV10 {
           runtime.seaStateCutRevision !== frame.seaStateCutRevision ||
           runtime.originX !== recipe.originX ||
           runtime.originZ !== recipe.originZ ||
+          runtime.seaLevelMetres !== recipe.seaLevelMetres ||
           frame.manifestHash !== recipe.driver.prewarm.core.manifestHash
         ) {
           throw qaError(
@@ -492,6 +527,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV10 {
           simulationResetRevision: frame.simulationResetRevision,
           originX: runtime.originX,
           originZ: runtime.originZ,
+          seaLevelMetres: runtime.seaLevelMetres,
           generation,
           presentationId: frame.presentationId,
           manifestHash: frame.manifestHash,
@@ -508,6 +544,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV10 {
             previous: previousMotion,
             current: currentMotion,
           }),
+          waterline: frame.waterline,
           temporal: frame.temporal,
         });
         recipe.captures = cacheCaptures(frame.captures, receipt);
@@ -791,6 +828,9 @@ export function createQaThreeFrameSource(
     },
     setOrigin(originX: number, originZ: number) {
       simulation.setOrigin(originX, originZ);
+    },
+    setSeaLevel(seaLevelMetres: number) {
+      simulation.setSeaLevel(seaLevelMetres);
     },
     setEnvironmentLighting(state: HostEnvironmentState) {
       environmentLighting.setLighting(state);

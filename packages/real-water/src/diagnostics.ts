@@ -27,7 +27,7 @@ export type {
 } from "./presentation.js";
 
 /**
- * The twenty-seven named diagnostic outputs. Names and CPU shapes match the QA
+ * The twenty-nine named diagnostic outputs. Names and CPU shapes match the QA
  * capture contract. Planar color and target-alpha occupancy are their own
  * prepared target. `planar-confidence` is reserved for a future screen-space
  * mask and is not a current capture. Current-frame SSR hit (stock raw
@@ -49,6 +49,8 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
   "whitecap-history",
   "whitecap-advection",
   "whitecap-decay",
+  "waterline",
+  "history-rejection",
   "optical-fresnel",
   "optical-thickness",
   "optical-scattering",
@@ -70,7 +72,7 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
 ] as const);
 
 /**
- * One of the twenty-seven named diagnostic CPU outputs.
+ * One of the twenty-nine named diagnostic CPU outputs.
  *
  * @public
  */
@@ -124,6 +126,16 @@ export const DIAGNOSTICS_CAPTURE_SHAPES = Object.freeze({
   }),
   "whitecap-decay": Object.freeze({
     format: "r32float-whitecap-stage" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "waterline": Object.freeze({
+    format: "r32float-waterline-coverage" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "history-rejection": Object.freeze({
+    format: "r32float-history-rejection" as const,
     elementType: "float32" as const,
     components: 1 as const,
   }),
@@ -233,6 +245,7 @@ const HOST_DIAGNOSTICS_PRESENTED_FRAME_KEYS = [
   "cameraCutRevision",
   "seaStateCutRevision",
   "temporal",
+  "waterline",
   "outputs",
   "compileCount",
   "probeCount",
@@ -240,6 +253,20 @@ const HOST_DIAGNOSTICS_PRESENTED_FRAME_KEYS = [
   "sceneRenderCount",
   "width",
   "height",
+] as const;
+const DIAGNOSTICS_WATERLINE_KEYS = [
+  "classification",
+  "seaLevelMetres",
+  "surfaceHeightMetres",
+  "signedDistanceMetres",
+  "submersion",
+  "transitionRevision",
+  "lensWetnessImpulse",
+] as const;
+const DIAGNOSTICS_WATERLINE_CLASSIFICATIONS = [
+  "above",
+  "crossing",
+  "below",
 ] as const;
 
 /**
@@ -355,6 +382,35 @@ export interface DiagnosticsWhitecapStageCapture extends DiagnosticsCaptureBase 
   /** Packed scalar whitecap density format. */
   readonly format: "r32float-whitecap-stage";
   /** Tightly packed scalar density samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Waterline coverage read from the prepared water-only attachment channel.
+ *
+ * @public
+ */
+export interface DiagnosticsWaterlineCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "waterline";
+  /** Packed waterline coverage format. */
+  readonly format: "r32float-waterline-coverage";
+  /** Tightly packed waterline coverage samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Full-frame shared-domain TRAA and SSR reset rejection for the presented
+ * frame. Stock per-pixel depth and disocclusion heuristics remain internal.
+ *
+ * @public
+ */
+export interface DiagnosticsHistoryRejectionCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "history-rejection";
+  /** Packed temporal rejection format. */
+  readonly format: "r32float-history-rejection";
+  /** Tightly packed temporal rejection samples. */
   readonly data: Float32Array;
 }
 
@@ -507,6 +563,8 @@ export type DiagnosticsCapture =
   | DiagnosticsNormalCapture
   | DiagnosticsMotionVectorCapture
   | DiagnosticsWhitecapStageCapture
+  | DiagnosticsWaterlineCapture
+  | DiagnosticsHistoryRejectionCapture
   | DiagnosticsOpticalScalarCapture;
 
 /**
@@ -522,12 +580,37 @@ export interface HostDiagnosticsPresentRequest {
 }
 
 /**
+ * Stable camera-medium classification and deterministic transition handoff for
+ * one presented Open Water frame.
+ *
+ * @public
+ */
+export interface DiagnosticsWaterlineState {
+  /** Stable camera-medium classification. */
+  readonly classification: "above" | "crossing" | "below";
+  /** Authoritative Host mean sea level for the single Open Water Domain. */
+  readonly seaLevelMetres: number;
+  /** Seed-matched Open Water surface height at the camera XZ position. */
+  readonly surfaceHeightMetres: number;
+  /** Camera world Y minus the seed-matched surface height. */
+  readonly signedDistanceMetres: number;
+  /** Continuous optical blend: 0 above, 1 below. */
+  readonly submersion: number;
+  /** Monotonic revision incremented once per successful classification change. */
+  readonly transitionRevision: number;
+  /** One-frame handoff for the future lens-wetness composition route. */
+  readonly lensWetnessImpulse: boolean;
+}
+
+/**
  * One diagnostics present: the root receipt plus named CPU outputs and
  * truthful readiness counters.
  *
  * @public
  */
 export interface HostDiagnosticsPresentedFrame extends HostPresentedFrame {
+  /** Stable waterline state associated with this presented frame. */
+  readonly waterline: DiagnosticsWaterlineState;
   /** Named CPU outputs in request order. */
   readonly outputs: readonly DiagnosticsCapture[];
   /** Material compile count observed for this present. */
@@ -559,7 +642,7 @@ export interface HostDiagnosticsRoute {
 }
 
 /**
- * Confirms `value` is one of the twenty-seven diagnostic capture names.
+ * Confirms `value` is one of the twenty-nine diagnostic capture names.
  *
  * @public
  */
@@ -673,8 +756,10 @@ export function readHostDiagnosticsPresentedFrame(
   const outputs = frame.outputs.map((output) =>
     readDiagnosticsCapture(output, receipt.presentationId, width, height),
   );
+  const waterline = readDiagnosticsWaterlineState(frame.waterline);
   return Object.freeze({
     ...receipt,
+    waterline,
     outputs: Object.freeze(outputs),
     compileCount: readNonNegativeSafeInteger(
       frame.compileCount,
@@ -694,6 +779,61 @@ export function readHostDiagnosticsPresentedFrame(
     ),
     width,
     height,
+  });
+}
+
+function readDiagnosticsWaterlineState(
+  value: DiagnosticsWaterlineState,
+): DiagnosticsWaterlineState {
+  if (!isRecord(value) || !hasExactKeys(value, DIAGNOSTICS_WATERLINE_KEYS)) {
+    throw new TypeError(
+      "Host diagnostics waterline state must use the exact receipt contract.",
+    );
+  }
+  if (
+    typeof value.classification !== "string" ||
+    !(DIAGNOSTICS_WATERLINE_CLASSIFICATIONS as readonly string[]).includes(
+      value.classification,
+    )
+  ) {
+    throw new TypeError(
+      "Host diagnostics waterline classification must be above, crossing, or below.",
+    );
+  }
+  if (
+    !Number.isFinite(value.seaLevelMetres) ||
+    !Number.isFinite(value.surfaceHeightMetres) ||
+    !Number.isFinite(value.signedDistanceMetres)
+  ) {
+    throw new RangeError(
+      "Host diagnostics waterline heights must be finite metres.",
+    );
+  }
+  if (
+    !Number.isFinite(value.submersion) ||
+    value.submersion < 0 ||
+    value.submersion > 1
+  ) {
+    throw new RangeError(
+      "Host diagnostics waterline submersion must be inside [0, 1].",
+    );
+  }
+  if (typeof value.lensWetnessImpulse !== "boolean") {
+    throw new TypeError(
+      "Host diagnostics lens wetness impulse must be boolean.",
+    );
+  }
+  return Object.freeze({
+    classification: value.classification,
+    seaLevelMetres: value.seaLevelMetres,
+    surfaceHeightMetres: value.surfaceHeightMetres,
+    signedDistanceMetres: value.signedDistanceMetres,
+    submersion: value.submersion,
+    transitionRevision: readNonNegativeSafeInteger(
+      value.transitionRevision,
+      "Host diagnostics waterline transitionRevision",
+    ),
+    lensWetnessImpulse: value.lensWetnessImpulse,
   });
 }
 

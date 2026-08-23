@@ -14,6 +14,7 @@ describe("Reference Host Simulation Controller", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     expect(simulation.start(0).tick).toBe(0);

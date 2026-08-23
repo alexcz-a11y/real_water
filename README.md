@@ -71,23 +71,26 @@ Issue #18 extended the coherent spectral runtime and deterministic QA
 foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly seventy-one work
-  units: a texture, Host equirect environment radiance, viewport scene color,
-  viewport scene depth, 6-attachment MRT, camera-relative clipmap, four spectral
-  bands, two fixed RGBA16F whitecap fields, reset/generate/history/advect/
-  diffuse/decay routes, a packed output-resolution whitecap stage target and
-  probe, TSL NodeMaterial, optical route, planar reflection target/route,
-  environment fallback, planar probe, current-frame SSR raw/blur/composite
-  targets and routes plus probe, dedicated TemporalReproject history and resolve
-  targets, beauty input target/route, resolved diagnostics copy target/route,
-  previous depth/normal, seed/resolve/accumulate/reset/probe routes,
-  reset-velocity target/route, one Core main scene render plus one auxiliary
-  planar scene render when facing, procedural motion, velocity, independent
-  inverse-linear depth conversion, packed view-normal RGB plus water roughness
-  A, optical factors, optical diagnostics A/B, Core final-color and
-  current-color targets, stock TRAA color+depth history, resolve/jitter route,
-  shared no-allocation TRAA+SSR reset route, current-color conversion,
-  twenty-seven named diagnostics output routes, eight hidden temporal
+- the canonical minimal-water Prewarm Manifest declares exactly seventy-seven
+  work units: a texture, Host equirect environment radiance, viewport scene
+  color, viewport scene depth, 6-attachment MRT, camera-relative clipmap, four
+  spectral bands, two fixed RGBA16F whitecap fields,
+  reset/generate/history/advect/ diffuse/decay routes, a packed
+  output-resolution whitecap stage target and probe, a double-sided TSL
+  NodeMaterial, a stable camera-medium waterline state, a shared waterline
+  history reset, a deterministic lens-wetness handoff, waterline/underside
+  optical route, planar reflection target/route, environment fallback, planar
+  probe, current-frame SSR raw/blur/composite targets and routes plus probe,
+  dedicated TemporalReproject history and resolve targets, beauty input
+  target/route, resolved diagnostics copy target/route, previous depth/normal,
+  seed/resolve/accumulate/reset/probe routes, reset-velocity target/route, one
+  Core main scene render plus one auxiliary planar scene render when facing,
+  procedural motion, velocity, independent inverse-linear depth conversion,
+  packed view-normal RGB plus water roughness A, optical factors, a
+  diagnostics-only GPU history-rejection target/route, optical diagnostics A/B,
+  Core final-color and current-color targets, stock TRAA color+depth history,
+  resolve/jitter route, shared no-allocation TRAA+SSR reset route, current-color
+  conversion, twenty-nine named diagnostics output routes, eight hidden temporal
   stabilization frames, named-output completion probes, and main-camera guard
   frame, plus the local interaction field, its fixed current/previous uniform
   buffers, and the hidden-executed radial-impact route. Version 5 binds the
@@ -101,8 +104,8 @@ foundation:
 - the prepared TSL material displaces a camera-relative clipmap with four
   deterministic spectral wave bands;
 - every Host explicitly supplies a Host Simulation Adapter whose seed, tick,
-  time, pause state, and floating origin drive both rendering and the CPU
-  evaluator without any wall-clock read;
+  time, pause state, one finite sea level, and floating origin drive both
+  rendering and the CPU evaluator without any wall-clock read;
 - every Host also supplies a Host Presentation Adapter whose camera-cut revision
   is visible on the lightweight snapshot and whose `bind(route)` accepts the
   receipt-only Core presentation route without calling or scheduling

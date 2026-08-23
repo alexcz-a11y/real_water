@@ -47,6 +47,7 @@ function expectedSsrCapabilities(width: number, height: number) {
         "camera-cut",
         "origin-shift",
         "sea-state-cut",
+        "waterline-crossing",
       ] as const),
       updateCadence: "host-present" as const,
     }),

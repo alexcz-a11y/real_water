@@ -175,6 +175,10 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   whitecapProbe: "water-whitecap-probe",
   material: "water-material",
   opticalRoute: "water-optical-route",
+  waterlineState: "water-waterline-state",
+  undersideOpticalRoute: "water-underside-optical-route",
+  waterlineHistoryResetRoute: "water-waterline-history-reset-route",
+  lensWetnessTransition: "water-lens-wetness-transition",
   planarReflectionTarget: "water-planar-reflection-target",
   planarReflectionRoute: "water-planar-reflection-route",
   planarEnvironmentFallback: "water-planar-environment-fallback",
@@ -208,6 +212,8 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   inverseLinearDepth: "water-inverse-linear-depth",
   viewNormal: "water-view-normal",
   opticalFactorsTarget: "water-optical-factors-target",
+  historyRejectionTarget: "water-history-rejection-target",
+  historyRejectionRoute: "water-history-rejection-route",
   opticalDiagnosticsA: "water-optical-diagnostics-a",
   opticalDiagnosticsB: "water-optical-diagnostics-b",
   finalColorTarget: "water-final-color-target",
@@ -240,6 +246,8 @@ const DRAWING_BUFFER_BOUND_DECLARATION_IDS: ReadonlySet<string> = new Set([
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.inverseLinearDepth,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.viewNormal,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalFactorsTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.historyRejectionTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.historyRejectionRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalDiagnosticsA,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalDiagnosticsB,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.finalColorTarget,
@@ -461,7 +469,8 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.material,
     kind: "effect-state",
-    label: "Minimal water material with persistent spectral-whitecap response",
+    label:
+      "Double-sided minimal water material with persistent spectral-whitecap response",
     fingerprint:
       "sha256:20c6447eb1b1d8ea56fc606898ea49e9505013b24ede63e70535057d5c0050ec",
   },
@@ -469,9 +478,39 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalRoute,
     kind: "effect-state",
     label:
-      "Optical composition route (planar+environment fallback, projected refraction, RGB Beer-Lambert, whitecap reflection/transmission/roughness/micro detail)",
+      "Waterline optical composition route (planar+environment fallback, air/water refraction, underside Fresnel and TIR, RGB Beer-Lambert, whitecap reflection/transmission/roughness/micro detail)",
     fingerprint:
       "sha256:c2c89db1c48c537cd41aedafb7dc88cf1b3a55c96399f308ab94cc679a076e07",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.waterlineState,
+    kind: "effect-state",
+    label:
+      "Seed-matched above/crossing/below camera-medium state with one Host sea level and hysteresis",
+    fingerprint:
+      "sha256:45b2f75e0297158c9462d4fee95cb01bab3f44319ad492dbe0619da59c96e603",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.undersideOpticalRoute,
+    kind: "effect-state",
+    label: "Double-sided water-to-air refraction and total internal reflection",
+    fingerprint:
+      "sha256:d4fc5c63528d53d720ed3e7a16c40b18aa7369ec71cc8d53b8384843d70b1fb1",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.waterlineHistoryResetRoute,
+    kind: "conditional-route",
+    label:
+      "Shared TRAA and SSR reset plus prepared GPU rejection route on committed waterline classification",
+    fingerprint:
+      "sha256:1514885dfa55ba27b6952367bdb97ab2d0c1116fe96f78210c5c076d78dd1610",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.lensWetnessTransition,
+    kind: "effect-state",
+    label: "One-frame deterministic lens-wetness emergence handoff",
+    fingerprint:
+      "sha256:c27da44a2e284b79a97fdb413f0bd12558a05a669c1102e65dd2dd95aa859446",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.planarReflectionTarget,
@@ -485,9 +524,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.planarReflectionRoute,
     kind: "conditional-route",
     label:
-      "Horizontal XZ planar reflection route (oblique clip, water hidden, no bounce)",
+      "Horizontal XZ planar reflection route (dynamic Host sea level, waterline crossing fade and below clear, oblique clip, water hidden, no bounce)",
     fingerprint:
-      "sha256:57c74219c5e33c9f5e063c0de85dc833ca8bef39dc73c3224d59b678dec658d4",
+      "sha256:717e164787f7d1d29b1111b1a80e75c1968ae31b5e3e3011a7d79cfb99238265",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.planarEnvironmentFallback,
@@ -660,9 +699,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResetRoute,
     kind: "conditional-route",
     label:
-      "Shared Host-domain SSR history reset (velocity sentinel, hitPointReprojection disabled, resolve reseed)",
+      "Shared Host-domain SSR history reset including waterline crossing (velocity sentinel, hitPointReprojection disabled, resolve reseed)",
     fingerprint:
-      "sha256:6e7e0d18b96ff8db458090bdbe117bc95f302a51a9d1b55bfc6916eaf20ba78b",
+      "sha256:c06ff1649e380debb6466059d6f548f4b582c592faf8c3719cef4d4e45df95ff",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResetVelocityTarget,
@@ -692,7 +731,7 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
     kind: "conditional-route",
     label:
-      "Fixed-tick whitecaps, planar aux, one jittered main MRT, current-frame SSR, dedicated TemporalReproject history, explicit compose, then stock TRAA",
+      "Fixed-tick whitecaps, waterline-gated planar aux, one jittered main MRT, current-frame SSR, shared-reset TemporalReproject history, explicit compose, then stock TRAA",
     fingerprint:
       "sha256:6cac0421e8bfc58786596e077221136c4f29dc249e4c70b557836692958322b4",
   },
@@ -700,9 +739,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.proceduralMotion,
     kind: "effect-state",
     label:
-      "Previous presented wave-field positionPrevious (current clipmap XZ)",
+      "Previous presented wave-field positionPrevious (current clipmap XZ and Host sea level)",
     fingerprint:
-      "sha256:9dfd0b4318451260c87a7146d234e2cce4e74315eccfe5d5eec89729695dea82",
+      "sha256:4971b46f9510ba5d5e0c43ae7e0a40a2eb552b82d3fb8ad5471f4b596ac9cc96",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.motionVectors,
@@ -730,9 +769,26 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalFactorsTarget,
     kind: "resource",
-    label: "Optical factors (RGBA16F, drawing-buffer-exact)",
+    label:
+      "Optical factors plus waterline coverage A (RGBA16F, drawing-buffer-exact)",
     fingerprint:
-      "sha256:17bb803da6968b516f2ea1f286d25d6e8aa0b2eda5bc9ba118cc0e4bdb18e5ec",
+      "sha256:a5e8e85cd5f940d0994f62131051afb9922d6aad02ae9c93327a4eb1f98d527c",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.historyRejectionTarget,
+    kind: "resource",
+    label:
+      "Shared history-rejection diagnostics target (RGBA8, drawing-buffer-exact)",
+    fingerprint:
+      "sha256:2d61d9c6e0c778789600c7b8bd0b6c11171cdceb8d627d779c47924e2296f42c",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.historyRejectionRoute,
+    kind: "conditional-route",
+    label:
+      "Diagnostics-only full-screen GPU route writing the shared TRAA and SSR reset uniform",
+    fingerprint:
+      "sha256:26a2465bc403ca51bdc7a57eb42cd57c2c8c3439ac49641e56f551d8db0f9276",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalDiagnosticsA,
@@ -765,9 +821,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.stockTraaHistory,
     kind: "effect-state",
-    label: "Stock TRAA color+depth history policy",
+    label: "Stock TRAA color+depth history with waterline reset domain",
     fingerprint:
-      "sha256:c497047138e197f87d7a3ac341246033cdb18d36701cc88b79774b51df0638c5",
+      "sha256:48a08329f1097cf2c968d3623b945b709e44165c4cfeca9f4bb32b3462e3070e",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.traaResolveJitter,
@@ -780,9 +836,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.traaResetRoute,
     kind: "conditional-route",
     label:
-      "No-allocation TRAA and dedicated SSR history reset (shared Host domain)",
+      "No-allocation TRAA and dedicated SSR history reset (shared Host domain including waterline crossing)",
     fingerprint:
-      "sha256:e4a59425b89a6138d620200a8404be90b74fd8d20a5da54fbefb259a3b4dd9ab",
+      "sha256:3f32ddae6ca9dde0bcfedf7e8c12e2d7f8c1c71d5fb53de9e2fb4e958e660239",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.currentColorConversion,
@@ -795,7 +851,7 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
     kind: "conditional-route",
-    label: "Twenty-seven named diagnostics output routes",
+    label: "Twenty-nine named diagnostics output routes",
     fingerprint:
       "sha256:a5f86239f7b86685991bc1e5e0669cadc120c4acb3f9749c5dc70991735c444f",
   },

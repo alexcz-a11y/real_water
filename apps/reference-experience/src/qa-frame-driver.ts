@@ -12,6 +12,7 @@ import {
 export type { QaBoundCoreManifestIdentity } from "./qa-bound-core-identity.js";
 import {
   readHostDiagnosticsPresentedFrame,
+  type DiagnosticsWaterlineState,
   type HostDiagnosticsPresentedFrame,
   type HostDiagnosticsRoute,
 } from "real-water/diagnostics";
@@ -34,6 +35,8 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
   "whitecap-history": "water-whitecap-stage-target",
   "whitecap-advection": "water-whitecap-stage-target",
   "whitecap-decay": "water-whitecap-stage-target",
+  "waterline": "water-optical-factors-target",
+  "history-rejection": "water-history-rejection-target",
   "optical-fresnel": "water-optical-factors-target",
   "optical-thickness": "water-optical-factors-target",
   "optical-scattering": "water-optical-diagnostics-b",
@@ -56,7 +59,7 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
 
 export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
   schema: "real-water/qa-frame-prewarm" as const,
-  version: 8 as const,
+  version: 10 as const,
   id: "reference-qa-frame" as const,
   captures: Object.freeze([
     Object.freeze({
@@ -94,6 +97,14 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
     Object.freeze({
       name: "whitecap-decay" as const,
       preparedFormat: "rgba16float-whitecap-stages" as const,
+    }),
+    Object.freeze({
+      name: "waterline" as const,
+      preparedFormat: "rgba16float-waterline-coverage" as const,
+    }),
+    Object.freeze({
+      name: "history-rejection" as const,
+      preparedFormat: "rgba8unorm-history-rejection" as const,
     }),
     Object.freeze({
       name: "optical-fresnel" as const,
@@ -225,6 +236,18 @@ export interface QaFrameDriverWhitecapStageCapture extends QaFrameDriverCaptureB
   readonly data: Float32Array;
 }
 
+export interface QaFrameDriverWaterlineCapture extends QaFrameDriverCaptureBase {
+  readonly name: "waterline";
+  readonly format: "r32float-waterline-coverage";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverHistoryRejectionCapture extends QaFrameDriverCaptureBase {
+  readonly name: "history-rejection";
+  readonly format: "r32float-history-rejection";
+  readonly data: Float32Array;
+}
+
 export interface QaFrameDriverOpticalScalarCapture extends QaFrameDriverCaptureBase {
   readonly name:
     | "optical-fresnel"
@@ -298,12 +321,15 @@ export type QaFrameDriverCapture =
   | QaFrameDriverNormalCapture
   | QaFrameDriverMotionVectorCapture
   | QaFrameDriverWhitecapStageCapture
+  | QaFrameDriverWaterlineCapture
+  | QaFrameDriverHistoryRejectionCapture
   | QaFrameDriverOpticalScalarCapture;
 
 export interface QaFrameDriverStateReceipt {
   readonly seed: number;
   readonly tick: number;
   readonly timeSeconds: number;
+  readonly seaLevelMetres: number;
   readonly simulationResetRevision: number;
 }
 
@@ -327,7 +353,11 @@ export interface QaFramePrewarmReceipt {
 }
 
 export type QaTemporalResetReason =
-  "qa-reset" | "camera-cut" | "origin-shift" | "sea-state-cut";
+  | "qa-reset"
+  | "camera-cut"
+  | "origin-shift"
+  | "sea-state-cut"
+  | "waterline-crossing";
 
 export interface QaTemporalReceipt {
   readonly historyEpoch: number;
@@ -346,6 +376,7 @@ export interface QaFrameDriverPresentedFrame extends QaFrameDriverStateReceipt {
   readonly probeCount: number;
   readonly prewarm: QaFramePrewarmReceipt;
   readonly captures: readonly QaFrameDriverCapture[];
+  readonly waterline: DiagnosticsWaterlineState;
   readonly temporal: QaTemporalReceipt;
 }
 
@@ -404,6 +435,7 @@ export function createQaFrameDriver(
           seed: state.seed,
           tick: state.tick,
           timeSeconds: state.timeSeconds,
+          seaLevelMetres: state.seaLevelMetres,
           simulationResetRevision: state.simulationResetRevision,
         });
       });
@@ -554,6 +586,7 @@ function toQaPresentedFrame(
     seed: frame.seed,
     tick: frame.tick,
     timeSeconds: frame.timeSeconds,
+    seaLevelMetres: state.seaLevelMetres,
     presentationId: frame.presentationId,
     manifestHash: frame.manifestHash,
     simulationResetRevision: frame.simulationResetRevision,
@@ -567,6 +600,7 @@ function toQaPresentedFrame(
     captures: Object.freeze([
       ...frame.outputs,
     ]) as readonly QaFrameDriverCapture[],
+    waterline: frame.waterline,
     temporal: Object.freeze({
       historyEpoch: frame.temporal.historyEpoch,
       resetReason: mapQaTemporalResetReason(frame.temporal.resetReason),

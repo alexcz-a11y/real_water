@@ -46,6 +46,7 @@ const NATIVE_SSR_HISTORY = Object.freeze({
     "camera-cut",
     "origin-shift",
     "sea-state-cut",
+    "waterline-crossing",
   ] as const),
   updateCadence: "host-present" as const,
 });
@@ -240,7 +241,11 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-view-normal":
     "sha256:9202e800870f86fd41deba3fbec57a3a94469cce59e3c93eea5513c006345bb5",
   "water-optical-factors-target":
-    "sha256:17bb803da6968b516f2ea1f286d25d6e8aa0b2eda5bc9ba118cc0e4bdb18e5ec",
+    "sha256:a5e8e85cd5f940d0994f62131051afb9922d6aad02ae9c93327a4eb1f98d527c",
+  "water-history-rejection-target":
+    "sha256:2d61d9c6e0c778789600c7b8bd0b6c11171cdceb8d627d779c47924e2296f42c",
+  "water-history-rejection-route":
+    "sha256:26a2465bc403ca51bdc7a57eb42cd57c2c8c3439ac49641e56f551d8db0f9276",
   "water-optical-diagnostics-a":
     "sha256:17bc4d8de01c8456f0cabc9ef93cd4b42994b069a7392abca453116b57189758",
   "water-optical-diagnostics-b":
@@ -250,7 +255,7 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-current-color-target":
     "sha256:e696b8999adaa67392cac034126b180ca2a99c4365fbf56099c912940313d771",
   "water-stock-traa-history":
-    "sha256:c497047138e197f87d7a3ac341246033cdb18d36701cc88b79774b51df0638c5",
+    "sha256:48a08329f1097cf2c968d3623b945b709e44165c4cfeca9f4bb32b3462e3070e",
   "water-traa-resolve-jitter":
     "sha256:ba8bdc48d2842afd8f4f620e5296fce9bde9055047e4de7d593eec83dce25733",
   "water-render-route":
@@ -298,7 +303,7 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-ssr-history-accumulate-route":
     "sha256:f20d52a23de875e18cf3f589f5d68f83357423af3f0ba268f2c377539b51e075",
   "water-ssr-history-reset-route":
-    "sha256:6e7e0d18b96ff8db458090bdbe117bc95f302a51a9d1b55bfc6916eaf20ba78b",
+    "sha256:c06ff1649e380debb6466059d6f548f4b582c592faf8c3719cef4d4e45df95ff",
   "water-ssr-history-reset-velocity-target":
     "sha256:ae0fedb85438f0e2219c04b0c688362e43f20519c0b35fa7a493228d44611a9f",
   "water-ssr-history-reset-velocity-route":
@@ -308,7 +313,7 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-planar-reflection-target":
     "sha256:380ced36a62272cecd356b28c02587cb24d24d7390b6d79ac5051cad272a52ba",
   "water-planar-reflection-route":
-    "sha256:57c74219c5e33c9f5e063c0de85dc833ca8bef39dc73c3224d59b678dec658d4",
+    "sha256:717e164787f7d1d29b1111b1a80e75c1968ae31b5e3e3011a7d79cfb99238265",
   "water-planar-reflection-probe":
     "sha256:f203f71435dfe40d3d14d3b19b853fd13f8338aba138c1eee29400570074311e",
   "water-completion-probe":
@@ -330,6 +335,8 @@ const DRAWING_BUFFER_BOUND_IDS = [
   "water-inverse-linear-depth",
   "water-view-normal",
   "water-optical-factors-target",
+  "water-history-rejection-target",
+  "water-history-rejection-route",
   "water-optical-diagnostics-a",
   "water-optical-diagnostics-b",
   "water-final-color-target",
@@ -436,6 +443,10 @@ const CORE_PREWARM_DECLARATION_IDS = [
   "water-whitecap-probe",
   "water-material",
   "water-optical-route",
+  "water-waterline-state",
+  "water-underside-optical-route",
+  "water-waterline-history-reset-route",
+  "water-lens-wetness-transition",
   "water-planar-reflection-target",
   "water-planar-reflection-route",
   "water-planar-environment-fallback",
@@ -469,6 +480,8 @@ const CORE_PREWARM_DECLARATION_IDS = [
   "water-inverse-linear-depth",
   "water-view-normal",
   "water-optical-factors-target",
+  "water-history-rejection-target",
+  "water-history-rejection-route",
   "water-optical-diagnostics-a",
   "water-optical-diagnostics-b",
   "water-final-color-target",
@@ -1208,6 +1221,39 @@ describe("Quality Profile manifests", () => {
     );
   });
 
+  it("declares the complete waterline optical and shared-history route", () => {
+    const profile = createMinimalWaterQualityProfile();
+    const manifest = createMinimalWaterPrewarmManifest(profile);
+
+    expect(QUALITY_PROFILE_VERSION).toBe(6);
+    expect(profile.reflection.ssr.history.resetDomains).toEqual([
+      "simulation-reset",
+      "camera-cut",
+      "origin-shift",
+      "sea-state-cut",
+      "waterline-crossing",
+    ]);
+    expect(
+      Object.fromEntries(
+        manifest.declarations
+          .filter(({ id }) =>
+            [
+              "water-waterline-state",
+              "water-underside-optical-route",
+              "water-waterline-history-reset-route",
+              "water-lens-wetness-transition",
+            ].includes(id),
+          )
+          .map(({ id, kind }) => [id, kind]),
+      ),
+    ).toEqual({
+      "water-waterline-state": "effect-state",
+      "water-underside-optical-route": "effect-state",
+      "water-waterline-history-reset-route": "conditional-route",
+      "water-lens-wetness-transition": "effect-state",
+    });
+  });
+
   it("maps each supported structure to a deterministic complete work plan", () => {
     const minimalProfile = createMinimalWaterQualityProfile();
     const highDetailProfile = createMinimalWaterQualityProfile(
@@ -1273,7 +1319,7 @@ describe("Quality Profile manifests", () => {
       "water-procedural-motion": {
         kind: "effect-state",
         label:
-          "Previous presented wave-field positionPrevious (current clipmap XZ)",
+          "Previous presented wave-field positionPrevious (current clipmap XZ and Host sea level)",
       },
       "water-motion-vectors": {
         kind: "resource",
@@ -1285,7 +1331,7 @@ describe("Quality Profile manifests", () => {
       },
       "water-stock-traa-history": {
         kind: "effect-state",
-        label: "Stock TRAA color+depth history policy",
+        label: "Stock TRAA color+depth history with waterline reset domain",
       },
       "water-traa-resolve-jitter": {
         kind: "conditional-route",
@@ -1294,7 +1340,7 @@ describe("Quality Profile manifests", () => {
       "water-traa-reset-route": {
         kind: "conditional-route",
         label:
-          "No-allocation TRAA and dedicated SSR history reset (shared Host domain)",
+          "No-allocation TRAA and dedicated SSR history reset (shared Host domain including waterline crossing)",
       },
     });
     expect(highDetail.declarations.map(({ id }) => id)).toEqual(
@@ -1356,7 +1402,7 @@ describe("Quality Profile manifests", () => {
       "water-optical-route":
         "sha256:c2c89db1c48c537cd41aedafb7dc88cf1b3a55c96399f308ab94cc679a076e07",
       "water-traa-reset-route":
-        "sha256:e4a59425b89a6138d620200a8404be90b74fd8d20a5da54fbefb259a3b4dd9ab",
+        "sha256:3f32ddae6ca9dde0bcfedf7e8c12e2d7f8c1c71d5fb53de9e2fb4e958e660239",
       "water-hidden-stabilization":
         "sha256:f35d6cdd70b97589e93e16f61bb2ecb684031f9681d47d324413e2617810c726",
     });

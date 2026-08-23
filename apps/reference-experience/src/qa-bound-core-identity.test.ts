@@ -67,6 +67,7 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
             "camera-cut",
             "origin-shift",
             "sea-state-cut",
+            "waterline-crossing",
           ] as const,
           updateCadence: "host-present",
         },

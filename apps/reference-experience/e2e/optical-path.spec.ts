@@ -268,6 +268,8 @@ test("captures color, depth, normal, and optical intermediates", async ({
     "whitecap-history",
     "whitecap-advection",
     "whitecap-decay",
+    "waterline",
+    "history-rejection",
     "optical-fresnel",
     "optical-thickness",
     "optical-scattering",
@@ -1261,7 +1263,7 @@ test("ignores Host scene environment and lights and follows only the Environment
     "optical-transmittance",
     "optical-glint",
   ] as const;
-  expect(Object.keys(result.baseline.captures)).toHaveLength(27);
+  expect(Object.keys(result.baseline.captures)).toHaveLength(29);
   expect(
     Object.fromEntries(
       shadingNames.map((name) => [name, result.decoy.captures[name]]),

@@ -22,6 +22,15 @@ import {
 } from "../src/diagnostics.js";
 
 const VALID_MANIFEST_HASH = `sha256:${"cd".repeat(32)}`;
+const ABOVE_WATERLINE = Object.freeze({
+  classification: "above" as const,
+  seaLevelMetres: 0,
+  surfaceHeightMetres: 0,
+  signedDistanceMetres: 1,
+  submersion: 0,
+  transitionRevision: 0,
+  lensWetnessImpulse: false,
+});
 
 function createPresentedFrame(): HostPresentedFrame {
   return {
@@ -44,7 +53,7 @@ function createPresentedFrame(): HostPresentedFrame {
 }
 
 describe("real-water/diagnostics", () => {
-  it("publishes the twenty-seven frozen CPU capture names and shapes only", () => {
+  it("publishes the twenty-nine frozen CPU capture names and shapes only", () => {
     expect(DIAGNOSTICS_CAPTURE_NAMES).toEqual([
       "final-color",
       "current-color",
@@ -55,6 +64,8 @@ describe("real-water/diagnostics", () => {
       "whitecap-history",
       "whitecap-advection",
       "whitecap-decay",
+      "waterline",
+      "history-rejection",
       "optical-fresnel",
       "optical-thickness",
       "optical-scattering",
@@ -160,6 +171,18 @@ describe("real-water/diagnostics", () => {
       elementType: "float32",
       components: 2,
     });
+    expect(DIAGNOSTICS_CAPTURE_SHAPES.waterline).toEqual({
+      format: "r32float-waterline-coverage",
+      elementType: "float32",
+      components: 1,
+    });
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["history-rejection"]).toEqual({
+      format: "r32float-history-rejection",
+      elementType: "float32",
+      components: 1,
+    });
+    expect(isDiagnosticsCaptureName("waterline")).toBe(true);
+    expect(isDiagnosticsCaptureName("history-rejection")).toBe(true);
     expect(isDiagnosticsCaptureName("optical-glint")).toBe(true);
     expect(isDiagnosticsCaptureName("velocity")).toBe(false);
     expect(Object.keys(DIAGNOSTICS_CAPTURE_SHAPES)).toEqual([
@@ -278,6 +301,7 @@ describe("real-water/diagnostics", () => {
         probeCount: 1,
         diagnosticReadbackCount: 2,
         sceneRenderCount: 1,
+        waterline: ABOVE_WATERLINE,
         width: 2,
         height: 1,
       }),
@@ -302,6 +326,7 @@ describe("real-water/diagnostics", () => {
       probeCount: 1,
       diagnosticReadbackCount: 1,
       sceneRenderCount: 1,
+      waterline: ABOVE_WATERLINE,
       width: 2,
       height: 1,
     };

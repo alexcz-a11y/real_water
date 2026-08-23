@@ -2,11 +2,11 @@ import { type Matrix4, Vector3, type Texture } from "three/webgpu";
 import {
   cameraFar,
   cameraNear,
-  cameraPosition,
   cameraProjectionMatrix,
   cameraViewMatrix,
   equirectUV,
   exp,
+  faceDirection,
   float,
   max,
   mix,
@@ -15,6 +15,7 @@ import {
   perspectiveDepthToViewZ,
   positionView,
   refract,
+  reflect,
   renderGroup,
   saturate,
   screenUV,
@@ -38,6 +39,7 @@ import type { LocalInteractionRenderSnapshot } from "./local-interaction.js";
 import { createWaterPreset } from "../water-preset.js";
 import type { createSpectralBandRendering } from "./spectral-bands-rendering.js";
 import { originSamplePhase } from "./spectral-bands.js";
+import type { WaterlineFrameState } from "./waterline-state.js";
 
 export const INVERSE_LINEAR_DEPTH_ATTACHMENT =
   "Real Water inverse linear depth";
@@ -70,6 +72,7 @@ export function createWaterOpticsRendering(
     readonly viewProjection: Matrix4;
     readonly hasOutput: { value: number };
   },
+  initialWaterline: WaterlineFrameState,
 ) {
   const initialEnvironment = readHostEnvironmentState(environment);
   const grazingReflection = uniform(
@@ -85,6 +88,9 @@ export function createWaterOpticsRendering(
   const foamMicroDetail = uniform(INITIAL_ARTISTIC_CONTROLS.microDetail);
   const foamMicroOriginPhaseX = uniform(0);
   const foamMicroOriginPhaseZ = uniform(0);
+  const submersion = uniform(initialWaterline.submersion)
+    .setName("waterlineSubmersion")
+    .setGroup(renderGroup);
   const sunDirectionValue = new Vector3(
     initialEnvironment.sunDirectionX,
     initialEnvironment.sunDirectionY,
@@ -148,6 +154,8 @@ export function createWaterOpticsRendering(
     .mul(foamMicroDetail)
     .mul(0.04)
     .clamp(0, 0.16);
+  // The micro phase is built from the Host origin alone, never from sea level:
+  // a sea-level change must not slide the XZ foam pattern across the surface.
   const foamMicroX = sin(
     spectral.hostXNode
       .mul(FOAM_MICRO_PRIMARY_X)
@@ -160,16 +168,20 @@ export function createWaterOpticsRendering(
       .add(spectral.hostZNode.mul(FOAM_MICRO_SECONDARY_Z))
       .add(foamMicroOriginPhaseZ),
   ).mul(foamMicroStrength);
+  // Order matters: the micro correction belongs to the surface, so it is
+  // applied to the upward-facing normal first and the underside orientation is
+  // taken afterwards. Orienting first would flip the correction with the face.
   const worldNormal = vec3(
     spectral.worldNormalNode.x.add(foamMicroX),
     spectral.worldNormalNode.y,
     spectral.worldNormalNode.z.add(foamMicroZ),
   ).normalize();
+  const orientedWorldNormal = worldNormal.mul(faceDirection);
   const viewDirection = spectral.viewDirectionNode;
-  const facing = saturate(worldNormal.dot(viewDirection));
+  const facing = saturate(orientedWorldNormal.dot(viewDirection));
   const fresnelAmount = grazingReflection.mul(0.5).add(0.5);
   const fresnelPow5 = float(1).sub(facing).pow(5);
-  const fresnelNode = float(0.02)
+  const schlickFresnel = float(0.02)
     .mul(fresnelAmount)
     .mul(float(1).sub(fresnelPow5))
     .add(fresnelPow5)
@@ -177,9 +189,7 @@ export function createWaterOpticsRendering(
     .clamp(0, 1);
 
   const incidentDirection = viewDirection.negate();
-  const reflectionDirection = incidentDirection.sub(
-    worldNormal.mul(worldNormal.dot(incidentDirection).mul(2)),
-  );
+  const reflectionDirection = reflect(incidentDirection, orientedWorldNormal);
   const environmentSample = texture(
     environment.texture as Texture,
     equirectUV(reflectionDirection as never),
@@ -216,10 +226,9 @@ export function createWaterOpticsRendering(
     .mul(step(float(0), planarSampleUV.y))
     .mul(step(planarSampleUV.y, float(1)));
   const projectionValid = clipWPositive.mul(clipDepthValid).mul(uvValid);
-  const facingPlane = step(float(1e-4), cameraPosition.y);
   const planarSample = texture(planar.texture, planarSampleUV);
   const planarConfidence = planarHasOutput
-    .mul(facingPlane)
+    .mul(float(1).sub(submersion))
     .mul(projectionValid)
     .mul(planarSample.a)
     .clamp(0, 1);
@@ -229,14 +238,30 @@ export function createWaterOpticsRendering(
     planarConfidence,
   );
 
-  const viewNormal = cameraViewMatrix.mul(vec4(worldNormal, 0)).xyz.normalize();
+  const viewNormal = cameraViewMatrix
+    .mul(vec4(orientedWorldNormal, 0))
+    .xyz.normalize();
   const incident = positionView.xyz.normalize();
-  const facingNormal = mix(
+  const refractedCandidate = refract(
+    incident,
     viewNormal,
-    viewNormal.negate(),
-    step(0, viewNormal.dot(incident)),
+    mix(float(1 / WATER_IOR), float(WATER_IOR), submersion),
   );
-  const refractedDir = refract(incident, facingNormal, float(1 / WATER_IOR));
+  const refractedValid = step(
+    float(1e-6),
+    refractedCandidate.dot(refractedCandidate),
+  );
+  const totalInternalReflection = submersion.mul(float(1).sub(refractedValid));
+  const refractedDir = mix(
+    reflect(incident, viewNormal),
+    refractedCandidate,
+    refractedValid,
+  );
+  const fresnelNode = mix(
+    schlickFresnel,
+    float(1),
+    totalInternalReflection,
+  ).clamp(0, 1);
   const hitView = positionView.xyz.add(
     refractedDir.mul(depthSeeThrough.mul(3.2)),
   );
@@ -323,7 +348,7 @@ export function createWaterOpticsRendering(
   const highlightExponent = float(2)
     .div(sunAngularRadius.mul(sunAngularRadius).max(1e-8))
     .mul(mix(float(1), float(90 / 420), surfaceRoughnessNode));
-  const highlightNode = worldNormal
+  const highlightNode = orientedWorldNormal
     .dot(halfDirection)
     .max(0)
     .pow(highlightExponent)
@@ -416,6 +441,11 @@ export function createWaterOpticsRendering(
       applyMicroOriginPhases(snapshot);
     },
   });
+  const waterline = Object.freeze({
+    synchronize(state: WaterlineFrameState): void {
+      submersion.value = state.submersion;
+    },
+  });
 
   return Object.freeze({
     colorNode: surfaceColor,
@@ -424,6 +454,7 @@ export function createWaterOpticsRendering(
     diagnosticsBNode,
     mrtNode,
     sink,
+    waterline,
     attachment: OPTICAL_FACTORS_ATTACHMENT,
     diagnosticsAAttachment: OPTICAL_DIAGNOSTICS_A_ATTACHMENT,
     diagnosticsBAttachment: OPTICAL_DIAGNOSTICS_B_ATTACHMENT,

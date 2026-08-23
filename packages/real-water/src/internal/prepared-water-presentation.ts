@@ -78,6 +78,10 @@ import {
   type SpectralWhitecapDiagnostics,
 } from "./spectral-whitecap-diagnostics.js";
 import type { SpectralWhitecapField } from "./spectral-whitecap-field.js";
+import type {
+  WaterlineFrameState,
+  WaterlineStateController,
+} from "./waterline-state.js";
 
 export const PREWARM_HISTORY_EPOCH = 1;
 export const HIDDEN_STABILIZATION_FRAME_COUNT = 8;
@@ -106,6 +110,8 @@ export interface PreparedWaterPresentationResources {
   readonly traaNode: ReturnType<typeof traa>;
   readonly jitterAdapter: TraaJitterAdapter;
   readonly resetUniform: ReturnType<typeof createTraaResetUniform>;
+  readonly historyRejectionPipeline: RenderPipeline;
+  readonly historyRejectionTarget: RenderTarget;
   readonly currentColorTarget: RenderTarget;
   readonly finalColorTarget: RenderTarget;
   readonly scenePass: ReturnType<typeof pass>;
@@ -119,6 +125,7 @@ export interface PreparedWaterPresentationResources {
   readonly opticalDiagnosticsATextureIndex: number;
   readonly opticalDiagnosticsBTextureIndex: number;
   readonly planar: PlanarReflectionPass;
+  readonly waterline: { current: WaterlineFrameState };
   readonly width: number;
   readonly height: number;
   readonly counters: PresentationReadinessCounters;
@@ -136,6 +143,7 @@ export function createPreparedWaterPresentationResources(
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
   whitecapField: SpectralWhitecapField,
+  initialWaterline: WaterlineFrameState,
 ): {
   readonly resources: PreparedWaterPresentationResources;
   readonly partial: PartialPreparedWaterPresentationResources;
@@ -148,6 +156,7 @@ export function createPreparedWaterPresentationResources(
       camera,
       drawingBuffer,
       whitecapField,
+      initialWaterline,
       partial,
     );
   } catch (error) {
@@ -162,6 +171,7 @@ function constructPreparedWaterPresentationResources(
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
   whitecapField: SpectralWhitecapField,
+  initialWaterline: WaterlineFrameState,
   partial: PartialPreparedWaterPresentationResources,
 ): {
   readonly resources: PreparedWaterPresentationResources;
@@ -174,6 +184,10 @@ function constructPreparedWaterPresentationResources(
     diagnosticReadbackCount: 0,
     sceneRenderCount: 0,
   };
+  const waterline = { current: initialWaterline };
+  partial.waterline = waterline;
+  const resetUniform = createTraaResetUniform();
+  partial.resetUniform = resetUniform;
   const scenePass = pass(scene, camera, { samples: 0 });
   partial.scenePass = scenePass;
   scenePass.updateBeforeType = "render";
@@ -184,7 +198,7 @@ function constructPreparedWaterPresentationResources(
       output,
       [VIEW_NORMAL_ATTACHMENT]: vec4(packNormalToRGB(normalView), 1),
       [MOTION_VECTORS_ATTACHMENT]: velocity,
-      [OPTICAL_FACTORS_ATTACHMENT]: vec4(0, 0, 0, 1),
+      [OPTICAL_FACTORS_ATTACHMENT]: vec4(0, 0, 0, 0),
       [OPTICAL_DIAGNOSTICS_A_ATTACHMENT]: vec4(0, 0, 0, 1),
       [OPTICAL_DIAGNOSTICS_B_ATTACHMENT]: vec4(0, 0, 0, 1),
     }),
@@ -226,8 +240,24 @@ function constructPreparedWaterPresentationResources(
   );
   partial.whitecapDiagnostics = whitecapDiagnostics;
 
-  const resetUniform = createTraaResetUniform();
-  partial.resetUniform = resetUniform;
+  const historyRejectionTarget = new RenderTarget(
+    drawingBuffer.width,
+    drawingBuffer.height,
+    {
+      depthBuffer: false,
+      stencilBuffer: false,
+      type: UnsignedByteType,
+    },
+  );
+  partial.historyRejectionTarget = historyRejectionTarget;
+  historyRejectionTarget.texture.name = "Real Water history rejection";
+  const historyRejectionPipeline = new RenderPipeline(
+    renderer,
+    vec4(resetUniform, 0, 0, 1),
+  );
+  partial.historyRejectionPipeline = historyRejectionPipeline;
+  historyRejectionPipeline.outputColorTransform = false;
+
   const ssr = createCurrentFrameSsrStack(
     renderer,
     scenePass,
@@ -298,6 +328,8 @@ function constructPreparedWaterPresentationResources(
     traaNode,
     jitterAdapter,
     resetUniform,
+    historyRejectionPipeline,
+    historyRejectionTarget,
     currentColorTarget,
     finalColorTarget,
     scenePass,
@@ -326,6 +358,7 @@ function constructPreparedWaterPresentationResources(
       OPTICAL_DIAGNOSTICS_B_ATTACHMENT,
     ),
     planar,
+    waterline,
     width: drawingBuffer.width,
     height: drawingBuffer.height,
     counters,
@@ -342,7 +375,12 @@ export async function compileAndPrimePreparedWaterPresentation(
 ): Promise<void> {
   throwIfAborted(signal);
   resources.counters.compileCount += 1;
-  await resources.planar.prime(renderer, scene, camera);
+  await resources.planar.prime(
+    renderer,
+    scene,
+    camera,
+    resources.waterline.current.seaLevelMetres,
+  );
   resources.counters.sceneRenderCount += 1;
   throwIfAborted(signal);
   resources.counters.compileCount += 1;
@@ -351,6 +389,7 @@ export async function compileAndPrimePreparedWaterPresentation(
   resources.ssr.ensureGraphPrepared(renderer);
   resources.resetUniform.value = 1;
   renderTemporalFrame(renderer, scene, camera, resources, true);
+  renderHistoryRejection(renderer, resources);
   resources.resetUniform.value = 0;
   renderCurrentColorConversion(renderer, resources);
   await probeNamedOutputRoutes(renderer, resources);
@@ -411,6 +450,8 @@ export function createPresentationRouteBridge(
   scene: Scene,
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
+  waterline: WaterlineStateController,
+  waterlineOptics: { synchronize(state: WaterlineFrameState): void },
   drawingBuffer: Readonly<{ width: number; height: number }>,
   manifestHash: string,
 ): HostPresentationRouteBridge {
@@ -444,10 +485,20 @@ export function createPresentationRouteBridge(
     }
     const snapshot = inspectRuntime();
     await resources.whitecapField.synchronize(renderer, snapshot);
-    const resetReason =
+    const snapshotResetReason =
       lastPresented === undefined
         ? null
         : detectPresentationReset(lastPresented, snapshot);
+    const waterlineCandidate = waterline.preview(
+      camera,
+      snapshot,
+      snapshotResetReason !== null,
+    );
+    const resetReason =
+      snapshotResetReason ??
+      (waterlineCandidate.transitioned ? "waterline-crossing" : null);
+    resources.waterline.current = waterlineCandidate.state;
+    waterlineOptics.synchronize(waterlineCandidate.state);
     const hostState = captureHostState(renderer, scene, camera);
     const outputs: DiagnosticsCapture[] = [];
     let temporalSceneStarted = false;
@@ -466,6 +517,9 @@ export function createPresentationRouteBridge(
       );
       if (accepted.outputs.includes("current-color")) {
         renderCurrentColorConversion(renderer, resources);
+      }
+      if (accepted.outputs.includes("history-rejection")) {
+        renderHistoryRejection(renderer, resources);
       }
       renderer.setRenderTarget(null);
       resources.presentationPipeline.render();
@@ -497,6 +551,7 @@ export function createPresentationRouteBridge(
       }
       presentationId += 1;
       lastPresented = readPresentedSnapshotKeys(snapshot);
+      waterline.commit(waterlineCandidate);
       return Object.freeze({
         presentationId,
         manifestHash,
@@ -513,6 +568,7 @@ export function createPresentationRouteBridge(
           resetReason,
           resetFrame: resetReason !== null,
         }),
+        waterline: waterlineCandidate.state,
         outputs: Object.freeze(outputs),
         compileCount: resources.counters.compileCount,
         probeCount: resources.counters.probeCount,
@@ -591,6 +647,8 @@ export function disposePreparedWaterPresentationResources(
   resources: PreparedWaterPresentationResources,
 ): void {
   resources.presentationPipeline.dispose();
+  resources.historyRejectionPipeline.dispose();
+  resources.historyRejectionTarget.dispose();
   resources.currentColorPipeline.dispose();
   resources.temporalPipeline.dispose();
   resources.traaNode.dispose();
@@ -607,6 +665,8 @@ export function disposePartialPreparedWaterPresentationResources(
 ): void {
   const disposals = [
     () => resources.presentationPipeline?.dispose(),
+    () => resources.historyRejectionPipeline?.dispose(),
+    () => resources.historyRejectionTarget?.dispose(),
     () => resources.currentColorPipeline?.dispose(),
     () => resources.temporalPipeline?.dispose(),
     () => resources.traaNode?.dispose(),
@@ -712,7 +772,13 @@ function renderTemporalFrame(
     );
   }
   assertNativeTraaCamera(camera);
-  resources.planar.render(renderer, scene, camera);
+  resources.planar.render(
+    renderer,
+    scene,
+    camera,
+    resources.waterline.current.seaLevelMetres,
+    resources.waterline.current.classification !== "below",
+  );
   if (resources.planar.hasOutput.value === 1) {
     resources.counters.sceneRenderCount += 1;
   }
@@ -768,6 +834,14 @@ function renderCurrentColorConversion(
   resources.currentColorPipeline.render();
 }
 
+function renderHistoryRejection(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): void {
+  renderer.setRenderTarget(resources.historyRejectionTarget);
+  resources.historyRejectionPipeline.render();
+}
+
 export function readDrawingBufferSize(renderer: Renderer): Readonly<{
   width: number;
   height: number;
@@ -794,6 +868,11 @@ async function probeNamedOutputRoutes(
 ): Promise<void> {
   await probeCompletedFrame(renderer, resources, resources.finalColorTarget);
   await probeCompletedFrame(renderer, resources, resources.currentColorTarget);
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.historyRejectionTarget,
+  );
   await probeCompletedFrame(
     renderer,
     resources,
@@ -1007,6 +1086,10 @@ async function readNamedOutput(
       throw new Error(
         "The spectral-whitecap diagnostic route has not been prepared.",
       );
+    case "waterline":
+      return readWaterlineCapture(renderer, resources);
+    case "history-rejection":
+      return readHistoryRejectionCapture(renderer, resources);
     case "optical-fresnel":
       return readOpticalScalarCapture(
         renderer,
@@ -1216,6 +1299,72 @@ async function readWhitecapStageCaptures(
     );
   }
   return result;
+}
+
+async function readWaterlineCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsCapture> {
+  const raw = await readAttachmentPixels(
+    renderer,
+    resources,
+    resources.opticalFactorsTextureIndex,
+  );
+  if (!(raw instanceof Uint16Array)) {
+    throw new TypeError(
+      "Waterline readback did not return Float16 coverage data.",
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    const coverage = DataUtils.fromHalfFloat(rgba[pixel * 4 + 3] ?? 0);
+    if (!Number.isFinite(coverage) || coverage < 0 || coverage > 1) {
+      throw new RangeError(
+        "Waterline coverage readback must contain normalized samples.",
+      );
+    }
+    data[pixel] = coverage;
+  }
+  return Object.freeze({
+    name: "waterline",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left" as const,
+    format: DIAGNOSTICS_CAPTURE_SHAPES.waterline.format,
+    data,
+  });
+}
+
+async function readHistoryRejectionCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.historyRejectionTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint8Array)) {
+    throw new TypeError(
+      "History-rejection readback did not return RGBA8 data.",
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    data[pixel] = (rgba[pixel * 4] ?? 0) / 255;
+  }
+  return Object.freeze({
+    name: "history-rejection",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["history-rejection"].format,
+    data,
+  });
 }
 
 async function readPlanarColorCapture(

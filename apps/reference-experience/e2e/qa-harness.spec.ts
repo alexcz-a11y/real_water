@@ -110,6 +110,8 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "whitecap-history",
       "whitecap-advection",
       "whitecap-decay",
+      "waterline",
+      "history-rejection",
       "optical-fresnel",
       "optical-thickness",
       "optical-scattering",
@@ -133,7 +135,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
     // Pinned for the same reason as `version` above: this contract test is
     // where a QA frame prewarm bump has to be stated, not inferred.
     // eslint-disable-next-line no-restricted-syntax
-    prewarmVersion: 8,
+    prewarmVersion: 10,
     prewarmCoreDeclarations: {
       "final-color": "water-final-color-target",
       "current-color": "water-current-color-target",
@@ -144,6 +146,8 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "whitecap-history": "water-whitecap-stage-target",
       "whitecap-advection": "water-whitecap-stage-target",
       "whitecap-decay": "water-whitecap-stage-target",
+      "waterline": "water-optical-factors-target",
+      "history-rejection": "water-history-rejection-target",
       "optical-fresnel": "water-optical-factors-target",
       "optical-thickness": "water-optical-factors-target",
       "optical-scattering": "water-optical-diagnostics-b",
@@ -184,6 +188,14 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       {
         name: "whitecap-decay",
         preparedFormat: "rgba16float-whitecap-stages",
+      },
+      {
+        name: "waterline",
+        preparedFormat: "rgba16float-waterline-coverage",
+      },
+      {
+        name: "history-rejection",
+        preparedFormat: "rgba8unorm-history-rejection",
       },
       {
         name: "optical-fresnel",
@@ -521,6 +533,8 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       "whitecap-history",
       "whitecap-advection",
       "whitecap-decay",
+      "waterline",
+      "history-rejection",
       "optical-fresnel",
       "optical-thickness",
       "optical-scattering",
@@ -567,6 +581,8 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "whitecap-history",
     "whitecap-advection",
     "whitecap-decay",
+    "waterline",
+    "history-rejection",
     "optical-fresnel",
     "optical-thickness",
     "optical-scattering",
@@ -587,7 +603,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "ssr-history-input-color",
   ]);
   expect(result.first.captures.map(({ version }) => version)).toEqual(
-    new Array<number>(27).fill(QA_CAPTURE_VERSION),
+    new Array<number>(29).fill(QA_CAPTURE_VERSION),
   );
   expect(result.first.captures.map(({ format }) => format)).toEqual([
     "rgba8unorm-srgb",
@@ -599,6 +615,8 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "r32float-whitecap-stage",
     "r32float-whitecap-stage",
     "r32float-whitecap-stage",
+    "r32float-waterline-coverage",
+    "r32float-history-rejection",
     "r32float-optical",
     "r32float-optical",
     "r32float-optical",

@@ -57,6 +57,7 @@ export interface RenderingCapabilitiesReflectionSsrHistory {
     "camera-cut",
     "origin-shift",
     "sea-state-cut",
+    "waterline-crossing",
   ];
   readonly updateCadence: "host-present";
 }
@@ -247,6 +248,7 @@ export function createCoreWebGPUCapabilities(
               "camera-cut",
               "origin-shift",
               "sea-state-cut",
+              "waterline-crossing",
             ] as const),
             updateCadence: "host-present" as const,
           }),

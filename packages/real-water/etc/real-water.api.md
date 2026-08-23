@@ -566,6 +566,8 @@ export interface HostSimulationState {
     // (undocumented)
     readonly paused: boolean;
     // (undocumented)
+    readonly seaLevelMetres: number;
+    // (undocumented)
     readonly seed: number;
     // (undocumented)
     readonly simulationResetRevision: number;
@@ -576,7 +578,7 @@ export interface HostSimulationState {
 }
 
 // @public
-export type HostTemporalResetReason = "simulation-reset" | "camera-cut" | "origin-shift" | "sea-state-cut";
+export type HostTemporalResetReason = "simulation-reset" | "camera-cut" | "origin-shift" | "sea-state-cut" | "waterline-crossing";
 
 // @public
 export interface HostTexture {
@@ -1032,7 +1034,8 @@ export interface QualityProfileReflectionSsrHistory {
     "simulation-reset",
     "camera-cut",
     "origin-shift",
-    "sea-state-cut"
+    "sea-state-cut",
+    "waterline-crossing"
     ];
     // (undocumented)
     readonly resetVelocityFormat: "rg16float";
@@ -1338,7 +1341,8 @@ export interface RenderingCapabilitiesReflectionSsrHistory {
     "simulation-reset",
     "camera-cut",
     "origin-shift",
-    "sea-state-cut"
+    "sea-state-cut",
+    "waterline-crossing"
     ];
     // (undocumented)
     readonly resetVelocityFormat: "rg16float";

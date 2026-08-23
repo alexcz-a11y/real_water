@@ -81,6 +81,7 @@ export interface RegressionAcceptanceScreenshot {
 export interface RegressionAcceptanceDetails {
   readonly seed: number;
   readonly tick: number;
+  readonly seaLevelMetres?: number;
   readonly camera: QaCameraV1;
   readonly controlRevision: number;
   readonly coreManifest: {
@@ -157,7 +158,7 @@ export async function attachRegressionAcceptance(
     createMinimalWaterQualityProfile(coreIdentity.qualityProfile.id),
     coreIdentity.drawingBuffer,
   );
-  assertQaPrewarmV8(details.qaPrewarm);
+  assertQaPrewarmV10(details.qaPrewarm);
   const [userAgent, hardwareConcurrency, drawingBuffer, navigatorGpuAdapter] =
     await Promise.all([
       page.evaluate(() => navigator.userAgent),
@@ -229,6 +230,7 @@ export async function attachRegressionAcceptance(
       asserted: screenshotAsserted,
       authoritative: screenshotAuthoritative,
     },
+    seaLevelMetres: details.seaLevelMetres ?? 0,
     seed: details.seed,
     tick: details.tick,
     camera: details.camera,
@@ -354,23 +356,23 @@ function chromeVersionFromUserAgent(userAgent: string): string {
   return /(?:Chrome|Chromium)\/([\d.]+)/u.exec(userAgent)?.[1] ?? userAgent;
 }
 
-function assertQaPrewarmV8(prewarm: QaFramePrewarmReceipt): void {
+function assertQaPrewarmV10(prewarm: QaFramePrewarmReceipt): void {
   if (
     prewarm.manifest.schema !== QA_FRAME_PREWARM_MANIFEST.schema ||
     prewarm.manifest.version !== QA_FRAME_PREWARM_MANIFEST.version ||
     prewarm.manifest.id !== QA_FRAME_PREWARM_MANIFEST.id
   ) {
-    throw new Error("Regression acceptance requires QA prewarm v8.");
+    throw new Error("Regression acceptance requires QA prewarm v10.");
   }
   if (
     canonicalJson(prewarm.manifest.captures) !==
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.captures) ||
     canonicalJson(prewarm.manifest.coreDeclarations) !==
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.coreDeclarations) ||
-    QA_FRAME_PREWARM_MANIFEST.captures.length !== 27
+    QA_FRAME_PREWARM_MANIFEST.captures.length !== 29
   ) {
     throw new Error(
-      "Regression acceptance requires the exact QA v8 27-name capture mapping.",
+      "Regression acceptance requires the exact QA v10 29-name capture mapping.",
     );
   }
   if (prewarm.rendererDevice === null || prewarm.rendererDevice === undefined) {
