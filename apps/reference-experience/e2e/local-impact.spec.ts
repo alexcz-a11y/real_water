@@ -215,6 +215,11 @@ test("renders a prewarmed directional wake coherently with Gameplay Query", asyn
         depthColoring: 1,
         inWaterGlow: 1,
         crestGlow: 1,
+        // Zero, like the sibling literal above and every other spec that is not
+        // about foam: #25 wrote this before the whitecap controls existed, so
+        // zero is what it actually measured.
+        whitecapAmount: 0,
+        foamPersistence: 0,
       };
       const wake = () => ({
         kind: "directional-wake" as const,
@@ -325,6 +330,11 @@ async function runAutomaticProxyWake(page: Page, proxyMode: "1" | "propeller") {
         depthColoring: 1,
         inWaterGlow: 1,
         crestGlow: 1,
+        // Zero, like the sibling literal above and every other spec that is not
+        // about foam: #25 wrote this before the whitecap controls existed, so
+        // zero is what it actually measured.
+        whitecapAmount: 0,
+        foamPersistence: 0,
       };
       const presentState = async (point: { x: number; z: number }) => ({
         presentation: await harness.present(),
