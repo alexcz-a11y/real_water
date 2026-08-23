@@ -139,12 +139,40 @@ const GAMEPLAY_CAPABILITY_KEYS = [
   "maxQueryPointsPerTick",
   "maxActiveDisturbances",
   "interactionField",
+  "bodyInteraction",
 ] as const;
 const INTERACTION_FIELD_CAPABILITY_KEYS = [
   "radiusMetres",
   "edgeFadeMetres",
   "maxSnapshotAgeTicks",
   "disturbanceKinds",
+] as const;
+const BODY_INTERACTION_CAPABILITY_KEYS = [
+  "fixedTickHz",
+  "maxShapeSamplesPerBody",
+  "maxConvexHullVertices",
+  "maxSocketsPerBody",
+  "shapeKinds",
+  "socketKinds",
+  "generatedDisturbanceKinds",
+] as const;
+const BODY_INTERACTION_SHAPE_KINDS = [
+  "sphere",
+  "box",
+  "capsule",
+  "convex-hull",
+  "compound",
+] as const;
+const BODY_INTERACTION_SOCKET_KINDS = [
+  "bow",
+  "stern",
+  "propeller",
+  "wake",
+  "interaction-anchor",
+] as const;
+const BODY_GENERATED_DISTURBANCE_KINDS = [
+  "directional-wake",
+  "propeller-wash",
 ] as const;
 const CAPABILITIES_TEMPORAL_KEYS = [
   ...TEMPORAL_KEYS,
@@ -196,7 +224,7 @@ export function createQaBoundCoreManifestIdentity(
 
 export function readReadyCapabilities(
   value: unknown,
-  profile: Pick<QualityProfile, "temporal" | "reflection">,
+  profile: Pick<QualityProfile, "bodyCoupling" | "temporal" | "reflection">,
   drawingBuffer: PrewarmDrawingBuffer,
 ): RealWaterCapabilities {
   if (!isRecord(value) || !hasExactKeys(value, CAPABILITIES_KEYS)) {
@@ -253,13 +281,18 @@ export function readReadyCapabilities(
     interactionField.edgeFadeMetres !== 8 ||
     interactionField.maxSnapshotAgeTicks !== 1 ||
     !Array.isArray(interactionField.disturbanceKinds) ||
-    interactionField.disturbanceKinds.length !== 1 ||
-    interactionField.disturbanceKinds[0] !== "radial-impact"
+    interactionField.disturbanceKinds.length !== 2 ||
+    interactionField.disturbanceKinds[0] !== "radial-impact" ||
+    interactionField.disturbanceKinds[1] !== "directional-wake"
   ) {
     throw new Error(
       "Ready capabilities.gameplay.interactionField disagrees with Core.",
     );
   }
+  const bodyInteraction = readCapabilitiesBodyInteraction(
+    value.gameplay.bodyInteraction,
+    profile.bodyCoupling,
+  );
   const temporal = readCapabilitiesTemporal(
     value.rendering.temporal,
     profile.temporal,
@@ -285,10 +318,60 @@ export function readReadyCapabilities(
           radiusMetres: 48 as const,
           edgeFadeMetres: 8 as const,
           maxSnapshotAgeTicks: 1 as const,
-          disturbanceKinds: ["radial-impact" as const],
+          disturbanceKinds: [
+            "radial-impact" as const,
+            "directional-wake" as const,
+          ],
         },
+        bodyInteraction,
       },
     }),
+  );
+}
+
+function readCapabilitiesBodyInteraction(
+  value: unknown,
+  policy: QualityProfile["bodyCoupling"],
+): RealWaterCapabilities["gameplay"]["bodyInteraction"] {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, BODY_INTERACTION_CAPABILITY_KEYS) ||
+    value.fixedTickHz !== policy.fixedTickHz ||
+    value.maxShapeSamplesPerBody !== policy.maxShapeSamplesPerBody ||
+    value.maxConvexHullVertices !== policy.maxConvexHullVertices ||
+    value.maxSocketsPerBody !== policy.maxSocketsPerBody ||
+    !matchesExactArray(value.shapeKinds, BODY_INTERACTION_SHAPE_KINDS) ||
+    !matchesExactArray(value.socketKinds, BODY_INTERACTION_SOCKET_KINDS) ||
+    !matchesExactArray(
+      value.generatedDisturbanceKinds,
+      BODY_GENERATED_DISTURBANCE_KINDS,
+    )
+  ) {
+    throw new Error(
+      "Ready capabilities.gameplay.bodyInteraction disagrees with Core.",
+    );
+  }
+  return deepFreeze(
+    deepClone({
+      fixedTickHz: 60 as const,
+      maxShapeSamplesPerBody: 32 as const,
+      maxConvexHullVertices: 64 as const,
+      maxSocketsPerBody: 8 as const,
+      shapeKinds: BODY_INTERACTION_SHAPE_KINDS,
+      socketKinds: BODY_INTERACTION_SOCKET_KINDS,
+      generatedDisturbanceKinds: BODY_GENERATED_DISTURBANCE_KINDS,
+    }),
+  );
+}
+
+function matchesExactArray(
+  value: unknown,
+  expected: readonly string[],
+): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === expected.length &&
+    expected.every((entry, index) => value[index] === entry)
   );
 }
 

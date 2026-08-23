@@ -4,8 +4,8 @@ Real Water is an ESM-only TypeScript Module for a reusable native Three.js Open
 Water Domain. The repository now includes a four-band, camera-relative Open
 Water Domain with a complete basic optical path, versioned Calm, Swell, and
 Storm Water Presets, versioned Environment, Quality, and Showcase preset data,
-one Host-driven floating sphere, and the prewarm, reveal, reprepare, and
-recovery path.
+one Host-driven proxy vessel, and the prewarm, reveal, reprepare, and recovery
+path.
 
 Ticket #34 adds a pure four-schema preset codec plus a Reference Experience
 local authoring library. Known Water and Quality history migrates explicitly;
@@ -39,6 +39,19 @@ Issue #24 adds the first bounded local interaction slice:
 - the QA Harness drives impact input, Anchor movement, reset, and deterministic
   replay, then compares non-zero rendered depth/normal against Gameplay Query.
 
+Issue #25 deepens that coupling into the proxy-vessel tracer:
+
+- sphere, box, capsule, convex-hull, and flat compound Interaction Shapes are
+  copied and frozen behind the same Body Adapter seam;
+- authored bow, stern, twin-propeller, wake, and Interaction Anchor sockets use
+  stable Body-local semantics and upsert fixed local-field sources by identity;
+- compound samples produce aggregate buoyancy, drag, slamming response, and
+  stabilizing torque while the Host remains authoritative for 60 Hz integration;
+- the Reference Experience accepts keyboard vessel controls and presents the
+  interpolated Host pose at 30 FPS without advancing physics;
+- manual radial impacts, directional wakes, and automatic Body wakes share the
+  declared 128-slot capacity with inspectable deterministic receipts.
+
 Issue #20 shades that domain with a Host-owned basic optical path:
 
 - Fresnel, Host environment reflection, depth-aware refraction, absorption,
@@ -71,7 +84,7 @@ Issue #18 extended the coherent spectral runtime and deterministic QA
 foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly sixty work
+- the canonical minimal-water Prewarm Manifest declares exactly sixty-two work
   units: a texture, Host equirect environment radiance, viewport scene color,
   viewport scene depth, 6-attachment MRT, camera-relative clipmap, four spectral
   bands, TSL NodeMaterial, optical route, planar reflection target/route,
@@ -88,9 +101,9 @@ foundation:
   twenty-three named diagnostics output routes, eight hidden temporal
   stabilization frames, named-output completion probes, and main-camera guard
   frame, plus the local interaction field, its fixed current/previous uniform
-  buffers, and the hidden-executed radial-impact route. Version 4 binds the
-  physical drawing buffer into that work plan; a viewport change creates a new
-  manifest and lease;
+  buffers, and hidden-executed radial-impact, directional-wake, and Body socket
+  routes. Version 5 binds the physical drawing buffer into that work plan; a
+  viewport change creates a new manifest and lease;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
   restores their state after preparation, and never disposes them;
 - progress advances monotonically only when declared manifest work completes;

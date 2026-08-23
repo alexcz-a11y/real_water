@@ -60,6 +60,8 @@ export interface BodyAttachment {
     inspect(): BodyAttachmentSnapshot;
     // (undocumented)
     readonly shape: InteractionShape;
+    // (undocumented)
+    readonly sockets: readonly BodyInteractionSocket[];
 }
 
 // @public
@@ -68,6 +70,8 @@ export interface BodyAttachmentOptions {
     readonly physics: BodyPhysicsAdapter;
     // (undocumented)
     readonly shape: InteractionShape;
+    // (undocumented)
+    readonly sockets?: readonly BodyInteractionSocket[];
 }
 
 // @public
@@ -75,8 +79,50 @@ export interface BodyAttachmentSnapshot {
     // (undocumented)
     readonly attached: boolean;
     // (undocumented)
+    readonly fixedStepCount: number;
+    // (undocumented)
+    readonly lastFixedStepTick: number | null;
+    // (undocumented)
+    readonly lastWakeReceipt: BodyWakeUpdateReceipt | null;
+    // (undocumented)
     readonly lastWaterLoad: BodyWaterLoad | null;
+    // (undocumented)
+    readonly queryPointCount: number;
 }
+
+// @public
+export interface BodyEffectSocket {
+    // (undocumented)
+    readonly direction: BodyPhysicsVector3;
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly kind: "bow" | "stern" | "propeller" | "wake";
+    // (undocumented)
+    readonly position: BodyPhysicsVector3;
+    // (undocumented)
+    readonly priority: number;
+    // (undocumented)
+    readonly radius: number;
+    // (undocumented)
+    readonly strength: number;
+}
+
+// @public
+export interface BodyInteractionAnchorSocket {
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly kind: "interaction-anchor";
+    // (undocumented)
+    readonly position: BodyPhysicsVector3;
+}
+
+// @public (undocumented)
+export type BodyInteractionSocket = BodyInteractionAnchorSocket | BodyEffectSocket;
+
+// @public
+export type BodyInteractionSocketKind = "bow" | "stern" | "propeller" | "wake" | "interaction-anchor";
 
 // @public
 export interface BodyPhysicsAdapter {
@@ -142,6 +188,20 @@ export interface BodyPhysicsVector3 {
 }
 
 // @public
+export interface BodyWakeUpdateReceipt {
+    // (undocumented)
+    readonly activeBodyWakeCount: number;
+    // (undocumented)
+    readonly activeDisturbanceCount: number;
+    // (undocumented)
+    readonly droppedSocketIds: readonly string[];
+    // (undocumented)
+    readonly emittedSocketIds: readonly string[];
+    // (undocumented)
+    readonly tick: number;
+}
+
+// @public
 export interface BodyWaterLoad {
     // (undocumented)
     readonly force: BodyPhysicsVector3;
@@ -153,6 +213,50 @@ export interface BodyWaterLoad {
     readonly queryTick: number;
     // (undocumented)
     readonly torque: BodyPhysicsVector3;
+}
+
+// @public
+export interface BoxInteractionShape {
+    // (undocumented)
+    readonly halfExtents: BodyPhysicsVector3;
+    // (undocumented)
+    readonly kind: "box";
+}
+
+// @public
+export interface CapsuleInteractionShape {
+    // (undocumented)
+    readonly halfHeight: number;
+    // (undocumented)
+    readonly kind: "capsule";
+    // (undocumented)
+    readonly radius: number;
+}
+
+// @public
+export interface CompoundInteractionShape {
+    // (undocumented)
+    readonly children: readonly CompoundInteractionShapeChild[];
+    // (undocumented)
+    readonly kind: "compound";
+}
+
+// @public
+export interface CompoundInteractionShapeChild {
+    // (undocumented)
+    readonly position: BodyPhysicsVector3;
+    // (undocumented)
+    readonly rotation: BodyPhysicsQuaternion;
+    // (undocumented)
+    readonly shape: PrimitiveInteractionShape;
+}
+
+// @public
+export interface ConvexHullInteractionShape {
+    // (undocumented)
+    readonly kind: "convex-hull";
+    // (undocumented)
+    readonly vertices: readonly BodyPhysicsVector3[];
 }
 
 // @public
@@ -217,7 +321,27 @@ export interface CurrentPresetImport {
 }
 
 // @public
-export type DisturbanceBatch = RadialImpactDisturbanceBatch;
+export interface DirectionalWakeDisturbanceBatch {
+    // (undocumented)
+    readonly amplitudes: Float32Array;
+    // (undocumented)
+    readonly count: number;
+    // (undocumented)
+    readonly directions: Float32Array;
+    // (undocumented)
+    readonly ids: Uint32Array;
+    // (undocumented)
+    readonly kind: "directional-wake";
+    // (undocumented)
+    readonly positions: Float32Array;
+    // (undocumented)
+    readonly priorities: Uint8Array;
+    // (undocumented)
+    readonly radii: Float32Array;
+}
+
+// @public
+export type DisturbanceBatch = RadialImpactDisturbanceBatch | DirectionalWakeDisturbanceBatch;
 
 // @public
 export interface DisturbanceSubmissionReceipt {
@@ -338,6 +462,8 @@ export function exportPresetJson(preset: PresetDocument): string;
 // @public
 export interface GameplayCapabilities {
     // (undocumented)
+    readonly bodyInteraction: GameplayCapabilitiesBodyInteraction;
+    // (undocumented)
     readonly interactionField: GameplayCapabilitiesInteractionField;
     // (undocumented)
     readonly maxActiveDisturbances: 128;
@@ -348,9 +474,42 @@ export interface GameplayCapabilities {
 }
 
 // @public
+export interface GameplayCapabilitiesBodyInteraction {
+    // (undocumented)
+    readonly fixedTickHz: 60;
+    // (undocumented)
+    readonly generatedDisturbanceKinds: readonly [
+    "directional-wake",
+    "propeller-wash"
+    ];
+    // (undocumented)
+    readonly maxConvexHullVertices: 64;
+    // (undocumented)
+    readonly maxShapeSamplesPerBody: 32;
+    // (undocumented)
+    readonly maxSocketsPerBody: 8;
+    // (undocumented)
+    readonly shapeKinds: readonly [
+    "sphere",
+    "box",
+    "capsule",
+    "convex-hull",
+    "compound"
+    ];
+    // (undocumented)
+    readonly socketKinds: readonly [
+    "bow",
+    "stern",
+    "propeller",
+    "wake",
+    "interaction-anchor"
+    ];
+}
+
+// @public
 export interface GameplayCapabilitiesInteractionField {
     // (undocumented)
-    readonly disturbanceKinds: readonly ["radial-impact"];
+    readonly disturbanceKinds: readonly ["radial-impact", "directional-wake"];
     // (undocumented)
     readonly edgeFadeMetres: 8;
     // (undocumented)
@@ -603,7 +762,7 @@ export interface InteractionAnchorUpdateReceipt {
 }
 
 // @public
-export type InteractionShape = SphereInteractionShape;
+export type InteractionShape = PrimitiveInteractionShape | CompoundInteractionShape;
 
 // @public
 export interface LoadingPresenterAdapter {
@@ -634,6 +793,15 @@ export const MAX_ACTIVE_DISTURBANCES: 128;
 
 // @public
 export const MAX_ATTACHED_BODIES: 32;
+
+// @public (undocumented)
+export const MAX_BODY_INTERACTION_SOCKETS: 8;
+
+// @public (undocumented)
+export const MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN: 32;
+
+// @public (undocumented)
+export const MAX_CONVEX_HULL_VERTICES: 64;
 
 // @public
 export const MAX_GAMEPLAY_QUERY_POINTS: 2048;
@@ -740,9 +908,13 @@ export function normalizeWaterPreset(candidate: WaterPreset): WaterPreset;
 // @public
 export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
     // (undocumented)
+    readonly activeBodyWakeCount: number;
+    // (undocumented)
     readonly activeDisturbanceCount: number;
     // (undocumented)
     readonly artisticControls: ArtisticControls;
+    // (undocumented)
+    readonly attachedBodyCount: number;
     // (undocumented)
     readonly cameraCutRevision: number;
     // (undocumented)
@@ -803,7 +975,7 @@ export type PresetRecoveryReason = "invalid-json" | "unknown-schema" | "invalid-
 export const PREWARM_MANIFEST_SCHEMA: "real-water/prewarm";
 
 // @public
-export const PREWARM_MANIFEST_VERSION: 4;
+export const PREWARM_MANIFEST_VERSION: 5;
 
 // @public
 export interface PrewarmDeclaration {
@@ -879,13 +1051,18 @@ export interface PrewarmManifestIdentity {
 }
 
 // @public
+export type PrimitiveInteractionShape = SphereInteractionShape | BoxInteractionShape | CapsuleInteractionShape | ConvexHullInteractionShape;
+
+// @public
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 6;
+export const QUALITY_PROFILE_VERSION: 7;
 
 // @public
 export interface QualityProfile {
+    // (undocumented)
+    readonly bodyCoupling: QualityProfileBodyCoupling;
     // (undocumented)
     readonly id: MinimalWaterQualityProfileId;
     // (undocumented)
@@ -902,6 +1079,22 @@ export interface QualityProfile {
     readonly temporal: QualityProfileTemporal;
     // (undocumented)
     readonly version: typeof QUALITY_PROFILE_VERSION;
+}
+
+// @public
+export interface QualityProfileBodyCoupling {
+    // (undocumented)
+    readonly fixedTickHz: 60;
+    // (undocumented)
+    readonly maxAttachedBodies: 32;
+    // (undocumented)
+    readonly maxConvexHullVertices: 64;
+    // (undocumented)
+    readonly maxShapeSamplesPerBody: 32;
+    // (undocumented)
+    readonly maxSocketsPerBody: 8;
+    // (undocumented)
+    readonly socketRoute: "stable-slot-upsert";
 }
 
 // @public
@@ -929,6 +1122,8 @@ export interface QualityProfileInteraction {
 
 // @public
 export interface QualityProfileInteractionField {
+    // (undocumented)
+    readonly directionalWakeRoute: "analytic-uniform-array";
     // (undocumented)
     readonly edgeFadeMetres: 8;
     // (undocumented)
@@ -1342,7 +1537,7 @@ export interface RenderingCapabilitiesTemporal {
 export type RuntimeDiagnostics = StartupDiagnostics;
 
 // @public
-export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "BODY_CAPACITY_EXCEEDED" | "GAMEPLAY_QUERY_CAPACITY_EXCEEDED" | "RUNTIME_INVALIDATED";
+export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "BODY_CAPACITY_EXCEEDED" | "BODY_ROUTE_TICK_REPEATED" | "INTERACTION_ANCHOR_CAPACITY_EXCEEDED" | "INTERACTION_ANCHOR_OWNED_BY_BODY" | "GAMEPLAY_QUERY_CAPACITY_EXCEEDED" | "RUNTIME_INVALIDATED";
 
 // @public
 export const SHOWCASE_PRESET_SCHEMA: "real-water/showcase-preset";

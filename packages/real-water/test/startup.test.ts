@@ -92,7 +92,34 @@ const TEST_GAMEPLAY_CAPABILITIES = Object.freeze({
     radiusMetres: 48 as const,
     edgeFadeMetres: 8 as const,
     maxSnapshotAgeTicks: 1 as const,
-    disturbanceKinds: Object.freeze(["radial-impact"] as const),
+    disturbanceKinds: Object.freeze([
+      "radial-impact",
+      "directional-wake",
+    ] as const),
+  }),
+  bodyInteraction: Object.freeze({
+    fixedTickHz: 60 as const,
+    maxShapeSamplesPerBody: 32 as const,
+    maxConvexHullVertices: 64 as const,
+    maxSocketsPerBody: 8 as const,
+    shapeKinds: Object.freeze([
+      "sphere",
+      "box",
+      "capsule",
+      "convex-hull",
+      "compound",
+    ] as const),
+    socketKinds: Object.freeze([
+      "bow",
+      "stern",
+      "propeller",
+      "wake",
+      "interaction-anchor",
+    ] as const),
+    generatedDisturbanceKinds: Object.freeze([
+      "directional-wake",
+      "propeller-wash",
+    ] as const),
   }),
 });
 const TEST_CAPABILITIES = Object.freeze({
@@ -734,12 +761,12 @@ describe("prepareRealWater", () => {
     );
     expect(lease.manifest).toEqual({
       schema: "real-water/prewarm",
-      version: 4,
+      version: 5,
       id: manifest.id,
       manifestHash: manifest.manifestHash,
       qualityProfile: {
         schema: "real-water/quality-profile",
-        version: 6,
+        version: 7,
         id: "minimal",
         profileHash: manifest.qualityProfile.profileHash,
       },
@@ -929,7 +956,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 60,
+        totalWork: 62,
       },
     });
   });
@@ -1597,7 +1624,7 @@ describe("prepareRealWater", () => {
 
     expect(Object.isFrozen(manifest)).toBe(true);
     expect(Object.isFrozen(manifest.drawingBuffer)).toBe(true);
-    expect(manifest.version).toBe(4);
+    expect(manifest.version).toBe(5);
     expect(manifest.drawingBuffer).toEqual({ width: 320, height: 180 });
     expect(Object.isFrozen(manifest.declarations)).toBe(true);
     expect(Object.isFrozen(first)).toBe(true);
@@ -1611,6 +1638,8 @@ describe("prepareRealWater", () => {
       "water-local-interaction-field",
       "water-local-interaction-buffers",
       "water-local-interaction-radial-impact-route",
+      "water-local-interaction-directional-wake-route",
+      "water-body-socket-emission-route",
       "water-spectral-band-swell",
       "water-spectral-band-wind",
       "water-spectral-band-chop",

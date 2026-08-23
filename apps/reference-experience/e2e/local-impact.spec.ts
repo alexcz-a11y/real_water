@@ -16,6 +16,16 @@ const TOP_DOWN_CAMERA = {
   near: 0.1,
   far: 100,
 };
+const WAKE_SAMPLE_Z = 1;
+const WAKE_CAMERA = {
+  projection: "perspective" as const,
+  position: [0, CAMERA_Y, WAKE_SAMPLE_Z] as const,
+  target: [0, 0, WAKE_SAMPLE_Z] as const,
+  up: [0, 0, -1] as const,
+  verticalFovDegrees: 40,
+  near: 0.1,
+  far: 100,
+};
 
 test("renders and replays an edge-free radial impact around the Interaction Anchor", async ({
   page,
@@ -170,6 +180,110 @@ test("renders and replays an edge-free radial impact around the Interaction Anch
   void _followedPresentationId;
   void _replayPresentationId;
   expect(replayQuery).toEqual(followedQuery);
+});
+
+test("renders a prewarmed directional wake coherently with Gameplay Query", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 321, height: 181 });
+  await page.goto("/?qa=1&host=memory&delay=0");
+  test.skip(
+    !(await hasCoreWebGPU(page)),
+    "Core WebGPU is unavailable in this browser profile.",
+  );
+
+  await page.goto("/?qa=1&host=three");
+  await expect(page.getByTestId("reference-stage")).toBeVisible();
+  const result = await page.evaluate(
+    async ({ camera, sampleZ }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
+      if (harness === undefined) {
+        throw new Error("QA Harness is unavailable.");
+      }
+      const controls = {
+        waveStrength: 0,
+        swellDrama: 1,
+        directionality: 0,
+        choppiness: 1,
+        crestSharpness: 0,
+        microDetail: 1,
+        timeScale: 1,
+        grazingReflection: 1,
+        environmentReflection: 1,
+        depthSeeThrough: 1,
+        depthColoring: 1,
+        inWaterGlow: 1,
+        crestGlow: 1,
+      };
+      const wake = () => ({
+        kind: "directional-wake" as const,
+        count: 1,
+        ids: Uint32Array.of(25),
+        positions: Float32Array.of(0, 0, 0),
+        directions: Float32Array.of(0, 0, 1),
+        radii: Float32Array.of(2),
+        amplitudes: Float32Array.of(1),
+        priorities: Uint8Array.of(200),
+      });
+      const presentState = async () => ({
+        presentation: await harness.present(),
+        depth: await harness.capture("depth"),
+        query: await harness.queryGameplay([0, 0, sampleZ]),
+      });
+      const prepare = async () => {
+        await harness.reset({ seed: 0x2500_0014 });
+        await harness.updateArtisticControls(controls, {
+          transition: "continuous",
+        });
+        await harness.updateInteractionAnchor({ x: 0, z: 0 });
+        await harness.setCamera(camera, { transition: "continuous" });
+      };
+
+      await prepare();
+      const baseline = await presentState();
+      const receipt = await harness.submitDisturbances(wake());
+      const affected = await presentState();
+
+      await prepare();
+      await presentState();
+      const replayReceipt = await harness.submitDisturbances(wake());
+      const replay = await presentState();
+      return { baseline, receipt, affected, replayReceipt, replay };
+    },
+    { camera: WAKE_CAMERA, sampleZ: WAKE_SAMPLE_Z },
+  );
+
+  const baselineHeight = centerRenderedHeight(result.baseline.depth.data);
+  const affectedHeight = centerRenderedHeight(result.affected.depth.data);
+  expect(result.receipt).toEqual({
+    tick: 0,
+    acceptedDisturbanceIds: [25],
+    droppedDisturbanceIds: [],
+    activeDisturbanceCount: 1,
+  });
+  expect(
+    Math.abs(result.affected.query.height - result.baseline.query.height),
+  ).toBeGreaterThan(0.05);
+  expect(
+    Math.abs(
+      affectedHeight -
+        baselineHeight -
+        (result.affected.query.height - result.baseline.query.height),
+    ),
+  ).toBeLessThanOrEqual(0.03);
+  expect(result.affected.query.snapshotAge).toBe(0);
+  expect(result.affected.presentation.compileCount).toBe(
+    result.baseline.presentation.compileCount,
+  );
+  expect(result.replayReceipt).toEqual(result.receipt);
+  expect(result.replay.depth.data).toBe(result.affected.depth.data);
+  const { presentationId: _affectedPresentationId, ...affectedQuery } =
+    result.affected.query;
+  const { presentationId: _replayPresentationId, ...replayQuery } =
+    result.replay.query;
+  void _affectedPresentationId;
+  void _replayPresentationId;
+  expect(replayQuery).toEqual(affectedQuery);
 });
 
 function centerRenderedHeight(encodedDepth: string): number {

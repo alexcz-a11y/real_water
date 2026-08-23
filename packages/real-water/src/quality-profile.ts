@@ -2,8 +2,14 @@ import { hasExactKeys, isRecord } from "./internal/record-validation.js";
 import {
   INTERACTION_FIELD_EDGE_FADE_METRES,
   INTERACTION_FIELD_RADIUS_METRES,
+  MAX_ATTACHED_BODIES,
   MAX_ACTIVE_DISTURBANCES,
 } from "./capabilities.js";
+import {
+  MAX_BODY_INTERACTION_SOCKETS,
+  MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN,
+  MAX_CONVEX_HULL_VERTICES,
+} from "./body-physics.js";
 
 /**
  * The discriminator for supported Quality Profiles.
@@ -17,7 +23,7 @@ export const QUALITY_PROFILE_SCHEMA = "real-water/quality-profile" as const;
  *
  * @public
  */
-export const QUALITY_PROFILE_VERSION = 6 as const;
+export const QUALITY_PROFILE_VERSION = 7 as const;
 
 /**
  * Built-in structural configurations for the minimal-water surface.
@@ -57,6 +63,7 @@ export interface QualityProfileInteractionField {
   readonly snapshotBanks: 2;
   readonly maxSnapshotAgeTicks: 1;
   readonly radialImpactRoute: "analytic-uniform-array";
+  readonly directionalWakeRoute: "analytic-uniform-array";
 }
 
 /**
@@ -67,6 +74,21 @@ export interface QualityProfileInteractionField {
 export interface QualityProfileInteraction {
   readonly anchorCount: 1;
   readonly field: QualityProfileInteractionField;
+}
+
+/**
+ * Bounded structural policy for fixed-step Body coupling and authored sockets.
+ * Per-Body Interaction Shapes and socket poses remain runtime attachment data.
+ *
+ * @public
+ */
+export interface QualityProfileBodyCoupling {
+  readonly fixedTickHz: 60;
+  readonly maxAttachedBodies: 32;
+  readonly maxShapeSamplesPerBody: 32;
+  readonly maxConvexHullVertices: 64;
+  readonly maxSocketsPerBody: 8;
+  readonly socketRoute: "stable-slot-upsert";
 }
 
 /**
@@ -174,6 +196,7 @@ export interface QualityProfile {
   readonly profileHash: string;
   readonly surface: QualityProfileSurface;
   readonly interaction: QualityProfileInteraction;
+  readonly bodyCoupling: QualityProfileBodyCoupling;
   readonly temporal: QualityProfileTemporal;
   readonly reflection: QualityProfileReflection;
 }
@@ -244,7 +267,8 @@ export const CURRENT_FRAME_SSR_POLICY: QualityProfileReflectionSsr =
 
 // Each static hash is the SHA-256 digest of the profile's canonical JSON,
 // excluding profileHash and preserving the public field order:
-// schema, version, id, surface, interaction, temporal, reflection.
+// schema, version, id, surface, interaction, bodyCoupling, temporal,
+// reflection.
 const NATIVE_TEMPORAL: QualityProfileTemporal = Object.freeze({
   mode: "TRAA",
   renderScale: 1,
@@ -271,13 +295,13 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:c60b0a30fa310fbc1f21270c413a35b5b6265d6f157e5f41233be4b8042d8ec5",
+      "sha256:1c11f4a6ae5099ee4ffe2610edc4c57fc546975fdb05a3a55ad4b662991db6a4",
     widthSegments: 128,
     heightSegments: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:4cba756cba61d7f4e071605c4d6939c1ba76b2cab0ef500bcf5ed1be7404d7f4",
+      "sha256:98911284133f9b9be6f93548f7726657c9f5164d4e241c08bab0ac440c04e67a",
     widthSegments: 256,
     heightSegments: 256,
   }),
@@ -354,6 +378,26 @@ const LEGACY_V5_QUALITY_PROFILES: Readonly<
   }),
 });
 
+// Version 6 introduced the local interaction field. These are the exact
+// built-in digests committed before directional wake and Body coupling policy
+// became structural Quality Profile data.
+const LEGACY_V6_QUALITY_PROFILES: Readonly<
+  Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
+> = Object.freeze({
+  "minimal": Object.freeze({
+    profileHash:
+      "sha256:c60b0a30fa310fbc1f21270c413a35b5b6265d6f157e5f41233be4b8042d8ec5",
+    widthSegments: 128,
+    heightSegments: 128,
+  }),
+  "minimal-high-detail": Object.freeze({
+    profileHash:
+      "sha256:4cba756cba61d7f4e071605c4d6939c1ba76b2cab0ef500bcf5ed1be7404d7f4",
+    widthSegments: 256,
+    heightSegments: 256,
+  }),
+});
+
 const LEGACY_PRE_RESET_V5_QUALITY_PROFILES: Readonly<
   Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
 > = Object.freeze({
@@ -378,6 +422,7 @@ const QUALITY_PROFILE_KEYS = [
   "profileHash",
   "surface",
   "interaction",
+  "bodyCoupling",
   "temporal",
   "reflection",
 ] as const;
@@ -389,6 +434,15 @@ const INTERACTION_FIELD_KEYS = [
   "snapshotBanks",
   "maxSnapshotAgeTicks",
   "radialImpactRoute",
+  "directionalWakeRoute",
+] as const;
+const BODY_COUPLING_KEYS = [
+  "fixedTickHz",
+  "maxAttachedBodies",
+  "maxShapeSamplesPerBody",
+  "maxConvexHullVertices",
+  "maxSocketsPerBody",
+  "socketRoute",
 ] as const;
 const LEGACY_V1_QUALITY_PROFILE_KEYS = [
   "schema",
@@ -459,7 +513,13 @@ const SSR_HISTORY_KEYS = [
   "updateCadence",
 ] as const;
 const LEGACY_V5_QUALITY_PROFILE_KEYS = QUALITY_PROFILE_KEYS.filter(
-  (key) => key !== "interaction",
+  (key) => key !== "interaction" && key !== "bodyCoupling",
+);
+const LEGACY_V6_QUALITY_PROFILE_KEYS = QUALITY_PROFILE_KEYS.filter(
+  (key) => key !== "bodyCoupling",
+);
+const LEGACY_V6_INTERACTION_FIELD_KEYS = INTERACTION_FIELD_KEYS.filter(
+  (key) => key !== "directionalWakeRoute",
 );
 const LEGACY_PRE_RESET_SSR_HISTORY_KEYS = SSR_HISTORY_KEYS.filter(
   (key) => key !== "resetVelocityFormat",
@@ -503,7 +563,16 @@ export function createMinimalWaterQualityProfile(
         snapshotBanks: 2,
         maxSnapshotAgeTicks: 1,
         radialImpactRoute: "analytic-uniform-array",
+        directionalWakeRoute: "analytic-uniform-array",
       },
+    },
+    bodyCoupling: {
+      fixedTickHz: 60,
+      maxAttachedBodies: MAX_ATTACHED_BODIES,
+      maxShapeSamplesPerBody: MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN,
+      maxConvexHullVertices: MAX_CONVEX_HULL_VERTICES,
+      maxSocketsPerBody: MAX_BODY_INTERACTION_SOCKETS,
+      socketRoute: "stable-slot-upsert",
     },
     temporal: NATIVE_TEMPORAL,
     reflection: NATIVE_REFLECTION,
@@ -560,6 +629,20 @@ export function normalizeQualityProfile(
       supported.interaction.field.maxSnapshotAgeTicks ||
     value.interaction.field.radialImpactRoute !==
       supported.interaction.field.radialImpactRoute ||
+    value.interaction.field.directionalWakeRoute !==
+      supported.interaction.field.directionalWakeRoute ||
+    !isRecord(value.bodyCoupling) ||
+    !hasExactKeys(value.bodyCoupling, BODY_COUPLING_KEYS) ||
+    value.bodyCoupling.fixedTickHz !== supported.bodyCoupling.fixedTickHz ||
+    value.bodyCoupling.maxAttachedBodies !==
+      supported.bodyCoupling.maxAttachedBodies ||
+    value.bodyCoupling.maxShapeSamplesPerBody !==
+      supported.bodyCoupling.maxShapeSamplesPerBody ||
+    value.bodyCoupling.maxConvexHullVertices !==
+      supported.bodyCoupling.maxConvexHullVertices ||
+    value.bodyCoupling.maxSocketsPerBody !==
+      supported.bodyCoupling.maxSocketsPerBody ||
+    value.bodyCoupling.socketRoute !== supported.bodyCoupling.socketRoute ||
     !isRecord(value.temporal) ||
     !hasExactKeys(value.temporal, TEMPORAL_KEYS) ||
     value.temporal.mode !== supported.temporal.mode ||
@@ -608,6 +691,15 @@ export function migrateQualityProfile(candidate: unknown): QualityProfile {
     } catch {
       throw new TypeError("The Quality Profile cannot be migrated.");
     }
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 6 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV6Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
   }
 
   if (
@@ -753,6 +845,36 @@ function matchesLegacyV5Profile(
     matchesLegacySurface(value, LEGACY_V5_QUALITY_PROFILES[id]) &&
     matchesCurrentTemporal(value.temporal) &&
     matchesCurrentReflection(value.reflection)
+  );
+}
+
+function matchesLegacyV6Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return (
+    hasExactKeys(value, LEGACY_V6_QUALITY_PROFILE_KEYS) &&
+    value.schema === QUALITY_PROFILE_SCHEMA &&
+    matchesLegacySurface(value, LEGACY_V6_QUALITY_PROFILES[id]) &&
+    matchesLegacyV6Interaction(value.interaction) &&
+    matchesCurrentTemporal(value.temporal) &&
+    matchesCurrentReflection(value.reflection)
+  );
+}
+
+function matchesLegacyV6Interaction(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, INTERACTION_KEYS) &&
+    value.anchorCount === 1 &&
+    isRecord(value.field) &&
+    hasExactKeys(value.field, LEGACY_V6_INTERACTION_FIELD_KEYS) &&
+    value.field.radiusMetres === INTERACTION_FIELD_RADIUS_METRES &&
+    value.field.edgeFadeMetres === INTERACTION_FIELD_EDGE_FADE_METRES &&
+    value.field.maxActiveDisturbances === MAX_ACTIVE_DISTURBANCES &&
+    value.field.snapshotBanks === 2 &&
+    value.field.maxSnapshotAgeTicks === 1 &&
+    value.field.radialImpactRoute === "analytic-uniform-array"
   );
 }
 
@@ -923,6 +1045,7 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
       anchorCount: profile.interaction.anchorCount,
       field: Object.freeze({ ...profile.interaction.field }),
     }),
+    bodyCoupling: Object.freeze({ ...profile.bodyCoupling }),
     temporal: Object.freeze({ ...profile.temporal }),
     reflection: Object.freeze({
       environment: Object.freeze({ ...profile.reflection.environment }),

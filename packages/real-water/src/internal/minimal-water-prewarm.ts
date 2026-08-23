@@ -209,7 +209,7 @@ export async function prepareMinimalWaterPlane(
     renderer.initTexture(waterTexture);
     renderer.initTexture(environmentRadiance);
     renderer.initTexture(createdPresentation.resources.planar.target.texture);
-    spectralBand.stagePrewarmRadialImpact();
+    spectralBand.stagePrewarmLocalInteractionRoutes();
     try {
       await compileAndPrimePreparedWaterPresentation(
         renderer,
@@ -219,7 +219,7 @@ export async function prepareMinimalWaterPlane(
         options.request.signal,
       );
     } finally {
-      spectralBand.clearPrewarmRadialImpact();
+      spectralBand.clearPrewarmLocalInteractionRoutes();
     }
     await completeDeclaredWork(options.request.progress, [
       "texture",
@@ -231,6 +231,8 @@ export async function prepareMinimalWaterPlane(
       "localInteractionField",
       "localInteractionBuffers",
       "localInteractionRadialImpactRoute",
+      "localInteractionDirectionalWakeRoute",
+      "bodySocketEmissionRoute",
       "spectralBandSwell",
       "spectralBandWind",
       "spectralBandChop",

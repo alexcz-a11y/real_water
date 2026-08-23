@@ -54,13 +54,13 @@ viewport after opaque geometry. Real Water never reads `scene.environment` or
 guesses sky or weather. The water material is an unlit public NodeMaterial whose
 color and MRT come from the same optical path.
 
-Each Prewarm Manifest is version 4 and binds an immutable drawing buffer. The
+Each Prewarm Manifest is version 5 and binds an immutable drawing buffer. The
 factory hashes that complete work plan synchronously. Memory Host tests may omit
 the buffer and receive 320x180; Three Host fails closed if the renderer buffer
 does not match. Changing the physical drawing buffer creates a new manifest and
 requires a full conceal, dispose, prewarm, and reveal.
 
-`minimal` and `minimal-high-detail` are immutable version-6 structural Quality
+`minimal` and `minimal-high-detail` are immutable version-7 structural Quality
 Profiles. Both pin the Native temporal policy and the implemented reflection
 layer: TRAA at render scale 1 with a drawing-buffer-exact resolution policy and
 TAAU, dynamic resolution, frame generation, and MSAA samples off, plus
@@ -75,17 +75,21 @@ before the runtime revision changes. Issue #22 and Native certification are not
 complete until the final slice audit.
 
 Both profiles also pin one 48-metre local interaction field with an 8-metre
-Hermite edge fade, one Interaction Anchor, 128 preallocated Disturbance slots,
-and current/previous snapshot banks. The Prewarm Manifest compiles and hidden-
-executes the analytic radial-impact route with scratch state, clears that state,
-and stabilizes the normal ready route before reveal. At runtime,
-`updateInteractionAnchor({ x, z })` moves only that current Host-frame
+Hermite edge fade, one Interaction Anchor, 128 shared preallocated Disturbance
+slots, current/previous snapshot banks, and a fixed 60 Hz Body coupling policy.
+The Prewarm Manifest compiles and hidden-executes radial-impact,
+directional-wake, and Body socket emission descriptors with scratch state,
+clears that state, and stabilizes the normal ready route before reveal. At
+runtime, `updateInteractionAnchor({ x, z })` moves only that current Host-frame
 world-space focus (the same coordinate frame used by Gameplay Queries);
-`submitDisturbances(...)` accepts caller-owned radial-impact typed arrays. When
-capacity is full, the lowest visual priority is dropped and identified by the
-receipt without resizing the prepared buffers. Radial-impact radii are bounded
-to 0.0001–48 metres and signed peak amplitudes to -4–4 metres so every accepted
-128-impact composition remains finite.
+`submitDisturbances(...)` accepts caller-owned radial-impact or directional-wake
+typed arrays. When capacity is full, the lowest visual priority is dropped and
+identified by the receipt without resizing the prepared buffers. Radial-impact
+radii are bounded to 0.0001–48 metres and signed peak amplitudes to -4–4 metres
+so every accepted 128-source composition remains finite. Registered Body sockets
+upsert their directional wake or propeller-wash source in place after each
+fixed-step query; they do not require a caller to submit a new Disturbance every
+tick.
 
 Ready leases expose one-shot runtime invalidation. A Host Integration calls
 `invalidateForLongSuspension()` when its own lifecycle classifies a suspension
@@ -147,19 +151,23 @@ composed without waiting for GPU work. Capacity and input failures are detected
 before output buffers are changed.
 
 `attachBody(...)` binds a Host-owned rigid body through the public Body Physics
-Adapter seam and an immutable closed sphere Interaction Shape. The ready lease
-prepares 32 Body slots; a thirty-third active attachment fails with the
+Adapter seam and an immutable sphere, box, capsule, convex-hull, or flat
+compound Interaction Shape. Optional copied-and-frozen Body-local sockets have
+stable bow, stern, propeller, wake, and Interaction Anchor roles. The ready
+lease prepares 32 Body slots; a thirty-third active attachment fails with the
 structured `BODY_CAPACITY_EXCEEDED` error. A production Adapter registers the
 opaque `beforeIntegrate()` route with its own 60 Hz physics loop. On each fixed
 tick, that route samples the synchronous Gameplay Query state, applies the
-resulting force and torque through the Adapter, and returns query tick, Artistic
-Control revision, and zero-or-one-tick snapshot age before the Host integrates
-its body. Core never steps or disposes the Host rigid body. The deterministic
-Memory Body Physics Adapter exercises the same route and retains previous and
-current poses for Host-owned presentation interpolation; reading an interpolated
-pose never advances physics. The non-QA Reference Experience uses that Adapter
-to float one visible sphere at 60 Hz while its Host Presentation controller may
-render at 30 FPS.
+resulting aggregate force and stabilizing torque through the Adapter, updates
+stable wake sources, and returns query tick, Artistic Control revision, and
+zero-or-one-tick snapshot age before the Host integrates its body. Core never
+steps or disposes the Host rigid body. The deterministic Memory Body Physics
+Adapter exercises the same route and retains previous and current poses for
+Host-owned presentation interpolation; reading an interpolated pose never
+advances physics. The non-QA Reference Experience instead supplies a Host-owned
+controllable proxy-vessel Adapter with a four-child compound shape, twin
+propellers, and authored sockets. Its physics runs at 60 Hz while the Host
+Presentation controller renders an interpolated pose at 30 FPS.
 
 Disposal releases the clipmap and other Real Water-owned resources without
 disposing Host-owned objects.

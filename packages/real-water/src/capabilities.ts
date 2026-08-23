@@ -120,7 +120,37 @@ export interface GameplayCapabilitiesInteractionField {
   readonly radiusMetres: 48;
   readonly edgeFadeMetres: 8;
   readonly maxSnapshotAgeTicks: 1;
-  readonly disturbanceKinds: readonly ["radial-impact"];
+  readonly disturbanceKinds: readonly ["radial-impact", "directional-wake"];
+}
+
+/**
+ * Bounded compound-shape and authored-socket policy behind `attachBody`.
+ *
+ * @public
+ */
+export interface GameplayCapabilitiesBodyInteraction {
+  readonly fixedTickHz: 60;
+  readonly maxShapeSamplesPerBody: 32;
+  readonly maxConvexHullVertices: 64;
+  readonly maxSocketsPerBody: 8;
+  readonly shapeKinds: readonly [
+    "sphere",
+    "box",
+    "capsule",
+    "convex-hull",
+    "compound",
+  ];
+  readonly socketKinds: readonly [
+    "bow",
+    "stern",
+    "propeller",
+    "wake",
+    "interaction-anchor",
+  ];
+  readonly generatedDisturbanceKinds: readonly [
+    "directional-wake",
+    "propeller-wash",
+  ];
 }
 
 /**
@@ -133,6 +163,7 @@ export interface GameplayCapabilities {
   readonly maxQueryPointsPerTick: 2_048;
   readonly maxActiveDisturbances: 128;
   readonly interactionField: GameplayCapabilitiesInteractionField;
+  readonly bodyInteraction: GameplayCapabilitiesBodyInteraction;
 }
 
 /**
@@ -159,13 +190,44 @@ export const MAX_ACTIVE_DISTURBANCES = 128 as const;
 export const INTERACTION_FIELD_RADIUS_METRES = 48 as const;
 export const INTERACTION_FIELD_EDGE_FADE_METRES = 8 as const;
 
-const SUPPORTED_DISTURBANCE_KINDS = Object.freeze(["radial-impact"] as const);
+const SUPPORTED_DISTURBANCE_KINDS = Object.freeze([
+  "radial-impact",
+  "directional-wake",
+] as const);
 const INTERACTION_FIELD_CAPABILITIES: GameplayCapabilitiesInteractionField =
   Object.freeze({
     radiusMetres: INTERACTION_FIELD_RADIUS_METRES,
     edgeFadeMetres: INTERACTION_FIELD_EDGE_FADE_METRES,
     maxSnapshotAgeTicks: 1 as const,
     disturbanceKinds: SUPPORTED_DISTURBANCE_KINDS,
+  });
+const SUPPORTED_INTERACTION_SHAPE_KINDS = Object.freeze([
+  "sphere",
+  "box",
+  "capsule",
+  "convex-hull",
+  "compound",
+] as const);
+const SUPPORTED_BODY_SOCKET_KINDS = Object.freeze([
+  "bow",
+  "stern",
+  "propeller",
+  "wake",
+  "interaction-anchor",
+] as const);
+const BODY_GENERATED_DISTURBANCE_KINDS = Object.freeze([
+  "directional-wake",
+  "propeller-wash",
+] as const);
+const BODY_INTERACTION_CAPABILITIES: GameplayCapabilitiesBodyInteraction =
+  Object.freeze({
+    fixedTickHz: 60,
+    maxShapeSamplesPerBody: MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN,
+    maxConvexHullVertices: MAX_CONVEX_HULL_VERTICES,
+    maxSocketsPerBody: MAX_BODY_INTERACTION_SOCKETS,
+    shapeKinds: SUPPORTED_INTERACTION_SHAPE_KINDS,
+    socketKinds: SUPPORTED_BODY_SOCKET_KINDS,
+    generatedDisturbanceKinds: BODY_GENERATED_DISTURBANCE_KINDS,
   });
 
 const NATIVE_TEMPORAL_CAPABILITIES: RenderingCapabilitiesTemporal =
@@ -207,6 +269,7 @@ export function createCoreWebGPUCapabilities(
       maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
       maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
       interactionField: INTERACTION_FIELD_CAPABILITIES,
+      bodyInteraction: BODY_INTERACTION_CAPABILITIES,
     }),
     rendering: Object.freeze({
       backend: "core-webgpu" as const,
@@ -275,3 +338,8 @@ export interface RealWaterCapabilities {
   readonly rendering: RenderingCapabilities;
   readonly gameplay: GameplayCapabilities;
 }
+import {
+  MAX_BODY_INTERACTION_SOCKETS,
+  MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN,
+  MAX_CONVEX_HULL_VERTICES,
+} from "./body-physics.js";
