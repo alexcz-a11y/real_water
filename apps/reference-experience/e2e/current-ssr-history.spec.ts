@@ -31,7 +31,7 @@ const SSR_CONTROLS = {
   underwaterExposure: 1,
 };
 
-function rawHitPixels(hit: Float32Array): number[] {
+function rawHitPixels(hit: ArrayLike<number>): number[] {
   const pixels: number[] = [];
   for (let pixel = 0; pixel < hit.length; pixel += 1) {
     if ((hit[pixel] ?? 0) > HALF_FLOAT_EPSILON) {
@@ -42,10 +42,10 @@ function rawHitPixels(hit: Float32Array): number[] {
 }
 
 function assertResetHistoryReseed(
-  hit: Float32Array,
-  input: Float32Array,
-  history: Float32Array,
-  weight: Float32Array,
+  hit: ArrayLike<number>,
+  input: ArrayLike<number>,
+  history: ArrayLike<number>,
+  weight: ArrayLike<number>,
 ): void {
   const pixels = rawHitPixels(hit);
   expect(pixels.length).toBeGreaterThan(0);
@@ -97,8 +97,8 @@ function isBlackRgb(color: readonly number[], pixel: number): boolean {
 }
 
 function assertStableHitWeightBelowOne(
-  hit: Float32Array,
-  weight: Float32Array,
+  hit: ArrayLike<number>,
+  weight: ArrayLike<number>,
 ): void {
   const pixels = rawHitPixels(hit);
   expect(
@@ -243,9 +243,9 @@ test("accumulates inverse frame weight on a static hit and stays bounded", async
   const firstInput = decodeFloat32(first.input);
   const lastInput = decodeFloat32(last.input);
   const validHit = (
-    hit: Float32Array,
-    confidence: Float32Array,
-    input: Float32Array,
+    hit: ArrayLike<number>,
+    confidence: ArrayLike<number>,
+    input: ArrayLike<number>,
     pixel: number,
   ): boolean => {
     const inputRed = input[pixel * 3] ?? Number.NaN;

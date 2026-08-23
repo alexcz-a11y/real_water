@@ -1014,7 +1014,9 @@ test("gates TRAA high-frequency glints on a moving horizon strafe", async ({
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
-      const runRoute = async (lighting: typeof onLighting) => {
+      const runRoute = async (
+        lighting: typeof onLighting | typeof offLighting,
+      ) => {
         await harness.reset({ seed });
         const appliedLighting =
           await harness.updateEnvironmentLighting(lighting);

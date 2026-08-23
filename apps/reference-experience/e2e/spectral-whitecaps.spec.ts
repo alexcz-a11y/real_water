@@ -403,8 +403,8 @@ function meanValue(
 }
 
 function compareQuarterTurn(
-  first: Float32Array,
-  second: Float32Array,
+  first: ArrayLike<number>,
+  second: ArrayLike<number>,
   width: number,
   height: number,
   radius: number,

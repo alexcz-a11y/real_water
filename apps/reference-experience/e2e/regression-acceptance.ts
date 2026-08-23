@@ -178,7 +178,10 @@ export async function attachRegressionAcceptance(
       width: details.qaPrewarm.width,
       height: details.qaPrewarm.height,
     },
-    captures: details.captures,
+    // Spread rather than assign: `exactOptionalPropertyTypes` distinguishes an
+    // absent key from an explicit `undefined`, and the assertion reads
+    // `input.captures ?? []`, so both mean the same thing to it.
+    ...(details.captures === undefined ? {} : { captures: details.captures }),
   });
   const temporalStress =
     details.temporalStress === undefined
@@ -287,7 +290,29 @@ export async function attachRegressionAcceptance(
 
 async function readNavigatorGpuAdapterEvidence(page: Page): Promise<unknown> {
   return page.evaluate(async () => {
-    const gpu = navigator.gpu;
+    // Narrowed at the use site, the same way `core-webgpu-support.ts` does it.
+    // The repository installs no WebGPU type package, and hand-writing a global
+    // `Navigator` augmentation here would be a second, drifting copy of a
+    // browser contract nothing else in the tree declares.
+    const gpu = (
+      navigator as Navigator & {
+        gpu?: {
+          requestAdapter(): Promise<{
+            info?: {
+              vendor: string;
+              architecture: string;
+              device: string;
+              description: string;
+            };
+            limits: {
+              maxTextureDimension2D: number;
+              maxColorAttachmentBytesPerSample: number;
+              maxStorageBufferBindingSize: number;
+            };
+          } | null>;
+        };
+      }
+    ).gpu;
     if (gpu === undefined) {
       return null;
     }
