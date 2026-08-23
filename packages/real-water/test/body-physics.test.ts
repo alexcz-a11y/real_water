@@ -339,6 +339,7 @@ describe("Body Physics Adapter seam", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     let bodyState: BodyPhysicsState = Object.freeze({
