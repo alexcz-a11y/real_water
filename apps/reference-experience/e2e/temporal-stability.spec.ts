@@ -266,7 +266,7 @@ test("settles presented water motion, then records deterministic nonzero motion 
   expect(result.first.moved.tick).toBe(126);
   expect(result.first.settledCaptures.motion).toMatchObject({
     name: "motion-vector",
-    version: 10,
+    version: QA_CAPTURE_VERSION,
     format: "rg32float-ndc",
     origin: "top-left",
     width: VIEWPORT.width,
@@ -647,7 +647,7 @@ test("resets TRAA history on the first present and matches current-color within 
   expect(result.captureNames[0]).toBe("final-color");
   expect(result.captureNames[1]).toBe("current-color");
   expect(result.currentShape).toEqual({
-    version: 10,
+    version: QA_CAPTURE_VERSION,
     format: "rgba8unorm-srgb",
     elementType: "uint8",
     components: 4,

@@ -7,7 +7,11 @@ import {
   QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS,
   calculateColorAttachmentBytesPerSample,
 } from "../src/qa-frame-contract.js";
-import type { QaCameraV1, QaHarnessV10 } from "../src/qa-harness.js";
+import {
+  QA_CAPTURE_VERSION,
+  type QaCameraV1,
+  type QaHarnessV10,
+} from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
 
@@ -90,6 +94,10 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
   ).toBe(CORE_WEBGPU_MAX_COLOR_ATTACHMENT_BYTES_PER_SAMPLE);
   expect(contract).toEqual({
     schema: "real-water/qa-harness",
+    // The one place the QA Harness version number is pinned to a reviewed
+    // value. Everywhere else compares against the exported constant, so this
+    // assertion is what makes a bump deliberate instead of self-confirming.
+    // eslint-disable-next-line no-restricted-syntax
     version: 10,
     fixedTickHz: 60,
     captureNames: [
@@ -122,6 +130,9 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "ssr-history-input-color",
     ],
     prewarmSchema: "real-water/qa-frame-prewarm",
+    // Pinned for the same reason as `version` above: this contract test is
+    // where a QA frame prewarm bump has to be stated, not inferred.
+    // eslint-disable-next-line no-restricted-syntax
     prewarmVersion: 8,
     prewarmCoreDeclarations: {
       "final-color": "water-final-color-target",
@@ -576,7 +587,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "ssr-history-input-color",
   ]);
   expect(result.first.captures.map(({ version }) => version)).toEqual(
-    new Array<number>(27).fill(10),
+    new Array<number>(27).fill(QA_CAPTURE_VERSION),
   );
   expect(result.first.captures.map(({ format }) => format)).toEqual([
     "rgba8unorm-srgb",
@@ -665,9 +676,11 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       }),
     ),
   );
-  expect(result.first.captures.every((capture) => capture.version === 10)).toBe(
-    true,
-  );
+  expect(
+    result.first.captures.every(
+      (capture) => capture.version === QA_CAPTURE_VERSION,
+    ),
+  ).toBe(true);
   expect(result.changedTick.captures[0]?.data).not.toBe(
     result.first.captures[0]?.data,
   );
