@@ -171,7 +171,17 @@ export interface ReferenceProxyVessel {
   dispose(): void;
 }
 
-export function createReferenceProxyVessel(scene: Scene): ReferenceProxyVessel {
+export interface ReferenceProxyVesselOptions {
+  readonly attachmentSockets?: NonNullable<BodyAttachmentOptions["sockets"]>;
+}
+
+export function createReferenceProxyVessel(
+  scene: Scene,
+  options: ReferenceProxyVesselOptions = {},
+): ReferenceProxyVessel {
+  const attachmentSockets = Object.freeze([
+    ...(options.attachmentSockets ?? REFERENCE_PROXY_VESSEL_SOCKETS),
+  ]);
   const root = new Group();
   root.name = REFERENCE_PROXY_VESSEL_NAME;
 
@@ -300,7 +310,7 @@ export function createReferenceProxyVessel(scene: Scene): ReferenceProxyVessel {
       attachment = runtime.attachBody({
         physics,
         shape: REFERENCE_PROXY_VESSEL_INTERACTION_SHAPE,
-        sockets: REFERENCE_PROXY_VESSEL_SOCKETS,
+        sockets: attachmentSockets,
       });
       return attachment;
     },

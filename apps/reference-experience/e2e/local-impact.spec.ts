@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import type { QaHarnessV9 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32 } from "./qa-capture-bytes.js";
@@ -296,9 +296,14 @@ test("drives prewarmed proxy-vessel wakes without per-tick Disturbance submissio
     "Core WebGPU is unavailable in this browser profile.",
   );
 
-  await page.goto("/?qa=1&host=three&proxy=1");
+  expectAutomaticProxyWake(await runAutomaticProxyWake(page, "1"));
+  expectAutomaticProxyWake(await runAutomaticProxyWake(page, "propeller"));
+});
+
+async function runAutomaticProxyWake(page: Page, proxyMode: "1" | "propeller") {
+  await page.goto(`/?qa=1&host=three&proxy=${proxyMode}`);
   await expect(page.getByTestId("reference-stage")).toBeVisible();
-  const result = await page.evaluate(
+  return page.evaluate(
     async ({ cameraY }) => {
       const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
       if (harness === undefined) {
@@ -385,7 +390,11 @@ test("drives prewarmed proxy-vessel wakes without per-tick Disturbance submissio
     },
     { cameraY: CAMERA_Y },
   );
+}
 
+function expectAutomaticProxyWake(
+  result: Awaited<ReturnType<typeof runAutomaticProxyWake>>,
+): void {
   const baselineHeight = centerRenderedHeight(result.baseline.depth.data);
   const affectedHeight = centerRenderedHeight(result.affected.depth.data);
   const queryDelta =
@@ -406,7 +415,7 @@ test("drives prewarmed proxy-vessel wakes without per-tick Disturbance submissio
   void _affectedPresentationId;
   void _replayPresentationId;
   expect(replayQuery).toEqual(affectedQuery);
-});
+}
 
 function centerRenderedHeight(encodedDepth: string): number {
   const values = decodeFloat32(encodedDepth);

@@ -325,6 +325,37 @@ describe("Reference proxy vessel", () => {
     vessel.dispose();
   });
 
+  it("can isolate the twin-propeller socket route without changing authored semantics", async () => {
+    const attachmentSockets = REFERENCE_PROXY_VESSEL_SOCKETS.filter(
+      (socket) =>
+        socket.kind === "propeller" || socket.kind === "interaction-anchor",
+    );
+    const vessel = createReferenceProxyVessel(new Scene(), {
+      attachmentSockets,
+    });
+    const simulation = createReferenceHostSimulationController({
+      integrateFixedStep: vessel.integrateFixedStep,
+    });
+    const lease = await createReadyLease(simulation);
+    const attachment = vessel.attach(lease);
+    vessel.setControls({ throttle: 1, steering: 0 });
+    simulation.start(0);
+    simulation.beforePresent(34);
+
+    expect(attachment.sockets.map(({ id }) => id)).toEqual([
+      "propeller-port",
+      "propeller-starboard",
+      "interaction-anchor",
+    ]);
+    expect(attachment.inspect().lastWakeReceipt).toMatchObject({
+      emittedSocketIds: ["propeller-port", "propeller-starboard"],
+      droppedSocketIds: [],
+    });
+
+    await lease.dispose();
+    vessel.dispose();
+  });
+
   it("replays an identical control sequence deterministically", async () => {
     const first = await runDeterministicVesselRoute();
     const second = await runDeterministicVesselRoute();

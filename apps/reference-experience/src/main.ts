@@ -37,6 +37,7 @@ import {
 } from "./reference-presentation-controller.js";
 import { createReferenceHostSimulationController } from "./reference-simulation-controller.js";
 import {
+  REFERENCE_PROXY_VESSEL_SOCKETS,
   createReferenceProxyVessel,
   type ReferenceProxyVessel,
 } from "./reference-proxy-vessel.js";
@@ -314,9 +315,22 @@ function createThreeReferenceHostAttempt(
   const scene = new Scene();
   scene.background = new Color(0x031019);
   const seabed = addReferenceSeabed(scene, qaModule !== null);
+  const proxyMode = parameters.get("proxy");
+  const qaProxyRequested = proxyMode === "1" || proxyMode === "propeller";
   const proxyVessel =
-    qaModule === null || parameters.get("proxy") === "1"
-      ? createReferenceProxyVessel(scene)
+    qaModule === null || qaProxyRequested
+      ? createReferenceProxyVessel(
+          scene,
+          qaModule !== null && proxyMode === "propeller"
+            ? {
+                attachmentSockets: REFERENCE_PROXY_VESSEL_SOCKETS.filter(
+                  (socket) =>
+                    socket.kind === "propeller" ||
+                    socket.kind === "interaction-anchor",
+                ),
+              }
+            : {},
+        )
       : undefined;
   const disposeVesselControls =
     proxyVessel === undefined
