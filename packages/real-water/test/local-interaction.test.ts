@@ -574,8 +574,8 @@ describe("ready local interaction runtime", () => {
   it("declares the bounded local interaction route before readiness", () => {
     const manifest = createMinimalWaterPrewarmManifest();
 
-    expect(manifest.version).toBe(6);
-    expect(manifest.qualityProfile.version).toBe(9);
+    expect(manifest.version).toBe(7);
+    expect(manifest.qualityProfile.version).toBe(10);
     expect(manifest.qualityProfile.interaction).toEqual({
       anchorCount: 1,
       field: {

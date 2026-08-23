@@ -1,7 +1,7 @@
 # real-water
 
 This alpha package exposes versioned minimal-water Quality Profiles, their
-canonical seventy-nine-unit Prewarm Manifests, versioned Calm, Swell, and Storm
+canonical eighty-six-unit Prewarm Manifests, versioned Calm, Swell, and Storm
 Water Presets, Environment Presets, deterministic Showcase Presets, and a pure
 JSON import/export and migration codec. It also exposes the Startup and ready
 Runtime Interfaces, normalized Core WebGPU and Gameplay Query capabilities,
@@ -59,7 +59,7 @@ viewport after opaque geometry. Real Water never reads `scene.environment` or
 guesses sky or weather. The water material is an unlit public NodeMaterial whose
 color and MRT come from the same optical path.
 
-Each Prewarm Manifest is version 6 and binds an immutable drawing buffer. The
+Each Prewarm Manifest is version 7 and binds an immutable drawing buffer. The
 factory hashes that complete work plan synchronously. Memory Host tests may omit
 the buffer and receive 320x180; Three Host fails closed if the renderer buffer
 does not match. Changing the physical drawing buffer creates a new manifest and
