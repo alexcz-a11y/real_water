@@ -1164,12 +1164,15 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
         ...profile.reflection.ssr,
         history: Object.freeze({
           ...profile.reflection.ssr.history,
+          // Copied, never re-listed. Re-typing the domains here would make this
+          // function a second declaration of the policy that has to be kept in
+          // step with the first by hand, and a frozen profile that quietly
+          // disagrees with its own type is not something any assertion in this
+          // package can see: normalizeQualityProfile compares against another
+          // profile frozen by this same function, and profileHash is a literal.
           resetDomains: Object.freeze([
-            "simulation-reset",
-            "camera-cut",
-            "origin-shift",
-            "sea-state-cut",
-          ] as const),
+            ...profile.reflection.ssr.history.resetDomains,
+          ]) as QualityProfileReflectionSsrHistory["resetDomains"],
         }),
       }),
     }),

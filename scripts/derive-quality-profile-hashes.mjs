@@ -53,12 +53,47 @@ const COMMITTED_LEGACY_HASHES = {
   },
 };
 
+// The reset domains every shape committed so far. Held here as its own literal
+// rather than read off the current profile: reconstructing a historical shape
+// from the current one means the next policy change silently rewrites history
+// and this script starts reporting mismatches against digests that are still
+// perfectly correct. quality-profile.ts declares the same list separately, for
+// the same reason.
+const LEGACY_SSR_HISTORY_RESET_DOMAINS = [
+  "simulation-reset",
+  "camera-cut",
+  "origin-shift",
+  "sea-state-cut",
+];
+
+function withLegacyResetDomains(profile) {
+  return {
+    ...profile,
+    reflection: {
+      ...profile.reflection,
+      ssr: {
+        ...profile.reflection.ssr,
+        history: {
+          ...profile.reflection.ssr.history,
+          resetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+        },
+      },
+    },
+  };
+}
+
 function legacyV6Interaction(profile) {
-  return { ...omitKeys(profile, ["whitecaps"]), version: 6 };
+  return {
+    ...withLegacyResetDomains(omitKeys(profile, ["whitecaps"])),
+    version: 6,
+  };
 }
 
 function legacyV6Whitecaps(profile) {
-  return { ...omitKeys(profile, ["interaction"]), version: 6 };
+  return {
+    ...withLegacyResetDomains(omitKeys(profile, ["interaction"])),
+    version: 6,
+  };
 }
 
 let failures = 0;
