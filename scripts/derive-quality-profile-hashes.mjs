@@ -1,5 +1,6 @@
-// Derives every Quality Profile hash this repository commits, and checks each
-// one against the value the source actually carries.
+// Derives every Quality Profile hash and every Prewarm Manifest hash this
+// repository commits, and checks each one against the value the source
+// actually carries.
 //
 // The Quality Profile hash is otherwise an open loop: it is hardcoded in
 // quality-profile.ts and hardcoded again in the tests, so a miscomputed value
@@ -12,11 +13,17 @@
 // The recipe is the SHA-256 digest of the profile's canonical JSON with
 // profileHash removed and the remaining public field order preserved:
 // schema, version, id, surface, interaction, temporal, reflection, whitecaps.
+//
+// The Prewarm Manifest hash is checked the same way, at the bottom of this
+// file, against anchors committed here. Run this whenever
+// PREWARM_MANIFEST_VERSION, a declaration, or a fingerprint changes.
 
 import { createHash } from "node:crypto";
 
 const { createMinimalWaterQualityProfile } =
   await import("../packages/real-water/dist/quality-profile.js");
+const { createMinimalWaterPrewarmManifest } =
+  await import("../packages/real-water/dist/manifest.js");
 
 const PROFILE_IDS = ["minimal", "minimal-high-detail"];
 
@@ -166,10 +173,63 @@ for (const id of PROFILE_IDS) {
   );
 }
 
+// The Prewarm Manifest hash had the same open loop the Quality Profile hash
+// had, one level up: the manifest computes it, and every test that mentions it
+// compares `manifest.manifestHash` to itself. Nothing in the repository stated
+// what the digest is supposed to be, so the whole manifest - all 77
+// declarations and every fingerprint inside them - agreed with itself no matter
+// what it said.
+//
+// These two values are the anchor. They were generated once, read off a
+// reviewed manifest, and pasted in. The recipe below is restated here rather
+// than imported so a change to the manifest's own hashing would show up as a
+// mismatch instead of following along silently: SHA-256 of the manifest's
+// public fields in declared order, with manifestHash itself excluded.
+const COMMITTED_MANIFEST_HASHES = {
+  "minimal":
+    "sha256:1c4d1a1b4ae1a50b0c466519e16843d6753b8f4b176eb8826ea2861f32e6e3e6",
+  "minimal-high-detail":
+    "sha256:7b37dba673d927adb9a6dc6d20ac1bd9835bf875aa3afdc6afb6ee2daf3da162",
+};
+
+function canonicalManifestJson(manifest) {
+  return JSON.stringify({
+    schema: manifest.schema,
+    version: manifest.version,
+    id: manifest.id,
+    qualityProfile: manifest.qualityProfile,
+    drawingBuffer: manifest.drawingBuffer,
+    environmentReflection: manifest.environmentReflection,
+    effectVariants: manifest.effectVariants,
+    declarations: manifest.declarations,
+  });
+}
+
+for (const id of PROFILE_IDS) {
+  const manifest = createMinimalWaterPrewarmManifest(
+    createMinimalWaterQualityProfile(id),
+  );
+  const expected = COMMITTED_MANIFEST_HASHES[id];
+  const derived = digest(canonicalManifestJson(manifest));
+  const matchesCommitted = derived === expected;
+  const matchesManifest = derived === manifest.manifestHash;
+  if (!matchesCommitted || !matchesManifest) {
+    failures += 1;
+  }
+  const verdict = !matchesCommitted
+    ? `MISMATCH, the committed anchor is ${expected}`
+    : !matchesManifest
+      ? `MISMATCH, the manifest carries ${manifest.manifestHash}`
+      : "matches the committed anchor and the manifest";
+  console.log(`manifest         ${id.padEnd(20)} ${derived}  ${verdict}`);
+}
+
 if (failures > 0) {
   throw new Error(
-    `${failures} Quality Profile hash${failures === 1 ? "" : "es"} do not match the committed source.`,
+    `${failures} committed hash${failures === 1 ? "" : "es"} do not match the source.`,
   );
 }
 
-console.log("Every committed Quality Profile hash is reproducible.");
+console.log(
+  "Every committed Quality Profile and Prewarm Manifest hash is reproducible.",
+);
