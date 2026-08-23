@@ -396,8 +396,8 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   expect(normalValues[normalIndex + 2]).toBeCloseTo(result.query.normal[1], 1);
   expect(result.after).toEqual(result.before);
   expect(result.presentation.prewarm.progress).toMatchObject({
-    completedWork: 15,
-    totalWork: 15,
+    completedWork: 16,
+    totalWork: 16,
   });
   const encodedRg8ByteLength = result.depth.width * result.depth.height * 4;
   for (const capture of [
@@ -558,8 +558,8 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       width: 320,
       height: 180,
       progress: {
-        completedWork: 15,
-        totalWork: 15,
+        completedWork: 16,
+        totalWork: 16,
       },
     },
   });

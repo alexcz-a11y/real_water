@@ -33,6 +33,10 @@ const WATERLINE_CONTROLS = Object.freeze({
   depthColoring: 1,
   inWaterGlow: 1,
   crestGlow: 1,
+  // Zero, like every other spec that is not about foam: #31 wrote this literal
+  // before the whitecap controls existed, so zero is what it actually measured.
+  whitecapAmount: 0,
+  foamPersistence: 0,
 }) satisfies ArtisticControls;
 
 async function openQaStage(page: Page): Promise<void> {
