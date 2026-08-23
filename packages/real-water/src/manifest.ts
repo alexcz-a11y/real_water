@@ -1022,6 +1022,13 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     label:
       "Thirty-four named diagnostics output routes including canonical anchor-local unified foam source identity",
     // Identity covers the complete thirty-four-route diagnostics registry.
+    // Minted for the merged label by the #27 merge, because neither parent's
+    // value survives a label neither parent wrote. Reproduce this one with
+    // sha256("Thirty-four named diagnostics output routes including canonical
+    // anchor-local unified foam source identity") - the label above, exactly,
+    // as a single line with no trailing newline. This is a note about THIS
+    // value only: most fingerprints in this file are not sha256 of anything
+    // recoverable, and none of them should be recomputed to match it.
     fingerprint:
       "sha256:6a4a626dc1b6a2f7fa185eedfdbc53f031399f390168f589ed8cf0ab87ddd03b",
   },
@@ -1038,6 +1045,12 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     kind: "conditional-route",
     label:
       "GPU completion probe of all thirty-four named output routes including underwater volume and canonical anchor-local unified foam source identity",
+    // Minted for the merged label by the #27 merge, on the same footing as the
+    // named-output-routes fingerprint above. Reproduce this one with
+    // sha256("GPU completion probe of all thirty-four named output routes
+    // including underwater volume and canonical anchor-local unified foam
+    // source identity") - the label above, exactly, as a single line with no
+    // trailing newline. Again: a note about THIS value, not a convention.
     fingerprint:
       "sha256:11ae558fe8ebdeba4eb10a198b002aab59c0c7b4f7b510f97a69cba647f6c4fd",
   },
