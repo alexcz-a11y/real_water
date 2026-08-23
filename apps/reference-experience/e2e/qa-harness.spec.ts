@@ -98,7 +98,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
     // value. Everywhere else compares against the exported constant, so this
     // assertion is what makes a bump deliberate instead of self-confirming.
     // eslint-disable-next-line no-restricted-syntax
-    version: 12,
+    version: 13,
     fixedTickHz: 60,
     captureNames: [
       "final-color",
@@ -140,7 +140,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
     // Pinned for the same reason as `version` above: this contract test is
     // where a QA frame prewarm bump has to be stated, not inferred.
     // eslint-disable-next-line no-restricted-syntax
-    prewarmVersion: 11,
+    prewarmVersion: 12,
     prewarmCoreDeclarations: {
       "final-color": "water-final-color-target",
       "current-color": "water-current-color-target",
@@ -436,8 +436,8 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   expect(normalValues[normalIndex + 2]).toBeCloseTo(result.query.normal[1], 1);
   expect(result.after).toEqual(result.before);
   expect(result.presentation.prewarm.progress).toMatchObject({
-    completedWork: 17,
-    totalWork: 17,
+    completedWork: 18,
+    totalWork: 18,
   });
   const encodedRg8ByteLength = result.depth.width * result.depth.height * 4;
   for (const capture of [
@@ -603,8 +603,8 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       width: 320,
       height: 180,
       progress: {
-        completedWork: 17,
-        totalWork: 17,
+        completedWork: 18,
+        totalWork: 18,
       },
     },
   });
