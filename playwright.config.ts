@@ -28,7 +28,15 @@ export default defineConfig({
     timeout: 5_000,
   },
   forbidOnly: Boolean(process.env.CI),
-  fullyParallel: true,
+  // Every spec in this suite drives the one WebGPU device this machine has, so
+  // parallel workers do not run in parallel -- they queue inside the driver and
+  // perturb each other's timing and GPU state. That made acceptance results
+  // depend on scheduling: two full runs of the same tree failed on different,
+  // non-overlapping sets. A suite that reports a different answer each time is
+  // worse than a slow one, so the device constraint is written down here rather
+  // than rediscovered per ticket.
+  workers: 1,
+  fullyParallel: false,
   snapshotPathTemplate:
     "{testDir}/{testFileName}-snapshots/{arg}-{projectName}{ext}",
   projects: [
