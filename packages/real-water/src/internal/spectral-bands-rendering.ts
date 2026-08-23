@@ -69,6 +69,7 @@ import {
   RADIAL_IMPACT_LIFETIME_SECONDS,
   type LocalInteractionRenderSnapshot,
 } from "./local-interaction.js";
+import type { SpectralWhitecapField } from "./spectral-whitecap-field.js";
 
 const INITIAL_ARTISTIC_CONTROLS: ArtisticControls =
   createWaterPreset("swell").artisticControls;
@@ -77,6 +78,7 @@ export function createSpectralBandRendering(
   simulation: HostSimulationAdapter,
   presentation: HostPresentationAdapter,
   innerCellMetres: number,
+  whitecaps: SpectralWhitecapField,
 ) {
   const originX = uniform(0);
   const originZ = uniform(0);
@@ -614,6 +616,10 @@ export function createSpectralBandRendering(
     ),
   );
   const detailStrengthNode = mix(nearWhite, farWhite, fragmentSlopeFade);
+  const whitecapStagesNode = whitecaps.sampleStages(
+    fragmentSample.hostX,
+    fragmentSample.hostZ,
+  );
   const writeOriginPhases = (
     originXValue: number,
     originZValue: number,
@@ -843,6 +849,10 @@ export function createSpectralBandRendering(
       desiredControls = snapshot.artisticControls;
       desiredSeaStateCutRevision = snapshot.seaStateCutRevision;
       desiredLocalInteraction = interaction;
+      whitecaps.runtimeStateSink.synchronize(snapshot, interaction);
+    },
+    observe(snapshot: OpenWaterRuntimeSnapshot): void {
+      whitecaps.runtimeStateSink.observe?.(snapshot);
     },
   });
 
@@ -859,6 +869,8 @@ export function createSpectralBandRendering(
     slopeStrengthNode: length(vec2(fragmentSlopeX, fragmentSlopeZ)),
     roughnessNode,
     detailStrengthNode,
+    whitecapStagesNode,
+    whitecapDensityNode: whitecapStagesNode.a,
     sink,
     stagePrewarmRadialImpact(): void {
       desiredLocalInteraction = Object.freeze({

@@ -71,10 +71,12 @@ Issue #18 extended the coherent spectral runtime and deterministic QA
 foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly sixty work
+- the canonical minimal-water Prewarm Manifest declares exactly sixty-eight work
   units: a texture, Host equirect environment radiance, viewport scene color,
   viewport scene depth, 6-attachment MRT, camera-relative clipmap, four spectral
-  bands, TSL NodeMaterial, optical route, planar reflection target/route,
+  bands, two fixed RGBA16F whitecap fields, reset/generate/history/advect/
+  diffuse/decay routes, a packed output-resolution whitecap stage target and
+  probe, TSL NodeMaterial, optical route, planar reflection target/route,
   environment fallback, planar probe, current-frame SSR raw/blur/composite
   targets and routes plus probe, dedicated TemporalReproject history and resolve
   targets, beauty input target/route, resolved diagnostics copy target/route,
@@ -85,7 +87,7 @@ foundation:
   A, optical factors, optical diagnostics A/B, Core final-color and
   current-color targets, stock TRAA color+depth history, resolve/jitter route,
   shared no-allocation TRAA+SSR reset route, current-color conversion,
-  twenty-three named diagnostics output routes, eight hidden temporal
+  twenty-seven named diagnostics output routes, eight hidden temporal
   stabilization frames, named-output completion probes, and main-camera guard
   frame, plus the local interaction field, its fixed current/previous uniform
   buffers, and the hidden-executed radial-impact route. Version 4 binds the

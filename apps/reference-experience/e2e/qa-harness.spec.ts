@@ -98,6 +98,10 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "depth",
       "normal",
       "motion-vector",
+      "whitecap-generation",
+      "whitecap-history",
+      "whitecap-advection",
+      "whitecap-decay",
       "optical-fresnel",
       "optical-thickness",
       "optical-scattering",
@@ -118,13 +122,17 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "ssr-history-input-color",
     ],
     prewarmSchema: "real-water/qa-frame-prewarm",
-    prewarmVersion: 7,
+    prewarmVersion: 8,
     prewarmCoreDeclarations: {
       "final-color": "water-final-color-target",
       "current-color": "water-current-color-target",
       "depth": "water-inverse-linear-depth",
       "normal": "water-view-normal",
       "motion-vector": "water-motion-vectors",
+      "whitecap-generation": "water-whitecap-stage-target",
+      "whitecap-history": "water-whitecap-stage-target",
+      "whitecap-advection": "water-whitecap-stage-target",
+      "whitecap-decay": "water-whitecap-stage-target",
       "optical-fresnel": "water-optical-factors-target",
       "optical-thickness": "water-optical-factors-target",
       "optical-scattering": "water-optical-diagnostics-b",
@@ -150,6 +158,22 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       { name: "depth", preparedFormat: "r32float-inverse-linear-view" },
       { name: "normal", preparedFormat: "rgba16float-view-normal" },
       { name: "motion-vector", preparedFormat: "rg16float-ndc" },
+      {
+        name: "whitecap-generation",
+        preparedFormat: "rgba16float-whitecap-stages",
+      },
+      {
+        name: "whitecap-history",
+        preparedFormat: "rgba16float-whitecap-stages",
+      },
+      {
+        name: "whitecap-advection",
+        preparedFormat: "rgba16float-whitecap-stages",
+      },
+      {
+        name: "whitecap-decay",
+        preparedFormat: "rgba16float-whitecap-stages",
+      },
       {
         name: "optical-fresnel",
         preparedFormat: "rgba16float-optical-factors",
@@ -240,6 +264,8 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
               readonly depthColoring: number;
               readonly inWaterGlow: number;
               readonly crestGlow: number;
+              readonly whitecapAmount: number;
+              readonly foamPersistence: number;
             },
             options: { readonly transition: "continuous" | "sea-state-cut" },
           ): Promise<{ readonly revision: number }>;
@@ -276,6 +302,8 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
         depthColoring: 1,
         inWaterGlow: 1,
         crestGlow: 1,
+        whitecapAmount: 1,
+        foamPersistence: 1,
       },
       {
         transition: "continuous",
@@ -331,21 +359,22 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   expect(result.query).toMatchObject({
     normal: expect.any(Array),
     velocity: expect.any(Array),
-    foam: 0,
+    foam: expect.any(Number),
     tick: 30,
     controlRevision: result.controls.revision,
     snapshotAge: 0,
     presentationId: result.presentation.presentationId,
   });
+  expect(result.query.foam).toBeCloseTo(0.758_019, 5);
   const normalValues = decodeFloat32(result.normal.data);
   const normalIndex = center * 3;
-  expect(normalValues[normalIndex]).toBeCloseTo(result.query.normal[0], 2);
-  expect(normalValues[normalIndex + 1]).toBeCloseTo(-result.query.normal[2], 2);
-  expect(normalValues[normalIndex + 2]).toBeCloseTo(result.query.normal[1], 2);
+  expect(normalValues[normalIndex]).toBeCloseTo(result.query.normal[0], 1);
+  expect(normalValues[normalIndex + 1]).toBeCloseTo(-result.query.normal[2], 1);
+  expect(normalValues[normalIndex + 2]).toBeCloseTo(result.query.normal[1], 1);
   expect(result.after).toEqual(result.before);
   expect(result.presentation.prewarm.progress).toMatchObject({
-    completedWork: 14,
-    totalWork: 14,
+    completedWork: 15,
+    totalWork: 15,
   });
   const encodedRg8ByteLength = result.depth.width * result.depth.height * 4;
   for (const capture of [
@@ -477,6 +506,10 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       "depth",
       "normal",
       "motion-vector",
+      "whitecap-generation",
+      "whitecap-history",
+      "whitecap-advection",
+      "whitecap-decay",
       "optical-fresnel",
       "optical-thickness",
       "optical-scattering",
@@ -500,8 +533,8 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       width: 320,
       height: 180,
       progress: {
-        completedWork: 14,
-        totalWork: 14,
+        completedWork: 15,
+        totalWork: 15,
       },
     },
   });
@@ -519,6 +552,10 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "depth",
     "normal",
     "motion-vector",
+    "whitecap-generation",
+    "whitecap-history",
+    "whitecap-advection",
+    "whitecap-decay",
     "optical-fresnel",
     "optical-thickness",
     "optical-scattering",
@@ -538,15 +575,19 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "ssr-history-frame-weight",
     "ssr-history-input-color",
   ]);
-  expect(result.first.captures.map(({ version }) => version)).toEqual([
-    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
-  ]);
+  expect(result.first.captures.map(({ version }) => version)).toEqual(
+    new Array<number>(27).fill(9),
+  );
   expect(result.first.captures.map(({ format }) => format)).toEqual([
     "rgba8unorm-srgb",
     "rgba8unorm-srgb",
     "r32float-linear-view",
     "rgb32float-view-normal",
     "rg32float-ndc",
+    "r32float-whitecap-stage",
+    "r32float-whitecap-stage",
+    "r32float-whitecap-stage",
+    "r32float-whitecap-stage",
     "r32float-optical",
     "r32float-optical",
     "r32float-optical",

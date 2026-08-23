@@ -33,7 +33,11 @@ const FAR_WATER_CAMERA = {
   near: 1,
   far: 2000,
 } satisfies QaCameraV1;
-const FAR_WATER_CONTROLS = createWaterPreset("storm").artisticControls;
+const FAR_WATER_CONTROLS = {
+  ...createWaterPreset("storm").artisticControls,
+  whitecapAmount: 0,
+  foamPersistence: 0,
+} satisfies ArtisticControls;
 const OFFSCREEN_CAMERA = {
   ...HIT_CAMERA,
   position: [40, 12, 40] as const,

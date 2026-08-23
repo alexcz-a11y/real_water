@@ -18,6 +18,7 @@ import {
   renderGroup,
   saturate,
   screenUV,
+  sin,
   smoothstep,
   step,
   texture,
@@ -76,6 +77,7 @@ export function createWaterOpticsRendering(
   const depthColoring = uniform(INITIAL_ARTISTIC_CONTROLS.depthColoring);
   const inWaterGlow = uniform(INITIAL_ARTISTIC_CONTROLS.inWaterGlow);
   const crestGlow = uniform(INITIAL_ARTISTIC_CONTROLS.crestGlow);
+  const foamMicroDetail = uniform(INITIAL_ARTISTIC_CONTROLS.microDetail);
   const sunDirectionValue = new Vector3(
     initialEnvironment.sunDirectionX,
     initialEnvironment.sunDirectionY,
@@ -134,7 +136,22 @@ export function createWaterOpticsRendering(
     applyHostLighting();
   });
 
-  const worldNormal = spectral.worldNormalNode;
+  const whitecapDensity = spectral.whitecapDensityNode.clamp(0, 1);
+  const foamMicroStrength = whitecapDensity
+    .mul(foamMicroDetail)
+    .mul(0.085)
+    .clamp(0, 0.16);
+  const foamMicroX = sin(
+    spectral.hostXNode.mul(2.31).add(spectral.hostZNode.mul(0.87)),
+  ).mul(foamMicroStrength);
+  const foamMicroZ = sin(
+    spectral.hostXNode.mul(-0.73).add(spectral.hostZNode.mul(2.67)),
+  ).mul(foamMicroStrength);
+  const worldNormal = vec3(
+    spectral.worldNormalNode.x.add(foamMicroX),
+    spectral.worldNormalNode.y,
+    spectral.worldNormalNode.z.add(foamMicroZ),
+  ).normalize();
   const viewDirection = spectral.viewDirectionNode;
   const facing = saturate(worldNormal.dot(viewDirection));
   const fresnelAmount = grazingReflection.mul(0.5).add(0.5);
@@ -156,7 +173,8 @@ export function createWaterOpticsRendering(
   );
   const environmentColor = environmentSample.rgb
     .mul(environmentReflection)
-    .mul(environmentIntensity);
+    .mul(environmentIntensity)
+    .mul(float(1).sub(whitecapDensity.mul(0.9)).clamp(0, 1));
   const planarViewProjection = uniform(planar.viewProjection)
     .setName("planarViewProjection")
     .setGroup(renderGroup);
@@ -246,9 +264,10 @@ export function createWaterOpticsRendering(
     spectral.heightNode.mul(0.06).add(1),
   );
   const seeThrough = depthSeeThrough.mul(0.5).add(0.5);
-  const transmitted = mix(bodySample, sceneColor.rgb, seeThrough).mul(
-    absorptionRgb,
-  );
+  const foamTransmission = float(1).sub(whitecapDensity.mul(0.94)).clamp(0, 1);
+  const transmitted = mix(bodySample, sceneColor.rgb, seeThrough)
+    .mul(absorptionRgb)
+    .mul(foamTransmission);
   const sunColor = sunColorUniform.mul(sunIntensity);
   const scattered = bodySample.mul(inscatterRgb);
   const backlight = saturate(viewDirection.dot(sunDirection).negate());
@@ -261,6 +280,7 @@ export function createWaterOpticsRendering(
     .mul(backlight)
     .mul(sunAmount)
     .mul(crestGlow)
+    .mul(float(1).sub(whitecapDensity.mul(0.8)).clamp(0, 1))
     .clamp(0, 1);
   const crestLift = mix(
     transmitted.add(scattered),
@@ -273,23 +293,37 @@ export function createWaterOpticsRendering(
     fresnelNode,
   );
   const opticalColor = mix(reflected, crestLift, crestNode.mul(0.35));
+  const foamDiffuse = vec3(0.78, 0.86, 0.9)
+    .mul(environmentIntensity.mul(0.28).add(sunAmount.mul(0.52)))
+    .add(sunColor.mul(0.08));
+  const whitewaterColor = mix(
+    opticalColor,
+    foamDiffuse,
+    whitecapDensity.mul(0.86).clamp(0, 1),
+  );
+  const surfaceRoughnessNode = mix(
+    spectral.roughnessNode,
+    float(0.94),
+    whitecapDensity.mul(0.9).clamp(0, 1),
+  );
   const halfDirection = sunDirection.add(viewDirection).normalize();
   const highlightExponent = float(2)
     .div(sunAngularRadius.mul(sunAngularRadius).max(1e-8))
-    .mul(mix(float(1), float(90 / 420), spectral.roughnessNode));
+    .mul(mix(float(1), float(90 / 420), surfaceRoughnessNode));
   const highlightNode = worldNormal
     .dot(halfDirection)
     .max(0)
     .pow(highlightExponent)
-    .mul(mix(float(0.28), float(0.1), spectral.roughnessNode))
+    .mul(mix(float(0.28), float(0.1), surfaceRoughnessNode))
     .mul(sunColor)
     .mul(sunAmount);
-  const surfaceColor = opticalColor.add(highlightNode);
+  const surfaceColor = whitewaterColor.add(highlightNode);
 
   const transmittanceNode = absorptionRgb.x
     .mul(0.2126)
     .add(absorptionRgb.y.mul(0.7152))
     .add(absorptionRgb.z.mul(0.0722))
+    .mul(foamTransmission)
     .clamp(0, 1);
   const glintNode = highlightNode.x
     .mul(0.2126)
@@ -319,7 +353,7 @@ export function createWaterOpticsRendering(
     output: surfaceColor,
     [VIEW_NORMAL_ATTACHMENT]: vec4(
       packNormalToRGB(viewNormal),
-      spectral.roughnessNode,
+      surfaceRoughnessNode,
     ),
     [MOTION_VECTORS_ATTACHMENT]: velocity,
     [OPTICAL_FACTORS_ATTACHMENT]: factorsNode,
@@ -335,6 +369,7 @@ export function createWaterOpticsRendering(
     depthColoring.value = snapshot.artisticControls.depthColoring;
     inWaterGlow.value = snapshot.artisticControls.inWaterGlow;
     crestGlow.value = snapshot.artisticControls.crestGlow;
+    foamMicroDetail.value = snapshot.artisticControls.microDetail;
   };
 
   const sink: RuntimeStateSink = Object.freeze({
@@ -344,6 +379,9 @@ export function createWaterOpticsRendering(
     ): void {
       spectral.sink.synchronize(snapshot, interaction);
       applySnapshot(snapshot);
+    },
+    observe(snapshot: OpenWaterRuntimeSnapshot): void {
+      spectral.sink.observe?.(snapshot);
     },
   });
 

@@ -158,6 +158,8 @@ const FLAT_CONTROLS = {
   depthColoring: 1,
   inWaterGlow: 1,
   crestGlow: 1,
+  whitecapAmount: 0,
+  foamPersistence: 0,
 } satisfies ArtisticControls;
 
 const SWELL_CONTROLS = {
@@ -174,6 +176,8 @@ const SWELL_CONTROLS = {
   depthColoring: 1,
   inWaterGlow: 1,
   crestGlow: 1,
+  whitecapAmount: 0,
+  foamPersistence: 0,
 } satisfies ArtisticControls;
 
 const BACKLIT_SUN = {
@@ -260,6 +264,10 @@ test("captures color, depth, normal, and optical intermediates", async ({
     "depth",
     "normal",
     "motion-vector",
+    "whitecap-generation",
+    "whitecap-history",
+    "whitecap-advection",
+    "whitecap-decay",
     "optical-fresnel",
     "optical-thickness",
     "optical-scattering",
@@ -1239,6 +1247,10 @@ test("ignores Host scene environment and lights and follows only the Environment
     "depth",
     "normal",
     "motion-vector",
+    "whitecap-generation",
+    "whitecap-history",
+    "whitecap-advection",
+    "whitecap-decay",
     "optical-fresnel",
     "optical-thickness",
     "optical-scattering",
@@ -1247,7 +1259,7 @@ test("ignores Host scene environment and lights and follows only the Environment
     "optical-transmittance",
     "optical-glint",
   ] as const;
-  expect(Object.keys(result.baseline.captures)).toHaveLength(23);
+  expect(Object.keys(result.baseline.captures)).toHaveLength(27);
   expect(
     Object.fromEntries(
       shadingNames.map((name) => [name, result.decoy.captures[name]]),

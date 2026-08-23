@@ -135,6 +135,10 @@ export const SUPPORTED_EFFECT_VARIANTS: readonly PrewarmEffectVariant[] =
       effectId: "minimal-water-surface",
       variantId: "basic",
     }),
+    Object.freeze({
+      effectId: "spectral-whitecaps",
+      variantId: "persistent",
+    }),
   ]);
 
 export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
@@ -152,6 +156,17 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   spectralBandWind: "water-spectral-band-wind",
   spectralBandChop: "water-spectral-band-chop",
   spectralBandRipple: "water-spectral-band-ripple",
+  whitecapFieldA: "water-whitecap-field-a",
+  whitecapFieldB: "water-whitecap-field-b",
+  whitecapResetRoute: "water-whitecap-reset-route",
+  whitecapGenerationRoute: "water-whitecap-generation-route",
+  whitecapHistory: "water-whitecap-history",
+  whitecapAdvectionRoute: "water-whitecap-advection-route",
+  whitecapDiffusionRoute: "water-whitecap-diffusion-route",
+  whitecapDecayRoute: "water-whitecap-decay-route",
+  whitecapStageTarget: "water-whitecap-stage-target",
+  whitecapStageRoute: "water-whitecap-stage-route",
+  whitecapProbe: "water-whitecap-probe",
   material: "water-material",
   opticalRoute: "water-optical-route",
   planarReflectionTarget: "water-planar-reflection-target",
@@ -256,6 +271,9 @@ const DRAWING_BUFFER_BOUND_DECLARATION_IDS: ReadonlySet<string> = new Set([
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryResetVelocityRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrHistoryProbe,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.ssrProbe,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapStageTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapStageRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapProbe,
 ]);
 const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
@@ -352,19 +370,102 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
       "sha256:f45d0459b6c83de101d0b860c7173104c9602a29f6e5f57d1c2fd64f35e9fb8e",
   },
   {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapFieldA,
+    kind: "resource",
+    label:
+      "Spectral whitecap field A (RGBA16F 128x128 repeat, stable final stage identity)",
+    fingerprint:
+      "sha256:6964c28972247bfe521e4f289cb6e937dd33e2a09bd6bde1907fc6417df5532a",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapFieldB,
+    kind: "resource",
+    label: "Spectral whitecap field B (RGBA16F 128x128 repeat scratch)",
+    fingerprint:
+      "sha256:da7fa829786648edc0ee13c9e5520ac1839d46ab9f2cec9474b21be27f35e514",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapResetRoute,
+    kind: "conditional-route",
+    label:
+      "Spectral whitecap A/B deterministic reset (seed, simulation reset, rewind, sea-state cut)",
+    fingerprint:
+      "sha256:0873837843076c0623008daa1287245383edbec389643e5cbebe16641b6f8d98",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapGenerationRoute,
+    kind: "conditional-route",
+    label: "Steep spectral crest generation (A to B, host fixed tick)",
+    fingerprint:
+      "sha256:97a3c3c72e722e2fb9af00dd1ded5af1b68dc5bb1f692aac84111fec17766461",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapHistory,
+    kind: "effect-state",
+    label: "Previous fixed-tick whitecap decay carried as bounded history",
+    fingerprint:
+      "sha256:fed268c92da5f225f3ca5be2daa9e66dbea47d2f951a1051b5548c118b1dcfe3",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapAdvectionRoute,
+    kind: "conditional-route",
+    label:
+      "World-domain semi-Lagrangian whitecap advection (manual bilinear B to A)",
+    fingerprint:
+      "sha256:50d3908c21fd1dd73226fd30491b9518ae22c096aa44f00b658f990a17566235",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapDiffusionRoute,
+    kind: "conditional-route",
+    label: "Three-tap cross-crest whitecap diffusion (A to B)",
+    fingerprint:
+      "sha256:d502167e1c04ddf8a6b39a7fcc6f356a340c40be88ec94131ca4bc3eb3057cfd",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapDecayRoute,
+    kind: "conditional-route",
+    label:
+      "Persistent whitecap decay and fresh-generation composition (B to A)",
+    fingerprint:
+      "sha256:5bff6f48ddcfecf86f604b3b021004cc886855fdccb23e643e89697187b11199",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapStageTarget,
+    kind: "resource",
+    label:
+      "Spectral whitecap stage diagnostics (RGBA16F, drawing-buffer-exact)",
+    fingerprint:
+      "sha256:731d234e5ce0ccd2bb8c4102219849e318b619dc1ea21723562e9a0ebbd08969",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapStageRoute,
+    kind: "conditional-route",
+    label:
+      "Output-resolution generation/history/advection/decay resolve from world field",
+    fingerprint:
+      "sha256:caf42fa74e220528b2c24d8fe5831ce569629a93eba6a26bba085f18173d6666",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapProbe,
+    kind: "conditional-route",
+    label: "GPU completion probe of packed spectral whitecap stages",
+    fingerprint:
+      "sha256:d740f79214a0fbb393edfb647e59881e642cf6b9ba79347db72d990058a81881",
+  },
+  {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.material,
     kind: "effect-state",
-    label: "Minimal water material",
+    label: "Minimal water material with persistent spectral-whitecap response",
     fingerprint:
-      "sha256:0a8c1aaa649d6a28ff0565d73cf0cf6e45acf14135c54e5162fbc7fbe0c7e386",
+      "sha256:20c6447eb1b1d8ea56fc606898ea49e9505013b24ede63e70535057d5c0050ec",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalRoute,
     kind: "effect-state",
     label:
-      "Basic optical composition route (planar+environment fallback, projected refraction, RGB Beer-Lambert, perspective camera)",
+      "Optical composition route (planar+environment fallback, projected refraction, RGB Beer-Lambert, whitecap reflection/transmission/roughness/micro detail)",
     fingerprint:
-      "sha256:f24789707811ecec877cb42335cd5d2f1ba2325c6e31644ec35d59dd724b0027",
+      "sha256:c2c89db1c48c537cd41aedafb7dc88cf1b3a55c96399f308ab94cc679a076e07",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.planarReflectionTarget,
@@ -585,9 +686,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
     kind: "conditional-route",
     label:
-      "Planar aux, one jittered main MRT, current-frame SSR, dedicated TemporalReproject history, explicit compose, then stock TRAA",
+      "Fixed-tick whitecaps, planar aux, one jittered main MRT, current-frame SSR, dedicated TemporalReproject history, explicit compose, then stock TRAA",
     fingerprint:
-      "sha256:42b6254fad454c6b5b415b997c96a14c78e7bf1b1473c28a2d7fe5ab90b4c579",
+      "sha256:6cac0421e8bfc58786596e077221136c4f29dc249e4c70b557836692958322b4",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.proceduralMotion,
@@ -688,9 +789,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
     kind: "conditional-route",
-    label: "Twenty-three named diagnostics output routes",
+    label: "Twenty-seven named diagnostics output routes",
     fingerprint:
-      "sha256:ac7175ab7f59205e4aefef72d46d2b68cfe4dc256db66788de2466d2d67dcf3a",
+      "sha256:a5f86239f7b86685991bc1e5e0669cadc120c4acb3f9749c5dc70991735c444f",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.hiddenStabilization,
@@ -702,9 +803,10 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.completionProbe,
     kind: "conditional-route",
-    label: "GPU completion probe of every named output route",
+    label:
+      "GPU completion probe of every named output route including whitecaps",
     fingerprint:
-      "sha256:c4e77fab97a18b547bf0053649e772e8faf9ce0dd58958136d531ecfca9ab89f",
+      "sha256:d80c56dde025d2eeb391c93648ef11eda60ee07a9b9337afa1375484bd5268f3",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.mainCameraGuard,
@@ -717,14 +819,39 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
 
 const MINIMAL_HIGH_DETAIL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] =
   MINIMAL_WATER_DECLARATIONS.map((declaration) =>
-    declaration.id === MINIMAL_WATER_PREWARM_DECLARATION_IDS.clipmap
-      ? {
-          ...declaration,
-          fingerprint:
-            "sha256:ac0f415a7ca925b92112e332ed39c7cebef51fcec3ffc07216a0484181be6930",
-        }
-      : declaration,
+    highDetailDeclaration(declaration),
   );
+
+function highDetailDeclaration(
+  declaration: PrewarmDeclaration,
+): PrewarmDeclaration {
+  const fingerprints: Readonly<Record<string, string>> = Object.freeze({
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.clipmap]:
+      "sha256:ac0f415a7ca925b92112e332ed39c7cebef51fcec3ffc07216a0484181be6930",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapFieldA]:
+      "sha256:d555b34c2fe10fa320bba4678909ab1b3760a9604634992177d5ea9309097c5f",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapFieldB]:
+      "sha256:d7f60462ee1929d08737b9f48297968adc6cdfbfa9fe6ddda2fcbdbbb7c96140",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapResetRoute]:
+      "sha256:78d5524d9bbbef7fa330407172d0fef44ac0d3170e474dac0819b8440bebdd02",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapGenerationRoute]:
+      "sha256:4fdea4350600184360645ac55cd43bd41c8776a532cb9367d6a33f5c2456aa54",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapHistory]:
+      "sha256:5d4498f62aff4e63f5b745c10ccb73ce4e62f8029a8a65ade31f4c89f005f022",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapAdvectionRoute]:
+      "sha256:6cda56103043786608daeb0d6638c7e5787ff1725191a49f035c23d000f83639",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapDiffusionRoute]:
+      "sha256:0d7dd8b91573cb52914ce0c22e32f6ac1189ec47c3eadd8a90d444392b256812",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapDecayRoute]:
+      "sha256:10faf88f44796a9e5ce1533a2cdf5c2fc986b2bb01bf2c5f14c650d88115a8ee",
+  });
+  const fingerprint = fingerprints[declaration.id];
+  if (fingerprint === undefined) {
+    return declaration;
+  }
+  const label = declaration.label.replaceAll("128x128", "256x256");
+  return { ...declaration, label, fingerprint };
+}
 
 /**
  * Returns the complete manifest for the first prewarmed water plane. This

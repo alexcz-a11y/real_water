@@ -172,6 +172,7 @@ export interface QaCaptureV9 extends QaPresentationReceiptV9 {
     | "r32float-linear-view"
     | "rgb32float-view-normal"
     | "rg32float-ndc"
+    | "r32float-whitecap-stage"
     | "r32float-optical"
     | "rgb32float-linear-ssr"
     | "r32float-ssr-roughness"

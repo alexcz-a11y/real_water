@@ -1685,6 +1685,8 @@ const SWELL_CONTROLS = {
   depthColoring: 1,
   inWaterGlow: 1,
   crestGlow: 1,
+  whitecapAmount: 0,
+  foamPersistence: 0,
 } as const;
 
 const PAN_CAMERA = {

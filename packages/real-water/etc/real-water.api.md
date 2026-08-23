@@ -13,12 +13,14 @@ export interface ArtisticControls {
     readonly depthSeeThrough: number;
     readonly directionality: number;
     readonly environmentReflection: number;
+    readonly foamPersistence: number;
     readonly grazingReflection: number;
     readonly inWaterGlow: number;
     readonly microDetail: number;
     readonly swellDrama: number;
     readonly timeScale: number;
     readonly waveStrength: number;
+    readonly whitecapAmount: number;
 }
 
 // @public
@@ -902,6 +904,8 @@ export interface QualityProfile {
     readonly temporal: QualityProfileTemporal;
     // (undocumented)
     readonly version: typeof QUALITY_PROFILE_VERSION;
+    // (undocumented)
+    readonly whitecaps: QualityProfileSpectralWhitecaps;
 }
 
 // @public
@@ -1036,6 +1040,38 @@ export interface QualityProfileReflectionSsrHistory {
     readonly resolveFormat: "rgba16float";
     // (undocumented)
     readonly updateCadence: "host-present";
+}
+
+// @public
+export interface QualityProfileSpectralWhitecaps {
+    // (undocumented)
+    readonly captureFormat: "rgba16float";
+    // (undocumented)
+    readonly captureResolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly diffusionTaps: 3;
+    // (undocumented)
+    readonly fieldFormat: "rgba16float";
+    // (undocumented)
+    readonly fieldResolution: 128 | 256;
+    // (undocumented)
+    readonly fixedTickHz: 60;
+    // (undocumented)
+    readonly mode: "spectral-ping-pong";
+    // (undocumented)
+    readonly resetDomains: readonly [
+    "simulation-reset",
+    "seed-change",
+    "tick-rewind",
+    "time-rewind",
+    "sea-state-cut"
+    ];
+    // (undocumented)
+    readonly stageLayout: "generation-history-advection-decay";
+    // (undocumented)
+    readonly tileSizeMetres: 256;
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
 }
 
 // @public

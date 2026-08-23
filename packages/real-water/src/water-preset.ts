@@ -98,6 +98,8 @@ const BUILT_IN_WATER_PRESETS: Readonly<
       depthColoring: 0.4,
       inWaterGlow: 0.35,
       crestGlow: 0.25,
+      whitecapAmount: 0.25,
+      foamPersistence: 0.45,
     }),
   }),
   swell: Object.freeze({
@@ -115,6 +117,8 @@ const BUILT_IN_WATER_PRESETS: Readonly<
       depthColoring: 1,
       inWaterGlow: 1,
       crestGlow: 1,
+      whitecapAmount: 1,
+      foamPersistence: 1,
     }),
   }),
   storm: Object.freeze({
@@ -132,6 +136,8 @@ const BUILT_IN_WATER_PRESETS: Readonly<
       depthColoring: 1.55,
       inWaterGlow: 1.45,
       crestGlow: 1.6,
+      whitecapAmount: 1.65,
+      foamPersistence: 1.6,
     }),
   }),
 });
@@ -207,6 +213,11 @@ export function normalizeWaterPreset(candidate: WaterPreset): WaterPreset {
   if (value.version === 1) {
     throw new TypeError(
       "Water Preset version 1 does not include the required optical Artistic Controls.",
+    );
+  }
+  if (value.version === 2) {
+    throw new TypeError(
+      "Water Preset version 2 does not include the required spectral whitecap Artistic Controls.",
     );
   }
 
@@ -288,6 +299,8 @@ function copyArtisticControls(
     depthColoring: artisticControls.depthColoring,
     inWaterGlow: artisticControls.inWaterGlow,
     crestGlow: artisticControls.crestGlow,
+    whitecapAmount: artisticControls.whitecapAmount,
+    foamPersistence: artisticControls.foamPersistence,
   };
 }
 

@@ -163,6 +163,32 @@ export interface QualityProfileReflection {
 }
 
 /**
+ * Structural spectral-whitecap field and diagnostic policy. Amount and
+ * persistence remain hot Artistic Controls and are deliberately absent here.
+ *
+ * @public
+ */
+export interface QualityProfileSpectralWhitecaps {
+  readonly mode: "spectral-ping-pong";
+  readonly fixedTickHz: 60;
+  readonly fieldResolution: 128 | 256;
+  readonly tileSizeMetres: 256;
+  readonly fieldFormat: "rgba16float";
+  readonly stageLayout: "generation-history-advection-decay";
+  readonly diffusionTaps: 3;
+  readonly updateCadence: "host-fixed-tick";
+  readonly captureResolutionPolicy: "drawing-buffer-exact";
+  readonly captureFormat: "rgba16float";
+  readonly resetDomains: readonly [
+    "simulation-reset",
+    "seed-change",
+    "tick-rewind",
+    "time-rewind",
+    "sea-state-cut",
+  ];
+}
+
+/**
  * A closed, versioned structural configuration prepared by the Readiness Gate.
  *
  * @public
@@ -176,6 +202,7 @@ export interface QualityProfile {
   readonly interaction: QualityProfileInteraction;
   readonly temporal: QualityProfileTemporal;
   readonly reflection: QualityProfileReflection;
+  readonly whitecaps: QualityProfileSpectralWhitecaps;
 }
 
 /**
@@ -194,6 +221,7 @@ interface SupportedQualityProfile {
   readonly profileHash: string;
   readonly widthSegments: number;
   readonly heightSegments: number;
+  readonly whitecapFieldResolution: 128 | 256;
 }
 
 export const CURRENT_FRAME_SSR_HISTORY_POLICY: QualityProfileReflectionSsrHistory =
@@ -244,7 +272,7 @@ export const CURRENT_FRAME_SSR_POLICY: QualityProfileReflectionSsr =
 
 // Each static hash is the SHA-256 digest of the profile's canonical JSON,
 // excluding profileHash and preserving the public field order:
-// schema, version, id, surface, interaction, temporal, reflection.
+// schema, version, id, surface, interaction, temporal, reflection, whitecaps.
 const NATIVE_TEMPORAL: QualityProfileTemporal = Object.freeze({
   mode: "TRAA",
   renderScale: 1,
@@ -266,20 +294,29 @@ const NATIVE_REFLECTION: QualityProfileReflection = Object.freeze({
   }),
   ssr: CURRENT_FRAME_SSR_POLICY,
 });
+const SPECTRAL_WHITECAP_RESET_DOMAINS = Object.freeze([
+  "simulation-reset",
+  "seed-change",
+  "tick-rewind",
+  "time-rewind",
+  "sea-state-cut",
+] as const);
 const SUPPORTED_QUALITY_PROFILES: Readonly<
   Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:c60b0a30fa310fbc1f21270c413a35b5b6265d6f157e5f41233be4b8042d8ec5",
+      "sha256:e89f6484cb983b184dee0ee46a77f8f05561b97df2a37c4686525b73b53eda28",
     widthSegments: 128,
     heightSegments: 128,
+    whitecapFieldResolution: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:4cba756cba61d7f4e071605c4d6939c1ba76b2cab0ef500bcf5ed1be7404d7f4",
+      "sha256:008a6a813e5e048fca87cce20a13ea7c1a2187a146a4fda7e2a441f4e7d71a37",
     widthSegments: 256,
     heightSegments: 256,
+    whitecapFieldResolution: 256,
   }),
 });
 
@@ -335,8 +372,8 @@ const LEGACY_V2_QUALITY_PROFILES: Readonly<
   }),
 });
 // The version 5 hashes below are the digests committed before the interaction
-// field existed, so they cover the version 5 field order: schema, version, id,
-// surface, temporal, reflection.
+// and whitecap fields existed, so they cover the version 5 field order:
+// schema, version, id, surface, temporal, reflection.
 const LEGACY_V5_QUALITY_PROFILES: Readonly<
   Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
 > = Object.freeze({
@@ -380,6 +417,20 @@ const QUALITY_PROFILE_KEYS = [
   "interaction",
   "temporal",
   "reflection",
+  "whitecaps",
+] as const;
+const SPECTRAL_WHITECAP_KEYS = [
+  "mode",
+  "fixedTickHz",
+  "fieldResolution",
+  "tileSizeMetres",
+  "fieldFormat",
+  "stageLayout",
+  "diffusionTaps",
+  "updateCadence",
+  "captureResolutionPolicy",
+  "captureFormat",
+  "resetDomains",
 ] as const;
 const INTERACTION_KEYS = ["anchorCount", "field"] as const;
 const INTERACTION_FIELD_KEYS = [
@@ -507,6 +558,19 @@ export function createMinimalWaterQualityProfile(
     },
     temporal: NATIVE_TEMPORAL,
     reflection: NATIVE_REFLECTION,
+    whitecaps: {
+      mode: "spectral-ping-pong",
+      fixedTickHz: 60,
+      fieldResolution: supported.whitecapFieldResolution,
+      tileSizeMetres: 256,
+      fieldFormat: "rgba16float",
+      stageLayout: "generation-history-advection-decay",
+      diffusionTaps: 3,
+      updateCadence: "host-fixed-tick",
+      captureResolutionPolicy: "drawing-buffer-exact",
+      captureFormat: "rgba16float",
+      resetDomains: SPECTRAL_WHITECAP_RESET_DOMAINS,
+    },
   });
 }
 
@@ -586,7 +650,8 @@ export function normalizeQualityProfile(
       supported.reflection.planar.resolutionPolicy ||
     value.reflection.planar.format !== supported.reflection.planar.format ||
     value.reflection.planar.samples !== supported.reflection.planar.samples ||
-    !isSupportedSsrPolicy(value.reflection.ssr, supported.reflection.ssr)
+    !isSupportedSsrPolicy(value.reflection.ssr, supported.reflection.ssr) ||
+    !isSupportedSpectralWhitecaps(value.whitecaps, supported.whitecaps)
   ) {
     throw new TypeError(
       "The Quality Profile does not match a supported structural configuration.",
@@ -594,6 +659,37 @@ export function normalizeQualityProfile(
   }
 
   return supported;
+}
+
+function isSupportedSpectralWhitecaps(
+  value: unknown,
+  supported: QualityProfileSpectralWhitecaps,
+): boolean {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, SPECTRAL_WHITECAP_KEYS) ||
+    !Array.isArray(value.resetDomains) ||
+    value.resetDomains.length !== supported.resetDomains.length
+  ) {
+    return false;
+  }
+  for (let index = 0; index < supported.resetDomains.length; index += 1) {
+    if (value.resetDomains[index] !== supported.resetDomains[index]) {
+      return false;
+    }
+  }
+  return (
+    value.mode === supported.mode &&
+    value.fixedTickHz === supported.fixedTickHz &&
+    value.fieldResolution === supported.fieldResolution &&
+    value.tileSizeMetres === supported.tileSizeMetres &&
+    value.fieldFormat === supported.fieldFormat &&
+    value.stageLayout === supported.stageLayout &&
+    value.diffusionTaps === supported.diffusionTaps &&
+    value.updateCadence === supported.updateCadence &&
+    value.captureResolutionPolicy === supported.captureResolutionPolicy &&
+    value.captureFormat === supported.captureFormat
+  );
 }
 
 /**
@@ -939,6 +1035,12 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
           ] as const),
         }),
       }),
+    }),
+    whitecaps: Object.freeze({
+      ...profile.whitecaps,
+      resetDomains: Object.freeze([
+        ...profile.whitecaps.resetDomains,
+      ]) as QualityProfileSpectralWhitecaps["resetDomains"],
     }),
   });
 }

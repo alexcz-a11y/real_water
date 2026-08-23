@@ -33,6 +33,7 @@ import {
   type DiagnosticsMotionVectorCapture,
   type DiagnosticsOpticalScalarCapture,
   type DiagnosticsSsrRoughnessCapture,
+  type DiagnosticsWhitecapStageCapture,
   type HostDiagnosticsPresentRequest,
   type HostDiagnosticsPresentedFrame,
   type HostDiagnosticsRoute,
@@ -72,6 +73,11 @@ import {
   renderCurrentFrameSsrHistory,
   type CurrentFrameSsrStack,
 } from "./ssr-stack.js";
+import {
+  createSpectralWhitecapDiagnostics,
+  type SpectralWhitecapDiagnostics,
+} from "./spectral-whitecap-diagnostics.js";
+import type { SpectralWhitecapField } from "./spectral-whitecap-field.js";
 
 export const PREWARM_HISTORY_EPOCH = 1;
 export const HIDDEN_STABILIZATION_FRAME_COUNT = 8;
@@ -104,6 +110,8 @@ export interface PreparedWaterPresentationResources {
   readonly finalColorTarget: RenderTarget;
   readonly scenePass: ReturnType<typeof pass>;
   readonly ssr: CurrentFrameSsrStack;
+  readonly whitecapField: SpectralWhitecapField;
+  readonly whitecapDiagnostics: SpectralWhitecapDiagnostics;
   readonly inverseLinearDepthTextureIndex: number;
   readonly viewNormalTextureIndex: number;
   readonly motionVectorsTextureIndex: number;
@@ -127,6 +135,7 @@ export function createPreparedWaterPresentationResources(
   scene: Scene,
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
+  whitecapField: SpectralWhitecapField,
 ): {
   readonly resources: PreparedWaterPresentationResources;
   readonly partial: PartialPreparedWaterPresentationResources;
@@ -138,6 +147,7 @@ export function createPreparedWaterPresentationResources(
       scene,
       camera,
       drawingBuffer,
+      whitecapField,
       partial,
     );
   } catch (error) {
@@ -151,6 +161,7 @@ function constructPreparedWaterPresentationResources(
   scene: Scene,
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
+  whitecapField: SpectralWhitecapField,
   partial: PartialPreparedWaterPresentationResources,
 ): {
   readonly resources: PreparedWaterPresentationResources;
@@ -205,6 +216,15 @@ function constructPreparedWaterPresentationResources(
   opticalDiagnosticsBTexture.type = UnsignedByteType;
   opticalDiagnosticsBTexture.colorSpace = LinearSRGBColorSpace;
   assertCoreScenePassColorByteBudget(scenePass.renderTarget.textures);
+  const whitecapDiagnostics = createSpectralWhitecapDiagnostics(
+    renderer,
+    camera,
+    scenePass.getTexture("depth"),
+    opticalFactorsTexture,
+    drawingBuffer,
+    whitecapField,
+  );
+  partial.whitecapDiagnostics = whitecapDiagnostics;
 
   const resetUniform = createTraaResetUniform();
   partial.resetUniform = resetUniform;
@@ -282,6 +302,8 @@ function constructPreparedWaterPresentationResources(
     finalColorTarget,
     scenePass,
     ssr,
+    whitecapField,
+    whitecapDiagnostics,
     inverseLinearDepthTextureIndex: 0,
     viewNormalTextureIndex: textureIndex(
       scenePass.renderTarget,
@@ -328,7 +350,7 @@ export async function compileAndPrimePreparedWaterPresentation(
   throwIfAborted(signal);
   resources.ssr.ensureGraphPrepared(renderer);
   resources.resetUniform.value = 1;
-  renderTemporalFrame(renderer, scene, camera, resources);
+  renderTemporalFrame(renderer, scene, camera, resources, true);
   resources.resetUniform.value = 0;
   renderCurrentColorConversion(renderer, resources);
   await probeNamedOutputRoutes(renderer, resources);
@@ -350,7 +372,7 @@ export function renderHiddenStabilizationFrames(
       resources.jitterAdapter.realign();
     }
     try {
-      renderTemporalFrame(renderer, scene, camera, resources);
+      renderTemporalFrame(renderer, scene, camera, resources, false);
     } finally {
       if (resetFrame) {
         resources.resetUniform.value = 0;
@@ -376,7 +398,7 @@ export async function renderMainCameraGuard(
   resources: PreparedWaterPresentationResources,
   signal: AbortSignal,
 ): Promise<void> {
-  renderTemporalFrame(renderer, scene, camera, resources);
+  renderTemporalFrame(renderer, scene, camera, resources, false);
   renderCurrentColorConversion(renderer, resources);
   renderer.setRenderTarget(null);
   resources.presentationPipeline.render();
@@ -421,6 +443,7 @@ export function createPresentationRouteBridge(
       );
     }
     const snapshot = inspectRuntime();
+    await resources.whitecapField.synchronize(renderer, snapshot);
     const resetReason =
       lastPresented === undefined
         ? null
@@ -434,15 +457,37 @@ export function createPresentationRouteBridge(
         resources.jitterAdapter.realign();
       }
       temporalSceneStarted = true;
-      renderTemporalFrame(renderer, scene, camera, resources);
+      renderTemporalFrame(
+        renderer,
+        scene,
+        camera,
+        resources,
+        accepted.outputs.some(isWhitecapCaptureName),
+      );
       if (accepted.outputs.includes("current-color")) {
         renderCurrentColorConversion(renderer, resources);
       }
       renderer.setRenderTarget(null);
       resources.presentationPipeline.render();
-      for (const name of accepted.outputs) {
-        outputs.push(await readNamedOutput(renderer, camera, resources, name));
+      const whitecapCaptures = accepted.outputs.some(isWhitecapCaptureName)
+        ? await readWhitecapStageCaptures(renderer, resources)
+        : undefined;
+      if (whitecapCaptures !== undefined) {
         resources.counters.diagnosticReadbackCount += 1;
+      }
+      for (const name of accepted.outputs) {
+        if (isWhitecapCaptureName(name)) {
+          const capture = whitecapCaptures?.get(name);
+          if (capture === undefined) {
+            throw new Error(`The ${name} packed capture is unavailable.`);
+          }
+          outputs.push(capture);
+        } else {
+          outputs.push(
+            await readNamedOutput(renderer, camera, resources, name),
+          );
+          resources.counters.diagnosticReadbackCount += 1;
+        }
       }
       if (resetReason !== null) {
         resources.resetUniform.value = 0;
@@ -551,6 +596,7 @@ export function disposePreparedWaterPresentationResources(
   resources.traaNode.dispose();
   resources.currentColorTarget.dispose();
   resources.finalColorTarget.dispose();
+  resources.whitecapDiagnostics.dispose();
   resources.scenePass.dispose();
   disposeCurrentFrameSsrStack(resources.ssr);
   resources.planar.dispose();
@@ -566,6 +612,7 @@ export function disposePartialPreparedWaterPresentationResources(
     () => resources.traaNode?.dispose(),
     () => resources.currentColorTarget?.dispose(),
     () => resources.finalColorTarget?.dispose(),
+    () => resources.whitecapDiagnostics?.dispose(),
     () => resources.scenePass?.dispose(),
     () => {
       if (resources.ssr !== undefined) {
@@ -656,6 +703,7 @@ function renderTemporalFrame(
   scene: Scene,
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
+  captureWhitecaps: boolean,
 ): void {
   const actual = readDrawingBufferSize(renderer);
   if (actual.width !== resources.width || actual.height !== resources.height) {
@@ -678,6 +726,9 @@ function renderTemporalFrame(
       renderer.setRenderTarget(resources.currentColorTarget);
       resources.ssr.sceneTriggerPipeline.render();
       resources.counters.sceneRenderCount += 1;
+      if (captureWhitecaps) {
+        resources.whitecapDiagnostics.render(renderer, camera);
+      }
       renderCurrentFrameSsr(renderer, resources.ssr);
       const historyHostState = captureHostState(renderer, scene, camera);
       try {
@@ -792,6 +843,20 @@ async function probeNamedOutputRoutes(
     resources.opticalDiagnosticsBTextureIndex,
   );
   await probeCompletedFrame(renderer, resources, resources.planar.target);
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.whitecapDiagnostics.target,
+  );
+}
+
+function isWhitecapCaptureName(name: DiagnosticsCaptureName): boolean {
+  return (
+    name === "whitecap-generation" ||
+    name === "whitecap-history" ||
+    name === "whitecap-advection" ||
+    name === "whitecap-decay"
+  );
 }
 
 async function probeCompletedFrame(
@@ -935,6 +1000,13 @@ async function readNamedOutput(
     }
     case "motion-vector":
       return readMotionVectorCapture(renderer, resources);
+    case "whitecap-generation":
+    case "whitecap-history":
+    case "whitecap-advection":
+    case "whitecap-decay":
+      throw new Error(
+        "The spectral-whitecap diagnostic route has not been prepared.",
+      );
     case "optical-fresnel":
       return readOpticalScalarCapture(
         renderer,
@@ -1085,6 +1157,65 @@ async function readMotionVectorCapture(
     format: DIAGNOSTICS_CAPTURE_SHAPES["motion-vector"].format,
     data,
   });
+}
+
+async function readWhitecapStageCaptures(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<
+  ReadonlyMap<DiagnosticsCaptureName, DiagnosticsWhitecapStageCapture>
+> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.whitecapDiagnostics.target,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array) && !(raw instanceof Float32Array)) {
+    throw new TypeError(
+      "Spectral-whitecap stage readback did not return Float16 or Float32 data.",
+    );
+  }
+  const packed = compactRows(raw, resources.width, resources.height, 4);
+  const names = [
+    "whitecap-generation",
+    "whitecap-history",
+    "whitecap-advection",
+    "whitecap-decay",
+  ] as const;
+  const result = new Map<
+    DiagnosticsCaptureName,
+    DiagnosticsWhitecapStageCapture
+  >();
+  for (const [channel, name] of names.entries()) {
+    const data = new Float32Array(resources.width * resources.height);
+    for (let pixel = 0; pixel < data.length; pixel += 1) {
+      const encoded = packed[pixel * 4 + channel] ?? 0;
+      const value =
+        packed instanceof Uint16Array
+          ? DataUtils.fromHalfFloat(encoded)
+          : encoded;
+      if (!Number.isFinite(value) || value < 0 || value > 1) {
+        throw new RangeError(
+          `The ${name} capture must contain finite unit density.`,
+        );
+      }
+      data[pixel] = value;
+    }
+    result.set(
+      name,
+      Object.freeze({
+        name,
+        width: resources.width,
+        height: resources.height,
+        origin: "top-left",
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+        data,
+      }),
+    );
+  }
+  return result;
 }
 
 async function readPlanarColorCapture(

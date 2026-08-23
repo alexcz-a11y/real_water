@@ -53,7 +53,7 @@ describe("current-frame SSR stack cleanup", () => {
       disposeCounts.set(this, (disposeCounts.get(this) ?? 0) + 1);
       return originalDispose.call(this);
     };
-    pipelineFailure.remaining = 4;
+    pipelineFailure.remaining = 5;
     const radiance = new DataTexture(
       createSupportedHostEnvironmentRadianceBytes(),
       8,

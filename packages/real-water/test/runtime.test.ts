@@ -137,7 +137,8 @@ describe("ready Open Water runtime", () => {
     expect(results.velocities[3]).toBe(0);
     expect(results.velocities[4]).toBeCloseTo(-1.611_797, 5);
     expect(results.velocities[5]).toBe(0);
-    expect([...results.foam]).toEqual([0, 0]);
+    expect(results.foam[0]).toBe(0);
+    expect(results.foam[1]).toBeCloseTo(0.68, 5);
     expect([...results.ticks]).toEqual([0, 0]);
     expect([...results.controlRevisions]).toEqual([0, 0]);
     expect([...results.snapshotAges]).toEqual([0, 0]);
@@ -200,6 +201,114 @@ describe("ready Open Water runtime", () => {
     expect(results.ticks[0]).toBe(60);
 
     await lease.dispose();
+  });
+
+  it("reports spectral foam with hot abundance and persistence", async () => {
+    const simulation = Object.freeze({
+      seed: 0x5eed_cafe,
+      tick: 90,
+      timeSeconds: 1.5,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      simulationResetRevision: 0,
+    });
+    const runtime = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        simulation: { snapshot: () => simulation },
+        stepDelayMs: 0,
+      }),
+    }).ready;
+    const positions = createWhitecapProbePositions();
+    const pointCount = positions.length / 3;
+    const sample = (whitecapAmount: number, foamPersistence: number) => {
+      runtime.updateArtisticControls({
+        ...runtime.inspectRuntime().artisticControls,
+        whitecapAmount,
+        foamPersistence,
+      });
+      const results = createResults(pointCount, 0);
+      runtime.queryGameplay({ count: pointCount, positions, results });
+      return [...results.foam];
+    };
+
+    expect(sample(0, 2)).toEqual(new Array<number>(pointCount).fill(0));
+    const immediate = sample(2, 0);
+    const persistent = sample(2, 2);
+    const replay = sample(2, 2);
+
+    expect(Math.max(...immediate)).toBeGreaterThan(0);
+    expect(persistent.reduce((sum, value) => sum + value, 0)).toBeGreaterThan(
+      immediate.reduce((sum, value) => sum + value, 0),
+    );
+    expect(replay).toEqual(persistent);
+    await runtime.dispose();
+  });
+
+  it("clears spectral foam history on reset and replays the same fixed-tick recipe", async () => {
+    let simulation = Object.freeze({
+      seed: 0x5eed_cafe,
+      tick: 90,
+      timeSeconds: 1.5,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      simulationResetRevision: 0,
+    });
+    const runtime = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        simulation: { snapshot: () => simulation },
+        stepDelayMs: 0,
+      }),
+    }).ready;
+    runtime.updateArtisticControls({
+      ...runtime.inspectRuntime().artisticControls,
+      whitecapAmount: 2,
+      foamPersistence: 2,
+    });
+    const positions = createWhitecapProbePositions();
+    const sample = () => {
+      const results = createResults(positions.length / 3, 0);
+      runtime.queryGameplay({
+        count: positions.length / 3,
+        positions,
+        results,
+      });
+      return [...results.foam];
+    };
+
+    const first = sample();
+    simulation = Object.freeze({
+      ...simulation,
+      simulationResetRevision: 1,
+    });
+    const reset = sample();
+
+    expect(reset.reduce((sum, value) => sum + value, 0)).toBeLessThan(
+      first.reduce((sum, value) => sum + value, 0),
+    );
+
+    simulation = Object.freeze({
+      ...simulation,
+      tick: 0,
+      timeSeconds: 0,
+      simulationResetRevision: 2,
+    });
+    sample();
+    simulation = Object.freeze({
+      ...simulation,
+      tick: 90,
+      timeSeconds: 1.5,
+    });
+    const replay = sample();
+
+    expect(replay).toEqual(first);
+    expect(new Set(replay).size).toBeGreaterThan(1);
+    await runtime.dispose();
   });
 
   it("synchronizes the render sink only when Artistic Controls change", () => {
@@ -689,4 +798,54 @@ function createResults(count: number, fill: number): GameplayQueryResults {
     controlRevisions: new Float64Array(count).fill(fill),
     snapshotAges: new Uint8Array(count).fill(fill),
   };
+}
+
+function createWhitecapProbePositions(): Float32Array {
+  return Float32Array.of(
+    -24,
+    0,
+    -16,
+    -12,
+    0,
+    -16,
+    0,
+    0,
+    -16,
+    12,
+    0,
+    -16,
+    24,
+    0,
+    -16,
+    -24,
+    0,
+    0,
+    -12,
+    0,
+    0,
+    0,
+    0,
+    0,
+    12,
+    0,
+    0,
+    24,
+    0,
+    0,
+    -24,
+    0,
+    16,
+    -12,
+    0,
+    16,
+    0,
+    0,
+    16,
+    12,
+    0,
+    16,
+    24,
+    0,
+    16,
+  );
 }

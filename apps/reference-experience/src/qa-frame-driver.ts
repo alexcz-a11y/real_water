@@ -30,6 +30,10 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
   "depth": "water-inverse-linear-depth",
   "normal": "water-view-normal",
   "motion-vector": "water-motion-vectors",
+  "whitecap-generation": "water-whitecap-stage-target",
+  "whitecap-history": "water-whitecap-stage-target",
+  "whitecap-advection": "water-whitecap-stage-target",
+  "whitecap-decay": "water-whitecap-stage-target",
   "optical-fresnel": "water-optical-factors-target",
   "optical-thickness": "water-optical-factors-target",
   "optical-scattering": "water-optical-diagnostics-b",
@@ -52,7 +56,7 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
 
 export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
   schema: "real-water/qa-frame-prewarm" as const,
-  version: 7 as const,
+  version: 8 as const,
   id: "reference-qa-frame" as const,
   captures: Object.freeze([
     Object.freeze({
@@ -74,6 +78,22 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
     Object.freeze({
       name: "motion-vector" as const,
       preparedFormat: "rg16float-ndc" as const,
+    }),
+    Object.freeze({
+      name: "whitecap-generation" as const,
+      preparedFormat: "rgba16float-whitecap-stages" as const,
+    }),
+    Object.freeze({
+      name: "whitecap-history" as const,
+      preparedFormat: "rgba16float-whitecap-stages" as const,
+    }),
+    Object.freeze({
+      name: "whitecap-advection" as const,
+      preparedFormat: "rgba16float-whitecap-stages" as const,
+    }),
+    Object.freeze({
+      name: "whitecap-decay" as const,
+      preparedFormat: "rgba16float-whitecap-stages" as const,
     }),
     Object.freeze({
       name: "optical-fresnel" as const,
@@ -195,6 +215,16 @@ export interface QaFrameDriverMotionVectorCapture extends QaFrameDriverCaptureBa
   readonly data: Float32Array;
 }
 
+export interface QaFrameDriverWhitecapStageCapture extends QaFrameDriverCaptureBase {
+  readonly name:
+    | "whitecap-generation"
+    | "whitecap-history"
+    | "whitecap-advection"
+    | "whitecap-decay";
+  readonly format: "r32float-whitecap-stage";
+  readonly data: Float32Array;
+}
+
 export interface QaFrameDriverOpticalScalarCapture extends QaFrameDriverCaptureBase {
   readonly name:
     | "optical-fresnel"
@@ -267,6 +297,7 @@ export type QaFrameDriverCapture =
   | QaFrameDriverDepthCapture
   | QaFrameDriverNormalCapture
   | QaFrameDriverMotionVectorCapture
+  | QaFrameDriverWhitecapStageCapture
   | QaFrameDriverOpticalScalarCapture;
 
 export interface QaFrameDriverStateReceipt {

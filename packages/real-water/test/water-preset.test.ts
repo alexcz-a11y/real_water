@@ -197,7 +197,7 @@ describe("Water Presets", () => {
       version: WATER_PRESET_VERSION,
       id: "swell",
       presetHash:
-        "sha256:7a24dac40f64cf2d8bef944832c661adefb49883d2ad541c13eaeb91254f580c",
+        "sha256:a271f14c1aad0eaf6681b9499cb962b94b19531870cf5b4bca3a6061636ccbeb",
       artisticControls: {
         waveStrength: 1,
         swellDrama: 1,
@@ -212,12 +212,14 @@ describe("Water Presets", () => {
         depthColoring: 1,
         inWaterGlow: 1,
         crestGlow: 1,
+        whitecapAmount: 1,
+        foamPersistence: 1,
       },
     });
     expect(calm.id).toBe("calm");
     expect(WATER_PRESET_VERSION).toBe(3);
     expect(calm.presetHash).toBe(
-      "sha256:4e857b4e7b20f4d2317e62980ef769d7d7547bf5b7b3aa7e3394bc4e8518aae5",
+      "sha256:2636557cea16c0c4c8fc249e486192db8b205737d2679df95e36ee10baeb2825",
     );
     expect(calm.artisticControls).toMatchObject({
       grazingReflection: 0.7,
@@ -226,10 +228,12 @@ describe("Water Presets", () => {
       depthColoring: 0.4,
       inWaterGlow: 0.35,
       crestGlow: 0.25,
+      whitecapAmount: 0.25,
+      foamPersistence: 0.45,
     });
     expect(storm.id).toBe("storm");
     expect(storm.presetHash).toBe(
-      "sha256:6eb0e333bf6a5b3242002057c8380800eaa0b2aad7e4dacf39ffb73f408a5fe5",
+      "sha256:04ba3bb41ea6ca9c9f6b54bd7bf8888c0b634df026379be67bad284143f2d3e9",
     );
     expect(storm.artisticControls).toMatchObject({
       grazingReflection: 1.15,
@@ -238,6 +242,8 @@ describe("Water Presets", () => {
       depthColoring: 1.55,
       inWaterGlow: 1.45,
       crestGlow: 1.6,
+      whitecapAmount: 1.65,
+      foamPersistence: 1.6,
     });
     expect(createWaterPreset("swell")).toEqual(swell);
     expect(Object.isFrozen(calm)).toBe(true);
@@ -258,7 +264,7 @@ describe("Water Presets", () => {
       version: WATER_PRESET_VERSION,
       id: "storm",
       presetHash:
-        "sha256:6eb0e333bf6a5b3242002057c8380800eaa0b2aad7e4dacf39ffb73f408a5fe5",
+        "sha256:04ba3bb41ea6ca9c9f6b54bd7bf8888c0b634df026379be67bad284143f2d3e9",
     });
     expect(Object.isFrozen(normalized)).toBe(true);
     expect(Object.isFrozen(identity)).toBe(true);
@@ -437,6 +443,43 @@ describe("Water Presets", () => {
 });
 
 describe("Water Preset runtime switching", () => {
+  it("changes whitecap amount and foam persistence as hot Artistic Controls", async () => {
+    const manifest = createMinimalWaterPrewarmManifest();
+    const lease = await prepareRealWater({
+      manifest,
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        simulation: createStaticHostSimulationAdapter(),
+        environment: createTestEnvironmentAdapter(),
+        presentation: createStaticHostPresentationAdapter(),
+        stepDelayMs: 0,
+      }),
+    }).ready;
+
+    expect(createWaterPreset("calm").artisticControls).toMatchObject({
+      whitecapAmount: 0.25,
+      foamPersistence: 0.45,
+    });
+    expect(createWaterPreset("storm").artisticControls).toMatchObject({
+      whitecapAmount: 1.65,
+      foamPersistence: 1.6,
+    });
+
+    const receipt = lease.updateArtisticControls({
+      ...lease.inspectRuntime().artisticControls,
+      whitecapAmount: 0,
+      foamPersistence: 2,
+    });
+
+    expect(receipt).toMatchObject({ changed: true, revision: 1 });
+    expect(lease.inspectRuntime().artisticControls).toMatchObject({
+      whitecapAmount: 0,
+      foamPersistence: 2,
+    });
+    expect(lease.manifest.manifestHash).toBe(manifest.manifestHash);
+    await lease.dispose();
+  });
+
   it("switches Calm, Swell, and Storm only through hot Artistic Controls", async () => {
     const lease = await prepareRealWater({
       manifest: createMinimalWaterPrewarmManifest(),

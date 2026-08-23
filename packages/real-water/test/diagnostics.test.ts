@@ -44,13 +44,17 @@ function createPresentedFrame(): HostPresentedFrame {
 }
 
 describe("real-water/diagnostics", () => {
-  it("publishes the twenty-three frozen CPU capture names and shapes only", () => {
+  it("publishes the twenty-seven frozen CPU capture names and shapes only", () => {
     expect(DIAGNOSTICS_CAPTURE_NAMES).toEqual([
       "final-color",
       "current-color",
       "depth",
       "normal",
       "motion-vector",
+      "whitecap-generation",
+      "whitecap-history",
+      "whitecap-advection",
+      "whitecap-decay",
       "optical-fresnel",
       "optical-thickness",
       "optical-scattering",
@@ -73,6 +77,22 @@ describe("real-water/diagnostics", () => {
     expect(isDiagnosticsCaptureName("ssr-history")).toBe(false);
     expect(isDiagnosticsCaptureName("ssr-history-color")).toBe(true);
     expect(isDiagnosticsCaptureName("ssr-history-input-color")).toBe(true);
+    expect(isDiagnosticsCaptureName("whitecap-generation")).toBe(true);
+    expect(isDiagnosticsCaptureName("whitecap-history")).toBe(true);
+    expect(isDiagnosticsCaptureName("whitecap-advection")).toBe(true);
+    expect(isDiagnosticsCaptureName("whitecap-decay")).toBe(true);
+    for (const name of [
+      "whitecap-generation",
+      "whitecap-history",
+      "whitecap-advection",
+      "whitecap-decay",
+    ] as const) {
+      expect(DIAGNOSTICS_CAPTURE_SHAPES[name]).toEqual({
+        format: "r32float-whitecap-stage",
+        elementType: "float32",
+        components: 1,
+      });
+    }
     expect(DIAGNOSTICS_CAPTURE_SHAPES["ssr-hit"]).toEqual({
       format: "r32float-optical",
       elementType: "float32",

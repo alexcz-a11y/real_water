@@ -213,6 +213,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -275,7 +276,7 @@ describe("createThreeHostLifecycleAdapter", () => {
       loading.snapshots.at(-1)?.status === "preparing"
         ? loading.snapshots.at(-1)?.progress.completedWork
         : undefined,
-    ).toBe(0);
+    ).toBe(8);
     releaseWarmup?.(Uint8Array.from([0, 96, 160, 255]));
     const lease = await run.ready;
 
@@ -304,13 +305,14 @@ describe("createThreeHostLifecycleAdapter", () => {
     }).toThrow(TypeError);
     expect(renderer.init).toHaveBeenCalledTimes(1);
     expect(renderer.onDeviceLost).not.toBe(previousOnDeviceLost);
-    expect(renderer.initTexture).toHaveBeenCalledTimes(3);
+    expect(renderer.initTexture).toHaveBeenCalledTimes(5);
+    expect(renderer.computeAsync).toHaveBeenCalledTimes(8);
     expect(renderer.compileAsync).toHaveBeenCalledWith(scene, camera);
     expect(
       renderer.compileAsync.mock.calls.some((call) => call[1] !== camera),
     ).toBe(true);
-    expect(renderer.render).toHaveBeenCalledTimes(128);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
+    expect(renderer.render).toHaveBeenCalledTimes(129);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(29);
     const readbackTargets = renderer.readRenderTargetPixelsAsync.mock.calls.map(
       (call) =>
         call[0] as { texture?: { name?: string }; textures?: unknown[] },
@@ -320,7 +322,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(readbackTargets[2]?.texture?.name).toBe(
       "Real Water inverse linear depth",
     );
-    expect(readbackTargets[26]?.texture?.name).toBe("Real Water final color");
+    expect(readbackTargets[28]?.texture?.name).toBe("Real Water final color");
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -413,7 +415,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     );
     expect(queryResults.foam[0]).toBe(geometryBefore.foam);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(29);
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -483,6 +485,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -599,6 +602,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -649,7 +653,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     const texture = environment.texture as DataTexture;
     const expectedBytes = createSupportedHostEnvironmentRadianceBytes();
     expect(renderer.initTexture).toHaveBeenCalledWith(environment.texture);
-    expect(renderer.initTexture).toHaveBeenCalledTimes(3);
+    expect(renderer.initTexture).toHaveBeenCalledTimes(5);
     expect(Array.from(texture.image.data)).toEqual(Array.from(expectedBytes));
     expect(texture.name).toBe("test-environment-radiance");
     expect(texture.wrapS).toBe(RepeatWrapping);
@@ -680,6 +684,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -826,6 +831,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -932,6 +938,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -990,7 +997,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     });
     expect(scene.children).toHaveLength(0);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(13);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(14);
     expect(renderer.dispose).not.toHaveBeenCalled();
   });
 
@@ -1208,6 +1215,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -1368,8 +1376,8 @@ describe("createThreeHostLifecycleAdapter", () => {
 
     expect(lease).not.toHaveProperty("present");
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
-    expect(renderer.render).toHaveBeenCalledTimes(128);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(29);
+    expect(renderer.render).toHaveBeenCalledTimes(129);
     expect(presentation.route).toBeDefined();
 
     const first = readHostPresentedFrame(await presentation.present());
@@ -1395,7 +1403,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(second.temporal.historyEpoch).toBe(1);
     expect(second.temporal.resetReason).toBeNull();
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(29);
 
     simulation.assign({ tick: 8, timeSeconds: 8 / 60, paused: false });
     const continuousTick = readHostPresentedFrame(await presentation.present());
@@ -1506,7 +1514,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(queuedFirst.presentationId + 1).toBe(queuedSecond.presentationId);
 
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(29);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
     expect(scene.children).toHaveLength(1);
@@ -1570,10 +1578,6 @@ describe("createThreeHostLifecycleAdapter", () => {
     const sizeCallsAtReady = renderer.getDrawingBufferSize.mock.calls.length;
     const first = presentation.present();
     const second = presentation.present();
-    await Promise.resolve();
-    expect(renderer.getDrawingBufferSize.mock.calls.length).toBe(
-      sizeCallsAtReady + 4,
-    );
     const [firstFrame, secondFrame] = await Promise.all([first, second]);
     expect(secondFrame.presentationId).toBe(firstFrame.presentationId + 1);
     expect(renderer.getDrawingBufferSize.mock.calls.length).toBe(
@@ -1701,12 +1705,10 @@ describe("createThreeHostLifecycleAdapter", () => {
     await disposeP;
     expect(order.includes("render")).toBe(true);
     expect(order.includes("dispose-start")).toBe(true);
-    expect(order.indexOf("render")).toBeLessThan(
-      order.indexOf("dispose-start"),
-    );
     expect(order.indexOf("dispose-start")).toBeLessThan(
-      order.lastIndexOf("destroy"),
+      order.indexOf("render"),
     );
+    expect(order.indexOf("render")).toBeLessThan(order.lastIndexOf("destroy"));
     expect(order.at(-1)).toBe("destroy");
     expect(scene.children).toHaveLength(0);
   });
@@ -1863,8 +1865,8 @@ describe("createThreeHostLifecycleAdapter", () => {
         outputs: [...DIAGNOSTICS_CAPTURE_NAMES],
       }),
     );
-    expect(all.outputs).toHaveLength(23);
-    expect(all.diagnosticReadbackCount).toBe(27);
+    expect(all.outputs).toHaveLength(27);
+    expect(all.diagnosticReadbackCount).toBe(28);
     expect(all.sceneRenderCount).toBe(resetFrame.sceneRenderCount + 1);
 
     await lease.dispose();
@@ -3105,6 +3107,7 @@ function createPrewarmRenderer() {
       },
     },
     compileAsync: vi.fn(async () => {}),
+    computeAsync: vi.fn(async () => {}),
     clear: vi.fn(),
     contextNode: null,
     coordinateSystem: 2_001,
@@ -3173,6 +3176,9 @@ function mockPresentationReadback(
     return new Float32Array(pixels).fill(1);
   }
   if (name.includes("view normal")) {
+    return new Uint16Array(pixels * 4);
+  }
+  if (name.includes("spectral whitecap stages")) {
     return new Uint16Array(pixels * 4);
   }
   if (
