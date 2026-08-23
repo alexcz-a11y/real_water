@@ -3,7 +3,7 @@ import {
   createMinimalWaterPrewarmManifest,
   createMinimalWaterQualityProfile,
 } from "real-water";
-import type { QaCameraV1, QaHarnessV11 } from "../src/qa-harness.js";
+import type { QaCameraV1, QaHarnessV12 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
 
@@ -86,7 +86,7 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
 
   const before = await page.evaluate(
     async ({ camera, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -104,6 +104,7 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
         "ssr-history-frame-weight",
       );
       const ssrHistoryInput = await harness.capture("ssr-history-input-color");
+      const underwater = await harness.capture("underwater-transmittance");
       return {
         presented,
         snapshot: harness.snapshot(),
@@ -136,6 +137,9 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
         ssrHistoryInputWidth: ssrHistoryInput.width,
         ssrHistoryInputHeight: ssrHistoryInput.height,
         ssrHistoryInput: ssrHistoryInput.data,
+        underwaterWidth: underwater.width,
+        underwaterHeight: underwater.height,
+        underwater: underwater.data,
       };
     },
     { camera: CAMERA, seed: SEED },
@@ -175,6 +179,11 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
   expect(before.ssrHistoryInputHeight).toBe(INITIAL.height);
   expect(decodeFloat32(before.ssrHistoryInput).length).toBe(
     INITIAL.width * INITIAL.height * 3,
+  );
+  expect(before.underwaterWidth).toBe(INITIAL.width);
+  expect(before.underwaterHeight).toBe(INITIAL.height);
+  expect(decodeFloat32(before.underwater).length).toBe(
+    INITIAL.width * INITIAL.height,
   );
   expect(decodeFloat32(before.ssrHit).length).toBe(
     INITIAL.width * INITIAL.height,
@@ -216,7 +225,7 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
   await expect(page.getByTestId("loading-experience")).toBeVisible();
 
   const invalidated = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -239,7 +248,7 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
 
   const after = await page.evaluate(
     async ({ camera, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -263,6 +272,7 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
         "ssr-history-frame-weight",
       );
       const ssrHistoryInput = await harness.capture("ssr-history-input-color");
+      const underwater = await harness.capture("underwater-transmittance");
       const repeated = await harness.present();
       const repeatedPlanar = await harness.capture("planar-color");
       const repeatedOccupancy = await harness.capture("planar-target-alpha");
@@ -271,6 +281,9 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
       const repeatedSsrRoughness = await harness.capture("ssr-roughness");
       const repeatedSsrHistoryColor =
         await harness.capture("ssr-history-color");
+      const repeatedUnderwater = await harness.capture(
+        "underwater-transmittance",
+      );
       return {
         snapshot,
         presented,
@@ -311,6 +324,9 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
         ssrHistoryInputWidth: ssrHistoryInput.width,
         ssrHistoryInputHeight: ssrHistoryInput.height,
         ssrHistoryInput: ssrHistoryInput.data,
+        underwaterWidth: underwater.width,
+        underwaterHeight: underwater.height,
+        underwater: underwater.data,
         repeatedCapabilities: repeated.prewarm.capabilities,
         repeatedPlanarWidth: repeatedPlanar.width,
         repeatedPlanarHeight: repeatedPlanar.height,
@@ -322,6 +338,8 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
         repeatedSsrColorLength: repeatedSsrColor.data.length,
         repeatedSsrRoughnessWidth: repeatedSsrRoughness.width,
         repeatedSsrHistoryColorWidth: repeatedSsrHistoryColor.width,
+        repeatedUnderwaterWidth: repeatedUnderwater.width,
+        repeatedUnderwaterHeight: repeatedUnderwater.height,
       };
     },
     { camera: CAMERA, seed: SEED },
@@ -375,6 +393,9 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
   expect(decodeFloat32(after.ssrHistoryInput).length).toBe(
     NEXT.width * NEXT.height * 3,
   );
+  expect(after.underwaterWidth).toBe(NEXT.width);
+  expect(after.underwaterHeight).toBe(NEXT.height);
+  expect(decodeFloat32(after.underwater).length).toBe(NEXT.width * NEXT.height);
   expect(decodeFloat32(after.ssrHit).length).toBe(NEXT.width * NEXT.height);
   expect(decodeFloat32(after.ssrConfidence).length).toBe(
     NEXT.width * NEXT.height,
@@ -404,6 +425,8 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
   expect(after.repeatedSsrColorWidth).toBe(NEXT.width);
   expect(after.repeatedSsrRoughnessWidth).toBe(NEXT.width);
   expect(after.repeatedSsrHistoryColorWidth).toBe(NEXT.width);
+  expect(after.repeatedUnderwaterWidth).toBe(NEXT.width);
+  expect(after.repeatedUnderwaterHeight).toBe(NEXT.height);
   expect(after.repeatedPlanarWidth).toBe(NEXT.width);
   expect(after.repeatedPlanarHeight).toBe(NEXT.height);
   expect(after.repeatedOccupancyWidth).toBe(NEXT.width);
@@ -433,7 +456,7 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
   expect(maxDiff).toBeLessThanOrEqual(1);
 
   const sameSize = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -467,7 +490,7 @@ test("rapid viewport changes reveal only the latest drawing buffer", async ({
   await page.goto("/?qa=1&host=three");
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const before = await page.evaluate(() => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -485,7 +508,7 @@ test("rapid viewport changes reveal only the latest drawing buffer", async ({
 
   const after = await page.evaluate(
     async ({ camera, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

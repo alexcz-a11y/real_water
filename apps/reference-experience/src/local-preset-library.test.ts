@@ -25,6 +25,11 @@ function withoutWhitecapControls(
   const legacy: Record<string, number> = { ...controls };
   delete legacy.whitecapAmount;
   delete legacy.foamPersistence;
+  delete legacy.underwaterHaze;
+  delete legacy.underwaterTurbidity;
+  delete legacy.underwaterLightShafts;
+  delete legacy.underwaterColor;
+  delete legacy.underwaterExposure;
   return legacy;
 }
 

@@ -19,6 +19,7 @@ export type {
   QualityProfileSpectralWhitecaps,
   QualityProfileSurface,
   QualityProfileTemporal,
+  QualityProfileUnderwaterVolume,
 } from "./quality-profile.js";
 
 export {

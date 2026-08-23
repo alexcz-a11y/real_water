@@ -27,7 +27,7 @@ export type {
 } from "./presentation.js";
 
 /**
- * The twenty-nine named diagnostic outputs. Names and CPU shapes match the QA
+ * The thirty-three named diagnostic outputs. Names and CPU shapes match the QA
  * capture contract. Planar color and target-alpha occupancy are their own
  * prepared target. `planar-confidence` is reserved for a future screen-space
  * mask and is not a current capture. Current-frame SSR hit (stock raw
@@ -58,6 +58,10 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
   "optical-crest-transmission",
   "optical-transmittance",
   "optical-glint",
+  "underwater-transmittance",
+  "underwater-scattering",
+  "underwater-light-shafts",
+  "underwater-shadow",
   "planar-color",
   "planar-target-alpha",
   "ssr-hit",
@@ -72,7 +76,7 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
 ] as const);
 
 /**
- * One of the twenty-nine named diagnostic CPU outputs.
+ * One of the thirty-three named diagnostic CPU outputs.
  *
  * @public
  */
@@ -171,6 +175,26 @@ export const DIAGNOSTICS_CAPTURE_SHAPES = Object.freeze({
   }),
   "optical-glint": Object.freeze({
     format: "r32float-optical" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-transmittance": Object.freeze({
+    format: "r32float-underwater-volume" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-scattering": Object.freeze({
+    format: "r32float-underwater-volume" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-light-shafts": Object.freeze({
+    format: "r32float-underwater-volume" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-shadow": Object.freeze({
+    format: "r32float-underwater-volume" as const,
     elementType: "float32" as const,
     components: 1 as const,
   }),
@@ -439,6 +463,24 @@ export interface DiagnosticsOpticalScalarCapture extends DiagnosticsCaptureBase 
 }
 
 /**
+ * One scalar channel unpacked from the prepared underwater diagnostics target.
+ *
+ * @public
+ */
+export interface DiagnosticsUnderwaterVolumeCapture extends DiagnosticsCaptureBase {
+  /** Underwater volume capture name. */
+  readonly name:
+    | "underwater-transmittance"
+    | "underwater-scattering"
+    | "underwater-light-shafts"
+    | "underwater-shadow";
+  /** Packed scalar underwater volume format. */
+  readonly format: "r32float-underwater-volume";
+  /** Tightly packed scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
  * Water-origin roughness read from the view-normal attachment alpha.
  *
  * @public
@@ -565,7 +607,8 @@ export type DiagnosticsCapture =
   | DiagnosticsWhitecapStageCapture
   | DiagnosticsWaterlineCapture
   | DiagnosticsHistoryRejectionCapture
-  | DiagnosticsOpticalScalarCapture;
+  | DiagnosticsOpticalScalarCapture
+  | DiagnosticsUnderwaterVolumeCapture;
 
 /**
  * Diagnostics present request. The exact key is `outputs`. Named outputs must
@@ -642,7 +685,7 @@ export interface HostDiagnosticsRoute {
 }
 
 /**
- * Confirms `value` is one of the twenty-nine diagnostic capture names.
+ * Confirms `value` is one of the thirty-three diagnostic capture names.
  *
  * @public
  */

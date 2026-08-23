@@ -25,9 +25,21 @@ import type { ArtisticControls } from "../src/runtime.js";
 function withoutWhitecapControls(
   controls: ArtisticControls,
 ): Record<string, number> {
-  const legacy: Record<string, number> = { ...controls };
+  const legacy = withoutUnderwaterControls(controls);
   delete legacy.whitecapAmount;
   delete legacy.foamPersistence;
+  return legacy;
+}
+
+function withoutUnderwaterControls(
+  controls: ArtisticControls,
+): Record<string, number> {
+  const legacy: Record<string, number> = { ...controls };
+  delete legacy.underwaterHaze;
+  delete legacy.underwaterTurbidity;
+  delete legacy.underwaterLightShafts;
+  delete legacy.underwaterColor;
+  delete legacy.underwaterExposure;
   return legacy;
 }
 
@@ -182,13 +194,13 @@ describe("Water Presets", () => {
 
     expect(authored).toEqual({
       schema: WATER_PRESET_SCHEMA,
-      version: 4,
+      version: 5,
       id: "storm",
       presetHash:
-        "sha256:4f7b89f0a5f836dff2371e451991e129a3d8e3a1e847b4077dee63dfa4fccb12",
+        "sha256:fce44a5709dcd774026f2597d42d2b0fc91d23e6ff5e88460a7817d95a2a3265",
       artisticControls: controls,
     });
-    expect(WATER_PRESET_VERSION).toBe(4);
+    expect(WATER_PRESET_VERSION).toBe(5);
     expect(Object.isFrozen(authored)).toBe(true);
     expect(Object.isFrozen(authored.artisticControls)).toBe(true);
   });
@@ -229,7 +241,7 @@ describe("Water Presets", () => {
       version: WATER_PRESET_VERSION,
       id: "swell",
       presetHash:
-        "sha256:1aec06c6bf80dd58fe969671ecc3c7384dbc0629c73a3e587d2340f3df937add",
+        "sha256:1ec9172feb2e6fb910c98b1ae064b465517f3ee811a7676018d9c4441127f822",
       artisticControls: {
         waveStrength: 1,
         swellDrama: 1,
@@ -246,12 +258,17 @@ describe("Water Presets", () => {
         crestGlow: 1,
         whitecapAmount: 1,
         foamPersistence: 1,
+        underwaterHaze: 1,
+        underwaterTurbidity: 1,
+        underwaterLightShafts: 1,
+        underwaterColor: 1,
+        underwaterExposure: 1,
       },
     });
     expect(calm.id).toBe("calm");
-    expect(WATER_PRESET_VERSION).toBe(4);
+    expect(WATER_PRESET_VERSION).toBe(5);
     expect(calm.presetHash).toBe(
-      "sha256:1bb0868a4be1fb6a0ede1528dd37a43e42da9ac7e1837b9f3ac42b6d670b7804",
+      "sha256:9ac9a6f352d1ed9090d00c2e7f979cc8b73f91ed2c9797d3e39ba15600fa243a",
     );
     expect(calm.artisticControls).toMatchObject({
       grazingReflection: 0.7,
@@ -262,10 +279,15 @@ describe("Water Presets", () => {
       crestGlow: 0.25,
       whitecapAmount: 0.25,
       foamPersistence: 0.45,
+      underwaterHaze: 0.45,
+      underwaterTurbidity: 0.35,
+      underwaterLightShafts: 0.65,
+      underwaterColor: 0.7,
+      underwaterExposure: 1.15,
     });
     expect(storm.id).toBe("storm");
     expect(storm.presetHash).toBe(
-      "sha256:037b3c79396891e2d93f795e0af78b84e9183123bf8352c3273bef8736c7b817",
+      "sha256:3f71363c4b433640a4a0dad6b0e030fb819be0640fe10b643bcce0d42db08df3",
     );
     expect(storm.artisticControls).toMatchObject({
       grazingReflection: 1.15,
@@ -276,6 +298,11 @@ describe("Water Presets", () => {
       crestGlow: 1.6,
       whitecapAmount: 1.65,
       foamPersistence: 1.6,
+      underwaterHaze: 1.45,
+      underwaterTurbidity: 1.7,
+      underwaterLightShafts: 0.55,
+      underwaterColor: 1.35,
+      underwaterExposure: 0.8,
     });
     expect(createWaterPreset("swell")).toEqual(swell);
     expect(Object.isFrozen(calm)).toBe(true);
@@ -296,7 +323,7 @@ describe("Water Presets", () => {
       version: WATER_PRESET_VERSION,
       id: "storm",
       presetHash:
-        "sha256:037b3c79396891e2d93f795e0af78b84e9183123bf8352c3273bef8736c7b817",
+        "sha256:3f71363c4b433640a4a0dad6b0e030fb819be0640fe10b643bcce0d42db08df3",
     });
     expect(Object.isFrozen(normalized)).toBe(true);
     expect(Object.isFrozen(identity)).toBe(true);
@@ -334,13 +361,42 @@ describe("Water Presets", () => {
     expect(Object.isFrozen(migrated.artisticControls)).toBe(true);
   });
 
+  it("migrates an authenticated authored v4 preset without losing its controls", () => {
+    const oldControls = {
+      ...withoutUnderwaterControls(createWaterPreset("storm").artisticControls),
+      waveStrength: 1.25,
+      directionality: 0.4,
+    };
+
+    const migrated = migrateWaterPreset({
+      schema: WATER_PRESET_SCHEMA,
+      version: 4,
+      id: "storm",
+      presetHash:
+        "sha256:4f7b89f0a5f836dff2371e451991e129a3d8e3a1e847b4077dee63dfa4fccb12",
+      artisticControls: oldControls,
+    });
+
+    expect(migrated.version).toBe(5);
+    expect(migrated.artisticControls).toEqual({
+      ...oldControls,
+      underwaterHaze: 1,
+      underwaterTurbidity: 1,
+      underwaterLightShafts: 1,
+      underwaterColor: 1,
+      underwaterExposure: 1,
+    });
+    expect(Object.isFrozen(migrated)).toBe(true);
+    expect(Object.isFrozen(migrated.artisticControls)).toBe(true);
+  });
+
   it.each(LEGACY_V2_BUILT_INS)(
     "migrates the repository's v2 $id built-in snapshot",
     (legacy) => {
       const migrated = migrateWaterPreset(structuredClone(legacy));
 
       expect(migrated).toEqual(createWaterPreset(legacy.id));
-      expect(migrated.version).toBe(4);
+      expect(migrated.version).toBe(5);
       expect(Object.isFrozen(migrated)).toBe(true);
       expect(Object.isFrozen(migrated.artisticControls)).toBe(true);
     },
@@ -352,7 +408,7 @@ describe("Water Presets", () => {
       const migrated = migrateWaterPreset(structuredClone(legacy));
 
       expect(migrated).toEqual(createWaterPreset(legacy.id));
-      expect(migrated.version).toBe(4);
+      expect(migrated.version).toBe(5);
       expect(Object.isFrozen(migrated)).toBe(true);
       expect(Object.isFrozen(migrated.artisticControls)).toBe(true);
     },
@@ -380,7 +436,7 @@ describe("Water Presets", () => {
           version: 3,
           id,
           presetHash: LEGACY_V3_WHITECAP_HASHES[id],
-          artisticControls: { ...current.artisticControls },
+          artisticControls: withoutUnderwaterControls(current.artisticControls),
         }),
       ).toEqual(current);
     },
@@ -406,7 +462,7 @@ describe("Water Presets", () => {
         version: 3,
         id: "calm",
         presetHash: LEGACY_V3_PRE_WHITECAP_HASHES.calm,
-        artisticControls: { ...current.artisticControls },
+        artisticControls: withoutUnderwaterControls(current.artisticControls),
       }),
     ).toThrow(TypeError);
   });
@@ -416,7 +472,7 @@ describe("Water Presets", () => {
       "a future version",
       {
         ...createWaterPreset("storm"),
-        version: 5,
+        version: 6,
       },
     ],
     [

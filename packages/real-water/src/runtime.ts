@@ -58,6 +58,16 @@ export interface ArtisticControls {
   readonly whitecapAmount: number;
   /** How long generated spectral foam remains visible as it moves and breaks up. */
   readonly foamPersistence: number;
+  /** Density of the depth-aware underwater haze. */
+  readonly underwaterHaze: number;
+  /** How strongly the underwater volume absorbs and scatters distant light. */
+  readonly underwaterTurbidity: number;
+  /** Strength of art-directed, depth-shadowed underwater sun shafts. */
+  readonly underwaterLightShafts: number;
+  /** Strength of the authored underwater depth-color palette. */
+  readonly underwaterColor: number;
+  /** Linear exposure applied only while the camera is submerged. */
+  readonly underwaterExposure: number;
 }
 
 export const ARTISTIC_CONTROL_KEYS = [
@@ -76,6 +86,11 @@ export const ARTISTIC_CONTROL_KEYS = [
   "crestGlow",
   "whitecapAmount",
   "foamPersistence",
+  "underwaterHaze",
+  "underwaterTurbidity",
+  "underwaterLightShafts",
+  "underwaterColor",
+  "underwaterExposure",
 ] as const;
 
 const DEFAULT_ARTISTIC_CONTROLS: ArtisticControls =
@@ -551,6 +566,16 @@ function freezeArtisticControls(controls: ArtisticControls): ArtisticControls {
   assertControlRange(value.crestGlow, 0, 2, "crestGlow");
   assertControlRange(value.whitecapAmount, 0, 2, "whitecapAmount");
   assertControlRange(value.foamPersistence, 0, 2, "foamPersistence");
+  assertControlRange(value.underwaterHaze, 0, 2, "underwaterHaze");
+  assertControlRange(value.underwaterTurbidity, 0, 2, "underwaterTurbidity");
+  assertControlRange(
+    value.underwaterLightShafts,
+    0,
+    2,
+    "underwaterLightShafts",
+  );
+  assertControlRange(value.underwaterColor, 0, 2, "underwaterColor");
+  assertControlRange(value.underwaterExposure, 0, 2, "underwaterExposure");
 
   return Object.freeze({
     waveStrength: value.waveStrength,
@@ -568,6 +593,11 @@ function freezeArtisticControls(controls: ArtisticControls): ArtisticControls {
     crestGlow: value.crestGlow,
     whitecapAmount: value.whitecapAmount,
     foamPersistence: value.foamPersistence,
+    underwaterHaze: value.underwaterHaze,
+    underwaterTurbidity: value.underwaterTurbidity,
+    underwaterLightShafts: value.underwaterLightShafts,
+    underwaterColor: value.underwaterColor,
+    underwaterExposure: value.underwaterExposure,
   });
 }
 

@@ -735,12 +735,12 @@ describe("prepareRealWater", () => {
     );
     expect(lease.manifest).toEqual({
       schema: "real-water/prewarm",
-      version: 5,
+      version: 6,
       id: manifest.id,
       manifestHash: manifest.manifestHash,
       qualityProfile: {
         schema: "real-water/quality-profile",
-        version: 8,
+        version: 9,
         id: "minimal",
         profileHash: manifest.qualityProfile.profileHash,
       },
@@ -754,6 +754,10 @@ describe("prepareRealWater", () => {
         {
           effectId: "spectral-whitecaps",
           variantId: "persistent",
+        },
+        {
+          effectId: "underwater-volume",
+          variantId: "depth-aware",
         },
       ],
     });
@@ -934,7 +938,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 77,
+        totalWork: 84,
       },
     });
   });
@@ -1602,7 +1606,7 @@ describe("prepareRealWater", () => {
 
     expect(Object.isFrozen(manifest)).toBe(true);
     expect(Object.isFrozen(manifest.drawingBuffer)).toBe(true);
-    expect(manifest.version).toBe(5);
+    expect(manifest.version).toBe(6);
     expect(manifest.drawingBuffer).toEqual({ width: 320, height: 180 });
     expect(Object.isFrozen(manifest.declarations)).toBe(true);
     expect(Object.isFrozen(first)).toBe(true);
@@ -1664,6 +1668,13 @@ describe("prepareRealWater", () => {
       "water-ssr-history-reset-velocity-target",
       "water-ssr-history-reset-velocity-route",
       "water-ssr-history-probe",
+      "water-underwater-volume-target",
+      "water-underwater-volume-route",
+      "water-underwater-depth-composition-route",
+      "water-underwater-sun-shaft-shadow-route",
+      "water-underwater-diagnostics-target",
+      "water-underwater-diagnostics-route",
+      "water-underwater-probe",
       "water-render-route",
       "water-procedural-motion",
       "water-motion-vectors",

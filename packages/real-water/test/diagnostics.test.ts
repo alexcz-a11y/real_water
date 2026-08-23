@@ -53,7 +53,7 @@ function createPresentedFrame(): HostPresentedFrame {
 }
 
 describe("real-water/diagnostics", () => {
-  it("publishes the twenty-nine frozen CPU capture names and shapes only", () => {
+  it("publishes the thirty-three frozen CPU capture names and shapes only", () => {
     expect(DIAGNOSTICS_CAPTURE_NAMES).toEqual([
       "final-color",
       "current-color",
@@ -73,6 +73,10 @@ describe("real-water/diagnostics", () => {
       "optical-crest-transmission",
       "optical-transmittance",
       "optical-glint",
+      "underwater-transmittance",
+      "underwater-scattering",
+      "underwater-light-shafts",
+      "underwater-shadow",
       "planar-color",
       "planar-target-alpha",
       "ssr-hit",
@@ -109,6 +113,19 @@ describe("real-water/diagnostics", () => {
       elementType: "float32",
       components: 1,
     });
+    for (const name of [
+      "underwater-transmittance",
+      "underwater-scattering",
+      "underwater-light-shafts",
+      "underwater-shadow",
+    ] as const) {
+      expect(DIAGNOSTICS_CAPTURE_SHAPES[name]).toEqual({
+        format: "r32float-underwater-volume",
+        elementType: "float32",
+        components: 1,
+      });
+      expect(isDiagnosticsCaptureName(name)).toBe(true);
+    }
     expect(DIAGNOSTICS_CAPTURE_SHAPES["ssr-confidence"]).toEqual({
       format: "r32float-optical",
       elementType: "float32",

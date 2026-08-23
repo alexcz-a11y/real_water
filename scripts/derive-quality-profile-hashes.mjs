@@ -12,7 +12,8 @@
 //
 // The recipe is the SHA-256 digest of the profile's canonical JSON with
 // profileHash removed and the remaining public field order preserved:
-// schema, version, id, surface, interaction, temporal, reflection, whitecaps.
+// schema, version, id, surface, interaction, temporal, reflection, whitecaps,
+// underwater.
 //
 // The Prewarm Manifest hash is checked the same way, at the bottom of this
 // file, against anchors committed here. Run this whenever
@@ -70,6 +71,12 @@ const COMMITTED_LEGACY_HASHES = {
     "minimal-high-detail":
       "sha256:d33533c3f740eb2d9ef0d4a516f8e242ce22ca83ce90f38fb72f74e57c9738b3",
   },
+  "8": {
+    "minimal":
+      "sha256:b2e727a8016dbac41a2ea1036275f10c344cffc82b2a10bea2c4bc4807bc651d",
+    "minimal-high-detail":
+      "sha256:a760008c06d5c27ea2cd42f986aff9272f7eaf184e97c6aab6bedf1d73f96bcd",
+  },
 };
 
 // The reset domains every shape committed so far. Held here as its own literal
@@ -103,14 +110,14 @@ function withLegacyResetDomains(profile) {
 
 function legacyV6Interaction(profile) {
   return {
-    ...withLegacyResetDomains(omitKeys(profile, ["whitecaps"])),
+    ...withLegacyResetDomains(omitKeys(profile, ["whitecaps", "underwater"])),
     version: 6,
   };
 }
 
 function legacyV6Whitecaps(profile) {
   return {
-    ...withLegacyResetDomains(omitKeys(profile, ["interaction"])),
+    ...withLegacyResetDomains(omitKeys(profile, ["interaction", "underwater"])),
     version: 6,
   };
 }
@@ -119,11 +126,21 @@ function legacyV6Whitecaps(profile) {
 // already carried waterline-crossing, so the current reset domains are correct
 // for it and only interaction and whitecaps are removed.
 function legacyV6Waterline(profile) {
-  return { ...omitKeys(profile, ["interaction", "whitecaps"]), version: 6 };
+  return {
+    ...omitKeys(profile, ["interaction", "whitecaps", "underwater"]),
+    version: 6,
+  };
 }
 
 function legacyV7(profile) {
-  return { ...withLegacyResetDomains(profile), version: 7 };
+  return {
+    ...withLegacyResetDomains(omitKeys(profile, ["underwater"])),
+    version: 7,
+  };
+}
+
+function legacyV8(profile) {
+  return { ...omitKeys(profile, ["underwater"]), version: 8 };
 }
 
 let failures = 0;
@@ -171,6 +188,12 @@ for (const id of PROFILE_IDS) {
     canonicalJson(legacyV7(profile)),
     COMMITTED_LEGACY_HASHES["7"][id],
   );
+  report(
+    "8",
+    id,
+    canonicalJson(legacyV8(profile)),
+    COMMITTED_LEGACY_HASHES["8"][id],
+  );
 }
 
 // The Prewarm Manifest hash had the same open loop the Quality Profile hash
@@ -178,7 +201,7 @@ for (const id of PROFILE_IDS) {
 // compares `manifest.manifestHash` to itself. Nothing in the repository stated
 // what the digest is supposed to be, so the whole manifest - all 77
 // declarations and every fingerprint inside them - agreed with itself no matter
-// what it said.
+// what it said. This version carries 84 declarations.
 //
 // These two values are the anchor. They were generated once, read off a
 // reviewed manifest, and pasted in. The recipe below is restated here rather
@@ -187,9 +210,9 @@ for (const id of PROFILE_IDS) {
 // public fields in declared order, with manifestHash itself excluded.
 const COMMITTED_MANIFEST_HASHES = {
   "minimal":
-    "sha256:1c4d1a1b4ae1a50b0c466519e16843d6753b8f4b176eb8826ea2861f32e6e3e6",
+    "sha256:9e74048ce7c4cb4dd501c68623b722700c36a384626bfc33125a481078279a80",
   "minimal-high-detail":
-    "sha256:7b37dba673d927adb9a6dc6d20ac1bd9835bf875aa3afdc6afb6ee2daf3da162",
+    "sha256:16e7c07b62915f609c7145462dbf70f230dc76f6041d5f37a346709bba4f0fc3",
 };
 
 function canonicalManifestJson(manifest) {

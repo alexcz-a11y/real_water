@@ -193,6 +193,11 @@ const ARTISTIC_CONTROL_KEYS = [
   "crestGlow",
   "whitecapAmount",
   "foamPersistence",
+  "underwaterHaze",
+  "underwaterTurbidity",
+  "underwaterLightShafts",
+  "underwaterColor",
+  "underwaterExposure",
 ] as const;
 const LIGHTING_KEYS = [
   "sunDirectionX",
@@ -971,7 +976,7 @@ export function readRegressionAcceptanceEvidence(
       "Regression acceptance coreManifest.hash disagrees with the Core identity.",
     );
   }
-  const qaPrewarm = readQaPrewarmV9(value.qaPrewarmManifest, coreIdentity);
+  const qaPrewarm = readQaPrewarmV11(value.qaPrewarmManifest, coreIdentity);
   const temporalPolicy = readReadyCapabilities(
     qaPrewarm.capabilities,
     createMinimalWaterQualityProfile(coreIdentity.qualityProfile.id),
@@ -1676,12 +1681,12 @@ function evaluateMetricPolicy(
   return true;
 }
 
-function readQaPrewarmV9(
+function readQaPrewarmV11(
   value: unknown,
   coreIdentity: QaBoundCoreManifestIdentity,
 ): QaFramePrewarmReceipt {
   if (!isRecord(value) || !hasExactKeys(value, QA_PREWARM_KEYS)) {
-    throw new TypeError("Regression acceptance requires QA prewarm v10.");
+    throw new TypeError("Regression acceptance requires QA prewarm v11.");
   }
   if (
     !isRecord(value.manifest) ||
@@ -1689,7 +1694,7 @@ function readQaPrewarmV9(
     value.manifest.version !== QA_FRAME_PREWARM_MANIFEST.version ||
     value.manifest.id !== QA_FRAME_PREWARM_MANIFEST.id
   ) {
-    throw new Error("Regression acceptance requires QA prewarm v10.");
+    throw new Error("Regression acceptance requires QA prewarm v11.");
   }
   if (
     canonicalJson(value.manifest.captures) !==
@@ -1698,11 +1703,11 @@ function readQaPrewarmV9(
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.coreDeclarations)
   ) {
     throw new Error(
-      "Regression acceptance requires the exact QA v10 29-name capture mapping.",
+      "Regression acceptance requires the exact QA v11 33-name capture mapping.",
     );
   }
-  if (QA_FRAME_PREWARM_MANIFEST.captures.length !== 29) {
-    throw new Error("QA v10 capture contract must name exactly 29 outputs.");
+  if (QA_FRAME_PREWARM_MANIFEST.captures.length !== 33) {
+    throw new Error("QA v11 capture contract must name exactly 33 outputs.");
   }
   const core = readQaBoundCoreManifestIdentity(value.core);
   if (core.manifestHash !== coreIdentity.manifestHash) {
