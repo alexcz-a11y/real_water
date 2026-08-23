@@ -324,11 +324,9 @@ test("applies continuous foam-control changes at the same tick regardless of pre
         const impactReceipt = await harness.submitDisturbances(impact());
 
         const controlTick = await harness.advanceTicks(60);
-        if (cadence === "stepped") {
-          // Establish the same tick-150 event boundary before changing the
-          // controls. Batched mode deliberately has no presentation here.
-          await harness.present();
-        }
+        // QA advanceTicks queues work until present, so both routes establish
+        // the same authoritative tick-150 command boundary before updating.
+        const controlBoundary = await harness.present();
         const update = await harness.updateArtisticControls(
           { ...changedControls },
           { transition: "continuous" },
@@ -352,6 +350,7 @@ test("applies continuous foam-control changes at the same tick regardless of pre
           wakeReceipt,
           impactReceipt,
           controlTick,
+          controlBoundary,
           update,
           finalPresentation,
           finalCapture,
@@ -394,6 +393,9 @@ test("applies continuous foam-control changes at the same tick regardless of pre
   expect(result.batched.controlTick.tick).toBe(150);
   expect(result.replay.controlTick.tick).toBe(150);
   expect(result.stepped.controlTick.tick).toBe(150);
+  expect(result.batched.controlBoundary.tick).toBe(150);
+  expect(result.replay.controlBoundary.tick).toBe(150);
+  expect(result.stepped.controlBoundary.tick).toBe(150);
   expect(result.batched.finalPresentation).toMatchObject({
     tick: 210,
     manifestHash: result.stepped.finalPresentation.manifestHash,
