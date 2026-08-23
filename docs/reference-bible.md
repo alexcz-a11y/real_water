@@ -8,8 +8,8 @@ the authority every procedural reconstruction cites.
 It is a specification, not a mood board and not a decision record. The decision that this document
 exists at all lives in ADR-0022.
 
-**Version**: v1 (drafted before the first hero-vessel anchor was approved). Sections 5 and 6 are
-provisional until the hero vessel pack is approved; see "Open at v1" at the end.
+**Version**: v2, written back after the hero vessel pack was approved. Sections 5, 6 and 11 now
+rest on nine approved views rather than on expectation.
 
 ## 1. World
 
@@ -34,6 +34,10 @@ returns an object that reads as predominantly orange, it has failed the palette 
 
 Salt-worn painted metal · rubber · composite · rope · wet concrete · basalt.
 
+Bronze is permitted for propellers only. It was missing from v1, which made the first stern
+elevation read as a palette violation when it was in fact correct: a real propeller is bronze.
+No other part may use it, and it does not enter the palette in section 2.
+
 Wear reads as: chalked paint on sun-facing surfaces, salt bloom in recesses, rust bleed at fastener
 lines and weld seams, scuffed rubber, sun-faded rope. Wear is present and legible but never
 derelict — every asset is in service.
@@ -57,8 +61,14 @@ pack. Everything a reconstruction reads from must be a neutral modelling referen
 
 - Seamless plain background, light neutral grey. No environment, no ocean, no sky, no props.
 - Soft overcast daylight. Low key-to-fill ratio. No rim lighting, no dramatic shadow, no lens flare.
-- Object fills the frame with even margins. Horizon-level camera unless the view is the top view.
+- **The entire object, bow to stern and keel to masthead, sits inside the frame with visible empty
+  margin on all four sides.** Nothing is cropped. (v1 said "fills the frame with even margins" and
+  every one of the first four candidates cropped the stern: the model honoured *fills* and dropped
+  the margin, which arrived as a subordinate clause. See section 12.)
+- Horizon-level camera unless the view is the top view.
 - Square framing.
+- An elevation is orthographic: no perspective, every visible edge vertical or horizontal, nothing
+  receding. Ask for it explicitly — a plain request for a side view returns a shallow three-quarter.
 - The whole object is visible. Nothing cropped, nothing occluded, no depth-of-field blur on the subject.
 - No motion, no spray, no wake, no crew.
 
@@ -88,6 +98,16 @@ silhouette and is not reconstructed at part level.
 The identity anchor is approved before any derivative view is generated. A derivative view that
 contradicts the approved anchor is rejected and regenerated; it is never accepted and reconciled
 afterwards.
+
+Only the geometric views — anchor, front, side, back, top — become Ingredients of the asset's saved
+reference. The material close-ups and the wet look-dev stay out of it: a tight surface crop carries
+no identity and pulls later generations toward close-up framing. They belong to the pack, not to the
+identity.
+
+Framing defects do not require a re-roll. Extending the canvas in the tool's literal mode preserves
+the approved pixels exactly and paints only what was missing. Whatever it paints is invented,
+though, so that region is held to a higher standard than the rest of the image — and if the missing
+region carries runtime sockets, say so in the pack record.
 
 ## 7. Prompt invariants
 
@@ -170,10 +190,51 @@ receiver, so its upper surfaces must read as broad and continuous.
 Fixed: columnar basalt sea stack; warm grey to graphite; no beach, no shoreline, no vegetation mass.
 Distant silhouette and reflection subject only.
 
-## Open at v1
+## 11. Two checklists, each covering a different half
 
-Settled by the approved hero-vessel anchor, then written back as v2:
+Every asset gets both. Run them at different moments, because they answer opposite questions.
 
-- Section 5's lighting and framing rules are stated but not yet validated against real output.
-- Section 6's material close-up count (3) is an estimate.
-- The hero vessel's provisional items above.
+**Before the album opens — what must exist but the anchor cannot show.** List the parts that the
+asset's function implies and the chosen anchor angle hides. On the hero vessel this list would have
+read: propellers (below the waterline), the fittings the fenders hang from (behind the fenders),
+the rudder and shaft struts. Both of the first two were instead discovered mid-pack, when a
+generated image produced them and forced a ruling. Writing the list first turns that into a decision
+made in advance.
+
+Every asset has such a region: the buoy's underwater ballast and mooring attachment, the crate's
+base pallet and closure hardware, the underwater structure's above-water portion and its anchoring
+points, the sea stack's submerged base. These are also, repeatedly, where the runtime sockets
+attach — the hero vessel's propeller list item carried three of them.
+
+**After each view is approved — what is in the picture that nobody counted.** The generating tool
+decomposes an approved image into named regions; read that list against the specification and ask
+which named region has no counterpart in it. This is how a stray fitting or an extra fender gets
+caught. It is a completeness check, not a component hierarchy: it is a flat set of 2D masks with no
+transforms, depth or parenthood, so it must never drive the reconstruction's component structure.
+
+The first list checks what cannot be seen; the second checks what was seen but not counted. Either
+one alone misses half.
+
+## 12. How to write a constraint
+
+State what must be present, as the sentence's main clause, and enumerate it. Keep negations to a
+short closing list, scoped tightly — "only two things are hidden: X and Y".
+
+A negation defines a forbidden region rather than a target, and the model satisfies it by deleting
+more than was asked. This cost two rounds during the hero vessel pack:
+
+- "filling the frame with even margins" produced four cropped candidates.
+- "the far-side railing must not be visible" removed the railing entirely, took the winch and deck
+  boxes with it, and stretched the hull.
+
+Both were fixed by naming every part that had to stay and hiding exactly two named things.
+
+## 13. When generation forces a decision
+
+A part that the anchor could not show will eventually appear in a derivative view. Settle it the
+moment it appears: either write it into section 10 as specification, or remove it. Never leave it
+undecided, because an undecided part drifts differently in every later view and there is nothing to
+judge the drift against.
+
+Bronze propellers and graphite horn cleats both entered this Bible that way. Section 11's first
+checklist exists to make the next one a decision taken in advance instead.
