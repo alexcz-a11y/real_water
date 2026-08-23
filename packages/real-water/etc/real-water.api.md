@@ -188,11 +188,25 @@ export interface BodyPhysicsVector3 {
 }
 
 // @public
+export interface BodyWakeSourceIdentity {
+    // (undocumented)
+    readonly attachmentId: number;
+    // (undocumented)
+    readonly socketId: string;
+    // (undocumented)
+    readonly socketKind: BodyEffectSocket["kind"];
+}
+
+// @public
 export interface BodyWakeUpdateReceipt {
     // (undocumented)
     readonly activeBodyWakeCount: number;
     // (undocumented)
     readonly activeDisturbanceCount: number;
+    // (undocumented)
+    readonly displacedBodyWakeSources: readonly BodyWakeSourceIdentity[];
+    // (undocumented)
+    readonly displacedDisturbanceIds: readonly number[];
     // (undocumented)
     readonly droppedSocketIds: readonly string[];
     // (undocumented)
@@ -349,6 +363,8 @@ export interface DisturbanceSubmissionReceipt {
     readonly acceptedDisturbanceIds: readonly number[];
     // (undocumented)
     readonly activeDisturbanceCount: number;
+    // (undocumented)
+    readonly displacedBodyWakeSources: readonly BodyWakeSourceIdentity[];
     // (undocumented)
     readonly droppedDisturbanceIds: readonly number[];
     // (undocumented)

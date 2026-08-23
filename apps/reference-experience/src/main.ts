@@ -315,7 +315,9 @@ function createThreeReferenceHostAttempt(
   scene.background = new Color(0x031019);
   const seabed = addReferenceSeabed(scene, qaModule !== null);
   const proxyVessel =
-    qaModule === null ? createReferenceProxyVessel(scene) : undefined;
+    qaModule === null || parameters.get("proxy") === "1"
+      ? createReferenceProxyVessel(scene)
+      : undefined;
   const disposeVesselControls =
     proxyVessel === undefined
       ? undefined
@@ -332,7 +334,17 @@ function createThreeReferenceHostAttempt(
   renderer.setPixelRatio(1);
   renderer.setSize(width, height, false);
   let disposed = false;
-  const qaSimulation = qaModule?.createQaHostSimulationController();
+  const qaSimulation = qaModule?.createQaHostSimulationController({
+    ...(proxyVessel === undefined
+      ? {}
+      : {
+          integrateFixedStep: proxyVessel.integrateFixedStep,
+          reset: () => {
+            proxyVessel.reset();
+            proxyVessel.setControls({ throttle: 1, steering: 0 });
+          },
+        }),
+  });
   const qaPresentation = qaModule?.createQaHostPresentationController();
   let referencePresentation: ReferenceHostPresentationController | undefined;
   const referenceSimulation =

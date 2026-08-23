@@ -383,6 +383,29 @@ describe("Reference proxy vessel", () => {
     vessel.dispose();
   });
 
+  it("resets Host controls and motion without disposing the proxy", () => {
+    const vessel = createReferenceProxyVessel(new Scene());
+    vessel.setControls({ throttle: 1, steering: 1 });
+    vessel.integrateFixedStep();
+
+    vessel.reset();
+
+    expect(vessel.inspect()).toEqual({
+      controls: { throttle: 0, steering: 0 },
+      fixedStepCount: 0,
+      pose: {
+        position: { x: 0, y: 0.25, z: 0 },
+        rotation: { x: 0, y: 0, z: 0, w: 1 },
+      },
+    });
+    expect(vessel.physics.snapshot()).toMatchObject({
+      position: { x: 0, y: 0.25, z: 0 },
+      linearVelocity: { x: 0, y: 0, z: 0 },
+      angularVelocity: { x: 0, y: 0, z: 0 },
+    });
+    vessel.dispose();
+  });
+
   it("detaches without destroying Host state and disposes owned Three resources once", async () => {
     const scene = new Scene();
     const vessel = createReferenceProxyVessel(scene);

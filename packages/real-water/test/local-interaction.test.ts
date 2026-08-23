@@ -31,6 +31,7 @@ describe("ready local interaction runtime", () => {
       tick: 0,
       acceptedDisturbanceIds: [41],
       droppedDisturbanceIds: [],
+      displacedBodyWakeSources: [],
       activeDisturbanceCount: 1,
     });
     const forward = queryPoint(lease, 0, 0, 1);
@@ -93,7 +94,7 @@ describe("ready local interaction runtime", () => {
     await lease.dispose();
   });
 
-  it("reports a dropped automatic wake when manual Disturbances hold all 128 slots", async () => {
+  it("lets a higher-priority Body wake displace the globally lowest manual Disturbance", async () => {
     const state: HostSimulationState = Object.freeze({
       seed: 25,
       tick: 0,
@@ -131,9 +132,69 @@ describe("ready local interaction runtime", () => {
 
     expect(attachment.inspect().lastWakeReceipt).toEqual({
       tick: 0,
-      emittedSocketIds: [],
-      droppedSocketIds: ["wake"],
-      activeBodyWakeCount: 0,
+      emittedSocketIds: ["wake"],
+      droppedSocketIds: [],
+      displacedDisturbanceIds: [1],
+      displacedBodyWakeSources: [],
+      activeBodyWakeCount: 1,
+      activeDisturbanceCount: 128,
+    });
+    expect(lease.inspectRuntime()).toMatchObject({
+      activeBodyWakeCount: 1,
+      activeDisturbanceCount: 128,
+    });
+    await lease.dispose();
+  });
+
+  it("reports the Body socket displaced by a higher-priority manual Disturbance", async () => {
+    const state: HostSimulationState = Object.freeze({
+      seed: 25,
+      tick: 0,
+      timeSeconds: 0,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      simulationResetRevision: 0,
+    });
+    const lease = await createInteractionLease(() => state);
+    let runHostFixedStep: (() => BodyWaterLoad) | undefined;
+    const body = createBodyPhysicsAdapter({
+      snapshot: createMovingBodyState,
+      applyWaterLoad() {},
+      bind(route) {
+        runHostFixedStep = route.beforeIntegrate;
+        return Object.freeze({ dispose() {} });
+      },
+    });
+    const attachment = lease.attachBody({
+      physics: body,
+      shape: { kind: "sphere", radius: 0.6 },
+      sockets: [{ ...createWakeSocket(), priority: 0 }],
+    });
+    runHostFixedStep?.();
+    lease.submitDisturbances({
+      kind: "radial-impact",
+      count: 127,
+      ids: Uint32Array.from({ length: 127 }, (_, index) => index + 1),
+      positions: new Float32Array(127 * 3),
+      radii: new Float32Array(127).fill(1),
+      amplitudes: new Float32Array(127).fill(0.25),
+      priorities: new Uint8Array(127).fill(255),
+    });
+
+    expect(
+      lease.submitDisturbances(radialImpactBatch({ id: 999, priority: 1 })),
+    ).toEqual({
+      tick: 0,
+      acceptedDisturbanceIds: [999],
+      droppedDisturbanceIds: [],
+      displacedBodyWakeSources: [
+        {
+          attachmentId: attachment.id,
+          socketId: "wake",
+          socketKind: "wake",
+        },
+      ],
       activeDisturbanceCount: 128,
     });
     expect(lease.inspectRuntime()).toMatchObject({
@@ -185,6 +246,7 @@ describe("ready local interaction runtime", () => {
       tick: 12,
       acceptedDisturbanceIds: [7],
       droppedDisturbanceIds: [],
+      displacedBodyWakeSources: [],
       activeDisturbanceCount: 1,
     });
 
@@ -252,6 +314,7 @@ describe("ready local interaction runtime", () => {
       tick: 4,
       acceptedDisturbanceIds: [999],
       droppedDisturbanceIds: [1],
+      displacedBodyWakeSources: [],
       activeDisturbanceCount: 128,
     });
     expect(
@@ -260,6 +323,7 @@ describe("ready local interaction runtime", () => {
       tick: 4,
       acceptedDisturbanceIds: [],
       droppedDisturbanceIds: [1_000],
+      displacedBodyWakeSources: [],
       activeDisturbanceCount: 128,
     });
 

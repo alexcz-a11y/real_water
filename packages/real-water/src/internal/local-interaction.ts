@@ -1,4 +1,7 @@
-import type { BodyWakeUpdateReceipt } from "../body-physics.js";
+import type {
+  BodyWakeSourceIdentity,
+  BodyWakeUpdateReceipt,
+} from "../body-physics.js";
 import type {
   DirectionalWakeDisturbanceBatch,
   GameplayQueryBatch,
@@ -58,6 +61,7 @@ interface ActiveBodyWake extends ActiveDisturbanceBase {
   readonly origin: "body";
   readonly attachmentId: number;
   readonly socketId: string;
+  readonly socketKind: BodyWakeSource["kind"];
   readonly kind: "directional-wake" | "propeller-wash";
 }
 
@@ -98,6 +102,7 @@ interface DisturbanceSubmissionReceipt {
   readonly tick: number;
   readonly acceptedDisturbanceIds: readonly number[];
   readonly droppedDisturbanceIds: readonly number[];
+  readonly displacedBodyWakeSources: readonly BodyWakeSourceIdentity[];
   readonly activeDisturbanceCount: number;
 }
 
@@ -273,6 +278,7 @@ export function createLocalInteractionField(
       }
     }
     const droppedDisturbanceIds: number[] = [];
+    const displacedBodyWakeSources: BodyWakeSourceIdentity[] = [];
     let mutated = false;
     for (const disturbance of submitted) {
       const freeIndex = disturbances.indexOf(null);
@@ -281,13 +287,18 @@ export function createLocalInteractionField(
         mutated = true;
         continue;
       }
-      const lowestIndex = findLowestPriorityDisturbance(disturbances, "manual");
+      const lowestIndex = findLowestPriorityDisturbance(disturbances);
       const lowest = disturbances[lowestIndex];
       if (
-        lowest?.origin === "manual" &&
+        lowest !== undefined &&
+        lowest !== null &&
         disturbance.priority > lowest.priority
       ) {
-        droppedDisturbanceIds.push(lowest.id);
+        if (lowest.origin === "manual") {
+          droppedDisturbanceIds.push(lowest.id);
+        } else {
+          displacedBodyWakeSources.push(bodyWakeIdentity(lowest));
+        }
         disturbances[lowestIndex] = disturbance;
         mutated = true;
       } else {
@@ -310,6 +321,7 @@ export function createLocalInteractionField(
       tick: state.tick,
       acceptedDisturbanceIds: Object.freeze(acceptedDisturbanceIds),
       droppedDisturbanceIds: Object.freeze(droppedDisturbanceIds),
+      displacedBodyWakeSources: Object.freeze(displacedBodyWakeSources),
       activeDisturbanceCount: activeDisturbanceCount(disturbances),
     });
   };
@@ -408,6 +420,8 @@ export function createLocalInteractionField(
         );
       }
       const requested = new Set(requestedSocketIds);
+      const displacedDisturbanceIds: number[] = [];
+      const displacedBodyWakeSources: BodyWakeSourceIdentity[] = [];
       let mutated = false;
       for (let index = 0; index < disturbances.length; index += 1) {
         const disturbance = disturbances[index];
@@ -463,12 +477,18 @@ export function createLocalInteractionField(
           mutated = true;
           continue;
         }
-        const lowestIndex = findLowestPriorityDisturbance(disturbances, "body");
+        const lowestIndex = findLowestPriorityDisturbance(disturbances);
         const lowest = disturbances[lowestIndex];
         if (
-          lowest?.origin === "body" &&
+          lowest !== undefined &&
+          lowest !== null &&
           disturbance.priority > lowest.priority
         ) {
+          if (lowest.origin === "manual") {
+            displacedDisturbanceIds.push(lowest.id);
+          } else {
+            displacedBodyWakeSources.push(bodyWakeIdentity(lowest));
+          }
           disturbances[lowestIndex] = disturbance;
           mutated = true;
         }
@@ -488,6 +508,8 @@ export function createLocalInteractionField(
         tick: state.tick,
         emittedSocketIds: Object.freeze(emittedSocketIds),
         droppedSocketIds: Object.freeze(droppedSocketIds),
+        displacedDisturbanceIds: Object.freeze(displacedDisturbanceIds),
+        displacedBodyWakeSources: Object.freeze(displacedBodyWakeSources),
         activeBodyWakeCount: activeBodyWakeCount(disturbances),
         activeDisturbanceCount: activeDisturbanceCount(disturbances),
       });
@@ -618,6 +640,7 @@ function createActiveBodyWake(
     origin: "body",
     attachmentId,
     socketId: source.socketId,
+    socketKind: source.kind,
     kind: source.kind === "propeller" ? "propeller-wash" : "directional-wake",
     x: source.x + state.originX,
     z: source.z + state.originZ,
@@ -646,14 +669,14 @@ function findBodyWakeIndex(
 
 function findLowestPriorityDisturbance(
   disturbances: readonly (ActiveDisturbance | null)[],
-  origin: ActiveDisturbance["origin"],
 ): number {
   let lowestIndex = -1;
   for (let index = 0; index < disturbances.length; index += 1) {
     const candidate = disturbances[index];
     const lowest = disturbances[lowestIndex];
     if (
-      candidate?.origin === origin &&
+      candidate !== undefined &&
+      candidate !== null &&
       (lowest === undefined ||
         lowest === null ||
         candidate.priority < lowest.priority ||
@@ -744,6 +767,7 @@ function compactDisturbances(
 function sameBodyWake(left: ActiveBodyWake, right: ActiveBodyWake): boolean {
   return (
     left.kind === right.kind &&
+    left.socketKind === right.socketKind &&
     left.x === right.x &&
     left.z === right.z &&
     left.directionX === right.directionX &&
@@ -752,6 +776,14 @@ function sameBodyWake(left: ActiveBodyWake, right: ActiveBodyWake): boolean {
     left.amplitude === right.amplitude &&
     left.priority === right.priority
   );
+}
+
+function bodyWakeIdentity(wake: ActiveBodyWake): BodyWakeSourceIdentity {
+  return Object.freeze({
+    attachmentId: wake.attachmentId,
+    socketId: wake.socketId,
+    socketKind: wake.socketKind,
+  });
 }
 
 function normalizeHorizontalDirection(

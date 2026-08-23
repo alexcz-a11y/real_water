@@ -2,6 +2,24 @@ import { describe, expect, it } from "vitest";
 import { createQaHostSimulationController } from "./qa-simulation-controller.js";
 
 describe("QA Host Simulation Controller", () => {
+  it("runs Host integration once at each current tick before advancing state", () => {
+    const integratedTicks: number[] = [];
+    let resetCount = 0;
+    const simulation = createQaHostSimulationController({
+      integrateFixedStep() {
+        integratedTicks.push(simulation.snapshot().tick);
+      },
+      reset() {
+        resetCount += 1;
+      },
+    });
+
+    expect(simulation.advance(3).tick).toBe(3);
+    expect(integratedTicks).toEqual([0, 1, 2]);
+    expect(simulation.reset(25).tick).toBe(0);
+    expect(resetCount).toBe(1);
+  });
+
   it("starts at simulationResetRevision 0 and increments every explicit reset", () => {
     const simulation = createQaHostSimulationController();
     expect(simulation.snapshot()).toEqual({

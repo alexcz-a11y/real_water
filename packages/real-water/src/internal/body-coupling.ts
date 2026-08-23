@@ -52,7 +52,7 @@ interface BodyQueryStorage {
 
 interface InteractionSample {
   readonly localPosition: BodyPhysicsVector3;
-  readonly immersionRadius: number;
+  readonly localHalfExtents: BodyPhysicsVector3;
   readonly volume: number;
 }
 
@@ -424,7 +424,10 @@ function createInteractionSamples(
           y: child.position.y + rotatedCenter.y,
           z: child.position.z + rotatedCenter.z,
         }),
-        immersionRadius: primitive.immersionRadius,
+        localHalfExtents: rotateHalfExtents(
+          primitive.localHalfExtents,
+          child.rotation,
+        ),
         volume: primitive.volume,
       });
     }),
@@ -436,20 +439,28 @@ function primitiveSample(shape: PrimitiveInteractionShape): InteractionSample {
     case "sphere":
       return Object.freeze({
         localPosition: zeroVector(),
-        immersionRadius: shape.radius,
+        localHalfExtents: freezeVector({
+          x: shape.radius,
+          y: shape.radius,
+          z: shape.radius,
+        }),
         volume: (4 / 3) * Math.PI * shape.radius ** 3,
       });
     case "box":
       return Object.freeze({
         localPosition: zeroVector(),
-        immersionRadius: shape.halfExtents.y,
+        localHalfExtents: shape.halfExtents,
         volume:
           8 * shape.halfExtents.x * shape.halfExtents.y * shape.halfExtents.z,
       });
     case "capsule":
       return Object.freeze({
         localPosition: zeroVector(),
-        immersionRadius: shape.radius + shape.halfHeight,
+        localHalfExtents: freezeVector({
+          x: shape.radius,
+          y: shape.radius + shape.halfHeight,
+          z: shape.radius,
+        }),
         volume:
           Math.PI * shape.radius ** 2 * shape.halfHeight * 2 +
           (4 / 3) * Math.PI * shape.radius ** 3,
@@ -462,10 +473,11 @@ function primitiveSample(shape: PrimitiveInteractionShape): InteractionSample {
           y: (bounds.minimum.y + bounds.maximum.y) / 2,
           z: (bounds.minimum.z + bounds.maximum.z) / 2,
         }),
-        immersionRadius: Math.max(
-          (bounds.maximum.y - bounds.minimum.y) / 2,
-          0.000_1,
-        ),
+        localHalfExtents: freezeVector({
+          x: Math.max((bounds.maximum.x - bounds.minimum.x) / 2, 0.000_1),
+          y: Math.max((bounds.maximum.y - bounds.minimum.y) / 2, 0.000_1),
+          z: Math.max((bounds.maximum.z - bounds.minimum.z) / 2, 0.000_1),
+        }),
         volume: Math.max(
           (bounds.maximum.x - bounds.minimum.x) *
             (bounds.maximum.y - bounds.minimum.y) *
@@ -510,6 +522,10 @@ function createCompoundWaterLoad(
     }
     const vectorIndex = index * 3;
     const lever = rotateVector(sample.localPosition, state.rotation);
+    const immersionRadius = Math.max(
+      rotateHalfExtents(sample.localHalfExtents, state.rotation).y,
+      0.000_1,
+    );
     const pointVelocity = addMutable(
       state.linearVelocity,
       cross(state.angularVelocity, lever),
@@ -519,15 +535,15 @@ function createCompoundWaterLoad(
     const waterVelocityY = results.velocities[vectorIndex + 1] ?? Number.NaN;
     const waterVelocityZ = results.velocities[vectorIndex + 2] ?? Number.NaN;
     const sampleY = state.position.y + lever.y;
-    const submergedDepth = waterHeight - (sampleY - sample.immersionRadius);
+    const submergedDepth = waterHeight - (sampleY - immersionRadius);
     const submergedFraction = clamp(
-      submergedDepth / (sample.immersionRadius * 2),
+      submergedDepth / (immersionRadius * 2),
       0,
       1,
     );
     const dampingWeight = clamp(submergedFraction * 2, 0, 1);
     const verticalDamping =
-      2 * Math.sqrt(GRAVITY_METRES_PER_SECOND_SQUARED / sample.immersionRadius);
+      2 * Math.sqrt(GRAVITY_METRES_PER_SECOND_SQUARED / immersionRadius);
     const horizontalDamping = 2 * dampingWeight;
     const sampleMass = state.mass * (sample.volume / totalVolume);
     const sampleForce = {
@@ -581,6 +597,20 @@ function rotateVector(
     x: vector.x + rotation.w * tx + rotation.y * tz - rotation.z * ty,
     y: vector.y + rotation.w * ty + rotation.z * tx - rotation.x * tz,
     z: vector.z + rotation.w * tz + rotation.x * ty - rotation.y * tx,
+  });
+}
+
+function rotateHalfExtents(
+  halfExtents: BodyPhysicsVector3,
+  rotation: BodyPhysicsQuaternion,
+): BodyPhysicsVector3 {
+  const xAxis = rotateVector({ x: halfExtents.x, y: 0, z: 0 }, rotation);
+  const yAxis = rotateVector({ x: 0, y: halfExtents.y, z: 0 }, rotation);
+  const zAxis = rotateVector({ x: 0, y: 0, z: halfExtents.z }, rotation);
+  return freezeVector({
+    x: Math.abs(xAxis.x) + Math.abs(yAxis.x) + Math.abs(zAxis.x),
+    y: Math.abs(xAxis.y) + Math.abs(yAxis.y) + Math.abs(zAxis.y),
+    z: Math.abs(xAxis.z) + Math.abs(yAxis.z) + Math.abs(zAxis.z),
   });
 }
 

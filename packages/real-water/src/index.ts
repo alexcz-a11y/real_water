@@ -110,6 +110,7 @@ export type {
   BodyInteractionSocketKind,
   BodyWaterLoad,
   BodyWakeUpdateReceipt,
+  BodyWakeSourceIdentity,
   BoxInteractionShape,
   CapsuleInteractionShape,
   CompoundInteractionShape,

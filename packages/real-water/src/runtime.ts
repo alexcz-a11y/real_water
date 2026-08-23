@@ -19,7 +19,11 @@ import {
   readHostPresentationState,
   type HostPresentationAdapter,
 } from "./presentation.js";
-import type { BodyAttachment, BodyAttachmentOptions } from "./body-physics.js";
+import type {
+  BodyAttachment,
+  BodyAttachmentOptions,
+  BodyWakeSourceIdentity,
+} from "./body-physics.js";
 import { createBodyCoupling } from "./internal/body-coupling.js";
 
 /**
@@ -217,6 +221,7 @@ export interface DisturbanceSubmissionReceipt {
   readonly tick: number;
   readonly acceptedDisturbanceIds: readonly number[];
   readonly droppedDisturbanceIds: readonly number[];
+  readonly displacedBodyWakeSources: readonly BodyWakeSourceIdentity[];
   readonly activeDisturbanceCount: number;
 }
 
@@ -724,58 +729,7 @@ function validateRadialImpactDisturbanceBatch(
       "Disturbance batches must use the exact radial-impact contract.",
     );
   }
-  if (!Number.isSafeInteger(batch.count) || batch.count < 0) {
-    throw new RangeError(
-      "Disturbance counts must be non-negative safe integers.",
-    );
-  }
-  requireUint32Length(batch.ids, batch.count, "ids");
-  requireLength(batch.positions, batch.count * 3, "positions");
-  requireLength(batch.radii, batch.count, "radii");
-  requireLength(batch.amplitudes, batch.count, "amplitudes");
-  requireUint8DisturbanceLength(batch.priorities, batch.count, "priorities");
-  const ids = new Set<number>();
-  for (let index = 0; index < batch.count; index += 1) {
-    const vectorIndex = index * 3;
-    if (
-      !Number.isFinite(batch.positions[vectorIndex]) ||
-      !Number.isFinite(batch.positions[vectorIndex + 1]) ||
-      !Number.isFinite(batch.positions[vectorIndex + 2])
-    ) {
-      throw new RangeError(
-        "Radial-impact positions must contain finite values.",
-      );
-    }
-    const radius = batch.radii[index];
-    if (
-      !Number.isFinite(radius) ||
-      radius === undefined ||
-      radius < MIN_RADIAL_IMPACT_RADIUS_METRES ||
-      radius > MAX_RADIAL_IMPACT_RADIUS_METRES
-    ) {
-      throw new RangeError(
-        "Radial-impact radii must be at least 0.0001 metres and at most 48 metres.",
-      );
-    }
-    const amplitude = batch.amplitudes[index];
-    if (
-      !Number.isFinite(amplitude) ||
-      amplitude === undefined ||
-      amplitude < -MAX_RADIAL_IMPACT_AMPLITUDE_METRES ||
-      amplitude > MAX_RADIAL_IMPACT_AMPLITUDE_METRES
-    ) {
-      throw new RangeError(
-        "Radial-impact amplitudes must be between -4 and 4 metres.",
-      );
-    }
-    const id = batch.ids[index] ?? 0;
-    if (ids.has(id)) {
-      throw new TypeError(
-        "Radial-impact batches require unique Disturbance ids.",
-      );
-    }
-    ids.add(id);
-  }
+  validateDisturbanceBatchStorage(batch, "Radial-impact");
 }
 
 function validateDirectionalWakeDisturbanceBatch(
@@ -800,6 +754,43 @@ function validateDirectionalWakeDisturbanceBatch(
       "Directional-wake batches must use the exact supported contract.",
     );
   }
+  validateDisturbanceBatchStorage(
+    batch,
+    "Directional-wake",
+    () => requireLength(batch.directions, batch.count * 3, "directions"),
+    (_index, vectorIndex) => {
+      const directionX = batch.directions[vectorIndex];
+      const directionY = batch.directions[vectorIndex + 1];
+      const directionZ = batch.directions[vectorIndex + 2];
+      const directionLength = Math.hypot(
+        directionX ?? Number.NaN,
+        directionY ?? Number.NaN,
+        directionZ ?? Number.NaN,
+      );
+      if (
+        !Number.isFinite(directionLength) ||
+        Math.abs(directionLength - 1) > 1e-5 ||
+        Math.hypot(directionX ?? 0, directionZ ?? 0) < 1e-6
+      ) {
+        throw new RangeError(
+          "Directional-wake directions must be normalized with a horizontal component.",
+        );
+      }
+    },
+  );
+}
+
+type SharedDisturbanceBatch = Pick<
+  RadialImpactDisturbanceBatch,
+  "amplitudes" | "count" | "ids" | "positions" | "priorities" | "radii"
+>;
+
+function validateDisturbanceBatchStorage(
+  batch: SharedDisturbanceBatch,
+  label: "Directional-wake" | "Radial-impact",
+  validateAdditionalStorage?: () => void,
+  validatePoint?: (index: number, vectorIndex: number) => void,
+): void {
   if (!Number.isSafeInteger(batch.count) || batch.count < 0) {
     throw new RangeError(
       "Disturbance counts must be non-negative safe integers.",
@@ -807,42 +798,21 @@ function validateDirectionalWakeDisturbanceBatch(
   }
   requireUint32Length(batch.ids, batch.count, "ids");
   requireLength(batch.positions, batch.count * 3, "positions");
-  requireLength(batch.directions, batch.count * 3, "directions");
   requireLength(batch.radii, batch.count, "radii");
   requireLength(batch.amplitudes, batch.count, "amplitudes");
   requireUint8DisturbanceLength(batch.priorities, batch.count, "priorities");
+  validateAdditionalStorage?.();
   const ids = new Set<number>();
   for (let index = 0; index < batch.count; index += 1) {
     const vectorIndex = index * 3;
-    const positionX = batch.positions[vectorIndex];
-    const positionY = batch.positions[vectorIndex + 1];
-    const positionZ = batch.positions[vectorIndex + 2];
     if (
-      !Number.isFinite(positionX) ||
-      !Number.isFinite(positionY) ||
-      !Number.isFinite(positionZ)
+      !Number.isFinite(batch.positions[vectorIndex]) ||
+      !Number.isFinite(batch.positions[vectorIndex + 1]) ||
+      !Number.isFinite(batch.positions[vectorIndex + 2])
     ) {
-      throw new RangeError(
-        "Directional-wake positions must contain finite values.",
-      );
+      throw new RangeError(`${label} positions must contain finite values.`);
     }
-    const directionX = batch.directions[vectorIndex];
-    const directionY = batch.directions[vectorIndex + 1];
-    const directionZ = batch.directions[vectorIndex + 2];
-    const directionLength = Math.hypot(
-      directionX ?? Number.NaN,
-      directionY ?? Number.NaN,
-      directionZ ?? Number.NaN,
-    );
-    if (
-      !Number.isFinite(directionLength) ||
-      Math.abs(directionLength - 1) > 1e-5 ||
-      Math.hypot(directionX ?? 0, directionZ ?? 0) < 1e-6
-    ) {
-      throw new RangeError(
-        "Directional-wake directions must be normalized with a horizontal component.",
-      );
-    }
+    validatePoint?.(index, vectorIndex);
     const radius = batch.radii[index];
     if (
       !Number.isFinite(radius) ||
@@ -851,7 +821,7 @@ function validateDirectionalWakeDisturbanceBatch(
       radius > MAX_RADIAL_IMPACT_RADIUS_METRES
     ) {
       throw new RangeError(
-        "Directional-wake radii must be at least 0.0001 metres and at most 48 metres.",
+        `${label} radii must be at least 0.0001 metres and at most 48 metres.`,
       );
     }
     const amplitude = batch.amplitudes[index];
@@ -862,14 +832,12 @@ function validateDirectionalWakeDisturbanceBatch(
       amplitude > MAX_RADIAL_IMPACT_AMPLITUDE_METRES
     ) {
       throw new RangeError(
-        "Directional-wake amplitudes must be between -4 and 4 metres.",
+        `${label} amplitudes must be between -4 and 4 metres.`,
       );
     }
     const id = batch.ids[index] ?? 0;
     if (ids.has(id)) {
-      throw new TypeError(
-        "Directional-wake batches require unique Disturbance ids.",
-      );
+      throw new TypeError(`${label} batches require unique Disturbance ids.`);
     }
     ids.add(id);
   }

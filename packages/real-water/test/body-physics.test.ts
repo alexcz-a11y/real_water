@@ -273,6 +273,64 @@ describe("Body Physics Adapter seam", () => {
     await lease.dispose();
   });
 
+  it("uses a Compound child's rotation when evaluating capsule immersion", async () => {
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        simulation: createStaticHostSimulationAdapter(),
+        environment: createTestEnvironmentAdapter(),
+        presentation: createStaticHostPresentationAdapter(),
+        stepDelayMs: 0,
+      }),
+    }).ready;
+    const waterHeight = queryAt(lease, 0, 0, 0).heights[0] ?? Number.NaN;
+    const state: BodyPhysicsState = Object.freeze({
+      position: Object.freeze({ x: 0, y: waterHeight + 0.75, z: 0 }),
+      rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
+      linearVelocity: Object.freeze({ x: 0, y: 0, z: 0 }),
+      angularVelocity: Object.freeze({ x: 0, y: 0, z: 0 }),
+      mass: 10,
+    });
+    const routes: Array<() => BodyWaterLoad> = [];
+    const loads: BodyWaterLoad[] = [];
+    const createBody = () =>
+      createBodyPhysicsAdapter({
+        snapshot: () => state,
+        applyWaterLoad(load) {
+          loads.push(load);
+        },
+        bind(route) {
+          routes.push(route.beforeIntegrate);
+          return Object.freeze({ dispose() {} });
+        },
+      });
+    const attachCapsule = (rotation: BodyPhysicsState["rotation"]) =>
+      lease.attachBody({
+        physics: createBody(),
+        shape: {
+          kind: "compound",
+          children: [
+            {
+              position: { x: 0, y: 0, z: 0 },
+              rotation,
+              shape: { kind: "capsule", radius: 0.5, halfHeight: 1 },
+            },
+          ],
+        },
+      });
+    attachCapsule({ x: 0, y: 0, z: 0, w: 1 });
+    attachCapsule({ x: Math.SQRT1_2, y: 0, z: 0, w: Math.SQRT1_2 });
+
+    routes[0]?.();
+    routes[1]?.();
+
+    expect(loads).toHaveLength(2);
+    expect(loads[0]?.force.y).toBeGreaterThan(0);
+    expect(loads[1]?.force.y).toBe(0);
+    await lease.dispose();
+  });
+
   it("upserts authored Body wakes and the Interaction Anchor without per-tick submissions", async () => {
     let simulation: HostSimulationState = Object.freeze({
       seed: 25,
@@ -412,6 +470,8 @@ describe("Body Physics Adapter seam", () => {
       tick: 0,
       emittedSocketIds: [],
       droppedSocketIds: [],
+      displacedDisturbanceIds: [],
+      displacedBodyWakeSources: [],
       activeBodyWakeCount: 0,
       activeDisturbanceCount: 0,
     });

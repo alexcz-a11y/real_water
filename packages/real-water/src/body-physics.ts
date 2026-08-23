@@ -229,6 +229,18 @@ export interface BodyWaterLoad {
 }
 
 /**
+ * Stable public identity for one automatic Body wake occupying Disturbance
+ * capacity.
+ *
+ * @public
+ */
+export interface BodyWakeSourceIdentity {
+  readonly attachmentId: number;
+  readonly socketId: string;
+  readonly socketKind: BodyEffectSocket["kind"];
+}
+
+/**
  * Deterministic result of updating one attachment's stable socket sources.
  *
  * @public
@@ -237,6 +249,8 @@ export interface BodyWakeUpdateReceipt {
   readonly tick: number;
   readonly emittedSocketIds: readonly string[];
   readonly droppedSocketIds: readonly string[];
+  readonly displacedDisturbanceIds: readonly number[];
+  readonly displacedBodyWakeSources: readonly BodyWakeSourceIdentity[];
   readonly activeBodyWakeCount: number;
   readonly activeDisturbanceCount: number;
 }

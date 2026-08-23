@@ -163,6 +163,7 @@ export interface ReferenceProxyVesselSnapshot {
 export interface ReferenceProxyVessel {
   readonly physics: BodyPhysicsAdapter;
   setControls(controls: ReferenceProxyVesselControls): void;
+  reset(): void;
   attach(runtime: Pick<RealWaterRuntime, "attachBody">): BodyAttachment;
   integrateFixedStep(): void;
   present(alpha: number): void;
@@ -232,13 +233,7 @@ export function createReferenceProxyVessel(scene: Scene): ReferenceProxyVessel {
 
   scene.add(root);
   let controls = freezeControls({ throttle: 0, steering: 0 });
-  let state = freezeState({
-    position: freezeVector(0, 0.25, 0),
-    rotation: IDENTITY_ROTATION,
-    linearVelocity: freezeVector(0, 0, 0),
-    angularVelocity: freezeVector(0, 0, 0),
-    mass: VESSEL_MASS_KILOGRAMS,
-  });
+  let state = createInitialState();
   let previousPose = poseFromState(state);
   let currentPose = previousPose;
   let fixedStepCount = 0;
@@ -286,6 +281,16 @@ export function createReferenceProxyVessel(scene: Scene): ReferenceProxyVessel {
     setControls(nextControls: ReferenceProxyVesselControls): void {
       assertUsable(disposed);
       controls = freezeControls(nextControls);
+    },
+    reset(): void {
+      assertUsable(disposed);
+      controls = freezeControls({ throttle: 0, steering: 0 });
+      state = createInitialState();
+      previousPose = poseFromState(state);
+      currentPose = previousPose;
+      fixedStepCount = 0;
+      pendingWaterLoad = undefined;
+      setPresentedPose(root, currentPose);
     },
     attach(runtime: Pick<RealWaterRuntime, "attachBody">): BodyAttachment {
       assertUsable(disposed);
@@ -448,6 +453,16 @@ export function createReferenceProxyVessel(scene: Scene): ReferenceProxyVessel {
 }
 
 const ZERO_VECTOR = freezeVector(0, 0, 0);
+
+function createInitialState(): BodyPhysicsState {
+  return freezeState({
+    position: freezeVector(0, 0.25, 0),
+    rotation: IDENTITY_ROTATION,
+    linearVelocity: freezeVector(0, 0, 0),
+    angularVelocity: freezeVector(0, 0, 0),
+    mass: VESSEL_MASS_KILOGRAMS,
+  });
+}
 
 function freezeVector(x: number, y: number, z: number) {
   return Object.freeze({ x, y, z });

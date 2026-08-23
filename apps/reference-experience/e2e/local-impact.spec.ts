@@ -26,7 +26,6 @@ const WAKE_CAMERA = {
   near: 0.1,
   far: 100,
 };
-
 test("renders and replays an edge-free radial impact around the Interaction Anchor", async ({
   page,
 }) => {
@@ -259,6 +258,7 @@ test("renders a prewarmed directional wake coherently with Gameplay Query", asyn
     tick: 0,
     acceptedDisturbanceIds: [25],
     droppedDisturbanceIds: [],
+    displacedBodyWakeSources: [],
     activeDisturbanceCount: 1,
   });
   expect(
@@ -276,6 +276,128 @@ test("renders a prewarmed directional wake coherently with Gameplay Query", asyn
     result.baseline.presentation.compileCount,
   );
   expect(result.replayReceipt).toEqual(result.receipt);
+  expect(result.replay.depth.data).toBe(result.affected.depth.data);
+  const { presentationId: _affectedPresentationId, ...affectedQuery } =
+    result.affected.query;
+  const { presentationId: _replayPresentationId, ...replayQuery } =
+    result.replay.query;
+  void _affectedPresentationId;
+  void _replayPresentationId;
+  expect(replayQuery).toEqual(affectedQuery);
+});
+
+test("drives prewarmed proxy-vessel wakes without per-tick Disturbance submissions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 321, height: 181 });
+  await page.goto("/?qa=1&host=memory&delay=0");
+  test.skip(
+    !(await hasCoreWebGPU(page)),
+    "Core WebGPU is unavailable in this browser profile.",
+  );
+
+  await page.goto("/?qa=1&host=three&proxy=1");
+  await expect(page.getByTestId("reference-stage")).toBeVisible();
+  const result = await page.evaluate(
+    async ({ cameraY }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV9 | undefined;
+      if (harness === undefined) {
+        throw new Error("QA Harness is unavailable.");
+      }
+      const controls = {
+        waveStrength: 0,
+        swellDrama: 1,
+        directionality: 0,
+        choppiness: 1,
+        crestSharpness: 0,
+        microDetail: 1,
+        timeScale: 1,
+        grazingReflection: 1,
+        environmentReflection: 1,
+        depthSeeThrough: 1,
+        depthColoring: 1,
+        inWaterGlow: 1,
+        crestGlow: 1,
+      };
+      const presentState = async (point: { x: number; z: number }) => ({
+        presentation: await harness.present(),
+        depth: await harness.capture("depth"),
+        query: await harness.queryGameplay([point.x, 0, point.z]),
+      });
+      const prepare = async () => {
+        await harness.reset({ seed: 0x2500_0014 });
+        await harness.updateArtisticControls(controls, {
+          transition: "sea-state-cut",
+        });
+      };
+      const advanceVessel = async () => {
+        await harness.advanceTicks(30);
+      };
+
+      await prepare();
+      await harness.setCamera(
+        {
+          projection: "perspective",
+          position: [0, cameraY, 8],
+          target: [0, 0, 8],
+          up: [0, 0, -1],
+          verticalFovDegrees: 40,
+          near: 0.1,
+          far: 100,
+        },
+        { transition: "continuous" },
+      );
+      await advanceVessel();
+      await harness.present();
+      const samples: Array<{ x: number; z: number; height: number }> = [];
+      for (let x = -4; x <= 4; x += 0.5) {
+        for (let z = 6.5; z <= 12; z += 0.5) {
+          const query = await harness.queryGameplay([x, 0, z]);
+          samples.push({ x, z, height: query.height });
+        }
+      }
+      const point = samples.reduce((strongest, candidate) =>
+        Math.abs(candidate.height) > Math.abs(strongest.height)
+          ? candidate
+          : strongest,
+      );
+      const camera = {
+        projection: "perspective" as const,
+        position: [point.x, cameraY, point.z] as const,
+        target: [point.x, 0, point.z] as const,
+        up: [0, 0, -1] as const,
+        verticalFovDegrees: 40,
+        near: 0.1,
+        far: 100,
+      };
+
+      await prepare();
+      await harness.setCamera(camera, { transition: "continuous" });
+      const baseline = await presentState(point);
+      await advanceVessel();
+      const affected = await presentState(point);
+      await prepare();
+      await harness.setCamera(camera, { transition: "continuous" });
+      await presentState(point);
+      await advanceVessel();
+      const replay = await presentState(point);
+      return { point, baseline, affected, replay };
+    },
+    { cameraY: CAMERA_Y },
+  );
+
+  const baselineHeight = centerRenderedHeight(result.baseline.depth.data);
+  const affectedHeight = centerRenderedHeight(result.affected.depth.data);
+  const queryDelta =
+    result.affected.query.height - result.baseline.query.height;
+  expect(Math.abs(queryDelta)).toBeGreaterThan(0.01);
+  expect(
+    Math.abs(affectedHeight - baselineHeight - queryDelta),
+  ).toBeLessThanOrEqual(0.03);
+  expect(result.affected.query.snapshotAge).toBe(1);
+  expect(result.affected.presentation.compileCount).toBe(
+    result.baseline.presentation.compileCount,
+  );
   expect(result.replay.depth.data).toBe(result.affected.depth.data);
   const { presentationId: _affectedPresentationId, ...affectedQuery } =
     result.affected.query;
