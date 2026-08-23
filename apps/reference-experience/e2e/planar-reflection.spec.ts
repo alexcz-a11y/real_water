@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createWaterPreset, type ArtisticControls } from "real-water";
 import type {
   QaCameraV1,
   QaHarnessV10,
@@ -23,6 +24,11 @@ const BELOW_CAMERA = {
   position: [-20, -8, -20] as const,
   target: [-20, 0, -40] as const,
 } satisfies QaCameraV1;
+const PLANAR_CONTROLS = {
+  ...createWaterPreset("swell").artisticControls,
+  whitecapAmount: 0,
+  foamPersistence: 0,
+} satisfies ArtisticControls;
 
 async function openQaStage(page: Page): Promise<void> {
   await page.setViewportSize(VIEWPORT);
@@ -52,12 +58,15 @@ async function presentPlanarEvidence(
   readonly fixture: QaPlanarReflectionFixtureState;
 }> {
   return page.evaluate(
-    async ({ fixtureEnabled, fixtureColor, camera }) => {
+    async ({ fixtureEnabled, fixtureColor, camera, controls }) => {
       const harness = window.__REAL_WATER_QA__ as QaHarnessV10 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
       await harness.reset({ seed: 0x4000_0000 });
+      await harness.updateArtisticControls(controls, {
+        transition: "continuous",
+      });
       await harness.setCamera(camera, { transition: "camera-cut" });
       await harness.advanceTicks(24);
       await harness.present();
@@ -97,7 +106,12 @@ async function presentPlanarEvidence(
         fixture: await harness.readHostScenePlanarReflectionFixture(),
       };
     },
-    { fixtureEnabled: enabled, fixtureColor: hotColor, camera: HIT_CAMERA },
+    {
+      fixtureEnabled: enabled,
+      fixtureColor: hotColor,
+      camera: HIT_CAMERA,
+      controls: PLANAR_CONTROLS,
+    },
   );
 }
 

@@ -5,6 +5,7 @@ import {
   WATER_PRESET_SCHEMA,
   WATER_PRESET_VERSION,
   createWaterPreset,
+  type ArtisticControls,
   type HostEnvironmentState,
 } from "real-water";
 import type { QaFramePrewarmReceipt } from "../src/qa-frame-driver.js";
@@ -64,6 +65,11 @@ const HORIZON_CAMERA = {
 } satisfies QaCameraV1;
 const SWELL_PRESET = createWaterPreset("swell");
 const FAST_PAN_CONTROLS = SWELL_PRESET.artisticControls;
+const TRAA_STABILITY_CONTROLS = {
+  ...FAST_PAN_CONTROLS,
+  whitecapAmount: 0,
+  foamPersistence: 0,
+} satisfies ArtisticControls;
 const TEMPORAL_QA_HARNESS = {
   schema: QA_HARNESS_SCHEMA,
   version: QA_HARNESS_VERSION,
@@ -905,6 +911,7 @@ test("gates TRAA warp residuals on a frozen-simulation fast pan", async ({
     tick: first.tick,
     controlRevision: first.controlRevision,
     prewarm,
+    artisticControls: FAST_PAN_CONTROLS,
     temporalStress: createTemporalStressEvidence({
       id: "fast-pan-frozen-simulation",
       startTick: FAST_PAN_TICK,
@@ -1117,7 +1124,7 @@ test("gates TRAA high-frequency glints on a moving horizon strafe", async ({
     },
     {
       camera: HORIZON_CAMERA,
-      controls: FAST_PAN_CONTROLS,
+      controls: TRAA_STABILITY_CONTROLS,
       seed: SEED,
       primeCount: GLINT_PRIME_PRESENTATIONS,
       frameCount: GLINT_STRAFE_FRAMES,
@@ -1227,6 +1234,7 @@ test("gates TRAA high-frequency glints on a moving horizon strafe", async ({
     tick: firstOn.tick,
     controlRevision: firstOn.controlRevision,
     prewarm: firstOn.prewarm,
+    artisticControls: TRAA_STABILITY_CONTROLS,
     temporalStress: createTemporalStressEvidence({
       id: "high-frequency-glint-horizon-strafe",
       startTick: GLINT_START_TICK,
@@ -1237,7 +1245,7 @@ test("gates TRAA high-frequency glints on a moving horizon strafe", async ({
         {
           id: "sun-on",
           cameraPath,
-          artisticControls: FAST_PAN_CONTROLS,
+          artisticControls: TRAA_STABILITY_CONTROLS,
           waterPreset: SWELL_WATER_PRESET,
           reflection: SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
           lighting: GLINT_ON_LIGHTING,
@@ -1247,7 +1255,7 @@ test("gates TRAA high-frequency glints on a moving horizon strafe", async ({
         {
           id: "sun-off",
           cameraPath,
-          artisticControls: FAST_PAN_CONTROLS,
+          artisticControls: TRAA_STABILITY_CONTROLS,
           waterPreset: SWELL_WATER_PRESET,
           reflection: SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
           lighting: GLINT_OFF_LIGHTING,
@@ -1432,7 +1440,7 @@ test("gates TRAA thin water detail on a jitter-only horizon hold", async ({
     },
     {
       camera: HORIZON_CAMERA,
-      controls: FAST_PAN_CONTROLS,
+      controls: TRAA_STABILITY_CONTROLS,
       lighting: REFERENCE_ENVIRONMENT_LIGHTING,
       seed: SEED,
       primeCount: THIN_PRIME_PRESENTATIONS,
@@ -1501,6 +1509,7 @@ test("gates TRAA thin water detail on a jitter-only horizon hold", async ({
     tick: firstThin.tick,
     controlRevision: firstThin.controlRevision,
     prewarm,
+    artisticControls: TRAA_STABILITY_CONTROLS,
     temporalStress: createTemporalStressEvidence({
       id: "thin-detail-jitter-only-hold",
       startTick: THIN_TICK,
@@ -1511,7 +1520,7 @@ test("gates TRAA thin water detail on a jitter-only horizon hold", async ({
         {
           id: "default",
           cameraPath: Array.from({ length: THIN_FRAMES }, () => HORIZON_CAMERA),
-          artisticControls: FAST_PAN_CONTROLS,
+          artisticControls: TRAA_STABILITY_CONTROLS,
           waterPreset: SWELL_WATER_PRESET,
           reflection: SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
           lighting: REFERENCE_ENVIRONMENT_LIGHTING,
@@ -2143,6 +2152,7 @@ async function attachTemporalStressAcceptance(
     readonly tick: number;
     readonly controlRevision: number;
     readonly prewarm: QaFramePrewarmReceipt;
+    readonly artisticControls: ArtisticControls;
     readonly temporalStress: ReturnType<typeof createTemporalStressEvidence>;
   },
 ): Promise<void> {
@@ -2158,7 +2168,7 @@ async function attachTemporalStressAcceptance(
     ],
     qaHarness: TEMPORAL_QA_HARNESS,
     qaCapture: TEMPORAL_QA_CAPTURE,
-    artisticControls: FAST_PAN_CONTROLS,
+    artisticControls: details.artisticControls,
     waterPreset: SWELL_WATER_PRESET,
     environment: {
       reflection: SUPPORTED_HOST_ENVIRONMENT_REFLECTION,

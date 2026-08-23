@@ -37,6 +37,7 @@ import type { OpenWaterRuntimeSnapshot, RuntimeStateSink } from "../runtime.js";
 import type { LocalInteractionRenderSnapshot } from "./local-interaction.js";
 import { createWaterPreset } from "../water-preset.js";
 import type { createSpectralBandRendering } from "./spectral-bands-rendering.js";
+import { originSamplePhase } from "./spectral-bands.js";
 
 export const INVERSE_LINEAR_DEPTH_ATTACHMENT =
   "Real Water inverse linear depth";
@@ -53,6 +54,10 @@ const WATER_IOR = 1.333;
 const BEER_LAMBERT_RGB = vec3(0.45, 0.07, 0.016);
 const SCATTER_RGB = vec3(0.035, 0.055, 0.085);
 const HENYEY_GREENSTEIN_G = 0.72;
+const FOAM_MICRO_PRIMARY_X = 2.31;
+const FOAM_MICRO_PRIMARY_Z = 0.87;
+const FOAM_MICRO_SECONDARY_X = -0.73;
+const FOAM_MICRO_SECONDARY_Z = 2.67;
 
 type SpectralBandRendering = ReturnType<typeof createSpectralBandRendering>;
 
@@ -78,6 +83,8 @@ export function createWaterOpticsRendering(
   const inWaterGlow = uniform(INITIAL_ARTISTIC_CONTROLS.inWaterGlow);
   const crestGlow = uniform(INITIAL_ARTISTIC_CONTROLS.crestGlow);
   const foamMicroDetail = uniform(INITIAL_ARTISTIC_CONTROLS.microDetail);
+  const foamMicroOriginPhaseX = uniform(0);
+  const foamMicroOriginPhaseZ = uniform(0);
   const sunDirectionValue = new Vector3(
     initialEnvironment.sunDirectionX,
     initialEnvironment.sunDirectionY,
@@ -139,13 +146,19 @@ export function createWaterOpticsRendering(
   const whitecapDensity = spectral.whitecapDensityNode.clamp(0, 1);
   const foamMicroStrength = whitecapDensity
     .mul(foamMicroDetail)
-    .mul(0.085)
+    .mul(0.04)
     .clamp(0, 0.16);
   const foamMicroX = sin(
-    spectral.hostXNode.mul(2.31).add(spectral.hostZNode.mul(0.87)),
+    spectral.hostXNode
+      .mul(FOAM_MICRO_PRIMARY_X)
+      .add(spectral.hostZNode.mul(FOAM_MICRO_PRIMARY_Z))
+      .add(foamMicroOriginPhaseX),
   ).mul(foamMicroStrength);
   const foamMicroZ = sin(
-    spectral.hostXNode.mul(-0.73).add(spectral.hostZNode.mul(2.67)),
+    spectral.hostXNode
+      .mul(FOAM_MICRO_SECONDARY_X)
+      .add(spectral.hostZNode.mul(FOAM_MICRO_SECONDARY_Z))
+      .add(foamMicroOriginPhaseZ),
   ).mul(foamMicroStrength);
   const worldNormal = vec3(
     spectral.worldNormalNode.x.add(foamMicroX),
@@ -361,6 +374,23 @@ export function createWaterOpticsRendering(
     [OPTICAL_DIAGNOSTICS_B_ATTACHMENT]: diagnosticsBNode,
   });
 
+  const applyMicroOriginPhases = (
+    snapshot: Pick<OpenWaterRuntimeSnapshot, "originX" | "originZ">,
+  ): void => {
+    foamMicroOriginPhaseX.value = originSamplePhase(
+      snapshot.originX,
+      snapshot.originZ,
+      FOAM_MICRO_PRIMARY_X,
+      FOAM_MICRO_PRIMARY_Z,
+    );
+    foamMicroOriginPhaseZ.value = originSamplePhase(
+      snapshot.originX,
+      snapshot.originZ,
+      FOAM_MICRO_SECONDARY_X,
+      FOAM_MICRO_SECONDARY_Z,
+    );
+  };
+
   const applySnapshot = (snapshot: OpenWaterRuntimeSnapshot): void => {
     grazingReflection.value = snapshot.artisticControls.grazingReflection;
     environmentReflection.value =
@@ -370,6 +400,7 @@ export function createWaterOpticsRendering(
     inWaterGlow.value = snapshot.artisticControls.inWaterGlow;
     crestGlow.value = snapshot.artisticControls.crestGlow;
     foamMicroDetail.value = snapshot.artisticControls.microDetail;
+    applyMicroOriginPhases(snapshot);
   };
 
   const sink: RuntimeStateSink = Object.freeze({
@@ -382,6 +413,7 @@ export function createWaterOpticsRendering(
     },
     observe(snapshot: OpenWaterRuntimeSnapshot): void {
       spectral.sink.observe?.(snapshot);
+      applyMicroOriginPhases(snapshot);
     },
   });
 
