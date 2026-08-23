@@ -576,7 +576,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "ssr-history-input-color",
   ]);
   expect(result.first.captures.map(({ version }) => version)).toEqual(
-    new Array<number>(27).fill(9),
+    new Array<number>(27).fill(10),
   );
   expect(result.first.captures.map(({ format }) => format)).toEqual([
     "rgba8unorm-srgb",
@@ -665,7 +665,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       }),
     ),
   );
-  expect(result.first.captures.every((capture) => capture.version === 9)).toBe(
+  expect(result.first.captures.every((capture) => capture.version === 10)).toBe(
     true,
   );
   expect(result.changedTick.captures[0]?.data).not.toBe(

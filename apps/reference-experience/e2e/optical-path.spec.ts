@@ -287,7 +287,7 @@ test("captures color, depth, normal, and optical intermediates", async ({
     "ssr-history-frame-weight",
     "ssr-history-input-color",
   ]);
-  expect(result.versions.every((version) => version === 9)).toBe(true);
+  expect(result.versions.every((version) => version === 10)).toBe(true);
   expect(result.depth).toBeDefined();
   const downDepth = decodeFloat32(result.depth ?? "");
   expect(downDepth.every((value) => Number.isFinite(value))).toBe(true);
