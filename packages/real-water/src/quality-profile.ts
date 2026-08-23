@@ -378,64 +378,95 @@ const LEGACY_V2_QUALITY_PROFILES: Readonly<
     heightSegments: 256,
   }),
 });
-// The version 5 hashes below are the digests committed before the interaction
-// and whitecap fields existed, so they cover the version 5 field order:
-// schema, version, id, surface, temporal, reflection.
-const LEGACY_V5_QUALITY_PROFILES: Readonly<
-  Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
-> = Object.freeze({
-  "minimal": Object.freeze({
-    profileHash:
-      "sha256:9a75bfe19d0e81f51ee19908ce547b5a7abd49ab01dbe00feb234e3c95d23ec0",
-    widthSegments: 128,
-    heightSegments: 128,
-  }),
-  "minimal-high-detail": Object.freeze({
-    profileHash:
-      "sha256:04b1d29617d1d2dd50f9d0f5b4f5dcd6ab6012cde62ae7e36ab0bba7be3061d8",
-    widthSegments: 256,
-    heightSegments: 256,
-  }),
-});
+// A legacy variant states the whole contract it was committed under, never
+// borrowing the current one. `absentKeys` covers fields the current schema has
+// and this shape did not; `absentSsrHistoryKeys` does the same one level down;
+// `ssrHistoryResetDomains` covers a field both shapes have but whose VALUE
+// changed. Existence and value are two halves of the same question, so they sit
+// together.
+//
+// The lists below are deliberately their own literals rather than references to
+// the current policy. Sharing the constant is exactly how a rung silently
+// starts demanding a contract written after it: the next reset domain added to
+// the current policy would propagate into every historical entry and each one
+// would begin rejecting the payload it exists to recover.
+type QualityProfileKey = (typeof QUALITY_PROFILE_KEYS)[number];
+type SsrHistoryKey = (typeof SSR_HISTORY_KEYS)[number];
 
-const LEGACY_PRE_RESET_V5_QUALITY_PROFILES: Readonly<
-  Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
-> = Object.freeze({
-  "minimal": Object.freeze({
-    profileHash:
-      "sha256:3ec933fa8238e5bfd50608dc451d8354374c8337e49c793f191a3ad86cdf67b2",
-    widthSegments: 128,
-    heightSegments: 128,
-  }),
-  "minimal-high-detail": Object.freeze({
-    profileHash:
-      "sha256:d61edd12017f4b8adfe9878fa2c116fd9831b1681ce8b52c5e474e012ad94886",
-    widthSegments: 256,
-    heightSegments: 256,
-  }),
-});
+interface LegacyQualityProfileVariant {
+  readonly absentKeys: readonly QualityProfileKey[];
+  readonly absentSsrHistoryKeys: readonly SsrHistoryKey[];
+  readonly ssrHistoryResetDomains: readonly string[];
+  readonly profiles: Readonly<
+    Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
+  >;
+}
+
+// Every shape committed so far carries these four, in this order.
+const LEGACY_SSR_HISTORY_RESET_DOMAINS = Object.freeze([
+  "simulation-reset",
+  "camera-cut",
+  "origin-shift",
+  "sea-state-cut",
+] as const);
+
+// Version 5 was committed twice: once before the SSR history carried a
+// resetVelocityFormat, and once after. Neither knew about `interaction` or
+// `whitecaps`, so both cover the field order schema, version, id, surface,
+// temporal, reflection.
+const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze(["interaction", "whitecaps"] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:9a75bfe19d0e81f51ee19908ce547b5a7abd49ab01dbe00feb234e3c95d23ec0",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:04b1d29617d1d2dd50f9d0f5b4f5dcd6ab6012cde62ae7e36ab0bba7be3061d8",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+    Object.freeze({
+      absentKeys: Object.freeze(["interaction", "whitecaps"] as const),
+      absentSsrHistoryKeys: Object.freeze(["resetVelocityFormat"] as const),
+      ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:3ec933fa8238e5bfd50608dc451d8354374c8337e49c793f191a3ad86cdf67b2",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:d61edd12017f4b8adfe9878fa2c116fd9831b1681ce8b52c5e474e012ad94886",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
 
 // Version 6 was committed more than once, in more than one shape, on branches
 // developed in parallel: one added `interaction`, another added `whitecaps`.
 // Every exact payload remains recoverable, and no hash is an alias for
 // another's partially matching data. Version 7 is the first version that
 // carries both fields, which is why it exists at all.
-//
-// A variant is described by the current-schema fields it did NOT carry, so a
-// further version 6 shape is one more entry here rather than a new table.
-type QualityProfileKey = (typeof QUALITY_PROFILE_KEYS)[number];
-
-interface LegacyQualityProfileVariant {
-  readonly absentKeys: readonly QualityProfileKey[];
-  readonly profiles: Readonly<
-    Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
-  >;
-}
-
 const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
       absentKeys: Object.freeze(["whitecaps"] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
       profiles: Object.freeze({
         "minimal": Object.freeze({
           profileHash:
@@ -453,6 +484,8 @@ const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
     }),
     Object.freeze({
       absentKeys: Object.freeze(["interaction"] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
       profiles: Object.freeze({
         "minimal": Object.freeze({
           profileHash:
@@ -571,12 +604,6 @@ const SSR_HISTORY_KEYS = [
   "resetDomains",
   "updateCadence",
 ] as const;
-const LEGACY_V5_QUALITY_PROFILE_KEYS = QUALITY_PROFILE_KEYS.filter(
-  (key) => key !== "interaction" && key !== "whitecaps",
-);
-const LEGACY_PRE_RESET_SSR_HISTORY_KEYS = SSR_HISTORY_KEYS.filter(
-  (key) => key !== "resetVelocityFormat",
-);
 
 /**
  * Returns a supported minimal-water Quality Profile.
@@ -781,8 +808,7 @@ export function migrateQualityProfile(candidate: unknown): QualityProfile {
     isRecord(candidate) &&
     candidate.version === 5 &&
     isSupportedProfileId(candidate.id) &&
-    (matchesLegacyV5Profile(candidate, candidate.id) ||
-      matchesLegacyPreResetV5Profile(candidate, candidate.id))
+    matchesLegacyV5Profile(candidate, candidate.id)
   ) {
     return createMinimalWaterQualityProfile(candidate.id);
   }
@@ -934,7 +960,7 @@ function matchesLegacyVariant(
     value.schema === QUALITY_PROFILE_SCHEMA &&
     matchesLegacySurface(value, variant.profiles[id]) &&
     matchesCurrentTemporal(value.temporal) &&
-    matchesCurrentReflection(value.reflection) &&
+    matchesVariantReflection(value.reflection, variant) &&
     (!carriesInteraction || matchesCurrentInteraction(value.interaction, id)) &&
     (!carriesWhitecaps ||
       isSupportedSpectralWhitecaps(
@@ -971,62 +997,16 @@ function matchesLegacyV5Profile(
   value: Record<string, unknown>,
   id: MinimalWaterQualityProfileId,
 ): boolean {
-  return (
-    hasExactKeys(value, LEGACY_V5_QUALITY_PROFILE_KEYS) &&
-    value.schema === QUALITY_PROFILE_SCHEMA &&
-    matchesLegacySurface(value, LEGACY_V5_QUALITY_PROFILES[id]) &&
-    matchesCurrentTemporal(value.temporal) &&
-    matchesCurrentReflection(value.reflection)
+  return LEGACY_V5_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
   );
 }
 
-function matchesCurrentReflection(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, REFLECTION_KEYS) &&
-    isRecord(value.environment) &&
-    hasExactKeys(value.environment, ["source"]) &&
-    value.environment.source === NATIVE_REFLECTION.environment.source &&
-    isRecord(value.planar) &&
-    hasExactKeys(value.planar, ["resolutionPolicy", "format", "samples"]) &&
-    value.planar.resolutionPolicy ===
-      NATIVE_REFLECTION.planar.resolutionPolicy &&
-    value.planar.format === NATIVE_REFLECTION.planar.format &&
-    value.planar.samples === NATIVE_REFLECTION.planar.samples &&
-    isSupportedSsrPolicy(value.ssr, NATIVE_REFLECTION.ssr)
-  );
-}
-
-function matchesLegacyPreResetV5Profile(
-  value: Record<string, unknown>,
-  id: MinimalWaterQualityProfileId,
+function matchesVariantReflection(
+  value: unknown,
+  variant: LegacyQualityProfileVariant,
 ): boolean {
   return (
-    hasExactKeys(value, LEGACY_V5_QUALITY_PROFILE_KEYS) &&
-    value.schema === QUALITY_PROFILE_SCHEMA &&
-    matchesLegacySurface(value, LEGACY_PRE_RESET_V5_QUALITY_PROFILES[id]) &&
-    matchesCurrentTemporal(value.temporal) &&
-    matchesLegacyPreResetReflection(value.reflection)
-  );
-}
-
-function matchesCurrentTemporal(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, TEMPORAL_KEYS) &&
-    value.mode === NATIVE_TEMPORAL.mode &&
-    value.renderScale === NATIVE_TEMPORAL.renderScale &&
-    value.resolutionPolicy === NATIVE_TEMPORAL.resolutionPolicy &&
-    value.taau === NATIVE_TEMPORAL.taau &&
-    value.dynamicResolution === NATIVE_TEMPORAL.dynamicResolution &&
-    value.frameGeneration === NATIVE_TEMPORAL.frameGeneration &&
-    value.msaaSamples === NATIVE_TEMPORAL.msaaSamples &&
-    value.updateCadence === NATIVE_TEMPORAL.updateCadence
-  );
-}
-
-function matchesLegacyPreResetReflection(value: unknown): boolean {
-  return (
     isRecord(value) &&
     hasExactKeys(value, REFLECTION_KEYS) &&
     isRecord(value.environment) &&
@@ -1038,16 +1018,19 @@ function matchesLegacyPreResetReflection(value: unknown): boolean {
       NATIVE_REFLECTION.planar.resolutionPolicy &&
     value.planar.format === NATIVE_REFLECTION.planar.format &&
     value.planar.samples === NATIVE_REFLECTION.planar.samples &&
-    matchesLegacyPreResetSsr(value.ssr)
+    matchesVariantSsr(value.ssr, variant)
   );
 }
 
-function matchesLegacyPreResetSsr(value: unknown): boolean {
+function matchesVariantSsr(
+  value: unknown,
+  variant: LegacyQualityProfileVariant,
+): boolean {
   const supported = NATIVE_REFLECTION.ssr;
   return (
     isRecord(value) &&
     hasExactKeys(value, SSR_KEYS) &&
-    matchesLegacyPreResetSsrHistory(value.history) &&
+    matchesVariantSsrHistory(value.history, variant) &&
     value.mode === supported.mode &&
     value.updateCadence === supported.updateCadence &&
     value.stochastic === supported.stochastic &&
@@ -1071,15 +1054,24 @@ function matchesLegacyPreResetSsr(value: unknown): boolean {
   );
 }
 
-function matchesLegacyPreResetSsrHistory(value: unknown): boolean {
+function matchesVariantSsrHistory(
+  value: unknown,
+  variant: LegacyQualityProfileVariant,
+): boolean {
   const supported = NATIVE_REFLECTION.ssr.history;
+  const expectedKeys = SSR_HISTORY_KEYS.filter(
+    (key) => !variant.absentSsrHistoryKeys.includes(key),
+  );
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, LEGACY_PRE_RESET_SSR_HISTORY_KEYS) ||
-    !matchesResetDomains(value.resetDomains, supported.resetDomains)
+    !hasExactKeys(value, expectedKeys) ||
+    !matchesResetDomains(value.resetDomains, variant.ssrHistoryResetDomains)
   ) {
     return false;
   }
+  const carriesResetVelocityFormat = !variant.absentSsrHistoryKeys.includes(
+    "resetVelocityFormat",
+  );
   return (
     value.mode === supported.mode &&
     value.accumulate === supported.accumulate &&
@@ -1090,13 +1082,30 @@ function matchesLegacyPreResetSsrHistory(value: unknown): boolean {
     value.inputFormat === supported.inputFormat &&
     value.captureFormat === supported.captureFormat &&
     value.normalFormat === supported.normalFormat &&
-    value.updateCadence === supported.updateCadence
+    value.updateCadence === supported.updateCadence &&
+    (!carriesResetVelocityFormat ||
+      value.resetVelocityFormat === supported.resetVelocityFormat)
+  );
+}
+
+function matchesCurrentTemporal(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, TEMPORAL_KEYS) &&
+    value.mode === NATIVE_TEMPORAL.mode &&
+    value.renderScale === NATIVE_TEMPORAL.renderScale &&
+    value.resolutionPolicy === NATIVE_TEMPORAL.resolutionPolicy &&
+    value.taau === NATIVE_TEMPORAL.taau &&
+    value.dynamicResolution === NATIVE_TEMPORAL.dynamicResolution &&
+    value.frameGeneration === NATIVE_TEMPORAL.frameGeneration &&
+    value.msaaSamples === NATIVE_TEMPORAL.msaaSamples &&
+    value.updateCadence === NATIVE_TEMPORAL.updateCadence
   );
 }
 
 function matchesResetDomains(
   value: unknown,
-  supported: QualityProfileReflectionSsrHistory["resetDomains"],
+  supported: readonly string[],
 ): boolean {
   if (!Array.isArray(value) || value.length !== supported.length) {
     return false;

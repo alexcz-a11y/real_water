@@ -692,6 +692,38 @@ describe("Quality Profiles", () => {
     }
   });
 
+  it("matches a legacy reset-domain list per variant, not against the current one", () => {
+    const legacy = LEGACY_PRE_RESET_PROFILES.minimal;
+    const candidate = {
+      schema: QUALITY_PROFILE_SCHEMA,
+      version: 5,
+      id: "minimal",
+      profileHash: legacy.profileHash,
+      surface: {
+        geometry: {
+          widthSegments: legacy.segments,
+          heightSegments: legacy.segments,
+        },
+      },
+      temporal: NATIVE_TEMPORAL,
+      reflection: {
+        ...NATIVE_REFLECTION,
+        ssr: {
+          ...NATIVE_SSR,
+          history: {
+            ...LEGACY_PRE_RESET_SSR_HISTORY,
+            resetDomains: [
+              ...LEGACY_PRE_RESET_SSR_HISTORY.resetDomains,
+              "waterline-crossing",
+            ],
+          },
+        },
+      },
+    };
+
+    expect(() => migrateQualityProfile(candidate)).toThrow(TypeError);
+  });
+
   it("migrates both committed version 6 Quality Profiles", () => {
     for (const id of ["minimal", "minimal-high-detail"] as const) {
       const withInteraction = LEGACY_V6_INTERACTION_PROFILES[id];
