@@ -123,9 +123,9 @@ const BODY_COUPLING = Object.freeze({
   socketRoute: "stable-slot-upsert" as const,
 });
 const MINIMAL_PROFILE_HASH =
-  "sha256:31eb3e5315aabb865027060647630de40f4dc32e8f184e7f1a9d362d73c44020";
+  "sha256:47475f80673e8e4c942b567715e0e3d36dedf0d6d1320e83825dc866fefacd93";
 const HIGH_DETAIL_PROFILE_HASH =
-  "sha256:a2f4fef88032d7f91a467131f2e4a3dd2741603d1b8b2322c679c4dcb6a00dfb";
+  "sha256:a8ce0bc38f028341be0567b0e467355f1b0bc74d4abe3f2043c59e28a2dbc239";
 const LEGACY_V9_PROFILES = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
@@ -356,7 +356,7 @@ const NATIVE_WHITECAPS = Object.freeze({
   sourceLayout: "whitecap-wake-impact-combined" as const,
   localHistoryBanks: 2 as const,
   maxLocalSources: 128 as const,
-  sourceTimelineCapacityTicks: 128 as const,
+  foamTimelineCapacityTicks: 128 as const,
 });
 const MEMORY_PREWARM_DRAWING_BUFFER = Object.freeze({
   width: 320,
@@ -676,7 +676,7 @@ describe("Quality Profiles", () => {
       sourceLayout: "whitecap-wake-impact-combined",
       localHistoryBanks: 2,
       maxLocalSources: 128,
-      sourceTimelineCapacityTicks: 128,
+      foamTimelineCapacityTicks: 128,
       diffusionTaps: 3,
       updateCadence: "host-fixed-tick",
       captureResolutionPolicy: "drawing-buffer-exact",
@@ -1384,7 +1384,7 @@ describe("Quality Profiles", () => {
           ...NATIVE_WHITECAPS,
           localHistoryBanks: 3,
           maxLocalSources: 129,
-          sourceTimelineCapacityTicks: 127,
+          foamTimelineCapacityTicks: 127,
         },
       },
     ],
@@ -1709,9 +1709,9 @@ describe("Quality Profile manifests", () => {
       ),
     ).toMatchObject({
       label:
-        "Bounded whitecap, wake, and impact source history (128 shared sources, two GPU local banks, 128-tick preallocated CPU snapshot timeline for 60Hz simulation, 30Hz present, and bounded catch-up)",
+        "Bounded foam history (128-source, two GPU banks, 128-tick preallocated CPU foam-state timeline with Artistic Controls and source poses/lifetimes for 60Hz simulation, 30Hz present, and bounded catch-up)",
       fingerprint:
-        "sha256:9afcb0be0910b9d9fc3e5fdee2da3b09eccb7afdddc1a8aa45a1750c294e8be5",
+        "sha256:b6921d58b2beb103bc12115f47b2430d7db11117842c74213ffef5812e75eaae",
     });
 
     const nextSize = createMinimalWaterPrewarmManifest(

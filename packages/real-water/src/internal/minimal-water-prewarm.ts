@@ -248,7 +248,7 @@ export async function prepareMinimalWaterPlane(
     renderer.initTexture(waterTexture);
     renderer.initTexture(environmentRadiance);
     renderer.initTexture(createdPresentation.resources.planar.target.texture);
-    const preparationSnapshot = createPreparationWhitecapSnapshot(
+    const preparationSnapshot = createPreparationFoamSnapshot(
       options.simulation,
       options.presentation,
     );
@@ -536,7 +536,7 @@ function disposePartialResourcesSilently(
   }
 }
 
-function createPreparationWhitecapSnapshot(
+function createPreparationFoamSnapshot(
   simulation: HostSimulationAdapter,
   presentation: HostPresentationAdapter,
 ): OpenWaterRuntimeSnapshot {

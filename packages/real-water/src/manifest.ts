@@ -514,9 +514,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceHistory,
     kind: "effect-state",
     label:
-      "Bounded whitecap, wake, and impact source history (128 shared sources, two GPU local banks, 128-tick preallocated CPU snapshot timeline for 60Hz simulation, 30Hz present, and bounded catch-up)",
+      "Bounded foam history (128-source, two GPU banks, 128-tick preallocated CPU foam-state timeline with Artistic Controls and source poses/lifetimes for 60Hz simulation, 30Hz present, and bounded catch-up)",
     fingerprint:
-      "sha256:9afcb0be0910b9d9fc3e5fdee2da3b09eccb7afdddc1a8aa45a1750c294e8be5",
+      "sha256:b6921d58b2beb103bc12115f47b2430d7db11117842c74213ffef5812e75eaae",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalAdvectionRoute,

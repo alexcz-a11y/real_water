@@ -22,6 +22,12 @@ const PROPELLER_CAMERA: QaCameraV1 = {
   target: [0, 0, 8],
 };
 const STORM_CONTROLS = createWaterPreset("storm").artisticControls;
+const CHANGED_FOAM_CONTROLS = {
+  ...STORM_CONTROLS,
+  choppiness: 0.65,
+  whitecapAmount: 0.9,
+  foamPersistence: 0.55,
+};
 
 test.describe.configure({ mode: "serial" });
 
@@ -270,6 +276,157 @@ test("preserves source-resolved deterministic foam after manual sources expire",
       maximum: expect.any(Number),
     })),
   );
+});
+
+test("applies continuous foam-control changes at the same tick regardless of presentation cadence", async ({
+  page,
+}) => {
+  await openQaStage(page);
+
+  const result = await page.evaluate(
+    async ({ camera, initialControls, changedControls }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
+      if (harness === undefined) {
+        throw new Error("QA Harness is unavailable.");
+      }
+
+      const wake = () => ({
+        kind: "directional-wake" as const,
+        count: 1,
+        ids: Uint32Array.of(27_101),
+        positions: Float32Array.of(-8, 0, -7),
+        directions: Float32Array.of(0, 0, 1),
+        radii: Float32Array.of(4),
+        amplitudes: Float32Array.of(1.5),
+        priorities: Uint8Array.of(180),
+      });
+      const impact = () => ({
+        kind: "radial-impact" as const,
+        count: 1,
+        ids: Uint32Array.of(27_102),
+        positions: Float32Array.of(8, 0, 0),
+        radii: Float32Array.of(6),
+        amplitudes: Float32Array.of(1.5),
+        priorities: Uint8Array.of(200),
+      });
+      const drive = async (cadence: "batched" | "stepped") => {
+        await harness.reset({ seed: 0x2700_c016 });
+        await harness.updateArtisticControls(
+          { ...initialControls },
+          { transition: "continuous" },
+        );
+        await harness.updateInteractionAnchor({ x: 0, z: 0 });
+        await harness.setCamera(camera, { transition: "continuous" });
+
+        await harness.advanceTicks(90);
+        const baseline = await harness.present();
+        const wakeReceipt = await harness.submitDisturbances(wake());
+        const impactReceipt = await harness.submitDisturbances(impact());
+
+        const controlTick = await harness.advanceTicks(60);
+        if (cadence === "stepped") {
+          // Establish the same tick-150 event boundary before changing the
+          // controls. Batched mode deliberately has no presentation here.
+          await harness.present();
+        }
+        const update = await harness.updateArtisticControls(
+          { ...changedControls },
+          { transition: "continuous" },
+        );
+        if (cadence === "stepped") {
+          // Same-tick presentation records the new complete control snapshot
+          // without evolving the fixed-tick field a second time.
+          await harness.present();
+          await harness.advanceTicks(30);
+          await harness.present();
+          await harness.advanceTicks(30);
+        } else {
+          await harness.advanceTicks(60);
+        }
+
+        await harness.setCamera(camera, { transition: "camera-cut" });
+        const finalPresentation = await harness.present();
+        const finalCapture = await harness.capture("foam-source-identity");
+        return {
+          baseline,
+          wakeReceipt,
+          impactReceipt,
+          controlTick,
+          update,
+          finalPresentation,
+          finalCapture,
+        };
+      };
+
+      return {
+        batched: await drive("batched"),
+        replay: await drive("batched"),
+        stepped: await drive("stepped"),
+      };
+    },
+    {
+      camera: FOAM_CAMERA,
+      initialControls: STORM_CONTROLS,
+      changedControls: CHANGED_FOAM_CONTROLS,
+    },
+  );
+
+  expect(result.batched.wakeReceipt).toEqual({
+    tick: 90,
+    acceptedDisturbanceIds: [27_101],
+    droppedDisturbanceIds: [],
+    displacedBodyWakeSources: [],
+    activeDisturbanceCount: 1,
+  });
+  expect(result.batched.impactReceipt).toEqual({
+    tick: 90,
+    acceptedDisturbanceIds: [27_102],
+    droppedDisturbanceIds: [],
+    displacedBodyWakeSources: [],
+    activeDisturbanceCount: 2,
+  });
+  expect(result.batched.update).toMatchObject({
+    artisticControls: CHANGED_FOAM_CONTROLS,
+    changed: true,
+    transition: "continuous",
+  });
+  expect(result.batched.baseline.tick).toBe(90);
+  expect(result.batched.controlTick.tick).toBe(150);
+  expect(result.replay.controlTick.tick).toBe(150);
+  expect(result.stepped.controlTick.tick).toBe(150);
+  expect(result.batched.finalPresentation).toMatchObject({
+    tick: 210,
+    manifestHash: result.stepped.finalPresentation.manifestHash,
+    compileCount: result.stepped.finalPresentation.compileCount,
+    probeCount: result.stepped.finalPresentation.probeCount,
+  });
+  expect(result.replay.finalPresentation.tick).toBe(210);
+  expect(result.stepped.finalPresentation.tick).toBe(210);
+  expect(result.batched.finalCapture).toMatchObject({
+    name: "foam-source-identity",
+    format: "rgba32float-foam-source-identity",
+    elementType: "float32",
+    components: 4,
+    width: CAPTURE_WIDTH,
+    height: CAPTURE_HEIGHT,
+  });
+  expectFoamCapturesIdentical(
+    result.batched.finalCapture.data,
+    result.replay.finalCapture.data,
+  );
+  expectFoamCapturesIdentical(
+    result.batched.finalCapture.data,
+    result.stepped.finalCapture.data,
+  );
+
+  const final = summarizeFoamCapture(result.batched.finalCapture.data);
+  expectFoamCaptureWellFormed(final);
+  for (const channel of final.channels) {
+    expect(channel.nonZero).toBeGreaterThan(0);
+    expect(channel.sum).toBeGreaterThan(SOURCE_EPSILON);
+  }
+  expect(final.union.meanAbsoluteError).toBeLessThan(0.001);
+  expect(final.union.maximumAbsoluteError).toBeLessThan(0.005);
 });
 
 test("keeps bounded foam allocated while overflow evicts the lowest oldest source", async ({

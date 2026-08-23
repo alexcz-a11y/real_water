@@ -1270,6 +1270,7 @@ export interface QualityProfileSpectralWhitecaps {
     readonly fieldResolution: 128 | 256;
     // (undocumented)
     readonly fixedTickHz: 60;
+    readonly foamTimelineCapacityTicks: 128;
     // (undocumented)
     readonly localHistoryBanks: 2;
     // (undocumented)
@@ -1286,8 +1287,6 @@ export interface QualityProfileSpectralWhitecaps {
     ];
     // (undocumented)
     readonly sourceLayout: "whitecap-wake-impact-combined";
-    // (undocumented)
-    readonly sourceTimelineCapacityTicks: 128;
     // (undocumented)
     readonly stageLayout: "generation-history-advection-decay";
     // (undocumented)

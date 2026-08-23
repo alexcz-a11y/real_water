@@ -806,7 +806,7 @@ function renderTemporalFrame(
       } else if (captureWhitecapStages) {
         resources.foamDiagnostics.renderStages(renderer, camera);
       } else if (captureFoamSources) {
-        resources.foamDiagnostics.renderSources(renderer, camera);
+        resources.foamDiagnostics.renderSources(renderer);
       }
       renderCurrentFrameSsr(renderer, resources.ssr);
       const historyHostState = captureHostState(renderer, scene, camera);

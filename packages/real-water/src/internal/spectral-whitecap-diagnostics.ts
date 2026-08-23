@@ -29,7 +29,7 @@ export interface UnifiedFoamDiagnostics {
   readonly stageTarget: RenderTarget;
   readonly sourceIdentityTarget: RenderTarget;
   renderStages(renderer: Renderer, camera: PerspectiveCamera): void;
-  renderSources(renderer: Renderer, camera: PerspectiveCamera): void;
+  renderSources(renderer: Renderer): void;
   renderAll(renderer: Renderer, camera: PerspectiveCamera): void;
   dispose(): void;
 }

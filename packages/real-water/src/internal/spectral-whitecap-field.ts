@@ -106,7 +106,7 @@ type IntUniform = UniformNode<"int", number>;
 
 const LOCAL_FOAM_DIAMETER_METRES = INTERACTION_FIELD_RADIUS_METRES * 2;
 
-interface WhitecapComputeUniforms {
+interface UnifiedFoamComputeUniforms {
   readonly phaseOffset: FloatUniform;
   readonly timeSeconds: FloatUniform;
   readonly timeScale: FloatUniform;
@@ -135,7 +135,7 @@ interface WhitecapBandUniforms {
   readonly directionZ: FloatUniform;
 }
 
-interface WhitecapKernels {
+interface UnifiedFoamKernels {
   readonly generate: ComputeNode;
   readonly advect: ComputeNode;
   readonly diffuse: ComputeNode;
@@ -144,20 +144,27 @@ interface WhitecapKernels {
   readonly resolveLocal: ComputeNode;
 }
 
-interface SourceTimelineEntry {
+interface FoamTimelineEntry {
   readonly tick: number;
   readonly sequence: number;
+  readonly snapshot: OpenWaterRuntimeSnapshot;
   readonly interaction: LocalInteractionRenderSnapshot;
 }
 
-interface SourceTimelinePlan {
+interface FoamTimelinePlan {
   readonly epoch: number;
   readonly sequenceCeiling: number;
-  readonly entries: readonly SourceTimelineEntry[];
+  readonly entries: readonly FoamTimelineEntry[];
 }
 
-interface SynchronizedSourceBaseline {
+interface SynchronizedFoamBaseline {
   readonly tick: number;
+  readonly snapshot: OpenWaterRuntimeSnapshot;
+  readonly interaction: LocalInteractionRenderSnapshot;
+}
+
+interface FoamTimelineState {
+  readonly snapshot: OpenWaterRuntimeSnapshot;
   readonly interaction: LocalInteractionRenderSnapshot;
 }
 
@@ -210,9 +217,7 @@ export function createUnifiedFoamField(
   const resolution = policy.fieldResolution;
   const tileSizeMetres = policy.tileSizeMetres;
   const fixedStepSeconds = 1 / policy.fixedTickHz;
-  const sourceTimeline = createSourceTimeline(
-    policy.sourceTimelineCapacityTicks,
-  );
+  const foamTimeline = createFoamTimeline(policy.foamTimelineCapacityTicks);
   const finalStageTexture = createWhitecapTexture(
     resolution,
     "Real Water spectral whitecaps A (final)",
@@ -237,11 +242,11 @@ export function createUnifiedFoamField(
     { length: MAX_ACTIVE_DISTURBANCES },
     () => new Vector4(),
   );
-  const uniforms = createWhitecapUniforms(
+  const uniforms = createUnifiedFoamUniforms(
     interactionGeometryValues,
     interactionTimingValues,
   );
-  const kernels = createWhitecapKernels(
+  const kernels = createUnifiedFoamKernels(
     finalStageTexture,
     stagingTexture,
     localFinalTexture,
@@ -254,7 +259,7 @@ export function createUnifiedFoamField(
   let pendingResetSnapshot: OpenWaterRuntimeSnapshot | undefined;
   let lastObservedSnapshot: OpenWaterRuntimeSnapshot | undefined;
   let synchronizedSnapshot: OpenWaterRuntimeSnapshot | undefined;
-  let synchronizedSourceBaseline: SynchronizedSourceBaseline | undefined;
+  let synchronizedFoamBaseline: SynchronizedFoamBaseline | undefined;
   let synchronizedLocalAnchor:
     Readonly<{ readonly x: number; readonly z: number }> | undefined;
   let operationQueue = Promise.resolve();
@@ -267,8 +272,8 @@ export function createUnifiedFoamField(
     const previous = lastObservedSnapshot ?? synchronizedSnapshot;
     if (requiresHistoryReset(previous, observed)) {
       pendingResetSnapshot = observed;
-      sourceTimeline.reset();
-      synchronizedSourceBaseline = undefined;
+      foamTimeline.reset();
+      synchronizedFoamBaseline = undefined;
       synchronizedLocalAnchor = undefined;
     }
     lastObservedSnapshot = observed;
@@ -364,10 +369,10 @@ export function createUnifiedFoamField(
         return;
       }
       const observed = observeSnapshot(snapshot);
-      // The declared 128-tick ring is the bounded bridge between 60 Hz source
-      // updates and a slower presentation cadence. Same-tick writes replace,
-      // and a full ring deterministically overwrites only its oldest entry.
-      sourceTimeline.record(observed.tick, interaction);
+      // The declared 128-tick ring is the bounded bridge between authoritative
+      // 60 Hz controls/sources and a slower presentation cadence. Same-tick
+      // writes replace, and a full ring overwrites only its oldest entry.
+      foamTimeline.record(observed, interaction);
     },
     observe(snapshot: OpenWaterRuntimeSnapshot): void {
       if (disposed) {
@@ -407,38 +412,54 @@ export function createUnifiedFoamField(
       const requestedSnapshot = observeSnapshot(snapshot);
       // Copy only immutable references out of the fixed ring. This plan cannot
       // be changed by sink callbacks arriving between asynchronous dispatches.
-      const sourcePlan = sourceTimeline.capture();
+      const foamPlan = foamTimeline.capture();
       const resetBoundary = pendingResetSnapshot;
       return enqueue(async () => {
         let previous = synchronizedSnapshot;
-        const sourceBaseline = synchronizedSourceBaseline;
+        const foamBaseline = synchronizedFoamBaseline;
         let appliedLocalAnchor = synchronizedLocalAnchor;
-        let appliedInteraction =
-          sourceBaseline?.interaction ?? emptyInteraction(requestedSnapshot);
-        const stageInteraction = (
+        let appliedState: FoamTimelineState = Object.freeze({
+          snapshot: foamBaseline?.snapshot ?? requestedSnapshot,
+          interaction:
+            foamBaseline?.interaction ?? emptyInteraction(requestedSnapshot),
+        });
+        const stageTimelineState = (
           tick: number,
-          tickSnapshot: OpenWaterRuntimeSnapshot,
+          fallbackSnapshot: OpenWaterRuntimeSnapshot,
+          snapshotOverride?: OpenWaterRuntimeSnapshot,
         ): void => {
           // A sink snapshot labelled T is published by the Host's
           // before-integrate route and drives the T -> T+1 interval. Therefore
-          // field tick T consumes the latest source state through T-1. The
-          // inclusive current state is retained below as the next baseline.
-          appliedInteraction = interactionAtTick(
-            sourcePlan,
-            sourceBaseline,
+          // field tick T consumes the latest complete foam state through T-1.
+          // Reset ticks deliberately retain their current reset snapshot.
+          const selected = foamStateAtTick(
+            foamPlan,
+            foamBaseline,
             tick - 1,
-            tickSnapshot,
+            fallbackSnapshot,
           );
-          const anchor = interactionAnchorWorld(appliedInteraction);
+          appliedState =
+            snapshotOverride === undefined
+              ? selected
+              : Object.freeze({
+                  snapshot: snapshotOverride,
+                  interaction: selected.interaction,
+                });
+          writeSnapshotUniforms(
+            uniforms,
+            appliedState.snapshot,
+            tileSizeMetres,
+          );
+          const anchor = interactionAnchorWorld(appliedState.interaction);
           writeInteractionUniforms(
             uniforms,
-            appliedInteraction,
+            appliedState.interaction,
             interactionGeometryValues,
             interactionTimingValues,
           );
           writeLocalAnchorUniforms(
             uniforms,
-            tickSnapshot,
+            appliedState.snapshot,
             anchor,
             appliedLocalAnchor,
           );
@@ -448,8 +469,9 @@ export function createUnifiedFoamField(
           tickTime: number,
           tickSnapshot: OpenWaterRuntimeSnapshot,
           resetHistory: boolean,
+          snapshotOverride?: OpenWaterRuntimeSnapshot,
         ): Promise<void> => {
-          stageInteraction(tick, tickSnapshot);
+          stageTimelineState(tick, tickSnapshot, snapshotOverride);
           await executeFixedTick(
             renderer,
             kernels,
@@ -457,7 +479,7 @@ export function createUnifiedFoamField(
             tickTime,
             resetHistory,
           );
-          appliedLocalAnchor = interactionAnchorWorld(appliedInteraction);
+          appliedLocalAnchor = interactionAnchorWorld(appliedState.interaction);
         };
 
         if (
@@ -469,16 +491,15 @@ export function createUnifiedFoamField(
             artisticControls: requestedSnapshot.artisticControls,
             controlRevision: requestedSnapshot.controlRevision,
           });
-          writeSnapshotUniforms(uniforms, preparedReset, tileSizeMetres);
           await executeTimelineTick(
             preparedReset.tick,
             preparedReset.timeSeconds,
             preparedReset,
             true,
+            preparedReset,
           );
           previous = preparedReset;
         }
-        writeSnapshotUniforms(uniforms, requestedSnapshot, tileSizeMetres);
         const reset = requiresHistoryReset(previous, requestedSnapshot);
 
         if (
@@ -502,6 +523,7 @@ export function createUnifiedFoamField(
               tickTime,
               requestedSnapshot,
               tick === previous.tick + 1,
+              tick === previous.tick + 1 ? requestedSnapshot : undefined,
             );
           }
         } else if (reset) {
@@ -510,6 +532,7 @@ export function createUnifiedFoamField(
             requestedSnapshot.timeSeconds,
             requestedSnapshot,
             true,
+            requestedSnapshot,
           );
         } else if (
           previous !== undefined &&
@@ -529,11 +552,12 @@ export function createUnifiedFoamField(
           }
         }
 
-        // Same-tick source updates become the next tick's baseline without
-        // evolving either persistent attachment a second time.
-        appliedInteraction = interactionAtTick(
-          sourcePlan,
-          sourceBaseline,
+        // Same-tick hot/sample state is always the requested state, while the
+        // inclusive authoritative foam pair becomes the next tick baseline.
+        writeSnapshotUniforms(uniforms, requestedSnapshot, tileSizeMetres);
+        const currentState = foamStateAtTick(
+          foamPlan,
+          foamBaseline,
           requestedSnapshot.tick,
           requestedSnapshot,
         );
@@ -549,13 +573,14 @@ export function createUnifiedFoamField(
         // Same-tick calls deliberately update only hot uniforms and world
         // phase. They never evolve persistent state a second time.
         synchronizedSnapshot = requestedSnapshot;
-        if (sourceTimeline.epoch() === sourcePlan.epoch) {
+        if (foamTimeline.epoch() === foamPlan.epoch) {
           synchronizedLocalAnchor = appliedLocalAnchor;
-          synchronizedSourceBaseline = Object.freeze({
+          synchronizedFoamBaseline = Object.freeze({
             tick: requestedSnapshot.tick,
-            interaction: appliedInteraction,
+            snapshot: currentState.snapshot,
+            interaction: currentState.interaction,
           });
-          sourceTimeline.consume(sourcePlan, requestedSnapshot.tick);
+          foamTimeline.consume(foamPlan, requestedSnapshot.tick);
         }
         if (pendingResetSnapshot === resetBoundary) {
           pendingResetSnapshot = undefined;
@@ -567,20 +592,21 @@ export function createUnifiedFoamField(
       snapshot: OpenWaterRuntimeSnapshot,
     ): Promise<void> {
       const liveSnapshot = observeSnapshot(snapshot);
-      const sourcePlan = sourceTimeline.capture();
+      const foamPlan = foamTimeline.capture();
       return enqueue(async () => {
-        const sourceBaseline = synchronizedSourceBaseline;
+        const foamBaseline = synchronizedFoamBaseline;
         renderer.initTexture(finalStageTexture);
         renderer.initTexture(stagingTexture);
         renderer.initTexture(localFinalTexture);
         renderer.initTexture(localStagingTexture);
         writeSnapshotUniforms(uniforms, liveSnapshot, tileSizeMetres);
-        const interaction = interactionAtTick(
-          sourcePlan,
-          sourceBaseline,
+        const currentState = foamStateAtTick(
+          foamPlan,
+          foamBaseline,
           liveSnapshot.tick,
           liveSnapshot,
         );
+        const interaction = currentState.interaction;
         const liveAnchor = interactionAnchorWorld(interaction);
         writeInteractionUniforms(
           uniforms,
@@ -616,12 +642,13 @@ export function createUnifiedFoamField(
         );
         writeLocalSampleAnchorUniforms(uniforms, liveSnapshot, liveAnchor);
         synchronizedSnapshot = liveSnapshot;
-        if (sourceTimeline.epoch() === sourcePlan.epoch) {
-          synchronizedSourceBaseline = Object.freeze({
+        if (foamTimeline.epoch() === foamPlan.epoch) {
+          synchronizedFoamBaseline = Object.freeze({
             tick: liveSnapshot.tick,
+            snapshot: liveSnapshot,
             interaction,
           });
-          sourceTimeline.consume(sourcePlan, liveSnapshot.tick);
+          foamTimeline.consume(foamPlan, liveSnapshot.tick);
         }
         lastObservedSnapshot = liveSnapshot;
         pendingResetSnapshot = undefined;
@@ -645,24 +672,27 @@ export function createUnifiedFoamField(
       pendingResetSnapshot = undefined;
       lastObservedSnapshot = undefined;
       synchronizedSnapshot = undefined;
-      synchronizedSourceBaseline = undefined;
+      synchronizedFoamBaseline = undefined;
       synchronizedLocalAnchor = undefined;
-      sourceTimeline.reset();
+      foamTimeline.reset();
     },
   });
 }
 
-function createSourceTimeline(capacity: number) {
+function createFoamTimeline(capacity: number) {
   if (!Number.isSafeInteger(capacity) || capacity <= 0) {
     throw new RangeError(
-      "The unified foam source timeline requires a positive fixed capacity.",
+      "The unified foam timeline requires a positive fixed capacity.",
     );
   }
   // These are the only structural timeline stores. The declared 128-tick
-  // bound covers 60 Hz source publication across the controlled 30 FPS route;
-  // pressure overwrites the oldest tick and never grows a backing array.
+  // bound covers 60 Hz foam-state publication across the controlled 30 FPS
+  // route; pressure overwrites the oldest tick and never grows a backing array.
   const ticks = new Float64Array(capacity);
   const sequences = new Float64Array(capacity);
+  const snapshots = Array<OpenWaterRuntimeSnapshot | undefined>(capacity).fill(
+    undefined,
+  );
   const interactions = Array<LocalInteractionRenderSnapshot | undefined>(
     capacity,
   ).fill(undefined);
@@ -672,6 +702,7 @@ function createSourceTimeline(capacity: number) {
   let currentEpoch = 0;
 
   const reset = (): void => {
+    snapshots.fill(undefined);
     interactions.fill(undefined);
     start = 0;
     length = 0;
@@ -684,13 +715,19 @@ function createSourceTimeline(capacity: number) {
       return currentEpoch;
     },
     reset,
-    record(tick: number, interaction: LocalInteractionRenderSnapshot): void {
+    record(
+      snapshot: OpenWaterRuntimeSnapshot,
+      interaction: LocalInteractionRenderSnapshot,
+    ): void {
+      const tick = snapshot.tick;
+      const immutableSnapshot = copySnapshot(snapshot);
       const immutable = copyInteraction(interaction);
       const sequence = nextSequence;
       nextSequence += 1;
       if (length > 0) {
         const newest = (start + length - 1) % capacity;
         if (ticks[newest] === tick) {
+          snapshots[newest] = immutableSnapshot;
           interactions[newest] = immutable;
           sequences[newest] = sequence;
           return;
@@ -700,6 +737,7 @@ function createSourceTimeline(capacity: number) {
         length < capacity ? (start + length) % capacity : start;
       ticks[writeIndex] = tick;
       sequences[writeIndex] = sequence;
+      snapshots[writeIndex] = immutableSnapshot;
       interactions[writeIndex] = immutable;
       if (length < capacity) {
         length += 1;
@@ -707,18 +745,20 @@ function createSourceTimeline(capacity: number) {
         start = (start + 1) % capacity;
       }
     },
-    capture(): SourceTimelinePlan {
-      const entries: SourceTimelineEntry[] = [];
+    capture(): FoamTimelinePlan {
+      const entries: FoamTimelineEntry[] = [];
       for (let offset = 0; offset < length; offset += 1) {
         const index = (start + offset) % capacity;
         const interaction = interactions[index];
-        if (interaction === undefined) {
+        const snapshot = snapshots[index];
+        if (interaction === undefined || snapshot === undefined) {
           continue;
         }
         entries.push(
           Object.freeze({
             tick: ticks[index] ?? 0,
             sequence: sequences[index] ?? 0,
+            snapshot,
             interaction,
           }),
         );
@@ -729,7 +769,7 @@ function createSourceTimeline(capacity: number) {
         entries: Object.freeze(entries),
       });
     },
-    consume(plan: SourceTimelinePlan, throughTick: number): void {
+    consume(plan: FoamTimelinePlan, throughTick: number): void {
       if (plan.epoch !== currentEpoch) {
         return;
       }
@@ -740,6 +780,7 @@ function createSourceTimeline(capacity: number) {
           break;
         }
         interactions[start] = undefined;
+        snapshots[start] = undefined;
         start = (start + 1) % capacity;
         length -= 1;
       }
@@ -747,22 +788,27 @@ function createSourceTimeline(capacity: number) {
   });
 }
 
-function interactionAtTick(
-  plan: SourceTimelinePlan,
-  baseline: SynchronizedSourceBaseline | undefined,
+function foamStateAtTick(
+  plan: FoamTimelinePlan,
+  baseline: SynchronizedFoamBaseline | undefined,
   tick: number,
   snapshot: OpenWaterRuntimeSnapshot,
-): LocalInteractionRenderSnapshot {
+): FoamTimelineState {
   const usableBaseline = baseline !== undefined && baseline.tick <= tick;
   let selectedTick = usableBaseline ? baseline.tick : Number.NEGATIVE_INFINITY;
-  let selected = usableBaseline ? baseline.interaction : undefined;
+  let selectedSnapshot = usableBaseline ? baseline.snapshot : undefined;
+  let selectedInteraction = usableBaseline ? baseline.interaction : undefined;
   for (const entry of plan.entries) {
     if (entry.tick <= tick && entry.tick >= selectedTick) {
       selectedTick = entry.tick;
-      selected = entry.interaction;
+      selectedSnapshot = entry.snapshot;
+      selectedInteraction = entry.interaction;
     }
   }
-  return selected ?? emptyInteraction(snapshot);
+  return Object.freeze({
+    snapshot: selectedSnapshot ?? snapshot,
+    interaction: selectedInteraction ?? emptyInteraction(snapshot),
+  });
 }
 
 function copyInteraction(
@@ -810,10 +856,10 @@ function createLocalFoamTexture(
   return result;
 }
 
-function createWhitecapUniforms(
+function createUnifiedFoamUniforms(
   interactionGeometryValues: Vector4[],
   interactionTimingValues: Vector4[],
-): WhitecapComputeUniforms {
+): UnifiedFoamComputeUniforms {
   return {
     phaseOffset: uniform(0),
     timeSeconds: uniform(0),
@@ -848,16 +894,16 @@ function createWhitecapUniforms(
   };
 }
 
-function createWhitecapKernels(
+function createUnifiedFoamKernels(
   finalStageTexture: StorageTexture,
   stagingTexture: StorageTexture,
   localFinalTexture: StorageTexture,
   localStagingTexture: StorageTexture,
-  uniforms: WhitecapComputeUniforms,
+  uniforms: UnifiedFoamComputeUniforms,
   resolution: number,
   tileSizeMetres: number,
   fixedStepSeconds: number,
-): WhitecapKernels {
+): UnifiedFoamKernels {
   const texelCoordinate = () => {
     const x = instanceIndex.mod(resolution);
     const y = instanceIndex.div(resolution);
@@ -1097,7 +1143,7 @@ function saturatingUnionNode(left: FloatNode, right: FloatNode): FloatNode {
 function createLocalGenerationNode(
   localX: FloatNode,
   localZ: FloatNode,
-  uniforms: WhitecapComputeUniforms,
+  uniforms: UnifiedFoamComputeUniforms,
 ) {
   return Fn(() => {
     const wake = float(0).toVar();
@@ -1226,7 +1272,7 @@ function createLocalGenerationNode(
 function createGenerationNode(
   worldX: FloatNode,
   worldZ: FloatNode,
-  uniforms: WhitecapComputeUniforms,
+  uniforms: UnifiedFoamComputeUniforms,
 ): FloatNode {
   const contributions = uniforms.bands.map((band) => {
     const phase = worldX
@@ -1293,8 +1339,8 @@ function createGenerationNode(
 
 async function executeFixedTick(
   renderer: Renderer,
-  kernels: WhitecapKernels,
-  uniforms: WhitecapComputeUniforms,
+  kernels: UnifiedFoamKernels,
+  uniforms: UnifiedFoamComputeUniforms,
   timeSeconds: number,
   resetHistory: boolean,
 ): Promise<void> {
@@ -1310,7 +1356,7 @@ async function executeFixedTick(
 }
 
 function writeSnapshotUniforms(
-  uniforms: WhitecapComputeUniforms,
+  uniforms: UnifiedFoamComputeUniforms,
   snapshot: OpenWaterRuntimeSnapshot,
   tileSizeMetres: number,
 ): void {
@@ -1346,7 +1392,7 @@ function writeSnapshotUniforms(
 }
 
 function writeInteractionUniforms(
-  uniforms: WhitecapComputeUniforms,
+  uniforms: UnifiedFoamComputeUniforms,
   interaction: LocalInteractionRenderSnapshot,
   geometryValues: Vector4[],
   timingValues: Vector4[],
@@ -1387,7 +1433,7 @@ function writeInteractionUniforms(
 }
 
 function writeLocalAnchorUniforms(
-  uniforms: WhitecapComputeUniforms,
+  uniforms: UnifiedFoamComputeUniforms,
   snapshot: OpenWaterRuntimeSnapshot,
   currentAnchor: Readonly<{ readonly x: number; readonly z: number }>,
   previousAnchor:
@@ -1401,7 +1447,7 @@ function writeLocalAnchorUniforms(
 }
 
 function writeLocalSampleAnchorUniforms(
-  uniforms: WhitecapComputeUniforms,
+  uniforms: UnifiedFoamComputeUniforms,
   snapshot: OpenWaterRuntimeSnapshot,
   anchor: Readonly<{ readonly x: number; readonly z: number }>,
 ): void {
@@ -1448,6 +1494,7 @@ function copySnapshot(
   return Object.freeze({
     ...snapshot,
     artisticControls: Object.freeze({ ...snapshot.artisticControls }),
+    interactionAnchor: Object.freeze({ ...snapshot.interactionAnchor }),
   });
 }
 

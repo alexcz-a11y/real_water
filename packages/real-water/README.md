@@ -79,16 +79,16 @@ at samples 0, current-frame SSR, and dedicated specular TemporalReproject
 history. A ready lease publishes that same TRAA, planar, current-frame SSR, and
 SSR history evidence, plus 128- or 256-square spectral and anchor-local
 ping-pong foam attachments and their drawing-buffer-exact diagnostics resolves.
-The unified field also preallocates a 128-tick source timeline so 60 Hz Body
-socket poses and manual source lifetimes replay identically when presentation is
-batched at 30 Hz. Amount and persistence remain hot Artistic Controls; field
-resolution, layout, format, cadence, timeline capacity, and routes remain
-structural. The lease includes RG16F motion and stock Three revision 185 only
-after prewarm succeeds. Changing between them produces a different manifest hash
-and requires a full new preparation. A ready lease accepts only effect variants
-declared by its manifest; undeclared requests fail with `EFFECT_NOT_PREWARMED`
-before the runtime revision changes. Playwright Regression acceptance does not
-constitute headed Native certification.
+The unified field also preallocates a 128-tick foam-state timeline so Artistic
+Controls, 60 Hz Body socket poses, and manual source lifetimes replay
+identically when presentation is batched at 30 Hz. Amount and persistence remain
+hot Artistic Controls; field resolution, layout, format, cadence, timeline
+capacity, and routes remain structural. The lease includes RG16F motion and
+stock Three revision 185 only after prewarm succeeds. Changing between them
+produces a different manifest hash and requires a full new preparation. A ready
+lease accepts only effect variants declared by its manifest; undeclared requests
+fail with `EFFECT_NOT_PREWARMED` before the runtime revision changes. Playwright
+Regression acceptance does not constitute headed Native certification.
 
 Both profiles also pin one 48-metre local interaction field with an 8-metre
 Hermite edge fade, one Interaction Anchor, 128 shared preallocated Disturbance

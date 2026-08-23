@@ -203,7 +203,8 @@ export interface QualityProfileSpectralWhitecaps {
   readonly sourceLayout: "whitecap-wake-impact-combined";
   readonly localHistoryBanks: 2;
   readonly maxLocalSources: 128;
-  readonly sourceTimelineCapacityTicks: 128;
+  /** Preallocated fixed-tick CPU journal of controls plus interaction state. */
+  readonly foamTimelineCapacityTicks: 128;
   readonly diffusionTaps: 3;
   readonly updateCadence: "host-fixed-tick";
   readonly captureResolutionPolicy: "drawing-buffer-exact";
@@ -353,14 +354,14 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:31eb3e5315aabb865027060647630de40f4dc32e8f184e7f1a9d362d73c44020",
+      "sha256:47475f80673e8e4c942b567715e0e3d36dedf0d6d1320e83825dc866fefacd93",
     widthSegments: 128,
     heightSegments: 128,
     whitecapFieldResolution: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:a2f4fef88032d7f91a467131f2e4a3dd2741603d1b8b2322c679c4dcb6a00dfb",
+      "sha256:a8ce0bc38f028341be0567b0e467355f1b0bc74d4abe3f2043c59e28a2dbc239",
     widthSegments: 256,
     heightSegments: 256,
     whitecapFieldResolution: 256,
@@ -745,7 +746,7 @@ const SPECTRAL_WHITECAP_KEYS = [
   "sourceLayout",
   "localHistoryBanks",
   "maxLocalSources",
-  "sourceTimelineCapacityTicks",
+  "foamTimelineCapacityTicks",
   "diffusionTaps",
   "updateCadence",
   "captureResolutionPolicy",
@@ -913,7 +914,7 @@ export function createMinimalWaterQualityProfile(
       sourceLayout: "whitecap-wake-impact-combined",
       localHistoryBanks: 2,
       maxLocalSources: MAX_ACTIVE_DISTURBANCES,
-      sourceTimelineCapacityTicks: 128,
+      foamTimelineCapacityTicks: 128,
       diffusionTaps: 3,
       updateCadence: "host-fixed-tick",
       captureResolutionPolicy: "drawing-buffer-exact",
@@ -1051,8 +1052,7 @@ function isSupportedSpectralWhitecaps(
     value.sourceLayout === supported.sourceLayout &&
     value.localHistoryBanks === supported.localHistoryBanks &&
     value.maxLocalSources === supported.maxLocalSources &&
-    value.sourceTimelineCapacityTicks ===
-      supported.sourceTimelineCapacityTicks &&
+    value.foamTimelineCapacityTicks === supported.foamTimelineCapacityTicks &&
     value.diffusionTaps === supported.diffusionTaps &&
     value.updateCadence === supported.updateCadence &&
     value.captureResolutionPolicy === supported.captureResolutionPolicy &&
