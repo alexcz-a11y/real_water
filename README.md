@@ -58,11 +58,15 @@ individual contracts:
 - the existing spectral generate/history/advect/diffuse/decay path remains
   intact while a fixed anchor-local ping-pong attachment carries wake and impact
   history without repeating it across the ocean tile;
-- one source-identity diagnostic packs spectral whitecap, wake/propeller wash,
-  impact, and their saturating union into distinct RGBA channels;
+- one canonical anchor-local source-identity diagnostic packs spectral whitecap,
+  wake/propeller wash, impact, and their saturating union into distinct RGBA
+  channels without camera-jitter ambiguity;
 - the same 128 Disturbance slots remain the only local source capacity, so
   priority overflow returns its existing receipt and never reallocates or clears
   already-generated foam;
+- a preallocated 128-tick source timeline replays Body socket poses and manual
+  source lifetimes at authoritative fixed ticks, independent of 30 Hz present
+  batching;
 - Gameplay Query composes bounded local source envelopes with its deterministic
   CPU spectral-foam reconstruction without a GPU wait.
 
@@ -122,9 +126,9 @@ foundation:
   main-camera guard frame, plus the local interaction field, its fixed
   current/previous uniform buffers, and the hidden-executed radial-impact,
   directional-wake, and Body socket emission routes, plus bounded local-foam
-  reproject/resolve and source-identity target/probe routes. Version 7 binds the
-  physical drawing buffer into that work plan; a viewport change creates a new
-  manifest and lease;
+  reproject/resolve and source-identity target/probe routes, plus the bounded
+  128-tick source timeline. Version 7 binds the physical drawing buffer into
+  that work plan; a viewport change creates a new manifest and lease;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
   restores their state after preparation, and never disposes them;
 - progress advances monotonically only when declared manifest work completes;

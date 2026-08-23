@@ -123,9 +123,9 @@ const BODY_COUPLING = Object.freeze({
   socketRoute: "stable-slot-upsert" as const,
 });
 const MINIMAL_PROFILE_HASH =
-  "sha256:d5bfc7270d0bf892d36e26adf92d7d930d73902419436d5a9733c6d167f7ddba";
+  "sha256:31eb3e5315aabb865027060647630de40f4dc32e8f184e7f1a9d362d73c44020";
 const HIGH_DETAIL_PROFILE_HASH =
-  "sha256:3b28bc94f9b765d3b901f0e55e693152c88f5c7b43a2c9de392e06a59302c464";
+  "sha256:a2f4fef88032d7f91a467131f2e4a3dd2741603d1b8b2322c679c4dcb6a00dfb";
 const LEGACY_V9_PROFILES = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
@@ -356,6 +356,7 @@ const NATIVE_WHITECAPS = Object.freeze({
   sourceLayout: "whitecap-wake-impact-combined" as const,
   localHistoryBanks: 2 as const,
   maxLocalSources: 128 as const,
+  sourceTimelineCapacityTicks: 128 as const,
 });
 const MEMORY_PREWARM_DRAWING_BUFFER = Object.freeze({
   width: 320,
@@ -401,7 +402,7 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-current-color-conversion":
     "sha256:ea19f958120b52c05d673abcec39db3aa8ca7157f326d5d4449a4faa0457c57c",
   "water-named-output-routes":
-    "sha256:e6ddeb49353021157af2be265782d8c710f4d4bf038ab064cdc493e6ea10f5e5",
+    "sha256:6730654631d83f3b5b94935b035c539ef7bfecf53def9c676a2af2d43215fea5",
   "water-ssr-raw-target":
     "sha256:5229f76bc28be7b7aa032fadcb3adabfada2202dde29a88f499d16fac9ba659f",
   "water-ssr-blur-target":
@@ -455,7 +456,7 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-planar-reflection-probe":
     "sha256:f203f71435dfe40d3d14d3b19b853fd13f8338aba138c1eee29400570074311e",
   "water-completion-probe":
-    "sha256:3bbdf71667f978093bc91a74ba06bc6bca5e2fbfbd24c5fe991a10407c7fe400",
+    "sha256:9c735ebc510815bc6fd20c1e85b5a57126e3d47714e8c46809916b9479b2da1b",
   "water-main-camera-guard":
     "sha256:ef72fd8cb5959aa73eeef6a857f67edc3f32b1b9f7e73b76b295f913ae6aca25",
   "water-whitecap-stage-target":
@@ -465,7 +466,7 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-whitecap-probe":
     "sha256:d740f79214a0fbb393edfb647e59881e642cf6b9ba79347db72d990058a81881",
   "water-foam-source-identity-target":
-    "sha256:a3468e67ddf8d47ed6dd455574639215f56e3debfa1b613b7543d70563c92a1c",
+    "sha256:7aed6a2a182c10f42c5853d5e86b07c27800aebcf7c82e15830fc48d7f0774f8",
 });
 const DRAWING_BUFFER_BOUND_IDS = [
   "water-scene-color",
@@ -675,6 +676,7 @@ describe("Quality Profiles", () => {
       sourceLayout: "whitecap-wake-impact-combined",
       localHistoryBanks: 2,
       maxLocalSources: 128,
+      sourceTimelineCapacityTicks: 128,
       diffusionTaps: 3,
       updateCadence: "host-fixed-tick",
       captureResolutionPolicy: "drawing-buffer-exact",
@@ -1382,6 +1384,7 @@ describe("Quality Profiles", () => {
           ...NATIVE_WHITECAPS,
           localHistoryBanks: 3,
           maxLocalSources: 129,
+          sourceTimelineCapacityTicks: 127,
         },
       },
     ],
@@ -1700,6 +1703,16 @@ describe("Quality Profile manifests", () => {
       "water-foam-source-identity-route": "conditional-route",
       "water-foam-source-identity-probe": "conditional-route",
     });
+    expect(
+      manifest.declarations.find(
+        ({ id }) => id === "water-foam-source-history",
+      ),
+    ).toMatchObject({
+      label:
+        "Bounded whitecap, wake, and impact source history (128 shared sources, two GPU local banks, 128-tick preallocated CPU snapshot timeline for 60Hz simulation, 30Hz present, and bounded catch-up)",
+      fingerprint:
+        "sha256:9afcb0be0910b9d9fc3e5fdee2da3b09eccb7afdddc1a8aa45a1750c294e8be5",
+    });
 
     const nextSize = createMinimalWaterPrewarmManifest(
       createMinimalWaterQualityProfile(),
@@ -1806,14 +1819,14 @@ describe("Quality Profile manifests", () => {
         (declaration) => declaration.id === "water-named-output-routes",
       )?.label,
     ).toBe(
-      "Thirty named diagnostics output routes including unified foam source identity",
+      "Thirty named diagnostics output routes including canonical anchor-local unified foam source identity",
     );
     expect(
       minimal.declarations.find(
         (declaration) => declaration.id === "water-completion-probe",
       )?.label,
     ).toBe(
-      "GPU completion probe of all thirty named output routes including unified foam source identity",
+      "GPU completion probe of all thirty named output routes including canonical anchor-local unified foam source identity",
     );
     expect(
       Object.fromEntries(

@@ -7,7 +7,7 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV11,
+  type QaHarnessV12,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
@@ -56,7 +56,7 @@ test("renders a stable non-black underside and bounds crossing rejection", async
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ controls, seed, tick }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -273,7 +273,7 @@ test("keeps rendering, queries, and classification coherent at a nonzero sea lev
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ controls, seed, tick }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -372,7 +372,7 @@ test("replays repeated crossings and treats a teleport as one camera-cut reset",
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ controls, seed, tick }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV11 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

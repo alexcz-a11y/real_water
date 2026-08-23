@@ -16,11 +16,16 @@ const FOAM_CAMERA: QaCameraV1 = {
   near: 0.1,
   far: 160,
 };
+const PROPELLER_CAMERA: QaCameraV1 = {
+  ...FOAM_CAMERA,
+  position: [0, 32, 8],
+  target: [0, 0, 8],
+};
 const STORM_CONTROLS = createWaterPreset("storm").artisticControls;
 
 test.describe.configure({ mode: "serial" });
 
-async function openQaStage(page: Page): Promise<void> {
+async function openQaStage(page: Page, proxyMode?: "propeller"): Promise<void> {
   await page.setViewportSize({
     width: CAPTURE_WIDTH,
     height: CAPTURE_HEIGHT,
@@ -30,7 +35,11 @@ async function openQaStage(page: Page): Promise<void> {
     !(await hasCoreWebGPU(page)),
     "Core WebGPU is unavailable in this browser profile.",
   );
-  await page.goto("/?qa=1&host=three");
+  await page.goto(
+    proxyMode === undefined
+      ? "/?qa=1&host=three"
+      : `/?qa=1&host=three&proxy=${proxyMode}`,
+  );
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 }
 
@@ -98,7 +107,7 @@ test("preserves source-resolved deterministic foam after manual sources expire",
           maximum,
         };
       };
-      const drive = async () => {
+      const drive = async (cadence: "batched" | "stepped") => {
         await harness.reset({ seed: 0x2700_0016 });
         await harness.updateArtisticControls(controls, {
           transition: "continuous",
@@ -128,13 +137,26 @@ test("preserves source-resolved deterministic foam after manual sources expire",
           legacy.push(await summarizeScalarCapture(name));
         }
 
-        // Keep the fixed-tick field current through the source lifetime, then
-        // age to three seconds. Generation stopped just over one second ago,
-        // while the storm preset's 1.232 s half-life must leave local history.
-        await harness.advanceTicks(59);
-        await harness.present();
-        await harness.advanceTicks(61);
-        const expiredPresentation = await harness.present();
+        // Reach age three seconds with the same fixed ticks and commands but
+        // two presentation cadences. A correct source journal must not let the
+        // final presentation cadence change generation or decay history.
+        let expiredPresentation;
+        if (cadence === "batched") {
+          await harness.advanceTicks(120);
+          await harness.setCamera(camera, { transition: "camera-cut" });
+          expiredPresentation = await harness.present();
+        } else {
+          for (let step = 0; step < 4; step += 1) {
+            await harness.advanceTicks(30);
+            if (step === 3) {
+              await harness.setCamera(camera, { transition: "camera-cut" });
+            }
+            expiredPresentation = await harness.present();
+          }
+        }
+        if (expiredPresentation === undefined) {
+          throw new Error("The expired foam state was not presented.");
+        }
         const expired = await harness.capture("foam-source-identity");
         return {
           wakeReceipt,
@@ -147,29 +169,35 @@ test("preserves source-resolved deterministic foam after manual sources expire",
         };
       };
 
-      return { first: await drive(), replay: await drive() };
+      return {
+        batched: await drive("batched"),
+        replay: await drive("batched"),
+        stepped: await drive("stepped"),
+      };
     },
     { camera: FOAM_CAMERA, controls: STORM_CONTROLS },
   );
 
-  expect(result.first.wakeReceipt).toEqual({
+  expect(result.batched.wakeReceipt).toEqual({
     tick: 90,
     acceptedDisturbanceIds: [27_001],
     droppedDisturbanceIds: [],
     displacedBodyWakeSources: [],
     activeDisturbanceCount: 1,
   });
-  expect(result.first.impactReceipt).toEqual({
+  expect(result.batched.impactReceipt).toEqual({
     tick: 90,
     acceptedDisturbanceIds: [27_002],
     droppedDisturbanceIds: [],
     displacedBodyWakeSources: [],
     activeDisturbanceCount: 2,
   });
-  expect(result.replay.wakeReceipt).toEqual(result.first.wakeReceipt);
-  expect(result.replay.impactReceipt).toEqual(result.first.impactReceipt);
+  expect(result.replay.wakeReceipt).toEqual(result.batched.wakeReceipt);
+  expect(result.replay.impactReceipt).toEqual(result.batched.impactReceipt);
+  expect(result.stepped.wakeReceipt).toEqual(result.batched.wakeReceipt);
+  expect(result.stepped.impactReceipt).toEqual(result.batched.impactReceipt);
 
-  expect(result.first.active).toMatchObject({
+  expect(result.batched.active).toMatchObject({
     name: "foam-source-identity",
     format: "rgba32float-foam-source-identity",
     elementType: "float32",
@@ -177,11 +205,25 @@ test("preserves source-resolved deterministic foam after manual sources expire",
     width: CAPTURE_WIDTH,
     height: CAPTURE_HEIGHT,
   });
-  expect(result.first.active.data).toBe(result.replay.active.data);
-  expect(result.first.expired.data).toBe(result.replay.expired.data);
+  expectFoamCapturesIdentical(
+    result.batched.active.data,
+    result.replay.active.data,
+  );
+  expectFoamCapturesIdentical(
+    result.batched.expired.data,
+    result.replay.expired.data,
+  );
+  expectFoamCapturesIdentical(
+    result.batched.active.data,
+    result.stepped.active.data,
+  );
+  expectFoamCapturesIdentical(
+    result.batched.expired.data,
+    result.stepped.expired.data,
+  );
 
-  const active = summarizeFoamCapture(result.first.active.data);
-  const expired = summarizeFoamCapture(result.first.expired.data);
+  const active = summarizeFoamCapture(result.batched.active.data);
+  const expired = summarizeFoamCapture(result.batched.expired.data);
   expectFoamCaptureWellFormed(active);
   expectFoamCaptureWellFormed(expired);
   for (const channel of active.channels) {
@@ -202,14 +244,15 @@ test("preserves source-resolved deterministic foam after manual sources expire",
   expect(expiredLocalSum).toBeGreaterThan(SOURCE_EPSILON);
   expect(expiredLocalSum).toBeLessThan(activeLocalSum);
 
-  expect(result.first.activePresentation).toMatchObject({
+  expect(result.batched.activePresentation).toMatchObject({
     tick: 150,
-    manifestHash: result.first.expiredPresentation.manifestHash,
-    compileCount: result.first.expiredPresentation.compileCount,
-    probeCount: result.first.expiredPresentation.probeCount,
+    manifestHash: result.batched.expiredPresentation.manifestHash,
+    compileCount: result.batched.expiredPresentation.compileCount,
+    probeCount: result.batched.expiredPresentation.probeCount,
   });
-  expect(result.first.expiredPresentation.tick).toBe(270);
-  expect(result.first.legacy).toEqual(
+  expect(result.batched.expiredPresentation.tick).toBe(270);
+  expect(result.stepped.expiredPresentation.tick).toBe(270);
+  expect(result.batched.legacy).toEqual(
     [
       "whitecap-generation",
       "whitecap-history",
@@ -397,6 +440,95 @@ test("keeps bounded foam allocated while overflow evicts the lowest oldest sourc
   expect(after.union.maximumAbsoluteError).toBeLessThan(0.005);
 });
 
+test("keeps Body propeller-wash foam independent of presentation cadence", async ({
+  page,
+}) => {
+  await openQaStage(page, "propeller");
+
+  const result = await page.evaluate(
+    async ({ camera, controls }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV12 | undefined;
+      if (harness === undefined) {
+        throw new Error("QA Harness is unavailable.");
+      }
+
+      const drive = async (cadence: "batched" | "stepped") => {
+        await harness.reset({ seed: 0x2700_2514 });
+        await harness.updateArtisticControls(controls, {
+          transition: "sea-state-cut",
+        });
+        await harness.setCamera(camera, { transition: "continuous" });
+
+        let presentation;
+        if (cadence === "batched") {
+          await harness.advanceTicks(30);
+          await harness.setCamera(camera, { transition: "camera-cut" });
+          presentation = await harness.present();
+        } else {
+          for (let step = 0; step < 15; step += 1) {
+            await harness.advanceTicks(2);
+            if (step === 14) {
+              await harness.setCamera(camera, { transition: "camera-cut" });
+            }
+            presentation = await harness.present();
+          }
+        }
+        if (presentation === undefined) {
+          throw new Error("The propeller-wash state was not presented.");
+        }
+        return {
+          presentation,
+          capture: await harness.capture("foam-source-identity"),
+        };
+      };
+
+      const batched = await drive("batched");
+      const stepped = await drive("stepped");
+      return {
+        batched,
+        stepped,
+        samePrewarmIdentity:
+          batched.presentation.prewarm === stepped.presentation.prewarm,
+      };
+    },
+    { camera: PROPELLER_CAMERA, controls: STORM_CONTROLS },
+  );
+
+  expect(result.batched.presentation.tick).toBe(30);
+  expect(result.stepped.presentation).toMatchObject({
+    tick: 30,
+    manifestHash: result.batched.presentation.manifestHash,
+    compileCount: result.batched.presentation.compileCount,
+    probeCount: result.batched.presentation.probeCount,
+    prewarm: result.batched.presentation.prewarm,
+  });
+  expect(result.samePrewarmIdentity).toBe(true);
+  expect(result.batched.capture).toMatchObject({
+    name: "foam-source-identity",
+    format: "rgba32float-foam-source-identity",
+    elementType: "float32",
+    components: 4,
+    width: CAPTURE_WIDTH,
+    height: CAPTURE_HEIGHT,
+  });
+  expectFoamCapturesIdentical(
+    result.batched.capture.data,
+    result.stepped.capture.data,
+  );
+
+  const batched = summarizeFoamCapture(result.batched.capture.data);
+  const stepped = summarizeFoamCapture(result.stepped.capture.data);
+  expectFoamCaptureWellFormed(batched);
+  expectFoamCaptureWellFormed(stepped);
+  expect(batched.channels[1].nonZero).toBeGreaterThan(0);
+  expect(batched.channels[1].sum).toBeGreaterThan(SOURCE_EPSILON);
+  expect(batched.channels[2].nonZero).toBe(0);
+  expect(batched.channels[2].maximum).toBeLessThanOrEqual(1e-6);
+  expect(batched.channels[3].sum).toBeGreaterThan(SOURCE_EPSILON);
+  expect(batched.union.meanAbsoluteError).toBeLessThan(0.001);
+  expect(batched.union.maximumAbsoluteError).toBeLessThan(0.005);
+});
+
 interface FoamChannelStats {
   readonly sum: number;
   readonly minimum: number;
@@ -478,6 +610,35 @@ function expectFoamCaptureWellFormed(stats: FoamCaptureStats): void {
     expect(channel.minimum).toBeGreaterThanOrEqual(-0.001);
     expect(channel.maximum).toBeLessThanOrEqual(1.001);
   }
+}
+
+function compareFoamCaptures(
+  leftEncoded: string,
+  rightEncoded: string,
+): readonly Readonly<{ count: number; maximum: number }>[] {
+  const left = decodeFloat32(leftEncoded);
+  const right = decodeFloat32(rightEncoded);
+  expect(right.length).toBe(left.length);
+  return [0, 1, 2, 3].map((component) => {
+    let count = 0;
+    let maximum = 0;
+    for (let index = component; index < left.length; index += 4) {
+      const difference = Math.abs(
+        (left[index] ?? Number.NaN) - (right[index] ?? Number.NaN),
+      );
+      if (difference !== 0) {
+        count += 1;
+        maximum = Math.max(maximum, difference);
+      }
+    }
+    return { count, maximum };
+  });
+}
+
+function expectFoamCapturesIdentical(left: string, right: string): void {
+  expect(compareFoamCaptures(left, right)).toEqual(
+    [0, 1, 2, 3].map(() => ({ count: 0, maximum: 0 })),
+  );
 }
 
 function normalizedChannelMad(

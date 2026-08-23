@@ -203,6 +203,7 @@ export interface QualityProfileSpectralWhitecaps {
   readonly sourceLayout: "whitecap-wake-impact-combined";
   readonly localHistoryBanks: 2;
   readonly maxLocalSources: 128;
+  readonly sourceTimelineCapacityTicks: 128;
   readonly diffusionTaps: 3;
   readonly updateCadence: "host-fixed-tick";
   readonly captureResolutionPolicy: "drawing-buffer-exact";
@@ -352,14 +353,14 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:d5bfc7270d0bf892d36e26adf92d7d930d73902419436d5a9733c6d167f7ddba",
+      "sha256:31eb3e5315aabb865027060647630de40f4dc32e8f184e7f1a9d362d73c44020",
     widthSegments: 128,
     heightSegments: 128,
     whitecapFieldResolution: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:3b28bc94f9b765d3b901f0e55e693152c88f5c7b43a2c9de392e06a59302c464",
+      "sha256:a2f4fef88032d7f91a467131f2e4a3dd2741603d1b8b2322c679c4dcb6a00dfb",
     widthSegments: 256,
     heightSegments: 256,
     whitecapFieldResolution: 256,
@@ -744,6 +745,7 @@ const SPECTRAL_WHITECAP_KEYS = [
   "sourceLayout",
   "localHistoryBanks",
   "maxLocalSources",
+  "sourceTimelineCapacityTicks",
   "diffusionTaps",
   "updateCadence",
   "captureResolutionPolicy",
@@ -911,6 +913,7 @@ export function createMinimalWaterQualityProfile(
       sourceLayout: "whitecap-wake-impact-combined",
       localHistoryBanks: 2,
       maxLocalSources: MAX_ACTIVE_DISTURBANCES,
+      sourceTimelineCapacityTicks: 128,
       diffusionTaps: 3,
       updateCadence: "host-fixed-tick",
       captureResolutionPolicy: "drawing-buffer-exact",
@@ -1048,6 +1051,8 @@ function isSupportedSpectralWhitecaps(
     value.sourceLayout === supported.sourceLayout &&
     value.localHistoryBanks === supported.localHistoryBanks &&
     value.maxLocalSources === supported.maxLocalSources &&
+    value.sourceTimelineCapacityTicks ===
+      supported.sourceTimelineCapacityTicks &&
     value.diffusionTaps === supported.diffusionTaps &&
     value.updateCadence === supported.updateCadence &&
     value.captureResolutionPolicy === supported.captureResolutionPolicy &&

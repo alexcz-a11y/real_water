@@ -62,6 +62,7 @@ const CANONICAL_WHITECAP_FIELDS = Object.freeze([
   "sourceLayout",
   "localHistoryBanks",
   "maxLocalSources",
+  "sourceTimelineCapacityTicks",
   "diffusionTaps",
   "updateCadence",
   "captureResolutionPolicy",
@@ -293,6 +294,7 @@ function legacyProfile(profile, variant) {
         "sourceLayout",
         "localHistoryBanks",
         "maxLocalSources",
+        "sourceTimelineCapacityTicks",
       ]),
       mode: "spectral-ping-pong",
     };
@@ -368,9 +370,9 @@ for (const variant of COMMITTED_LEGACY_VARIANTS) {
 // public fields in declared order, with manifestHash itself excluded.
 const COMMITTED_MANIFEST_HASHES = {
   "minimal":
-    "sha256:8b0427cb06e1ffa77b22c9484c227d6515e35ff48f58eff70be7af2160cdbf4d",
+    "sha256:cbd00f9389697c7f7c90abf2486a64ae2a537cfcd572875ad78ecf40b321a406",
   "minimal-high-detail":
-    "sha256:1a9537397f7c7318ae5ff025e7b5625edc7c2007ad23a438d29fce880a5cebb1",
+    "sha256:4c2a38b8a8edbe45ab9e6d7170e3f420aea7e72f4ad2bb56d16a06ccafe4cb4d",
 };
 
 function canonicalManifestJson(manifest) {

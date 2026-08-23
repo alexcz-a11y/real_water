@@ -514,9 +514,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceHistory,
     kind: "effect-state",
     label:
-      "Bounded whitecap, wake, and impact source history (128 shared sources, two local history banks)",
+      "Bounded whitecap, wake, and impact source history (128 shared sources, two GPU local banks, 128-tick preallocated CPU snapshot timeline for 60Hz simulation, 30Hz present, and bounded catch-up)",
     fingerprint:
-      "sha256:bf0e7a732a14df1f3df38c88ea42d309a22b4119748c927434697e1ecfb3dcd5",
+      "sha256:9afcb0be0910b9d9fc3e5fdee2da3b09eccb7afdddc1a8aa45a1750c294e8be5",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalAdvectionRoute,
@@ -538,24 +538,25 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceIdentityTarget,
     kind: "resource",
     label:
-      "Unified foam source-identity diagnostics (RGBA16F, drawing-buffer-exact)",
+      "Unified foam source-identity diagnostics (RGBA16F canonical anchor-local 96m field, drawing-buffer-exact)",
     fingerprint:
-      "sha256:a3468e67ddf8d47ed6dd455574639215f56e3debfa1b613b7543d70563c92a1c",
+      "sha256:7aed6a2a182c10f42c5853d5e86b07c27800aebcf7c82e15830fc48d7f0774f8",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceIdentityRoute,
     kind: "conditional-route",
     label:
-      "Drawing-buffer whitecap, wake, and impact source-identity diagnostics route",
+      "Drawing-buffer canonical anchor-local whitecap, wake, and impact source-identity diagnostics route",
     fingerprint:
-      "sha256:63b87a198f5c3b63c22b5fb08efe546891c2f936ca94ea9cdd1c81bae7a0dc8e",
+      "sha256:00a84dfdb990f853318915cc3b164e201bf8e548c32ea12d851e336d1f5054b2",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceIdentityProbe,
     kind: "conditional-route",
-    label: "GPU completion probe of unified foam source identity",
+    label:
+      "GPU completion probe of canonical anchor-local unified foam source identity",
     fingerprint:
-      "sha256:95606c3b131052b445e77776b112b057fb74fbd525f5792de73a9bf499283e4a",
+      "sha256:8bc0852433ba4552576bc066f3af3728b95fa9dd03048c34ef3243698b5925a8",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.material,
@@ -949,10 +950,10 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
     kind: "conditional-route",
     label:
-      "Thirty named diagnostics output routes including unified foam source identity",
+      "Thirty named diagnostics output routes including canonical anchor-local unified foam source identity",
     // Identity covers the complete thirty-route diagnostics registry.
     fingerprint:
-      "sha256:e6ddeb49353021157af2be265782d8c710f4d4bf038ab064cdc493e6ea10f5e5",
+      "sha256:6730654631d83f3b5b94935b035c539ef7bfecf53def9c676a2af2d43215fea5",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.hiddenStabilization,
@@ -965,9 +966,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.completionProbe,
     kind: "conditional-route",
     label:
-      "GPU completion probe of all thirty named output routes including unified foam source identity",
+      "GPU completion probe of all thirty named output routes including canonical anchor-local unified foam source identity",
     fingerprint:
-      "sha256:3bbdf71667f978093bc91a74ba06bc6bca5e2fbfbd24c5fe991a10407c7fe400",
+      "sha256:9c735ebc510815bc6fd20c1e85b5a57126e3d47714e8c46809916b9479b2da1b",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.mainCameraGuard,

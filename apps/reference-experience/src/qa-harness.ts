@@ -300,19 +300,6 @@ export interface QaHarnessV12 {
   synthesizeDeviceLoss(): void;
 }
 
-/** @deprecated Use `QaFrameStateReceiptV12`. */
-export type QaFrameStateReceiptV11 = QaFrameStateReceiptV12;
-/** @deprecated Use `QaSeaLevelReceiptV12`. */
-export type QaSeaLevelReceiptV11 = QaSeaLevelReceiptV12;
-/** @deprecated Use `QaTemporalReceiptV12`. */
-export type QaTemporalReceiptV11 = QaTemporalReceiptV12;
-/** @deprecated Use `QaPresentationReceiptV12`. */
-export type QaPresentationReceiptV11 = QaPresentationReceiptV12;
-/** @deprecated Use `QaCaptureV12`. */
-export type QaCaptureV11 = QaCaptureV12;
-/** @deprecated Use `QaHarnessV12`. */
-export type QaHarnessV11 = QaHarnessV12;
-
 interface ActiveRecipe {
   readonly source: QaFrameSource;
   readonly driver: QaFrameDriver;

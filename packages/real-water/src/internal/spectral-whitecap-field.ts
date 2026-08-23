@@ -144,15 +144,46 @@ interface WhitecapKernels {
   readonly resolveLocal: ComputeNode;
 }
 
-export interface SpectralWhitecapField {
-  /** Stable final-stage texture. RGBA is generation/history/advection/decay. */
-  readonly texture: StorageTexture;
-  /** Stable anchor-local wake/impact field. RGBA is wake/impact/union/union. */
-  readonly sourceTexture: StorageTexture;
-  /** Samples the final stages at a Host-frame XZ position. */
+interface SourceTimelineEntry {
+  readonly tick: number;
+  readonly sequence: number;
+  readonly interaction: LocalInteractionRenderSnapshot;
+}
+
+interface SourceTimelinePlan {
+  readonly epoch: number;
+  readonly sequenceCeiling: number;
+  readonly entries: readonly SourceTimelineEntry[];
+}
+
+interface SynchronizedSourceBaseline {
+  readonly tick: number;
+  readonly interaction: LocalInteractionRenderSnapshot;
+}
+
+export interface UnifiedFoamField {
+  /**
+   * Global repeating spectral-stage attachment. RGBA remains the T15
+   * generation/history/advection/decay diagnostic contract.
+   */
+  readonly spectralStageTexture: StorageTexture;
+  /**
+   * Anchor-local, non-repeating source-history attachment. RGBA is
+   * wake/impact/local-union/local-union.
+   */
+  readonly localSourceHistoryTexture: StorageTexture;
+  /** Samples the global spectral diagnostic stages at a Host-frame XZ point. */
   sampleStages(hostXNode: FloatNode, hostZNode: FloatNode): Vec4Node;
-  /** Samples spectral, wake, impact, and their saturating union. */
+  /**
+   * Resolves the global spectral attachment and anchor-local source history as
+   * spectral/wake/impact/union without repeating the 96 m local domain.
+   */
   sampleSources(hostXNode: FloatNode, hostZNode: FloatNode): Vec4Node;
+  /**
+   * Samples the same logical field on a canonical anchor-local diagnostic UV,
+   * independent of camera projection, depth, and temporal jitter.
+   */
+  sampleSourcesAtFieldUv(uvXNode: FloatNode, uvYNode: FloatNode): Vec4Node;
   /** Runtime sink used to stage the latest hot controls and world origin. */
   readonly runtimeStateSink: RuntimeStateSink;
   /** Advances every missing authoritative fixed tick exactly once. */
@@ -173,12 +204,15 @@ export interface SpectralWhitecapField {
  * remains intact while the anchor-local source textures, compute graphs, and
  * descriptor storage stay fixed for the field lifetime.
  */
-export function createSpectralWhitecapField(
+export function createUnifiedFoamField(
   policy: QualityProfileSpectralWhitecaps,
-): SpectralWhitecapField {
+): UnifiedFoamField {
   const resolution = policy.fieldResolution;
   const tileSizeMetres = policy.tileSizeMetres;
   const fixedStepSeconds = 1 / policy.fixedTickHz;
+  const sourceTimeline = createSourceTimeline(
+    policy.sourceTimelineCapacityTicks,
+  );
   const finalStageTexture = createWhitecapTexture(
     resolution,
     "Real Water spectral whitecaps A (final)",
@@ -220,7 +254,7 @@ export function createSpectralWhitecapField(
   let pendingResetSnapshot: OpenWaterRuntimeSnapshot | undefined;
   let lastObservedSnapshot: OpenWaterRuntimeSnapshot | undefined;
   let synchronizedSnapshot: OpenWaterRuntimeSnapshot | undefined;
-  let latestInteraction: LocalInteractionRenderSnapshot | undefined;
+  let synchronizedSourceBaseline: SynchronizedSourceBaseline | undefined;
   let synchronizedLocalAnchor:
     Readonly<{ readonly x: number; readonly z: number }> | undefined;
   let operationQueue = Promise.resolve();
@@ -233,6 +267,9 @@ export function createSpectralWhitecapField(
     const previous = lastObservedSnapshot ?? synchronizedSnapshot;
     if (requiresHistoryReset(previous, observed)) {
       pendingResetSnapshot = observed;
+      sourceTimeline.reset();
+      synchronizedSourceBaseline = undefined;
+      synchronizedLocalAnchor = undefined;
     }
     lastObservedSnapshot = observed;
     return observed;
@@ -301,14 +338,22 @@ export function createSpectralWhitecapField(
     const spectral = stageSample(hostXNode, hostZNode).a.clamp(0, 1);
     const wake = local.r.clamp(0, 1);
     const impact = local.g.clamp(0, 1);
-    const localUnion = float(1)
-      .sub(float(1).sub(wake).mul(float(1).sub(impact)))
-      .clamp(0, 1);
-    const union = float(1)
-      .sub(float(1).sub(spectral).mul(float(1).sub(localUnion)))
-      .clamp(0, 1);
+    const localUnion = saturatingUnionNode(wake, impact);
+    const union = saturatingUnionNode(spectral, localUnion);
     return vec4(spectral, wake, impact, union);
   };
+  const sourceFieldUvSample = (
+    uvXNode: FloatNode,
+    uvYNode: FloatNode,
+  ): Vec4Node =>
+    sourceSample(
+      uniforms.localSampleAnchorHostX.add(
+        uvXNode.sub(0.5).mul(LOCAL_FOAM_DIAMETER_METRES),
+      ),
+      uniforms.localSampleAnchorHostZ.add(
+        uvYNode.sub(0.5).mul(LOCAL_FOAM_DIAMETER_METRES),
+      ),
+    );
 
   const runtimeStateSink: RuntimeStateSink = Object.freeze({
     synchronize(
@@ -318,10 +363,11 @@ export function createSpectralWhitecapField(
       if (disposed) {
         return;
       }
-      // Sink callbacks may arrive between the four async dispatch submissions.
-      // Cache only; the queued GPU synchronization applies one coherent copy.
-      observeSnapshot(snapshot);
-      latestInteraction = interaction;
+      const observed = observeSnapshot(snapshot);
+      // The declared 128-tick ring is the bounded bridge between 60 Hz source
+      // updates and a slower presentation cadence. Same-tick writes replace,
+      // and a full ring deterministically overwrites only its oldest entry.
+      sourceTimeline.record(observed.tick, interaction);
     },
     observe(snapshot: OpenWaterRuntimeSnapshot): void {
       if (disposed) {
@@ -337,7 +383,7 @@ export function createSpectralWhitecapField(
       try {
         await operation();
       } catch (cause) {
-        // A partial four-stage tick is not authoritative. Force the next call
+        // A partial six-stage tick is not authoritative. Force the next call
         // through the reset path instead of continuing from an unknown field.
         synchronizedSnapshot = undefined;
         throw cause;
@@ -348,20 +394,72 @@ export function createSpectralWhitecapField(
   };
 
   return Object.freeze({
-    texture: finalStageTexture,
-    sourceTexture: localFinalTexture,
+    spectralStageTexture: finalStageTexture,
+    localSourceHistoryTexture: localFinalTexture,
     sampleStages: stageSample,
     sampleSources: sourceSample,
+    sampleSourcesAtFieldUv: sourceFieldUvSample,
     runtimeStateSink,
     synchronize(
       renderer: Renderer,
       snapshot: OpenWaterRuntimeSnapshot,
     ): Promise<void> {
       const requestedSnapshot = observeSnapshot(snapshot);
-      const requestedInteraction = latestInteraction;
+      // Copy only immutable references out of the fixed ring. This plan cannot
+      // be changed by sink callbacks arriving between asynchronous dispatches.
+      const sourcePlan = sourceTimeline.capture();
       const resetBoundary = pendingResetSnapshot;
       return enqueue(async () => {
         let previous = synchronizedSnapshot;
+        const sourceBaseline = synchronizedSourceBaseline;
+        let appliedLocalAnchor = synchronizedLocalAnchor;
+        let appliedInteraction =
+          sourceBaseline?.interaction ?? emptyInteraction(requestedSnapshot);
+        const stageInteraction = (
+          tick: number,
+          tickSnapshot: OpenWaterRuntimeSnapshot,
+        ): void => {
+          // A sink snapshot labelled T is published by the Host's
+          // before-integrate route and drives the T -> T+1 interval. Therefore
+          // field tick T consumes the latest source state through T-1. The
+          // inclusive current state is retained below as the next baseline.
+          appliedInteraction = interactionAtTick(
+            sourcePlan,
+            sourceBaseline,
+            tick - 1,
+            tickSnapshot,
+          );
+          const anchor = interactionAnchorWorld(appliedInteraction);
+          writeInteractionUniforms(
+            uniforms,
+            appliedInteraction,
+            interactionGeometryValues,
+            interactionTimingValues,
+          );
+          writeLocalAnchorUniforms(
+            uniforms,
+            tickSnapshot,
+            anchor,
+            appliedLocalAnchor,
+          );
+        };
+        const executeTimelineTick = async (
+          tick: number,
+          tickTime: number,
+          tickSnapshot: OpenWaterRuntimeSnapshot,
+          resetHistory: boolean,
+        ): Promise<void> => {
+          stageInteraction(tick, tickSnapshot);
+          await executeFixedTick(
+            renderer,
+            kernels,
+            uniforms,
+            tickTime,
+            resetHistory,
+          );
+          appliedLocalAnchor = interactionAnchorWorld(appliedInteraction);
+        };
+
         if (
           resetBoundary !== undefined &&
           requiresHistoryReset(previous, resetBoundary)
@@ -371,42 +469,16 @@ export function createSpectralWhitecapField(
             artisticControls: requestedSnapshot.artisticControls,
             controlRevision: requestedSnapshot.controlRevision,
           });
-          const resetInteraction =
-            requestedInteraction ?? emptyInteraction(preparedReset);
-          const resetAnchor = interactionAnchorWorld(resetInteraction);
           writeSnapshotUniforms(uniforms, preparedReset, tileSizeMetres);
-          writeInteractionUniforms(
-            uniforms,
-            resetInteraction,
-            interactionGeometryValues,
-            interactionTimingValues,
-          );
-          writeLocalAnchorUniforms(
-            uniforms,
-            preparedReset,
-            resetAnchor,
-            synchronizedLocalAnchor,
-          );
-          await executeFixedTick(
-            renderer,
-            kernels,
-            uniforms,
+          await executeTimelineTick(
+            preparedReset.tick,
             preparedReset.timeSeconds,
+            preparedReset,
             true,
           );
           previous = preparedReset;
-          synchronizedLocalAnchor = resetAnchor;
         }
         writeSnapshotUniforms(uniforms, requestedSnapshot, tileSizeMetres);
-        const interaction =
-          requestedInteraction ?? emptyInteraction(requestedSnapshot);
-        const requestedAnchor = interactionAnchorWorld(interaction);
-        writeInteractionUniforms(
-          uniforms,
-          interaction,
-          interactionGeometryValues,
-          interactionTimingValues,
-        );
         const reset = requiresHistoryReset(previous, requestedSnapshot);
 
         if (
@@ -425,36 +497,20 @@ export function createSpectralWhitecapField(
               0,
               requestedSnapshot.timeSeconds - remainingTicks * fixedStepSeconds,
             );
-            writeLocalAnchorUniforms(
-              uniforms,
-              requestedSnapshot,
-              requestedAnchor,
-              synchronizedLocalAnchor,
-            );
-            await executeFixedTick(
-              renderer,
-              kernels,
-              uniforms,
+            await executeTimelineTick(
+              tick,
               tickTime,
+              requestedSnapshot,
               tick === previous.tick + 1,
             );
-            synchronizedLocalAnchor = requestedAnchor;
           }
         } else if (reset) {
-          writeLocalAnchorUniforms(
-            uniforms,
-            requestedSnapshot,
-            requestedAnchor,
-            synchronizedLocalAnchor,
-          );
-          await executeFixedTick(
-            renderer,
-            kernels,
-            uniforms,
+          await executeTimelineTick(
+            requestedSnapshot.tick,
             requestedSnapshot.timeSeconds,
+            requestedSnapshot,
             true,
           );
-          synchronizedLocalAnchor = requestedAnchor;
         } else if (
           previous !== undefined &&
           requestedSnapshot.tick > previous.tick
@@ -469,34 +525,38 @@ export function createSpectralWhitecapField(
               0,
               requestedSnapshot.timeSeconds - remainingTicks * fixedStepSeconds,
             );
-            writeLocalAnchorUniforms(
-              uniforms,
-              requestedSnapshot,
-              requestedAnchor,
-              synchronizedLocalAnchor,
-            );
-            await executeFixedTick(
-              renderer,
-              kernels,
-              uniforms,
-              tickTime,
-              false,
-            );
-            synchronizedLocalAnchor = requestedAnchor;
+            await executeTimelineTick(tick, tickTime, requestedSnapshot, false);
           }
         }
 
-        if (synchronizedLocalAnchor !== undefined) {
+        // Same-tick source updates become the next tick's baseline without
+        // evolving either persistent attachment a second time.
+        appliedInteraction = interactionAtTick(
+          sourcePlan,
+          sourceBaseline,
+          requestedSnapshot.tick,
+          requestedSnapshot,
+        );
+
+        if (appliedLocalAnchor !== undefined) {
           writeLocalSampleAnchorUniforms(
             uniforms,
             requestedSnapshot,
-            synchronizedLocalAnchor,
+            appliedLocalAnchor,
           );
         }
 
         // Same-tick calls deliberately update only hot uniforms and world
         // phase. They never evolve persistent state a second time.
         synchronizedSnapshot = requestedSnapshot;
+        if (sourceTimeline.epoch() === sourcePlan.epoch) {
+          synchronizedLocalAnchor = appliedLocalAnchor;
+          synchronizedSourceBaseline = Object.freeze({
+            tick: requestedSnapshot.tick,
+            interaction: appliedInteraction,
+          });
+          sourceTimeline.consume(sourcePlan, requestedSnapshot.tick);
+        }
         if (pendingResetSnapshot === resetBoundary) {
           pendingResetSnapshot = undefined;
         }
@@ -507,13 +567,20 @@ export function createSpectralWhitecapField(
       snapshot: OpenWaterRuntimeSnapshot,
     ): Promise<void> {
       const liveSnapshot = observeSnapshot(snapshot);
+      const sourcePlan = sourceTimeline.capture();
       return enqueue(async () => {
+        const sourceBaseline = synchronizedSourceBaseline;
         renderer.initTexture(finalStageTexture);
         renderer.initTexture(stagingTexture);
         renderer.initTexture(localFinalTexture);
         renderer.initTexture(localStagingTexture);
         writeSnapshotUniforms(uniforms, liveSnapshot, tileSizeMetres);
-        const interaction = latestInteraction ?? emptyInteraction(liveSnapshot);
+        const interaction = interactionAtTick(
+          sourcePlan,
+          sourceBaseline,
+          liveSnapshot.tick,
+          liveSnapshot,
+        );
         const liveAnchor = interactionAnchorWorld(interaction);
         writeInteractionUniforms(
           uniforms,
@@ -549,6 +616,13 @@ export function createSpectralWhitecapField(
         );
         writeLocalSampleAnchorUniforms(uniforms, liveSnapshot, liveAnchor);
         synchronizedSnapshot = liveSnapshot;
+        if (sourceTimeline.epoch() === sourcePlan.epoch) {
+          synchronizedSourceBaseline = Object.freeze({
+            tick: liveSnapshot.tick,
+            interaction,
+          });
+          sourceTimeline.consume(sourcePlan, liveSnapshot.tick);
+        }
         lastObservedSnapshot = liveSnapshot;
         pendingResetSnapshot = undefined;
       });
@@ -571,9 +645,136 @@ export function createSpectralWhitecapField(
       pendingResetSnapshot = undefined;
       lastObservedSnapshot = undefined;
       synchronizedSnapshot = undefined;
-      latestInteraction = undefined;
+      synchronizedSourceBaseline = undefined;
       synchronizedLocalAnchor = undefined;
+      sourceTimeline.reset();
     },
+  });
+}
+
+function createSourceTimeline(capacity: number) {
+  if (!Number.isSafeInteger(capacity) || capacity <= 0) {
+    throw new RangeError(
+      "The unified foam source timeline requires a positive fixed capacity.",
+    );
+  }
+  // These are the only structural timeline stores. The declared 128-tick
+  // bound covers 60 Hz source publication across the controlled 30 FPS route;
+  // pressure overwrites the oldest tick and never grows a backing array.
+  const ticks = new Float64Array(capacity);
+  const sequences = new Float64Array(capacity);
+  const interactions = Array<LocalInteractionRenderSnapshot | undefined>(
+    capacity,
+  ).fill(undefined);
+  let start = 0;
+  let length = 0;
+  let nextSequence = 1;
+  let currentEpoch = 0;
+
+  const reset = (): void => {
+    interactions.fill(undefined);
+    start = 0;
+    length = 0;
+    nextSequence = 1;
+    currentEpoch += 1;
+  };
+
+  return Object.freeze({
+    epoch(): number {
+      return currentEpoch;
+    },
+    reset,
+    record(tick: number, interaction: LocalInteractionRenderSnapshot): void {
+      const immutable = copyInteraction(interaction);
+      const sequence = nextSequence;
+      nextSequence += 1;
+      if (length > 0) {
+        const newest = (start + length - 1) % capacity;
+        if (ticks[newest] === tick) {
+          interactions[newest] = immutable;
+          sequences[newest] = sequence;
+          return;
+        }
+      }
+      const writeIndex =
+        length < capacity ? (start + length) % capacity : start;
+      ticks[writeIndex] = tick;
+      sequences[writeIndex] = sequence;
+      interactions[writeIndex] = immutable;
+      if (length < capacity) {
+        length += 1;
+      } else {
+        start = (start + 1) % capacity;
+      }
+    },
+    capture(): SourceTimelinePlan {
+      const entries: SourceTimelineEntry[] = [];
+      for (let offset = 0; offset < length; offset += 1) {
+        const index = (start + offset) % capacity;
+        const interaction = interactions[index];
+        if (interaction === undefined) {
+          continue;
+        }
+        entries.push(
+          Object.freeze({
+            tick: ticks[index] ?? 0,
+            sequence: sequences[index] ?? 0,
+            interaction,
+          }),
+        );
+      }
+      return Object.freeze({
+        epoch: currentEpoch,
+        sequenceCeiling: nextSequence - 1,
+        entries: Object.freeze(entries),
+      });
+    },
+    consume(plan: SourceTimelinePlan, throughTick: number): void {
+      if (plan.epoch !== currentEpoch) {
+        return;
+      }
+      while (length > 0) {
+        const sequence = sequences[start] ?? 0;
+        const tick = ticks[start] ?? 0;
+        if (sequence > plan.sequenceCeiling || tick > throughTick) {
+          break;
+        }
+        interactions[start] = undefined;
+        start = (start + 1) % capacity;
+        length -= 1;
+      }
+    },
+  });
+}
+
+function interactionAtTick(
+  plan: SourceTimelinePlan,
+  baseline: SynchronizedSourceBaseline | undefined,
+  tick: number,
+  snapshot: OpenWaterRuntimeSnapshot,
+): LocalInteractionRenderSnapshot {
+  const usableBaseline = baseline !== undefined && baseline.tick <= tick;
+  let selectedTick = usableBaseline ? baseline.tick : Number.NEGATIVE_INFINITY;
+  let selected = usableBaseline ? baseline.interaction : undefined;
+  for (const entry of plan.entries) {
+    if (entry.tick <= tick && entry.tick >= selectedTick) {
+      selectedTick = entry.tick;
+      selected = entry.interaction;
+    }
+  }
+  return selected ?? emptyInteraction(snapshot);
+}
+
+function copyInteraction(
+  interaction: LocalInteractionRenderSnapshot,
+): LocalInteractionRenderSnapshot {
+  return Object.freeze({
+    revision: interaction.revision,
+    anchorX: interaction.anchorX,
+    anchorZ: interaction.anchorZ,
+    impacts: Object.freeze(
+      interaction.impacts.map((source) => Object.freeze({ ...source })),
+    ),
   });
 }
 
@@ -866,15 +1067,9 @@ function createWhitecapKernels(
       texel.localZ,
       uniforms,
     );
-    const wake = float(1)
-      .sub(float(1).sub(history.x).mul(float(1).sub(generated.x)))
-      .clamp(0, 1);
-    const impact = float(1)
-      .sub(float(1).sub(history.y).mul(float(1).sub(generated.y)))
-      .clamp(0, 1);
-    const localUnion = float(1)
-      .sub(float(1).sub(wake).mul(float(1).sub(impact)))
-      .clamp(0, 1);
+    const wake = saturatingUnionNode(history.x, generated.x);
+    const impact = saturatingUnionNode(history.y, generated.y);
+    const localUnion = saturatingUnionNode(wake, impact);
     textureStore(
       localFinalTexture,
       texel.coordinate,
@@ -891,6 +1086,12 @@ function createWhitecapKernels(
     reprojectLocal,
     resolveLocal,
   };
+}
+
+function saturatingUnionNode(left: FloatNode, right: FloatNode): FloatNode {
+  return float(1)
+    .sub(float(1).sub(left).mul(float(1).sub(right)))
+    .clamp(0, 1);
 }
 
 function createLocalGenerationNode(

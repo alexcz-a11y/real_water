@@ -33,35 +33,36 @@ expose planar-color and planar-target-alpha occupancy from that auxiliary
 target; they do not claim a screen-space planar-confidence mask. Whitecap
 generation, carried history, advected history, and final decay are packed into
 one prepared target and read back as four scalar captures with one GPU transfer.
-A separate source-identity capture packs spectral whitecap, wake or propeller
-wash, impact, and their saturating union into RGBA. Current-frame SSR exposes
-ssr-hit from the stock raw target, ssr-confidence from the compose-target alpha
-used by the shader, linear Float32 ssr-color from the raw RGB, ssr-roughness
-from view-normal alpha, reflection-base-color from the scene-pass output RGB,
-and ssr-composite-color from the compose-target RGB. Stock roughness blur is
-current-frame spatial only. Dedicated TemporalReproject history RGB and inverse
-accumulated frame-count weight are capturable from the resolved texture. TRAA
-and SSR, including SSR history, update on each Host present. The Core main scene
-render remains one 6-attachment 32-byte MRT pass, plus one auxiliary planar
-scene render when facing. Current-frame SSR, history, and compose are fullscreen
-passes after that single main scene and before TRAA. Before readiness it also
-renders a no-allocation TRAA and SSR-history reset frame, eight full temporal
-hidden stabilization frames, performs completion readbacks of every named
-diagnostics output route and the main-camera guard frame, then blits the probed
-final color through a transform-free presentation pipeline. Progress advances
-only as manifest work completes. Optional `real-water/diagnostics` reads CPU
-DTOs from the same bound Core frame; QA does not own a second scene or TRAA. The
-Host must supply a perspective camera. The Reference Experience reveals the
-prepared canvas on the next refresh. The Host retains ownership of environment
-radiance and finite sun. The prepared radiance fingerprint is the Host
-verification credential: the SHA-256 of the canonical 8x4 RGBA8 sRGB pixels.
-Identity, size, format, type, and color space are structural and must agree with
-the borrowed Three texture. Texture bytes, sampler, and identity stay unchanged
-and alive through the lease; Core does not dispose the Host texture or read back
-its pixels. Scene-behind-water color and depth are sampled from the Host
-viewport after opaque geometry. Real Water never reads `scene.environment` or
-guesses sky or weather. The water material is an unlit public NodeMaterial whose
-color and MRT come from the same optical path.
+A separate canonical anchor-local source-identity capture maps the prepared
+96-metre Interaction Field and packs spectral whitecap, wake or propeller wash,
+impact, and their saturating union into RGBA without camera-jitter ambiguity.
+Current-frame SSR exposes ssr-hit from the stock raw target, ssr-confidence from
+the compose-target alpha used by the shader, linear Float32 ssr-color from the
+raw RGB, ssr-roughness from view-normal alpha, reflection-base-color from the
+scene-pass output RGB, and ssr-composite-color from the compose-target RGB.
+Stock roughness blur is current-frame spatial only. Dedicated TemporalReproject
+history RGB and inverse accumulated frame-count weight are capturable from the
+resolved texture. TRAA and SSR, including SSR history, update on each Host
+present. The Core main scene render remains one 6-attachment 32-byte MRT pass,
+plus one auxiliary planar scene render when facing. Current-frame SSR, history,
+and compose are fullscreen passes after that single main scene and before TRAA.
+Before readiness it also renders a no-allocation TRAA and SSR-history reset
+frame, eight full temporal hidden stabilization frames, performs completion
+readbacks of every named diagnostics output route and the main-camera guard
+frame, then blits the probed final color through a transform-free presentation
+pipeline. Progress advances only as manifest work completes. Optional
+`real-water/diagnostics` reads CPU DTOs from the same bound Core frame; QA does
+not own a second scene or TRAA. The Host must supply a perspective camera. The
+Reference Experience reveals the prepared canvas on the next refresh. The Host
+retains ownership of environment radiance and finite sun. The prepared radiance
+fingerprint is the Host verification credential: the SHA-256 of the canonical
+8x4 RGBA8 sRGB pixels. Identity, size, format, type, and color space are
+structural and must agree with the borrowed Three texture. Texture bytes,
+sampler, and identity stay unchanged and alive through the lease; Core does not
+dispose the Host texture or read back its pixels. Scene-behind-water color and
+depth are sampled from the Host viewport after opaque geometry. Real Water never
+reads `scene.environment` or guesses sky or weather. The water material is an
+unlit public NodeMaterial whose color and MRT come from the same optical path.
 
 Each Prewarm Manifest is version 7 and binds an immutable drawing buffer. The
 factory hashes that complete work plan synchronously. Memory Host tests may omit
@@ -78,13 +79,16 @@ at samples 0, current-frame SSR, and dedicated specular TemporalReproject
 history. A ready lease publishes that same TRAA, planar, current-frame SSR, and
 SSR history evidence, plus 128- or 256-square spectral and anchor-local
 ping-pong foam attachments and their drawing-buffer-exact diagnostics resolves.
-Amount and persistence remain hot Artistic Controls; field resolution, layout,
-format, cadence, and routes remain structural. The lease includes RG16F motion
-and stock Three revision 185 only after prewarm succeeds. Changing between them
-produces a different manifest hash and requires a full new preparation. A ready
-lease accepts only effect variants declared by its manifest; undeclared requests
-fail with `EFFECT_NOT_PREWARMED` before the runtime revision changes. Playwright
-Regression acceptance does not constitute headed Native certification.
+The unified field also preallocates a 128-tick source timeline so 60 Hz Body
+socket poses and manual source lifetimes replay identically when presentation is
+batched at 30 Hz. Amount and persistence remain hot Artistic Controls; field
+resolution, layout, format, cadence, timeline capacity, and routes remain
+structural. The lease includes RG16F motion and stock Three revision 185 only
+after prewarm succeeds. Changing between them produces a different manifest hash
+and requires a full new preparation. A ready lease accepts only effect variants
+declared by its manifest; undeclared requests fail with `EFFECT_NOT_PREWARMED`
+before the runtime revision changes. Playwright Regression acceptance does not
+constitute headed Native certification.
 
 Both profiles also pin one 48-metre local interaction field with an 8-metre
 Hermite edge fade, one Interaction Anchor, 128 shared preallocated Disturbance

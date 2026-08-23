@@ -1287,6 +1287,8 @@ export interface QualityProfileSpectralWhitecaps {
     // (undocumented)
     readonly sourceLayout: "whitecap-wake-impact-combined";
     // (undocumented)
+    readonly sourceTimelineCapacityTicks: 128;
+    // (undocumented)
     readonly stageLayout: "generation-history-advection-decay";
     // (undocumented)
     readonly tileSizeMetres: 256;

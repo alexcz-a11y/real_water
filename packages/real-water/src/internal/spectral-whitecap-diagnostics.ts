@@ -19,32 +19,29 @@ import {
 import type { Node } from "three/webgpu";
 import { CURRENT_FRAME_SSR_WATER_MASK_EPSILON } from "../ssr.js";
 
-export interface SpectralWhitecapStageSampler {
+export interface UnifiedFoamSampler {
   sampleStages(hostX: Node<"float">, hostZ: Node<"float">): Node<"vec4">;
   sampleSources(hostX: Node<"float">, hostZ: Node<"float">): Node<"vec4">;
+  sampleSourcesAtFieldUv(uvX: Node<"float">, uvY: Node<"float">): Node<"vec4">;
 }
 
-export interface SpectralWhitecapDiagnostics {
-  /** Compatibility alias for the unchanged T15 stage target. */
-  readonly target: RenderTarget;
+export interface UnifiedFoamDiagnostics {
   readonly stageTarget: RenderTarget;
   readonly sourceIdentityTarget: RenderTarget;
-  /** Compatibility route: renders only the unchanged T15 stage target. */
-  render(renderer: Renderer, camera: PerspectiveCamera): void;
   renderStages(renderer: Renderer, camera: PerspectiveCamera): void;
   renderSources(renderer: Renderer, camera: PerspectiveCamera): void;
   renderAll(renderer: Renderer, camera: PerspectiveCamera): void;
   dispose(): void;
 }
 
-export function createSpectralWhitecapDiagnostics(
+export function createUnifiedFoamDiagnostics(
   renderer: Renderer,
   camera: PerspectiveCamera,
   depthTexture: Texture,
   opticalFactorsTexture: Texture,
   drawingBuffer: Readonly<{ width: number; height: number }>,
-  sampler: SpectralWhitecapStageSampler,
-): SpectralWhitecapDiagnostics {
+  sampler: UnifiedFoamSampler,
+): UnifiedFoamDiagnostics {
   const stageTarget = new RenderTarget(
     drawingBuffer.width,
     drawingBuffer.height,
@@ -90,9 +87,12 @@ export function createSpectralWhitecapDiagnostics(
     const packedStages = vec4(
       sampler.sampleStages(worldPosition.x, worldPosition.z),
     ).mul(waterMask);
+    // Source identity is a canonical view of the logical field's anchor-local
+    // ±48 m domain. Unlike the legacy screen-space stage attachment, it does
+    // not inherit camera jitter, depth reconstruction, or presentation count.
     const packedSources = vec4(
-      sampler.sampleSources(worldPosition.x, worldPosition.z),
-    ).mul(waterMask);
+      sampler.sampleSourcesAtFieldUv(screenUV.x, screenUV.y),
+    );
     const stagePipeline = new RenderPipeline(renderer, packedStages);
     stagePipeline.outputColorTransform = false;
     const sourcePipeline = new RenderPipeline(renderer, packedSources);
@@ -118,21 +118,15 @@ export function createSpectralWhitecapDiagnostics(
       nextRenderer.setRenderTarget(stageTarget);
       stagePipeline.render();
     };
-    const renderSources = (
-      nextRenderer: Renderer,
-      nextCamera: PerspectiveCamera,
-    ): void => {
+    const renderSources = (nextRenderer: Renderer): void => {
       assertActive();
-      updateCamera(nextCamera);
       nextRenderer.setRenderTarget(sourceIdentityTarget);
       sourcePipeline.render();
     };
 
     return Object.freeze({
-      target: stageTarget,
       stageTarget,
       sourceIdentityTarget,
-      render: renderStages,
       renderStages,
       renderSources,
       renderAll(nextRenderer: Renderer, nextCamera: PerspectiveCamera): void {

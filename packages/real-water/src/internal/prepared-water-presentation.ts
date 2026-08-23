@@ -75,10 +75,10 @@ import {
   type CurrentFrameSsrStack,
 } from "./ssr-stack.js";
 import {
-  createSpectralWhitecapDiagnostics,
-  type SpectralWhitecapDiagnostics,
+  createUnifiedFoamDiagnostics,
+  type UnifiedFoamDiagnostics,
 } from "./spectral-whitecap-diagnostics.js";
-import type { SpectralWhitecapField } from "./spectral-whitecap-field.js";
+import type { UnifiedFoamField } from "./spectral-whitecap-field.js";
 import type {
   WaterlineFrameState,
   WaterlineStateController,
@@ -117,8 +117,8 @@ export interface PreparedWaterPresentationResources {
   readonly finalColorTarget: RenderTarget;
   readonly scenePass: ReturnType<typeof pass>;
   readonly ssr: CurrentFrameSsrStack;
-  readonly whitecapField: SpectralWhitecapField;
-  readonly whitecapDiagnostics: SpectralWhitecapDiagnostics;
+  readonly foamField: UnifiedFoamField;
+  readonly foamDiagnostics: UnifiedFoamDiagnostics;
   readonly inverseLinearDepthTextureIndex: number;
   readonly viewNormalTextureIndex: number;
   readonly motionVectorsTextureIndex: number;
@@ -143,7 +143,7 @@ export function createPreparedWaterPresentationResources(
   scene: Scene,
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
-  whitecapField: SpectralWhitecapField,
+  foamField: UnifiedFoamField,
   initialWaterline: WaterlineFrameState,
 ): {
   readonly resources: PreparedWaterPresentationResources;
@@ -156,7 +156,7 @@ export function createPreparedWaterPresentationResources(
       scene,
       camera,
       drawingBuffer,
-      whitecapField,
+      foamField,
       initialWaterline,
       partial,
     );
@@ -171,7 +171,7 @@ function constructPreparedWaterPresentationResources(
   scene: Scene,
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
-  whitecapField: SpectralWhitecapField,
+  foamField: UnifiedFoamField,
   initialWaterline: WaterlineFrameState,
   partial: PartialPreparedWaterPresentationResources,
 ): {
@@ -231,15 +231,15 @@ function constructPreparedWaterPresentationResources(
   opticalDiagnosticsBTexture.type = UnsignedByteType;
   opticalDiagnosticsBTexture.colorSpace = LinearSRGBColorSpace;
   assertCoreScenePassColorByteBudget(scenePass.renderTarget.textures);
-  const whitecapDiagnostics = createSpectralWhitecapDiagnostics(
+  const foamDiagnostics = createUnifiedFoamDiagnostics(
     renderer,
     camera,
     scenePass.getTexture("depth"),
     opticalFactorsTexture,
     drawingBuffer,
-    whitecapField,
+    foamField,
   );
-  partial.whitecapDiagnostics = whitecapDiagnostics;
+  partial.foamDiagnostics = foamDiagnostics;
 
   const historyRejectionTarget = new RenderTarget(
     drawingBuffer.width,
@@ -335,8 +335,8 @@ function constructPreparedWaterPresentationResources(
     finalColorTarget,
     scenePass,
     ssr,
-    whitecapField,
-    whitecapDiagnostics,
+    foamField,
+    foamDiagnostics,
     inverseLinearDepthTextureIndex: 0,
     viewNormalTextureIndex: textureIndex(
       scenePass.renderTarget,
@@ -485,7 +485,7 @@ export function createPresentationRouteBridge(
       );
     }
     const snapshot = inspectRuntime();
-    await resources.whitecapField.synchronize(renderer, snapshot);
+    await resources.foamField.synchronize(renderer, snapshot);
     const snapshotResetReason =
       lastPresented === undefined
         ? null
@@ -662,7 +662,7 @@ export function disposePreparedWaterPresentationResources(
   resources.traaNode.dispose();
   resources.currentColorTarget.dispose();
   resources.finalColorTarget.dispose();
-  resources.whitecapDiagnostics.dispose();
+  resources.foamDiagnostics.dispose();
   resources.scenePass.dispose();
   disposeCurrentFrameSsrStack(resources.ssr);
   resources.planar.dispose();
@@ -680,7 +680,7 @@ export function disposePartialPreparedWaterPresentationResources(
     () => resources.traaNode?.dispose(),
     () => resources.currentColorTarget?.dispose(),
     () => resources.finalColorTarget?.dispose(),
-    () => resources.whitecapDiagnostics?.dispose(),
+    () => resources.foamDiagnostics?.dispose(),
     () => resources.scenePass?.dispose(),
     () => {
       if (resources.ssr !== undefined) {
@@ -802,11 +802,11 @@ function renderTemporalFrame(
       resources.ssr.sceneTriggerPipeline.render();
       resources.counters.sceneRenderCount += 1;
       if (captureWhitecapStages && captureFoamSources) {
-        resources.whitecapDiagnostics.renderAll(renderer, camera);
+        resources.foamDiagnostics.renderAll(renderer, camera);
       } else if (captureWhitecapStages) {
-        resources.whitecapDiagnostics.renderStages(renderer, camera);
+        resources.foamDiagnostics.renderStages(renderer, camera);
       } else if (captureFoamSources) {
-        resources.whitecapDiagnostics.renderSources(renderer, camera);
+        resources.foamDiagnostics.renderSources(renderer, camera);
       }
       renderCurrentFrameSsr(renderer, resources.ssr);
       const historyHostState = captureHostState(renderer, scene, camera);
@@ -938,12 +938,12 @@ async function probeNamedOutputRoutes(
   await probeCompletedFrame(
     renderer,
     resources,
-    resources.whitecapDiagnostics.target,
+    resources.foamDiagnostics.stageTarget,
   );
   await probeCompletedFrame(
     renderer,
     resources,
-    resources.whitecapDiagnostics.sourceIdentityTarget,
+    resources.foamDiagnostics.sourceIdentityTarget,
   );
 }
 
@@ -1269,7 +1269,7 @@ async function readWhitecapStageCaptures(
   ReadonlyMap<DiagnosticsCaptureName, DiagnosticsWhitecapStageCapture>
 > {
   const raw = await renderer.readRenderTargetPixelsAsync(
-    resources.whitecapDiagnostics.target,
+    resources.foamDiagnostics.stageTarget,
     0,
     0,
     resources.width,
@@ -1326,7 +1326,7 @@ async function readFoamSourceIdentityCapture(
   resources: PreparedWaterPresentationResources,
 ): Promise<DiagnosticsFoamSourceIdentityCapture> {
   const raw = await renderer.readRenderTargetPixelsAsync(
-    resources.whitecapDiagnostics.sourceIdentityTarget,
+    resources.foamDiagnostics.sourceIdentityTarget,
     0,
     0,
     resources.width,

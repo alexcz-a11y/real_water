@@ -392,7 +392,9 @@ export interface DiagnosticsWhitecapStageCapture extends DiagnosticsCaptureBase 
 }
 
 /**
- * Source-resolved contribution and saturating union of the unified foam field.
+ * Canonical anchor-local contribution map and saturating union of the unified
+ * foam field. Unlike screen-space stage captures, this map covers the prepared
+ * 96-metre Interaction Field directly and is independent of camera jitter.
  *
  * @public
  */
@@ -402,8 +404,8 @@ export interface DiagnosticsFoamSourceIdentityCapture extends DiagnosticsCapture
   /** Packed RGBA source-identity format. */
   readonly format: "rgba32float-foam-source-identity";
   /**
-   * Tightly packed source samples: R = spectral whitecap, G = vessel wake or
-   * propeller wash, B = local impact, A = saturating union.
+   * Tightly packed anchor-local samples: R = spectral whitecap, G = vessel wake
+   * or propeller wash, B = local impact, A = saturating union.
    */
   readonly data: Float32Array;
 }
