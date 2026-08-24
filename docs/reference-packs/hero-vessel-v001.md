@@ -136,10 +136,16 @@ Terms §2.3 attaches a licence that runs the other way, and its scope depends on
 
 ### Two facts this record cannot settle
 
-1. **The account tier of the generating account is not recorded here.** §2.3 turns on it: on a Free
-   Account the nine approved views carry a perpetual licence to Reve *and to other users* to
-   reproduce, distribute, create derivative works of, and publicly display them. Ownership is
-   retained either way; what differs is what else was granted alongside it.
+1. ~~The account tier of the generating account is not recorded here.~~ **Settled 2026-08-24: the
+   generating account (`jackson.neo2230@gmail.com`) is on the Reve **Free plan**, read from
+   `https://app.reve.com/account`.** Terms §2.3 therefore applies in full to these nine views: they
+   "may be made available ... to and/or searchable by other users, including on Reve's Inspiration
+   page", and a "perpetual license to Reve **and other users** to reproduce, distribute, create
+   derivative works of and publicly display such Output" has been granted. Ownership is retained
+   regardless; what a Free Account grants alongside it is a licence to third parties. The model
+   training opt-out in §2.3 is available to Paid Accounts only, and by its own wording applies only
+   to Content created *after* the opt-out is selected — so it could not be applied retroactively to
+   this pack even if the account were upgraded.
 2. **The nine files were downloaded by an agent driving the site's own download control.** Terms
    §1.3(b) prohibits "automatically or programmatically extract or scrape data or Outputs from the
    Services". Whether an agent operating the published UI falls inside that phrase is not settled
