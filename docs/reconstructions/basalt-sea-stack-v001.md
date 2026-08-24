@@ -5,10 +5,15 @@ as a code-only procedural Three.js model under `apps/reference-experience`, thro
 `img2threejs` staged pipeline.
 
 The reconstruction's own record is `basalt-sea-stack-v001.sculpt.json` beside this file: the
-`ObjectSculptSpec` with every measurement, assumption, revision note and pass review. Pixels — the
-renders, comparison sheets and geometry dumps — stay outside the repository under
-`.img2threejs/evidence/`, for the same reason ADR-0022 keeps the pack pixels out: the text is the
-evidence a published MIT package can carry.
+`ObjectSculptSpec` with every measurement, assumption, revision note and pass review. The committed
+spec passes `validate_sculpt_spec.py --strict-quality` as committed.
+
+Pixels — renders, comparison sheets and geometry dumps — stay outside the repository, for the same
+reason ADR-0022 keeps the pack pixels out: the text is the evidence a published MIT package can
+carry. They are **retained beside the pack pixels they were compared against**, at
+`~/rw/reference-packs/basalt-sea-stack/reconstruction-v001/`, and hashed below so the record and the
+files stay tied together. The working directory this was produced in
+(`.img2threejs/`) is gitignored scratch and is not the retained copy.
 
 | | |
 |---|---|
@@ -177,7 +182,7 @@ Three of these are low confidence and are the ones to challenge first.
 | Bible §4's 250–300 m is **above-water** height | 0.70 | A sea stack's height is conventionally measured above sea level, and "distant silhouette only" is the above-water part. The buoy row says "Above-water height" explicitly; this row does not. |
 | Maximum diameter 268 m, from the anchor's H/D of 1.026 | 0.85 | Makes the asset a monolith rather than a slender stack — which is what the approved anchor shows, and the generating album is named "The Monolith of Basalt". The pack record makes the anchor authoritative for proportion. |
 | Submerged depth 84 m | **0.40** | The anchor's own proportion below the stain. No view shows the shaft terminating; Bible §10 fixes its character, not its depth. |
-| The dark band covers the whole submerged shaft; `stainRiseMetres` defaults to 0 | **0.35** | Every view crops or fades before the band's lower edge, so only its **top** edge is evidence. Exposed as a review parameter for the human approver to settle. |
+| The dark band covers the whole submerged shaft; `stainRiseMetres` defaults to 0 | **0.35** | Every view crops or fades before the band's lower edge, so only its **top** edge is evidence. Exposed as a review parameter for the human approver to settle. **If the approver moves it off 0, write the chosen value into `BASALT_SEA_STACK_FIELD`, the sculpt spec and this row** — otherwise the decision lives only in someone's memory of the review. |
 | Summit plan arrangement | **0.45** | Generated from the field statistics. Bible §6 omits the top view by design, so there is nothing to compare it against. |
 
 ## One conflict found in the pack, and how it was settled
@@ -202,6 +207,34 @@ character the record describes as rejected. **Reported to the pack owner rather 
 eye.** It changes nothing about the model: Bible §10 outranks any approved image and requires one
 level, unbroken, sharp band regardless, so the front elevation and `mat-waterline` are the evidence
 for how it looks and the other three contribute nothing to it.
+
+## Retained comparison evidence
+
+`~/rw/reference-packs/basalt-sea-stack/reconstruction-v001/`, sha256 first 16:
+
+| File | What it is | sha256 (first 16) |
+|---|---|---|
+| `render-anchor-3q.png` | Review render — identity anchor, three-quarter (the authoritative view) | `a5223f353dc8c998` |
+| `render-front.png` | Review render — front orthographic | `2580cc7d5d9fcb31` |
+| `render-side.png` | Review render — side orthographic | `343f70344de4e9e8` |
+| `render-back.png` | Review render — back orthographic | `8feb3f01fc50f512` |
+| `render-az270.png` | Review render — azimuth 270, the turntable gate's fourth angle | `7b513841053f4f37` |
+| `render-mapstripped-anchor-3q.png` | Material-stripped render, the blockout gate's required evidence | `bb78147cc0aeea0e` |
+| `cmp-anchor-3q.png` | Comparison sheet — anchor | `60b32c1f98d85e78` |
+| `cmp-front.png` | Comparison sheet — front | `8b3856e4b0c04e64` |
+| `cmp-side.png` | Comparison sheet — side | `85259b0a03268de5` |
+| `cmp-back.png` | Comparison sheet — back | `776dcac450e7ce0b` |
+| `scene-participation.png` | Scene participation — water plane, fog, shadow, level reflection edge | `5962986688b2f1d0` |
+| `geometry.json` | World-space vertices, normals and colours of all ten meshes (gate input) | `43e1fe5e3023b0bb` |
+| `parts.json` | Runtime part-tree dump (`check_part_coverage` input) | `487bec81ae2bafed` |
+| `part-coverage.json` | `check_part_coverage` findings | `65bf7591bdfdf65f` |
+| `turntable.json` | `turntable_gate` findings | `14fc216057c7e1c7` |
+| `self-intersection.json` | `self_intersection` findings, including the unresolved residual | `50ac34536b6f4b6b` |
+| `palette.json` | Vertex-colour palette (`vertex_region_gate` input) | `01b85162e13f7b99` |
+| `waterline-expect.json` | Waterline expectation the region gate is run against | `3267d3a5bd91033c` |
+
+The per-pass evidence for the eight build passes, and the review history that cites it, live in the
+committed sculpt spec's `reviewHistory`.
 
 ## The limit of all of this
 
