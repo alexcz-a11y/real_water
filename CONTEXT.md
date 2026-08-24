@@ -36,6 +36,12 @@ Real Water defines the language for a reusable real-time open-water experience w
 
 **Interaction Anchor**: The world-space focus around which high-detail water interactions are maintained, usually the primary playable vessel or object. _Avoid_: Camera position, global simulation origin
 
+**Local Interaction Field**: The bounded, Interaction Anchor-centred field of active Disturbances that perturbs the Open Water Domain's surface, faded out at its own edge so that it blends into the spectral ocean rather than ending. _Avoid_: Global disturbance list, coupled fluid domain
+
+**Prepared Surface**: The composed water surface a frame presents, being the spectral ocean and the Local Interaction Field together at one sample position and time. Every observation expected to agree with what is drawn resolves against it. _Avoid_: Spectral ocean alone, displaced render mesh
+
+**Waterline**: The classification of an observer as above, crossing, or below the Prepared Surface, held stable across frames by hysteresis so that layers keyed to it do not oscillate. _Avoid_: Sea level, surface plane, camera depth sign
+
 **Hero Breaker**: An art-directed, localized breaking-wave event used where silhouette and drama matter most, without implying a general volumetric fluid simulation. _Avoid_: Full fluid solve, generic whitecap
 
 **Reference Experience**: The controlled demonstration scene in which Real Water's visual-quality and whole-frame performance claims are evaluated. _Avoid_: Any host application, arbitrary integration
