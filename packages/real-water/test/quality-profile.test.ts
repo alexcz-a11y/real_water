@@ -100,6 +100,20 @@ const LOCAL_INTERACTION = Object.freeze({
     maxSnapshotAgeTicks: 1 as const,
     radialImpactRoute: "analytic-uniform-array" as const,
     directionalWakeRoute: "analytic-uniform-array" as const,
+    maxActiveHeroBreakers: 8 as const,
+    heroBreakerRoute: "art-directed-overturning-uniform-array" as const,
+  }),
+});
+const PRE_HERO_BREAKER_INTERACTION = Object.freeze({
+  anchorCount: LOCAL_INTERACTION.anchorCount,
+  field: Object.freeze({
+    radiusMetres: LOCAL_INTERACTION.field.radiusMetres,
+    edgeFadeMetres: LOCAL_INTERACTION.field.edgeFadeMetres,
+    maxActiveDisturbances: LOCAL_INTERACTION.field.maxActiveDisturbances,
+    snapshotBanks: LOCAL_INTERACTION.field.snapshotBanks,
+    maxSnapshotAgeTicks: LOCAL_INTERACTION.field.maxSnapshotAgeTicks,
+    radialImpactRoute: LOCAL_INTERACTION.field.radialImpactRoute,
+    directionalWakeRoute: LOCAL_INTERACTION.field.directionalWakeRoute,
   }),
 });
 // Every shape committed before #25 carried an interaction field one key short:
@@ -124,9 +138,21 @@ const BODY_COUPLING = Object.freeze({
   socketRoute: "stable-slot-upsert" as const,
 });
 const MINIMAL_PROFILE_HASH =
-  "sha256:fe3581f672279216b2fe41dd658b7ae47140a58fb555badf2f1b05477781f663";
+  "sha256:9fb629031064c5718584b77355748965e9cfafe11cba7e3f4675eedf715cd684";
 const HIGH_DETAIL_PROFILE_HASH =
-  "sha256:e21f2d7c73e0efec73e8e01b21bfcd52ba7d059c5fb857bc73fee3d11bc89148";
+  "sha256:9780385fa033a0aeb2ad9de04ad04d6d5635398377da6b4000541044120f650b";
+const LEGACY_V13_PROFILES = Object.freeze({
+  "minimal": Object.freeze({
+    profileHash:
+      "sha256:fe3581f672279216b2fe41dd658b7ae47140a58fb555badf2f1b05477781f663",
+    segments: 128,
+  }),
+  "minimal-high-detail": Object.freeze({
+    profileHash:
+      "sha256:e21f2d7c73e0efec73e8e01b21bfcd52ba7d059c5fb857bc73fee3d11bc89148",
+    segments: 256,
+  }),
+} as const);
 const LEGACY_V12_PROFILES = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
@@ -531,7 +557,7 @@ const NATIVE_UNDERWATER = Object.freeze({
 const NATIVE_WHITECAPS = Object.freeze({
   ...LEGACY_SPECTRAL_WHITECAPS,
   mode: "unified-source-ping-pong" as const,
-  sourceLayout: "whitecap-wake-impact-combined" as const,
+  sourceLayout: "whitecap-wake-impact-hero-combined" as const,
   localHistoryBanks: 2 as const,
   maxLocalSources: 128 as const,
   foamTimelineCapacityTicks: 128 as const,
@@ -593,6 +619,8 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
     "sha256:3b379f85cfe563c2a0dccf32deb4f5eebe4c42b1f034851efda2bd678f874bfa",
   "water-secondary-particle-probe":
     "sha256:a84045371ce814a6b2899f98b0eac6f93fa43d23014ac1573bcb0f18a9c87548",
+  "water-hero-breaker-foam-diagnostics-target":
+    "sha256:3e57313110292e7292a28f379183191e87a37c252e3ede01a808393a923046aa",
   "water-lens-wetness-diagnostics-target":
     "sha256:a0bec0c560242b5154b76a55261076c46b6e61e1c0c882c74ec498b84636c4fa",
   "water-lens-wetness-stage-route":
@@ -606,7 +634,7 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-current-color-conversion":
     "sha256:750febf150f950dd006fc0a7df54e7e5faa9aace9e026c452f1b9aa0f639a0c8",
   "water-named-output-routes":
-    "sha256:94e65cb8d4ad5c047715315b129abaa5c9ff0e6f58f7671f1acdd2e370284b9e",
+    "sha256:cac4b057b2128af8a3336bafc8381573bed8c406794e1163a8ee30e4ad2a923d",
   "water-ssr-raw-target":
     "sha256:5229f76bc28be7b7aa032fadcb3adabfada2202dde29a88f499d16fac9ba659f",
   "water-ssr-blur-target":
@@ -694,7 +722,7 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-planar-reflection-probe":
     "sha256:f203f71435dfe40d3d14d3b19b853fd13f8338aba138c1eee29400570074311e",
   "water-completion-probe":
-    "sha256:a3377b51000b3c8df474f6c5d3710d2857df5c695337fb6c7f028560d3154b88",
+    "sha256:8b7be2e1119ef683210e89c3350cb114f633adc492739f1588fc180e15084903",
   "water-main-camera-guard":
     "sha256:e59db4a839b5f36edfaec493a1f334f44ba6bae5a5046a758c0ceb69ea143841",
   "water-whitecap-stage-target":
@@ -731,6 +759,7 @@ const DRAWING_BUFFER_BOUND_IDS = [
   "water-secondary-particle-composite-route",
   "water-secondary-particle-diagnostics-route",
   "water-secondary-particle-probe",
+  "water-hero-breaker-foam-diagnostics-target",
   "water-lens-wetness-diagnostics-target",
   "water-lens-wetness-stage-route",
   "water-lens-wetness-diagnostics-route",
@@ -854,6 +883,13 @@ const CORE_PREWARM_DECLARATION_IDS = [
   "water-local-interaction-buffers",
   "water-local-interaction-radial-impact-route",
   "water-local-interaction-directional-wake-route",
+  "water-hero-breaker-state",
+  "water-hero-breaker-deformation-route",
+  "water-hero-breaker-foam-route",
+  "water-hero-breaker-spray-route",
+  "water-hero-breaker-foam-diagnostics-target",
+  "water-hero-breaker-foam-diagnostics-route",
+  "water-hero-breaker-foam-probe",
   "water-body-socket-emission-route",
   "water-spectral-band-swell",
   "water-spectral-band-wind",
@@ -972,7 +1008,7 @@ describe("Quality Profiles", () => {
   it("pins the depth-aware underwater volume outside hot Artistic Controls", () => {
     const profile = createMinimalWaterQualityProfile();
 
-    expect(QUALITY_PROFILE_VERSION).toBe(13);
+    expect(QUALITY_PROFILE_VERSION).toBe(14);
     expect(profile.underwater).toEqual(NATIVE_UNDERWATER);
     expect(Object.isFrozen(profile.underwater)).toBe(true);
     expect(Object.isFrozen(profile.underwater.caustics)).toBe(true);
@@ -993,7 +1029,7 @@ describe("Quality Profiles", () => {
       tileSizeMetres: 256,
       fieldFormat: "rgba16float",
       stageLayout: "generation-history-advection-decay",
-      sourceLayout: "whitecap-wake-impact-combined",
+      sourceLayout: "whitecap-wake-impact-hero-combined",
       localHistoryBanks: 2,
       maxLocalSources: 128,
       foamTimelineCapacityTicks: 128,
@@ -1021,10 +1057,10 @@ describe("Quality Profiles", () => {
     const minimal = createMinimalWaterQualityProfile();
     const highDetail = createMinimalWaterQualityProfile("minimal-high-detail");
 
-    expect(QUALITY_PROFILE_VERSION).toBe(13);
+    expect(QUALITY_PROFILE_VERSION).toBe(14);
     expect(minimal).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 13,
+      version: 14,
       id: "minimal",
       profileHash: MINIMAL_PROFILE_HASH,
       surface: {
@@ -1044,7 +1080,7 @@ describe("Quality Profiles", () => {
     });
     expect(highDetail).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 13,
+      version: 14,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
       surface: {
@@ -1152,7 +1188,7 @@ describe("Quality Profiles", () => {
     expect(normalized).not.toBe(candidate);
     expect(identity).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 13,
+      version: 14,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
     });
@@ -1189,6 +1225,46 @@ describe("Quality Profiles", () => {
     expect(Object.isFrozen(migrated)).toBe(true);
   });
 
+  it("migrates the complete committed version 13 Quality Profiles", () => {
+    for (const id of ["minimal", "minimal-high-detail"] as const) {
+      const legacy = LEGACY_V13_PROFILES[id];
+      const candidate = {
+        schema: QUALITY_PROFILE_SCHEMA,
+        version: 13,
+        id,
+        profileHash: legacy.profileHash,
+        surface: {
+          geometry: {
+            widthSegments: legacy.segments,
+            heightSegments: legacy.segments,
+          },
+        },
+        interaction: PRE_HERO_BREAKER_INTERACTION,
+        bodyCoupling: BODY_COUPLING,
+        temporal: NATIVE_TEMPORAL,
+        reflection: NATIVE_REFLECTION,
+        whitecaps: {
+          ...NATIVE_WHITECAPS,
+          fieldResolution: legacy.segments,
+          sourceLayout: "whitecap-wake-impact-combined" as const,
+        },
+        secondaryParticles: NATIVE_SECONDARY_PARTICLES,
+        underwater: NATIVE_UNDERWATER,
+        postTraaComposition: NATIVE_POST_TRAA_COMPOSITION,
+      };
+
+      expect(migrateQualityProfile(candidate)).toEqual(
+        createMinimalWaterQualityProfile(id),
+      );
+      expect(() =>
+        migrateQualityProfile({
+          ...candidate,
+          interaction: LOCAL_INTERACTION,
+        }),
+      ).toThrow(TypeError);
+    }
+  });
+
   it("migrates the complete committed version 11 Quality Profiles", () => {
     for (const id of ["minimal", "minimal-high-detail"] as const) {
       const legacy = LEGACY_V11_PROFILES[id];
@@ -1203,13 +1279,14 @@ describe("Quality Profiles", () => {
             heightSegments: legacy.segments,
           },
         },
-        interaction: LOCAL_INTERACTION,
+        interaction: PRE_HERO_BREAKER_INTERACTION,
         bodyCoupling: BODY_COUPLING,
         temporal: NATIVE_TEMPORAL,
         reflection: NATIVE_REFLECTION,
         whitecaps: {
           ...NATIVE_WHITECAPS,
           fieldResolution: legacy.segments,
+          sourceLayout: "whitecap-wake-impact-combined" as const,
         },
         underwater: LEGACY_UNDERWATER,
       };
@@ -1237,13 +1314,14 @@ describe("Quality Profiles", () => {
             heightSegments: legacy.segments,
           },
         },
-        interaction: LOCAL_INTERACTION,
+        interaction: PRE_HERO_BREAKER_INTERACTION,
         bodyCoupling: BODY_COUPLING,
         temporal: NATIVE_TEMPORAL,
         reflection: NATIVE_REFLECTION,
         whitecaps: {
           ...NATIVE_WHITECAPS,
           fieldResolution: legacy.segments,
+          sourceLayout: "whitecap-wake-impact-combined" as const,
         },
         secondaryParticles: NATIVE_SECONDARY_PARTICLES,
         underwater: LEGACY_UNDERWATER,
@@ -1532,7 +1610,7 @@ describe("Quality Profiles", () => {
               heightSegments: legacy.segments,
             },
           },
-          interaction: LOCAL_INTERACTION,
+          interaction: PRE_HERO_BREAKER_INTERACTION,
           bodyCoupling: BODY_COUPLING,
           temporal: NATIVE_TEMPORAL,
           reflection: {
@@ -1594,7 +1672,7 @@ describe("Quality Profiles", () => {
               heightSegments: legacy.segments,
             },
           },
-          interaction: LOCAL_INTERACTION,
+          interaction: PRE_HERO_BREAKER_INTERACTION,
           bodyCoupling: BODY_COUPLING,
           temporal: NATIVE_TEMPORAL,
           reflection: NATIVE_REFLECTION,
@@ -1661,7 +1739,7 @@ describe("Quality Profiles", () => {
     const bodyCoupled = {
       ...candidate,
       profileHash: LEGACY_V9_BODY_COUPLING_PROFILES.minimal.profileHash,
-      interaction: LOCAL_INTERACTION,
+      interaction: PRE_HERO_BREAKER_INTERACTION,
       bodyCoupling: { ...BODY_COUPLING, maxSocketsPerBody: 9 },
       underwater: undefined,
     };
@@ -1682,7 +1760,7 @@ describe("Quality Profiles", () => {
         id: "minimal",
         profileHash: LEGACY_V6_WHITECAP_PROFILES.minimal.profileHash,
         surface,
-        interaction: LOCAL_INTERACTION,
+        interaction: PRE_HERO_BREAKER_INTERACTION,
         temporal: NATIVE_TEMPORAL,
         reflection: NATIVE_REFLECTION,
       }),
@@ -1711,7 +1789,7 @@ describe("Quality Profiles", () => {
       "unknown version 4",
       { ...createMinimalWaterQualityProfile(), version: 4 },
     ],
-    ["future version", { ...createMinimalWaterQualityProfile(), version: 14 }],
+    ["future version", { ...createMinimalWaterQualityProfile(), version: 15 }],
     [
       "version 1 hash tampering",
       {
@@ -1809,7 +1887,7 @@ describe("Quality Profiles", () => {
         id: "minimal",
         profileHash: LEGACY_V9_BODY_COUPLING_PROFILES.minimal.profileHash,
         surface: { geometry: { widthSegments: 128, heightSegments: 128 } },
-        interaction: LOCAL_INTERACTION,
+        interaction: PRE_HERO_BREAKER_INTERACTION,
         bodyCoupling: { ...BODY_COUPLING, maxAttachedBodies: 31 },
         temporal: NATIVE_TEMPORAL,
         reflection: NATIVE_REFLECTION,
@@ -1824,7 +1902,7 @@ describe("Quality Profiles", () => {
         id: "minimal",
         profileHash: LEGACY_V9_BODY_COUPLING_PROFILES.minimal.profileHash,
         surface: { geometry: { widthSegments: 128, heightSegments: 128 } },
-        interaction: LOCAL_INTERACTION,
+        interaction: PRE_HERO_BREAKER_INTERACTION,
         bodyCoupling: BODY_COUPLING,
         temporal: NATIVE_TEMPORAL,
         reflection: NATIVE_REFLECTION,
@@ -2271,7 +2349,7 @@ describe("Quality Profile manifests", () => {
       manifest.declarations.map(({ id, kind }) => [id, kind]),
     );
 
-    expect(PREWARM_MANIFEST_VERSION).toBe(10);
+    expect(PREWARM_MANIFEST_VERSION).toBe(11);
     expect(manifest.effectVariants).toContainEqual({
       effectId: "underwater-volume",
       variantId: "depth-aware",
@@ -2360,7 +2438,7 @@ describe("Quality Profile manifests", () => {
       ),
     ).toMatchObject({
       label:
-        "Bounded foam history (128-source, two GPU banks, 128-tick preallocated CPU foam-state timeline with Artistic Controls and source poses/lifetimes for 60Hz simulation, 30Hz present, and bounded catch-up)",
+        "Bounded foam history (128-source including at most 8 Hero Breakers, two GPU banks, 128-tick preallocated CPU foam-state timeline with Artistic Controls and source poses/lifetimes for 60Hz simulation, 30Hz present, and bounded catch-up)",
       fingerprint:
         "sha256:b6921d58b2beb103bc12115f47b2430d7db11117842c74213ffef5812e75eaae",
     });
@@ -2409,7 +2487,7 @@ describe("Quality Profile manifests", () => {
     const profile = createMinimalWaterQualityProfile();
     const manifest = createMinimalWaterPrewarmManifest(profile);
 
-    expect(QUALITY_PROFILE_VERSION).toBe(13);
+    expect(QUALITY_PROFILE_VERSION).toBe(14);
     expect(profile.reflection.ssr.history.resetDomains).toEqual([
       "simulation-reset",
       "camera-cut",
@@ -2449,8 +2527,8 @@ describe("Quality Profile manifests", () => {
     );
     const highDetail = createMinimalWaterPrewarmManifest(highDetailProfile);
 
-    expect(PREWARM_MANIFEST_VERSION).toBe(10);
-    expect(minimal.version).toBe(10);
+    expect(PREWARM_MANIFEST_VERSION).toBe(11);
+    expect(minimal.version).toBe(11);
     expect(minimal.drawingBuffer).toEqual(MEMORY_PREWARM_DRAWING_BUFFER);
     expect(Object.isFrozen(minimal.drawingBuffer)).toBe(true);
     expect(minimal.manifestHash).toBe(
@@ -2484,11 +2562,15 @@ describe("Quality Profile manifests", () => {
         effectId: "lens-wetness",
         variantId: "bounded-emergence-decay",
       },
+      {
+        effectId: "hero-breaker",
+        variantId: "art-directed-overturning",
+      },
     ]);
     expect(minimal.effectVariants).toEqual(SUPPORTED_EFFECT_VARIANTS);
     expect(minimal.qualityProfile.temporal).toEqual(NATIVE_TEMPORAL);
     expect(minimal.qualityProfile.reflection).toEqual(NATIVE_REFLECTION);
-    expect(minimal.qualityProfile.version).toBe(13);
+    expect(minimal.qualityProfile.version).toBe(14);
 
     expect(minimal.qualityProfile.whitecaps).toEqual(NATIVE_WHITECAPS);
     expect(minimal.qualityProfile.secondaryParticles).toEqual(
@@ -2506,14 +2588,14 @@ describe("Quality Profile manifests", () => {
         (declaration) => declaration.id === "water-named-output-routes",
       )?.label,
     ).toBe(
-      "Forty named diagnostics output routes including unified foam identity, underwater caustics/particles/bubbles, lens wetness, plus secondary-particle contribution and overdraw",
+      "Forty-one named diagnostics output routes including unified foam identity, Hero Breaker foam, underwater caustics/particles/bubbles, lens wetness, plus secondary-particle contribution and overdraw",
     );
     expect(
       minimal.declarations.find(
         (declaration) => declaration.id === "water-completion-probe",
       )?.label,
     ).toBe(
-      "GPU completion probe of all forty named output routes including underwater volume/tracers, lens wetness, unified foam identity, and secondary-particle contribution/overdraw",
+      "GPU completion probe of all forty-one named output routes including Hero Breaker foam, underwater volume/tracers, lens wetness, unified foam identity, and secondary-particle contribution/overdraw",
     );
     expect(
       Object.fromEntries(
@@ -2584,7 +2666,7 @@ describe("Quality Profile manifests", () => {
         "Viewport pre-water scene color (viewportSharedTexture)",
       "water-scene-depth": "Viewport opaque scene depth (viewportDepthTexture)",
       "water-optical-route":
-        "Waterline optical composition route (planar+environment fallback, air/water refraction, underside Fresnel and TIR, RGB Beer-Lambert, unified source-resolved foam reflection/transmission/roughness/micro detail)",
+        "Waterline optical composition route (planar+environment fallback, air/water refraction, underside Fresnel and TIR, RGB Beer-Lambert, unified whitecap/wake/impact/Hero Breaker foam reflection/transmission/roughness/micro detail)",
     });
     const highDetailClipmap = highDetail.declarations.find(
       (declaration) => declaration.id === "water-clipmap",
@@ -2637,7 +2719,7 @@ describe("Quality Profile manifests", () => {
     );
     expect(manifestIdentity(highDetail)).toEqual({
       schema: "real-water/prewarm",
-      version: 10,
+      version: 11,
       id: "reference-minimal-water",
       manifestHash: highDetail.manifestHash,
       qualityProfile: qualityProfileIdentity(highDetailProfile),
@@ -2667,6 +2749,10 @@ describe("Quality Profile manifests", () => {
           effectId: "lens-wetness",
           variantId: "bounded-emergence-decay",
         },
+        {
+          effectId: "hero-breaker",
+          variantId: "art-directed-overturning",
+        },
       ],
     });
     expect(Object.isFrozen(minimal.drawingBuffer)).toBe(true);
@@ -2682,6 +2768,7 @@ describe("Quality Profile manifests", () => {
     expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[5])).toBe(true);
     expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[6])).toBe(true);
     expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[7])).toBe(true);
+    expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[8])).toBe(true);
   });
 
   it("binds drawing-buffer-exact fingerprints and hashes to each physical size", () => {

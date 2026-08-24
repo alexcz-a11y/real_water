@@ -976,7 +976,7 @@ export function readRegressionAcceptanceEvidence(
       "Regression acceptance coreManifest.hash disagrees with the Core identity.",
     );
   }
-  const qaPrewarm = readQaPrewarmV14(value.qaPrewarmManifest, coreIdentity);
+  const qaPrewarm = readQaPrewarmV15(value.qaPrewarmManifest, coreIdentity);
   const temporalPolicy = readReadyCapabilities(
     qaPrewarm.capabilities,
     createMinimalWaterQualityProfile(coreIdentity.qualityProfile.id),
@@ -1681,12 +1681,12 @@ function evaluateMetricPolicy(
   return true;
 }
 
-function readQaPrewarmV14(
+function readQaPrewarmV15(
   value: unknown,
   coreIdentity: QaBoundCoreManifestIdentity,
 ): QaFramePrewarmReceipt {
   if (!isRecord(value) || !hasExactKeys(value, QA_PREWARM_KEYS)) {
-    throw new TypeError("Regression acceptance requires QA prewarm v14.");
+    throw new TypeError("Regression acceptance requires QA prewarm v15.");
   }
   if (
     !isRecord(value.manifest) ||
@@ -1694,7 +1694,7 @@ function readQaPrewarmV14(
     value.manifest.version !== QA_FRAME_PREWARM_MANIFEST.version ||
     value.manifest.id !== QA_FRAME_PREWARM_MANIFEST.id
   ) {
-    throw new Error("Regression acceptance requires QA prewarm v14.");
+    throw new Error("Regression acceptance requires QA prewarm v15.");
   }
   if (
     canonicalJson(value.manifest.captures) !==
@@ -1703,11 +1703,11 @@ function readQaPrewarmV14(
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.coreDeclarations)
   ) {
     throw new Error(
-      "Regression acceptance requires the exact QA v14 40-name capture mapping.",
+      "Regression acceptance requires the exact QA v15 41-name capture mapping.",
     );
   }
-  if (QA_FRAME_PREWARM_MANIFEST.captures.length !== 40) {
-    throw new Error("QA v14 capture contract must name exactly 40 outputs.");
+  if (QA_FRAME_PREWARM_MANIFEST.captures.length !== 41) {
+    throw new Error("QA v15 capture contract must name exactly 41 outputs.");
   }
   const core = readQaBoundCoreManifestIdentity(value.core);
   if (core.manifestHash !== coreIdentity.manifestHash) {

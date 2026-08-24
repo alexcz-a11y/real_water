@@ -5,6 +5,7 @@ import type {
 import type {
   DirectionalWakeDisturbanceBatch,
   GameplayQueryBatch,
+  HeroBreakerDisturbanceBatch,
   HostSimulationState,
   InteractionAnchor,
   RadialImpactDisturbanceBatch,
@@ -13,16 +14,20 @@ import {
   INTERACTION_FIELD_EDGE_FADE_METRES,
   INTERACTION_FIELD_RADIUS_METRES,
   MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
 } from "../capabilities.js";
 import { manualInteractionStableSourceId } from "../interaction-source-identity.js";
+import { evaluateHeroBreakerShape } from "./hero-breaker.js";
 
 export const RADIAL_IMPACT_LIFETIME_SECONDS = 2;
+export const RADIAL_IMPACT_LIFETIME_TICKS = 120;
 export const MIN_RADIAL_IMPACT_RADIUS_METRES = 0.000_1;
 export const MAX_RADIAL_IMPACT_RADIUS_METRES = 48;
 export const MAX_RADIAL_IMPACT_AMPLITUDE_METRES = 4;
 export const LOCAL_INTERACTION_KIND_RADIAL_IMPACT = 0;
 export const LOCAL_INTERACTION_KIND_DIRECTIONAL_WAKE = 1;
 export const LOCAL_INTERACTION_KIND_PROPELLER_WASH = 2;
+export const LOCAL_INTERACTION_KIND_HERO_BREAKER = 3;
 export const PERSISTENT_BODY_WAKE_START_TIME_SECONDS = -1;
 export const DIRECTIONAL_WAKE_LENGTH_RADIUS_MULTIPLIER = 4;
 export const PROPELLER_WASH_LENGTH_RADIUS_MULTIPLIER = 6;
@@ -37,7 +42,7 @@ export const PROPELLER_WASH_TEMPORAL_RADIANS_PER_SECOND = Math.PI * 4;
 const FIXED_TICK_SECONDS = 1 / 60;
 
 type LocalInteractionRenderKind =
-  "radial-impact" | "directional-wake" | "propeller-wash";
+  "radial-impact" | "directional-wake" | "propeller-wash" | "hero-breaker";
 
 interface ActiveDisturbanceBase {
   readonly stableSourceId: number;
@@ -50,13 +55,17 @@ interface ActiveDisturbanceBase {
   readonly amplitude: number;
   readonly priority: number;
   readonly startTimeSeconds: number;
+  readonly startTick: number;
+  readonly lifetimeTicks: number;
+  readonly foamAmount: number;
+  readonly sprayAmount: number;
   readonly sequence: number;
 }
 
 interface ActiveManualDisturbance extends ActiveDisturbanceBase {
   readonly origin: "manual";
   readonly id: number;
-  readonly kind: "radial-impact" | "directional-wake";
+  readonly kind: "radial-impact" | "directional-wake" | "hero-breaker";
 }
 
 interface ActiveBodyWake extends ActiveDisturbanceBase {
@@ -98,6 +107,10 @@ export interface LocalInteractionRenderImpact {
   readonly radius: number;
   readonly amplitude: number;
   readonly startTimeSeconds: number;
+  readonly startTick: number;
+  readonly lifetimeTicks: number;
+  readonly foamAmount: number;
+  readonly sprayAmount: number;
 }
 
 export interface LocalInteractionRenderSnapshot {
@@ -132,6 +145,10 @@ export interface LocalInteractionField {
     batch: DirectionalWakeDisturbanceBatch,
     state: HostSimulationState,
   ): Readonly<DisturbanceSubmissionReceipt>;
+  submitHeroBreakers(
+    batch: HeroBreakerDisturbanceBatch,
+    state: HostSimulationState,
+  ): Readonly<DisturbanceSubmissionReceipt>;
   updateBodyWakes(
     attachmentId: number,
     sources: readonly BodyWakeSource[],
@@ -144,6 +161,7 @@ export interface LocalInteractionField {
     revision: number;
     activeBodyWakeCount: number;
     activeDisturbanceCount: number;
+    activeHeroBreakerCount: number;
   }>;
   renderRevision(): number;
   renderSnapshot(): LocalInteractionRenderSnapshot;
@@ -183,7 +201,10 @@ export function createLocalInteractionField(
     querySnapshotDisturbances.fill(null);
     let writeIndex = 0;
     for (const disturbance of disturbances) {
-      if (disturbance !== null && isActiveAtTime(disturbance, timeSeconds)) {
+      if (
+        disturbance !== null &&
+        isActiveAtSnapshot(disturbance, tick, timeSeconds)
+      ) {
         querySnapshotDisturbances[writeIndex] = disturbance;
         writeIndex += 1;
       }
@@ -211,7 +232,7 @@ export function createLocalInteractionField(
     const manual = disturbances.filter(
       (disturbance): disturbance is ActiveManualDisturbance =>
         disturbance?.origin === "manual" &&
-        isActiveAtTime(disturbance, timeSeconds),
+        isActiveAtSnapshot(disturbance, tick, timeSeconds),
     );
     const bodyCapacity = MAX_ACTIVE_DISTURBANCES - manual.length;
     const previousBody = querySnapshotDisturbances
@@ -265,7 +286,7 @@ export function createLocalInteractionField(
     lastTick = state.tick;
     lastTimeSeconds = state.timeSeconds;
     lastResetRevision = state.simulationResetRevision;
-    if (removeExpiredManualDisturbances(disturbances, state.timeSeconds)) {
+    if (removeExpiredManualDisturbances(disturbances, state)) {
       renderRevision += 1;
     }
   };
@@ -274,22 +295,29 @@ export function createLocalInteractionField(
     submitted: readonly ActiveManualDisturbance[],
     state: HostSimulationState,
   ): Readonly<DisturbanceSubmissionReceipt> => {
-    const activeIdsBeforeSubmission = new Set(
-      disturbances.flatMap((disturbance) =>
-        disturbance?.origin === "manual" ? [disturbance.id] : [],
-      ),
-    );
-    for (const disturbance of submitted) {
-      if (activeIdsBeforeSubmission.has(disturbance.id)) {
-        throw new TypeError(
-          `Disturbance id ${String(disturbance.id)} is already active in the local field.`,
-        );
-      }
-    }
     const droppedDisturbanceIds: number[] = [];
     const displacedBodyWakeSources: BodyWakeSourceIdentity[] = [];
     let mutated = false;
     for (const disturbance of submitted) {
+      if (
+        disturbance.kind === "hero-breaker" &&
+        activeHeroBreakerCount(disturbances) >= MAX_ACTIVE_HERO_BREAKERS
+      ) {
+        const lowestHeroIndex = findLowestPriorityHeroBreaker(disturbances);
+        const lowestHero = disturbances[lowestHeroIndex];
+        if (
+          lowestHero?.origin === "manual" &&
+          lowestHero.kind === "hero-breaker" &&
+          disturbance.priority > lowestHero.priority
+        ) {
+          droppedDisturbanceIds.push(lowestHero.id);
+          disturbances[lowestHeroIndex] = disturbance;
+          mutated = true;
+        } else {
+          droppedDisturbanceIds.push(disturbance.id);
+        }
+        continue;
+      }
       const freeIndex = disturbances.indexOf(null);
       if (freeIndex >= 0) {
         disturbances[freeIndex] = disturbance;
@@ -359,6 +387,7 @@ export function createLocalInteractionField(
       state: HostSimulationState,
     ) {
       observe(state);
+      assertManualIdsAvailable(batch.ids, batch.count, disturbances);
       const submitted = Array.from(
         { length: batch.count },
         (_, index): ActiveManualDisturbance => {
@@ -378,6 +407,10 @@ export function createLocalInteractionField(
             amplitude: batch.amplitudes[index] ?? 0,
             priority: batch.priorities[index] ?? 0,
             startTimeSeconds: state.timeSeconds,
+            startTick: state.tick,
+            lifetimeTicks: RADIAL_IMPACT_LIFETIME_TICKS,
+            foamAmount: 1,
+            sprayAmount: 1,
             sequence: nextSequence,
           };
           nextSequence += 1;
@@ -391,6 +424,7 @@ export function createLocalInteractionField(
       state: HostSimulationState,
     ) {
       observe(state);
+      assertManualIdsAvailable(batch.ids, batch.count, disturbances);
       const submitted = Array.from(
         { length: batch.count },
         (_, index): ActiveManualDisturbance => {
@@ -414,6 +448,51 @@ export function createLocalInteractionField(
             amplitude: batch.amplitudes[index] ?? 0,
             priority: batch.priorities[index] ?? 0,
             startTimeSeconds: state.timeSeconds,
+            startTick: state.tick,
+            lifetimeTicks: RADIAL_IMPACT_LIFETIME_TICKS,
+            foamAmount: 1,
+            sprayAmount: 1,
+            sequence: nextSequence,
+          };
+          nextSequence += 1;
+          return disturbance;
+        },
+      );
+      return submitManualDisturbances(submitted, state);
+    },
+    submitHeroBreakers(
+      batch: HeroBreakerDisturbanceBatch,
+      state: HostSimulationState,
+    ) {
+      observe(state);
+      assertManualIdsAvailable(batch.ids, batch.count, disturbances);
+      const submitted = Array.from(
+        { length: batch.count },
+        (_, index): ActiveManualDisturbance => {
+          const vectorIndex = index * 3;
+          const direction = normalizeHorizontalDirection(
+            batch.directions[vectorIndex] ?? 0,
+            batch.directions[vectorIndex + 2] ?? 0,
+          );
+          const disturbance: ActiveManualDisturbance = {
+            origin: "manual",
+            stableSourceId: manualInteractionStableSourceId(
+              batch.ids[index] ?? 0,
+            ),
+            kind: "hero-breaker",
+            id: batch.ids[index] ?? 0,
+            x: (batch.positions[vectorIndex] ?? 0) + state.originX,
+            z: (batch.positions[vectorIndex + 2] ?? 0) + state.originZ,
+            directionX: direction.x,
+            directionZ: direction.z,
+            radius: batch.radii[index] ?? 0,
+            amplitude: batch.amplitudes[index] ?? 0,
+            priority: batch.priorities[index] ?? 0,
+            startTimeSeconds: state.timeSeconds,
+            startTick: state.tick,
+            lifetimeTicks: batch.lifetimeTicks[index] ?? 0,
+            foamAmount: batch.foamAmounts[index] ?? 0,
+            sprayAmount: batch.sprayAmounts[index] ?? 0,
             sequence: nextSequence,
           };
           nextSequence += 1;
@@ -574,6 +653,7 @@ export function createLocalInteractionField(
           z,
           querySnapshotAnchorX,
           querySnapshotAnchorZ,
+          querySnapshotManualTick ?? state.tick,
           querySnapshotManualTimeSeconds,
           querySnapshotBodyTimeSeconds,
           querySnapshotDisturbances,
@@ -615,6 +695,7 @@ export function createLocalInteractionField(
         revision: anchorRevision,
         activeBodyWakeCount: activeBodyWakeCount(disturbances),
         activeDisturbanceCount: activeDisturbanceCount(disturbances),
+        activeHeroBreakerCount: activeHeroBreakerCount(disturbances),
       });
     },
     renderRevision() {
@@ -640,6 +721,10 @@ export function createLocalInteractionField(
                     radius: disturbance.radius,
                     amplitude: disturbance.amplitude,
                     startTimeSeconds: disturbance.startTimeSeconds,
+                    startTick: disturbance.startTick,
+                    lifetimeTicks: disturbance.lifetimeTicks,
+                    foamAmount: disturbance.foamAmount,
+                    sprayAmount: disturbance.sprayAmount,
                   }),
                 ],
           ),
@@ -674,6 +759,10 @@ function createActiveBodyWake(
     amplitude: source.amplitude,
     priority: source.priority,
     startTimeSeconds: PERSISTENT_BODY_WAKE_START_TIME_SECONDS,
+    startTick: state.tick,
+    lifetimeTicks: 0,
+    foamAmount: 1,
+    sprayAmount: 1,
     sequence,
   };
 }
@@ -713,6 +802,28 @@ function findLowestPriorityDisturbance(
   return lowestIndex;
 }
 
+function findLowestPriorityHeroBreaker(
+  disturbances: readonly (ActiveDisturbance | null)[],
+): number {
+  let lowestIndex = -1;
+  for (let index = 0; index < disturbances.length; index += 1) {
+    const candidate = disturbances[index];
+    if (candidate?.kind !== "hero-breaker") {
+      continue;
+    }
+    const lowest = disturbances[lowestIndex];
+    if (
+      lowest?.kind !== "hero-breaker" ||
+      candidate.priority < lowest.priority ||
+      (candidate.priority === lowest.priority &&
+        candidate.sequence < lowest.sequence)
+    ) {
+      lowestIndex = index;
+    }
+  }
+  return lowestIndex;
+}
+
 function compareHigherPriorityFirst(
   left: ActiveDisturbance,
   right: ActiveDisturbance,
@@ -722,15 +833,14 @@ function compareHigherPriorityFirst(
 
 function removeExpiredManualDisturbances(
   disturbances: Array<ActiveDisturbance | null>,
-  timeSeconds: number,
+  state: HostSimulationState,
 ): boolean {
   let removed = false;
   for (let index = 0; index < disturbances.length; index += 1) {
     const disturbance = disturbances[index];
     if (
       disturbance?.origin === "manual" &&
-      timeSeconds - disturbance.startTimeSeconds >=
-        RADIAL_IMPACT_LIFETIME_SECONDS
+      !isActiveAtSnapshot(disturbance, state.tick, state.timeSeconds)
     ) {
       disturbances[index] = null;
       removed = true;
@@ -739,15 +849,23 @@ function removeExpiredManualDisturbances(
   return removed;
 }
 
-function isActiveAtTime(
+function isActiveAtSnapshot(
   disturbance: ActiveDisturbance,
+  tick: number,
   timeSeconds: number,
 ): boolean {
+  if (disturbance.origin === "body") {
+    return true;
+  }
+  if (disturbance.kind === "hero-breaker") {
+    return (
+      disturbance.startTick <= tick &&
+      tick < disturbance.startTick + disturbance.lifetimeTicks
+    );
+  }
   return (
-    disturbance.origin === "body" ||
-    (disturbance.startTimeSeconds <= timeSeconds &&
-      timeSeconds - disturbance.startTimeSeconds <
-        RADIAL_IMPACT_LIFETIME_SECONDS)
+    disturbance.startTimeSeconds <= timeSeconds &&
+    timeSeconds - disturbance.startTimeSeconds < RADIAL_IMPACT_LIFETIME_SECONDS
   );
 }
 
@@ -773,6 +891,38 @@ function activeBodyWakeCount(
     }
   }
   return count;
+}
+
+function activeHeroBreakerCount(
+  disturbances: readonly (ActiveDisturbance | null)[],
+): number {
+  let count = 0;
+  for (const disturbance of disturbances) {
+    if (disturbance?.kind === "hero-breaker") {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function assertManualIdsAvailable(
+  ids: Uint32Array,
+  count: number,
+  disturbances: readonly (ActiveDisturbance | null)[],
+): void {
+  const activeIds = new Set(
+    disturbances.flatMap((disturbance) =>
+      disturbance?.origin === "manual" ? [disturbance.id] : [],
+    ),
+  );
+  for (let index = 0; index < count; index += 1) {
+    const id = ids[index] ?? 0;
+    if (activeIds.has(id)) {
+      throw new TypeError(
+        `Disturbance id ${String(id)} is already active in the local field.`,
+      );
+    }
+  }
 }
 
 function compactDisturbances(
@@ -827,6 +977,7 @@ function evaluateLocalCorrection(
   z: number,
   anchorX: number,
   anchorZ: number,
+  manualTick: number,
   manualTimeSeconds: number,
   bodyTimeSeconds: number,
   disturbances: readonly (ActiveDisturbance | null)[],
@@ -851,7 +1002,9 @@ function evaluateLocalCorrection(
     const correction =
       disturbance.kind === "radial-impact"
         ? evaluateRadialImpact(x, z, timeSeconds, disturbance)
-        : evaluateDirectionalWake(x, z, timeSeconds, disturbance);
+        : disturbance.kind === "hero-breaker"
+          ? evaluateHeroBreaker(x, z, manualTick, disturbance)
+          : evaluateDirectionalWake(x, z, timeSeconds, disturbance);
     height += correction.height;
     slopeX += correction.slopeX;
     slopeZ += correction.slopeZ;
@@ -938,6 +1091,44 @@ function evaluateRadialImpact(
     slopeZ: heightDerivativeRadius * dz * inverseDistance,
     velocityY,
     foam: clampUnit(Math.abs(impact.amplitude) * 0.8 * decay * radialWindow),
+  };
+}
+
+function evaluateHeroBreaker(
+  x: number,
+  z: number,
+  tick: number,
+  breaker: ActiveManualDisturbance,
+): Readonly<{
+  height: number;
+  slopeX: number;
+  slopeZ: number;
+  velocityY: number;
+  foam: number;
+}> {
+  const dx = x - breaker.x;
+  const dz = z - breaker.z;
+  const along = dx * breaker.directionX + dz * breaker.directionZ;
+  const lateral = -dx * breaker.directionZ + dz * breaker.directionX;
+  const sample = evaluateHeroBreakerShape({
+    alongMetres: along,
+    lateralMetres: lateral,
+    radiusMetres: breaker.radius,
+    amplitudeMetres: breaker.amplitude,
+    ageTicks: tick - breaker.startTick,
+    lifetimeTicks: breaker.lifetimeTicks,
+    foamAmount: breaker.foamAmount,
+  });
+  return {
+    height: sample.height,
+    slopeX:
+      sample.slopeAlong * breaker.directionX -
+      sample.slopeLateral * breaker.directionZ,
+    slopeZ:
+      sample.slopeAlong * breaker.directionZ +
+      sample.slopeLateral * breaker.directionX,
+    velocityY: sample.velocityY,
+    foam: sample.foam,
   };
 }
 

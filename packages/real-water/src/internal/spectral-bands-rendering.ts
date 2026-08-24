@@ -2,6 +2,7 @@ import {
   abs,
   cameraPosition,
   cos,
+  exp,
   float,
   highpModelNormalViewMatrix,
   If,
@@ -28,6 +29,7 @@ import {
   INTERACTION_FIELD_EDGE_FADE_METRES,
   INTERACTION_FIELD_RADIUS_METRES,
   MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
 } from "../capabilities.js";
 import type {
   ArtisticControls,
@@ -83,6 +85,20 @@ import {
   RADIAL_IMPACT_LIFETIME_SECONDS,
   type LocalInteractionRenderSnapshot,
 } from "./local-interaction.js";
+import {
+  HERO_BREAKER_ATTACK_FRACTION,
+  HERO_BREAKER_BACK_WIDTH_RADII,
+  HERO_BREAKER_FIXED_TICKS_PER_SECOND,
+  HERO_BREAKER_FORWARD_CURL_STRENGTH,
+  HERO_BREAKER_FORWARD_HOLLOW_CENTER_RADII,
+  HERO_BREAKER_FORWARD_HOLLOW_DEPTH,
+  HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII,
+  HERO_BREAKER_FORWARD_TRAVEL_RADII,
+  HERO_BREAKER_FRONT_WIDTH_RADII,
+  HERO_BREAKER_INITIAL_CREST_CENTER_RADII,
+  HERO_BREAKER_LATERAL_WIDTH_RADII,
+  HERO_BREAKER_RELEASE_START_FRACTION,
+} from "./hero-breaker.js";
 import type { UnifiedFoamField } from "./spectral-whitecap-field.js";
 import {
   bodyInteractionStableSourceId,
@@ -163,11 +179,53 @@ export function createSpectralBandRendering(
   )
     .setName("localImpactTimingPrevious")
     .setGroup(renderGroup);
+  const createHeroBreakerVectors = () =>
+    Array.from({ length: MAX_ACTIVE_HERO_BREAKERS }, () => new Vector4());
+  const currentHeroBreakerGeometryValues = createHeroBreakerVectors();
+  const currentHeroBreakerTimingValues = createHeroBreakerVectors();
+  const previousHeroBreakerGeometryValues = createHeroBreakerVectors();
+  const previousHeroBreakerTimingValues = createHeroBreakerVectors();
+  const currentHeroBreakerGeometry = uniformArray<"vec4">(
+    currentHeroBreakerGeometryValues,
+    "vec4",
+  )
+    .setName("heroBreakerGeometryCurrent")
+    .setGroup(renderGroup);
+  const currentHeroBreakerTiming = uniformArray<"vec4">(
+    currentHeroBreakerTimingValues,
+    "vec4",
+  )
+    .setName("heroBreakerTimingCurrent")
+    .setGroup(renderGroup);
+  const previousHeroBreakerGeometry = uniformArray<"vec4">(
+    previousHeroBreakerGeometryValues,
+    "vec4",
+  )
+    .setName("heroBreakerGeometryPrevious")
+    .setGroup(renderGroup);
+  const previousHeroBreakerTiming = uniformArray<"vec4">(
+    previousHeroBreakerTimingValues,
+    "vec4",
+  )
+    .setName("heroBreakerTimingPrevious")
+    .setGroup(renderGroup);
   const currentImpactCount = uniform(0, "int")
     .setName("localImpactCountCurrent")
     .setGroup(renderGroup);
   const previousImpactCount = uniform(0, "int")
     .setName("localImpactCountPrevious")
+    .setGroup(renderGroup);
+  const currentHeroBreakerCount = uniform(0, "int")
+    .setName("heroBreakerCountCurrent")
+    .setGroup(renderGroup);
+  const previousHeroBreakerCount = uniform(0, "int")
+    .setName("heroBreakerCountPrevious")
+    .setGroup(renderGroup);
+  const currentTick = uniform(0)
+    .setName("heroBreakerTickCurrent")
+    .setGroup(renderGroup);
+  const previousTick = uniform(0)
+    .setName("heroBreakerTickPrevious")
     .setGroup(renderGroup);
   const currentAnchorValue = new Vector2();
   const previousAnchorValue = new Vector2();
@@ -445,6 +503,280 @@ export function createSpectralBandRendering(
         accumulated.w.mul(fieldFade),
       );
     })();
+  type HeroBreakerGeometry = typeof currentHeroBreakerGeometry;
+  type HeroBreakerTiming = typeof currentHeroBreakerTiming;
+  type HeroBreakerCount = typeof currentHeroBreakerCount;
+  type TickUniform = typeof currentTick;
+  // TSL form of hero-breaker.ts's authored CPU evaluator. The imported profile
+  // constants keep visible height/slopes and Gameplay Query on one source.
+  const evaluateHeroBreakerSurface = (
+    hostX: WaveAxis,
+    hostZ: WaveAxis,
+    sampleTick: TickUniform,
+    anchor: AnchorUniform,
+    count: HeroBreakerCount,
+    geometry: HeroBreakerGeometry,
+    timing: HeroBreakerTiming,
+  ) =>
+    Fn(() => {
+      const anchorDx = hostX.sub(anchor.x);
+      const anchorDz = hostZ.sub(anchor.y);
+      const anchorDistance = length(vec2(anchorDx, anchorDz));
+      const fadeStart =
+        INTERACTION_FIELD_RADIUS_METRES - INTERACTION_FIELD_EDGE_FADE_METRES;
+      const fadeT = anchorDistance
+        .sub(fadeStart)
+        .div(INTERACTION_FIELD_EDGE_FADE_METRES)
+        .clamp(0, 1);
+      const fieldFade = float(1).sub(
+        fadeT.mul(fadeT).mul(float(3).sub(fadeT.mul(2))),
+      );
+      const fieldFadeDerivative = fadeT
+        .mul(float(1).sub(fadeT))
+        .mul(-6 / INTERACTION_FIELD_EDGE_FADE_METRES);
+      const inverseAnchorDistance = float(1).div(anchorDistance.max(1e-5));
+      const accumulated = vec4(0).toVar();
+      If(fieldFade.greaterThan(0), () => {
+        Loop({ start: 0, end: count, type: "int", condition: "<" }, ({ i }) => {
+          const descriptor = vec4(geometry.element(i));
+          const timingDescriptor = vec4(timing.element(i));
+          const directionX = timingDescriptor.z;
+          const directionZ = timingDescriptor.w;
+          const dx = hostX.sub(descriptor.x);
+          const dz = hostZ.sub(descriptor.y);
+          const along = dx.mul(directionX).add(dz.mul(directionZ));
+          const lateral = dx.mul(directionZ).mul(-1).add(dz.mul(directionX));
+          const radius = descriptor.z;
+          const lifetimeTicks = timingDescriptor.y.max(1);
+          const ageTicks = sampleTick.sub(timingDescriptor.x);
+          const progress = ageTicks.div(lifetimeTicks).clamp(0, 1);
+          const active = step(0, ageTicks).mul(
+            float(1).sub(step(lifetimeTicks, ageTicks)),
+          );
+          const attackT = progress
+            .div(HERO_BREAKER_ATTACK_FRACTION)
+            .clamp(0, 1);
+          const attack = attackT.mul(attackT).mul(float(3).sub(attackT.mul(2)));
+          const attackDerivative = attackT
+            .mul(float(1).sub(attackT))
+            .mul(6 / HERO_BREAKER_ATTACK_FRACTION);
+          const releaseDuration = 1 - HERO_BREAKER_RELEASE_START_FRACTION;
+          const releaseT = progress
+            .sub(HERO_BREAKER_RELEASE_START_FRACTION)
+            .div(releaseDuration)
+            .clamp(0, 1);
+          const release = float(1).sub(
+            releaseT.mul(releaseT).mul(float(3).sub(releaseT.mul(2))),
+          );
+          const releaseDerivative = releaseT
+            .mul(float(1).sub(releaseT))
+            .mul(-6 / releaseDuration);
+          const envelope = attack.mul(release);
+          const envelopeDerivative = attackDerivative
+            .mul(release)
+            .add(attack.mul(releaseDerivative));
+          const lateralWidth = radius.mul(HERO_BREAKER_LATERAL_WIDTH_RADII);
+          const lateralT = abs(lateral).div(lateralWidth);
+          const lateralWindow = float(1).sub(
+            lateralT
+              .clamp(0, 1)
+              .mul(lateralT.clamp(0, 1))
+              .mul(float(3).sub(lateralT.clamp(0, 1).mul(2))),
+          );
+          const lateralActive = float(1).sub(step(1, lateralT));
+          const lateralSign = step(0, lateral).mul(2).sub(1);
+          const lateralDerivative = lateralT
+            .mul(float(1).sub(lateralT))
+            .mul(-6)
+            .div(lateralWidth)
+            .mul(lateralSign)
+            .mul(lateralActive);
+          const crestCenter = float(
+            HERO_BREAKER_INITIAL_CREST_CENTER_RADII,
+          ).add(progress.mul(HERO_BREAKER_FORWARD_TRAVEL_RADII));
+          const localAlong = along.div(radius).sub(crestCenter);
+          const crestWidth = mix(
+            float(HERO_BREAKER_BACK_WIDTH_RADII),
+            float(HERO_BREAKER_FRONT_WIDTH_RADII),
+            step(0, localAlong),
+          );
+          const crestNormalized = localAlong.div(crestWidth);
+          const crest = exp(crestNormalized.mul(crestNormalized).mul(-0.5));
+          const crestDerivative = localAlong
+            .mul(crest)
+            .mul(-1)
+            .div(crestWidth.mul(crestWidth));
+          const hollowAlong = localAlong.sub(
+            HERO_BREAKER_FORWARD_HOLLOW_CENTER_RADII,
+          );
+          const hollowNormalized = hollowAlong.div(
+            HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII,
+          );
+          const forwardHollow = exp(
+            hollowNormalized.mul(hollowNormalized).mul(-0.5),
+          );
+          const forwardHollowDerivative = hollowAlong
+            .mul(forwardHollow)
+            .mul(-1)
+            .div(
+              HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII *
+                HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII,
+            );
+          const shape = crest.sub(
+            forwardHollow.mul(HERO_BREAKER_FORWARD_HOLLOW_DEPTH),
+          );
+          const shapeDerivative = crestDerivative.sub(
+            forwardHollowDerivative.mul(HERO_BREAKER_FORWARD_HOLLOW_DEPTH),
+          );
+          const amplitudeEnvelope = descriptor.w.mul(envelope);
+          const height = amplitudeEnvelope
+            .mul(lateralWindow)
+            .mul(shape)
+            .mul(lateralActive)
+            .mul(active);
+          const slopeAlong = amplitudeEnvelope
+            .mul(lateralWindow)
+            .mul(shapeDerivative)
+            .div(radius)
+            .mul(lateralActive)
+            .mul(active);
+          const slopeLateral = amplitudeEnvelope
+            .mul(lateralDerivative)
+            .mul(shape)
+            .mul(active);
+          const velocityY = descriptor.w
+            .mul(lateralWindow)
+            .mul(
+              envelopeDerivative
+                .mul(shape)
+                .sub(
+                  envelope
+                    .mul(shapeDerivative)
+                    .mul(HERO_BREAKER_FORWARD_TRAVEL_RADII),
+                ),
+            )
+            .mul(HERO_BREAKER_FIXED_TICKS_PER_SECOND)
+            .div(lifetimeTicks)
+            .mul(lateralActive)
+            .mul(active);
+          accumulated.x.addAssign(height);
+          accumulated.y.addAssign(
+            slopeAlong.mul(directionX).sub(slopeLateral.mul(directionZ)),
+          );
+          accumulated.z.addAssign(
+            slopeAlong.mul(directionZ).add(slopeLateral.mul(directionX)),
+          );
+          accumulated.w.addAssign(velocityY);
+        });
+      });
+      return vec4(
+        accumulated.x.mul(fieldFade),
+        accumulated.y
+          .mul(fieldFade)
+          .add(
+            accumulated.x
+              .mul(fieldFadeDerivative)
+              .mul(anchorDx)
+              .mul(inverseAnchorDistance),
+          ),
+        accumulated.z
+          .mul(fieldFade)
+          .add(
+            accumulated.x
+              .mul(fieldFadeDerivative)
+              .mul(anchorDz)
+              .mul(inverseAnchorDistance),
+          ),
+        accumulated.w.mul(fieldFade),
+      );
+    })();
+  const evaluateHeroBreakerForwardCurl = (
+    hostX: WaveAxis,
+    hostZ: WaveAxis,
+    sampleTick: TickUniform,
+    anchor: AnchorUniform,
+    count: HeroBreakerCount,
+    geometry: HeroBreakerGeometry,
+    timing: HeroBreakerTiming,
+  ) =>
+    Fn(() => {
+      const anchorDistance = length(
+        vec2(hostX.sub(anchor.x), hostZ.sub(anchor.y)),
+      );
+      const fadeStart =
+        INTERACTION_FIELD_RADIUS_METRES - INTERACTION_FIELD_EDGE_FADE_METRES;
+      const fadeT = anchorDistance
+        .sub(fadeStart)
+        .div(INTERACTION_FIELD_EDGE_FADE_METRES)
+        .clamp(0, 1);
+      const fieldFade = float(1).sub(
+        fadeT.mul(fadeT).mul(float(3).sub(fadeT.mul(2))),
+      );
+      const curl = vec2(0).toVar();
+      If(fieldFade.greaterThan(0), () => {
+        Loop({ start: 0, end: count, type: "int", condition: "<" }, ({ i }) => {
+          const descriptor = vec4(geometry.element(i));
+          const timingDescriptor = vec4(timing.element(i));
+          const directionX = timingDescriptor.z;
+          const directionZ = timingDescriptor.w;
+          const dx = hostX.sub(descriptor.x);
+          const dz = hostZ.sub(descriptor.y);
+          const along = dx.mul(directionX).add(dz.mul(directionZ));
+          const lateral = dx.mul(directionZ).mul(-1).add(dz.mul(directionX));
+          const radius = descriptor.z;
+          const lifetimeTicks = timingDescriptor.y.max(1);
+          const ageTicks = sampleTick.sub(timingDescriptor.x);
+          const progress = ageTicks.div(lifetimeTicks).clamp(0, 1);
+          const active = step(0, ageTicks).mul(
+            float(1).sub(step(lifetimeTicks, ageTicks)),
+          );
+          const attackT = progress
+            .div(HERO_BREAKER_ATTACK_FRACTION)
+            .clamp(0, 1);
+          const attack = attackT.mul(attackT).mul(float(3).sub(attackT.mul(2)));
+          const releaseT = progress
+            .sub(HERO_BREAKER_RELEASE_START_FRACTION)
+            .div(1 - HERO_BREAKER_RELEASE_START_FRACTION)
+            .clamp(0, 1);
+          const release = float(1).sub(
+            releaseT.mul(releaseT).mul(float(3).sub(releaseT.mul(2))),
+          );
+          const envelope = attack.mul(release);
+          const lateralWidth = radius.mul(HERO_BREAKER_LATERAL_WIDTH_RADII);
+          const lateralT = abs(lateral).div(lateralWidth);
+          const clampedLateralT = lateralT.clamp(0, 1);
+          const lateralWindow = float(1).sub(
+            clampedLateralT
+              .mul(clampedLateralT)
+              .mul(float(3).sub(clampedLateralT.mul(2))),
+          );
+          const lateralActive = float(1).sub(step(1, lateralT));
+          const crestCenter = float(
+            HERO_BREAKER_INITIAL_CREST_CENTER_RADII,
+          ).add(progress.mul(HERO_BREAKER_FORWARD_TRAVEL_RADII));
+          const localAlong = along.div(radius).sub(crestCenter);
+          const hollowAlong = localAlong.sub(
+            HERO_BREAKER_FORWARD_HOLLOW_CENTER_RADII,
+          );
+          const hollowNormalized = hollowAlong.div(
+            HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII,
+          );
+          const forwardHollow = exp(
+            hollowNormalized.mul(hollowNormalized).mul(-0.5),
+          );
+          const forwardCurl = descriptor.w
+            .mul(HERO_BREAKER_FORWARD_CURL_STRENGTH)
+            .mul(envelope)
+            .mul(lateralWindow)
+            .mul(forwardHollow)
+            .mul(lateralActive)
+            .mul(active);
+          curl.x.addAssign(forwardCurl.mul(directionX));
+          curl.y.addAssign(forwardCurl.mul(directionZ));
+        });
+      });
+      return curl.mul(fieldFade);
+    })();
   const viewDistanceNode = (hostX: WaveAxis, hostZ: WaveAxis) =>
     length(vec2(hostX.sub(cameraPosition.x), hostZ.sub(cameraPosition.z)));
   const slopeFadeNode = (viewDistance: ReturnType<typeof viewDistanceNode>) =>
@@ -710,8 +1042,27 @@ export function createSpectralBandRendering(
     currentImpactGeometry,
     currentImpactTiming,
   );
+  const vertexHeroBreaker = evaluateHeroBreakerSurface(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    currentTick,
+    currentAnchor,
+    currentHeroBreakerCount,
+    currentHeroBreakerGeometry,
+    currentHeroBreakerTiming,
+  );
+  const vertexHeroBreakerCurl = evaluateHeroBreakerForwardCurl(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    currentTick,
+    currentAnchor,
+    currentHeroBreakerCount,
+    currentHeroBreakerGeometry,
+    currentHeroBreakerTiming,
+  );
   const vertexHeight = vertexSurface.height
     .add(vertexLocalInteraction.x)
+    .add(vertexHeroBreaker.x)
     .add(currentWaveField.seaLevelMetres)
     .toVertexStage();
   const previousVertexSurface = evaluateBlendedSurface(
@@ -730,8 +1081,27 @@ export function createSpectralBandRendering(
     previousImpactGeometry,
     previousImpactTiming,
   );
+  const previousVertexHeroBreaker = evaluateHeroBreakerSurface(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    previousTick,
+    previousAnchor,
+    previousHeroBreakerCount,
+    previousHeroBreakerGeometry,
+    previousHeroBreakerTiming,
+  );
+  const previousVertexHeroBreakerCurl = evaluateHeroBreakerForwardCurl(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    previousTick,
+    previousAnchor,
+    previousHeroBreakerCount,
+    previousHeroBreakerGeometry,
+    previousHeroBreakerTiming,
+  );
   const previousVertexHeight = previousVertexSurface.height
     .add(previousVertexLocalInteraction.x)
+    .add(previousVertexHeroBreaker.x)
     .add(previousWaveField.seaLevelMetres)
     .toVertexStage();
 
@@ -757,8 +1127,21 @@ export function createSpectralBandRendering(
     currentImpactGeometry,
     currentImpactTiming,
   );
-  const fragmentSlopeX = fragmentSurface.slopeX.add(fragmentLocalInteraction.y);
-  const fragmentSlopeZ = fragmentSurface.slopeZ.add(fragmentLocalInteraction.z);
+  const fragmentHeroBreaker = evaluateHeroBreakerSurface(
+    fragmentSample.hostX,
+    fragmentSample.hostZ,
+    currentTick,
+    currentAnchor,
+    currentHeroBreakerCount,
+    currentHeroBreakerGeometry,
+    currentHeroBreakerTiming,
+  );
+  const fragmentSlopeX = fragmentSurface.slopeX
+    .add(fragmentLocalInteraction.y)
+    .add(fragmentHeroBreaker.y);
+  const fragmentSlopeZ = fragmentSurface.slopeZ
+    .add(fragmentLocalInteraction.z)
+    .add(fragmentHeroBreaker.z);
 
   const localNormal = vec3(
     fragmentSlopeX.mul(-1),
@@ -904,38 +1287,74 @@ export function createSpectralBandRendering(
     geometryValues: Vector4[],
     timingValues: Vector4[],
     countUniform: typeof currentImpactCount,
+    heroGeometryValues: Vector4[],
+    heroTimingValues: Vector4[],
+    heroCountUniform: typeof currentHeroBreakerCount,
     anchorValue: Vector2,
   ): void => {
-    const count = Math.min(interaction.impacts.length, MAX_ACTIVE_DISTURBANCES);
-    countUniform.value = count;
+    const sourceCount = Math.min(
+      interaction.impacts.length,
+      MAX_ACTIVE_DISTURBANCES,
+    );
+    let count = 0;
+    let heroCount = 0;
     anchorValue.set(
       interaction.anchorX - state.originX,
       interaction.anchorZ - state.originZ,
     );
-    for (let index = 0; index < count; index += 1) {
+    for (let index = 0; index < sourceCount; index += 1) {
       const impact = interaction.impacts[index];
       if (impact === undefined) {
         continue;
       }
-      geometryValues[index]?.set(
-        impact.x - state.originX,
-        impact.z - state.originZ,
-        impact.radius,
-        impact.amplitude,
-      );
-      const kind =
-        impact.kind === "radial-impact"
-          ? LOCAL_INTERACTION_KIND_RADIAL_IMPACT
-          : impact.kind === "directional-wake"
-            ? LOCAL_INTERACTION_KIND_DIRECTIONAL_WAKE
-            : LOCAL_INTERACTION_KIND_PROPELLER_WASH;
-      timingValues[index]?.set(
-        impact.startTimeSeconds,
-        kind,
-        impact.directionX,
-        impact.directionZ,
-      );
+      switch (impact.kind) {
+        case "hero-breaker":
+          if (heroCount >= MAX_ACTIVE_HERO_BREAKERS) {
+            throw new Error(
+              "Spectral rendering Hero Breaker capacity was exceeded.",
+            );
+          }
+          heroGeometryValues[heroCount]?.set(
+            impact.x - state.originX,
+            impact.z - state.originZ,
+            impact.radius,
+            impact.amplitude,
+          );
+          heroTimingValues[heroCount]?.set(
+            impact.startTick - (interaction.revision === -1 ? 1 : 0),
+            impact.lifetimeTicks,
+            impact.directionX,
+            impact.directionZ,
+          );
+          heroCount += 1;
+          break;
+        case "radial-impact":
+        case "directional-wake":
+        case "propeller-wash": {
+          geometryValues[count]?.set(
+            impact.x - state.originX,
+            impact.z - state.originZ,
+            impact.radius,
+            impact.amplitude,
+          );
+          const kind = localInteractionKindValue(impact.kind);
+          timingValues[count]?.set(
+            impact.startTimeSeconds,
+            kind,
+            impact.directionX,
+            impact.directionZ,
+          );
+          count += 1;
+          break;
+        }
+        default:
+          throw new Error(
+            "Spectral rendering received an unknown local-interaction kind.",
+          );
+      }
     }
+    countUniform.value = count;
+    heroCountUniform.value = heroCount;
   };
   type PresentedWaveField = Readonly<{
     readonly seed: number;
@@ -999,6 +1418,9 @@ export function createSpectralBandRendering(
         currentImpactGeometryValues,
         currentImpactTimingValues,
         currentImpactCount,
+        currentHeroBreakerGeometryValues,
+        currentHeroBreakerTimingValues,
+        currentHeroBreakerCount,
         currentAnchorValue,
       );
       writeLocalInteractionBank(
@@ -1007,8 +1429,13 @@ export function createSpectralBandRendering(
         previousImpactGeometryValues,
         previousImpactTimingValues,
         previousImpactCount,
+        previousHeroBreakerGeometryValues,
+        previousHeroBreakerTimingValues,
+        previousHeroBreakerCount,
         previousAnchorValue,
       );
+      currentTick.value = current.tick;
+      previousTick.value = (previous ?? current).tick;
       const camera = frame.camera;
       if (
         camera !== null &&
@@ -1043,9 +1470,17 @@ export function createSpectralBandRendering(
   const positionNode = Fn(() => {
     nodeObject(presentationNode).toStack();
     positionPrevious.assign(
-      vec3(vertexSample.hostX, previousVertexHeight, vertexSample.hostZ),
+      vec3(
+        vertexSample.hostX.add(previousVertexHeroBreakerCurl.x),
+        previousVertexHeight,
+        vertexSample.hostZ.add(previousVertexHeroBreakerCurl.y),
+      ),
     );
-    return vec3(vertexSample.hostX, vertexHeight, vertexSample.hostZ);
+    return vec3(
+      vertexSample.hostX.add(vertexHeroBreakerCurl.x),
+      vertexHeight,
+      vertexSample.hostZ.add(vertexHeroBreakerCurl.y),
+    );
   })();
   const sink: RuntimeStateSink = Object.freeze({
     synchronize(
@@ -1087,7 +1522,7 @@ export function createSpectralBandRendering(
       sampleSurface: sampleCurrentSurface,
     }),
     sink,
-    stagePrewarmLocalInteractionRoutes(): void {
+    stagePrewarmLocalInteractionRoutes(): LocalInteractionRenderSnapshot {
       desiredLocalInteraction = Object.freeze({
         revision: -1,
         anchorX: initialSimulationState.originX,
@@ -1103,6 +1538,10 @@ export function createSpectralBandRendering(
             radius: 8,
             amplitude: 0.25,
             startTimeSeconds: initialSimulationState.timeSeconds,
+            startTick: initialSimulationState.tick,
+            lifetimeTicks: 120,
+            foamAmount: 1,
+            sprayAmount: 1,
           }),
           Object.freeze({
             stableSourceId: manualInteractionStableSourceId(2),
@@ -1114,6 +1553,10 @@ export function createSpectralBandRendering(
             radius: 2,
             amplitude: 0.2,
             startTimeSeconds: initialSimulationState.timeSeconds,
+            startTick: initialSimulationState.tick,
+            lifetimeTicks: 120,
+            foamAmount: 1,
+            sprayAmount: 1,
           }),
           Object.freeze({
             stableSourceId: bodyInteractionStableSourceId(
@@ -1128,12 +1571,53 @@ export function createSpectralBandRendering(
             radius: 1,
             amplitude: 0.25,
             startTimeSeconds: PERSISTENT_BODY_WAKE_START_TIME_SECONDS,
+            startTick: initialSimulationState.tick,
+            lifetimeTicks: 0,
+            foamAmount: 1,
+            sprayAmount: 1,
+          }),
+          Object.freeze({
+            stableSourceId: manualInteractionStableSourceId(3),
+            kind: "hero-breaker",
+            x: initialSimulationState.originX,
+            z: initialSimulationState.originZ,
+            directionX: 1,
+            directionZ: 0,
+            radius: 6,
+            amplitude: 1,
+            startTimeSeconds: Math.max(
+              0,
+              initialSimulationState.timeSeconds -
+                1 / HERO_BREAKER_FIXED_TICKS_PER_SECOND,
+            ),
+            startTick: initialSimulationState.tick,
+            lifetimeTicks: 120,
+            foamAmount: 1,
+            sprayAmount: 1,
           }),
         ]),
       });
+      return desiredLocalInteraction;
     },
     clearPrewarmLocalInteractionRoutes(): void {
       desiredLocalInteraction = emptyLocalInteraction;
     },
   });
+}
+
+function localInteractionKindValue(
+  kind: "radial-impact" | "directional-wake" | "propeller-wash",
+): number {
+  switch (kind) {
+    case "radial-impact":
+      return LOCAL_INTERACTION_KIND_RADIAL_IMPACT;
+    case "directional-wake":
+      return LOCAL_INTERACTION_KIND_DIRECTIONAL_WAKE;
+    case "propeller-wash":
+      return LOCAL_INTERACTION_KIND_PROPELLER_WASH;
+    default:
+      throw new Error(
+        "Spectral rendering received an unknown local-interaction kind.",
+      );
+  }
 }

@@ -153,7 +153,7 @@ function createPresentedFrame(): HostPresentedFrame {
 }
 
 describe("real-water/diagnostics", () => {
-  it("publishes the forty frozen CPU capture names and shapes only", () => {
+  it("publishes the forty-one frozen CPU capture names and shapes only", () => {
     expect(DIAGNOSTICS_CAPTURE_NAMES).toEqual([
       "final-color",
       "current-color",
@@ -195,6 +195,7 @@ describe("real-water/diagnostics", () => {
       "ssr-history-input-color",
       "secondary-particle-contribution",
       "secondary-particle-overdraw",
+      "hero-breaker-foam",
     ]);
     expect(isDiagnosticsCaptureName("ssr-history")).toBe(false);
     expect(isDiagnosticsCaptureName("ssr-history-color")).toBe(true);
@@ -313,6 +314,12 @@ describe("real-water/diagnostics", () => {
       true,
     );
     expect(isDiagnosticsCaptureName("secondary-particle-overdraw")).toBe(true);
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["hero-breaker-foam"]).toEqual({
+      format: "r32float-hero-breaker-foam",
+      elementType: "float32",
+      components: 1,
+    });
+    expect(isDiagnosticsCaptureName("hero-breaker-foam")).toBe(true);
     expect(Object.isFrozen(DIAGNOSTICS_CAPTURE_NAMES)).toBe(true);
     expect(Object.isFrozen(DIAGNOSTICS_CAPTURE_SHAPES)).toBe(true);
     expect(DIAGNOSTICS_CAPTURE_SHAPES["final-color"]).toEqual({
@@ -803,7 +810,7 @@ describe("real-water/diagnostics", () => {
     ).toThrowError(/sceneRenderCount/i);
   });
 
-  it("strictly reads the independent finite normalized T22 effect captures", () => {
+  it("strictly reads the independent finite normalized effect captures", () => {
     const receipt = createPresentedFrame();
     const captures = [
       {
@@ -833,6 +840,14 @@ describe("real-water/diagnostics", () => {
       {
         name: "lens-wetness",
         format: "r32float-lens-wetness",
+        width: 2,
+        height: 1,
+        origin: "top-left" as const,
+        data: Float32Array.of(0.25, 1),
+      },
+      {
+        name: "hero-breaker-foam",
+        format: "r32float-hero-breaker-foam",
         width: 2,
         height: 1,
         origin: "top-left" as const,

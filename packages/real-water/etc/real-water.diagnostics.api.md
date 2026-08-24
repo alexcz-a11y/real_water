@@ -5,7 +5,7 @@
 ```ts
 
 // @public
-export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "whitecap-generation", "whitecap-history", "whitecap-advection", "whitecap-decay", "foam-source-identity", "waterline", "history-rejection", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "underwater-transmittance", "underwater-scattering", "underwater-light-shafts", "underwater-shadow", "underwater-caustics", "underwater-particles", "underwater-bubbles", "lens-wetness", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color", "secondary-particle-contribution", "secondary-particle-overdraw"];
+export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "whitecap-generation", "whitecap-history", "whitecap-advection", "whitecap-decay", "foam-source-identity", "waterline", "history-rejection", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "underwater-transmittance", "underwater-scattering", "underwater-light-shafts", "underwater-shadow", "underwater-caustics", "underwater-particles", "underwater-bubbles", "lens-wetness", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color", "secondary-particle-contribution", "secondary-particle-overdraw", "hero-breaker-foam"];
 
 // @public
 export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
@@ -209,10 +209,15 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
         elementType: "float32";
         components: 1;
     }>;
+    "hero-breaker-foam": Readonly<{
+        format: "r32float-hero-breaker-foam";
+        elementType: "float32";
+        components: 1;
+    }>;
 }>;
 
 // @public
-export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsWhitecapStageCapture | DiagnosticsFoamSourceIdentityCapture | DiagnosticsWaterlineCapture | DiagnosticsHistoryRejectionCapture | DiagnosticsOpticalScalarCapture | DiagnosticsUnderwaterVolumeCapture | DiagnosticsUnderwaterCausticsCapture | DiagnosticsUnderwaterParticlesCapture | DiagnosticsUnderwaterBubblesCapture | DiagnosticsLensWetnessCapture | DiagnosticsSecondaryParticleContributionCapture | DiagnosticsSecondaryParticleOverdrawCapture;
+export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsWhitecapStageCapture | DiagnosticsFoamSourceIdentityCapture | DiagnosticsWaterlineCapture | DiagnosticsHistoryRejectionCapture | DiagnosticsOpticalScalarCapture | DiagnosticsUnderwaterVolumeCapture | DiagnosticsUnderwaterCausticsCapture | DiagnosticsUnderwaterParticlesCapture | DiagnosticsUnderwaterBubblesCapture | DiagnosticsLensWetnessCapture | DiagnosticsSecondaryParticleContributionCapture | DiagnosticsSecondaryParticleOverdrawCapture | DiagnosticsHeroBreakerFoamCapture;
 
 // @public
 export interface DiagnosticsCaptureBase {
@@ -250,6 +255,13 @@ export interface DiagnosticsFoamSourceIdentityCapture extends DiagnosticsCapture
     readonly data: Float32Array;
     readonly format: "rgba32float-foam-source-identity";
     readonly name: "foam-source-identity";
+}
+
+// @public
+export interface DiagnosticsHeroBreakerFoamCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-hero-breaker-foam";
+    readonly name: "hero-breaker-foam";
 }
 
 // @public

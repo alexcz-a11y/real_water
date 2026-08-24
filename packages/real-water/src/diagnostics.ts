@@ -27,7 +27,7 @@ export type {
 } from "./presentation.js";
 
 /**
- * The forty named diagnostic outputs. Names and CPU shapes match the QA
+ * The forty-one named diagnostic outputs. Names and CPU shapes match the QA
  * capture contract. Planar color and target-alpha occupancy are their own
  * prepared target. `planar-confidence` is reserved for a future screen-space
  * mask and is not a current capture. Current-frame SSR hit (stock raw
@@ -80,10 +80,11 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
   "ssr-history-input-color",
   "secondary-particle-contribution",
   "secondary-particle-overdraw",
+  "hero-breaker-foam",
 ] as const);
 
 /**
- * One of the forty named diagnostic CPU outputs.
+ * One of the forty-one named diagnostic CPU outputs.
  *
  * @public
  */
@@ -292,6 +293,11 @@ export const DIAGNOSTICS_CAPTURE_SHAPES = Object.freeze({
   }),
   "secondary-particle-overdraw": Object.freeze({
     format: "r32float-secondary-particle-overdraw" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "hero-breaker-foam": Object.freeze({
+    format: "r32float-hero-breaker-foam" as const,
     elementType: "float32" as const,
     components: 1 as const,
   }),
@@ -778,6 +784,21 @@ export interface DiagnosticsSecondaryParticleOverdrawCapture extends Diagnostics
 }
 
 /**
+ * Output-resolution scalar contribution from the dedicated Hero Breaker foam
+ * route.
+ *
+ * @public
+ */
+export interface DiagnosticsHeroBreakerFoamCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "hero-breaker-foam";
+  /** Packed normalized scalar Hero Breaker foam format. */
+  readonly format: "r32float-hero-breaker-foam";
+  /** Tightly packed finite normalized scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
  * Frozen CPU DTO for one named diagnostic output. No GPU object types.
  *
  * @public
@@ -807,7 +828,8 @@ export type DiagnosticsCapture =
   | DiagnosticsUnderwaterBubblesCapture
   | DiagnosticsLensWetnessCapture
   | DiagnosticsSecondaryParticleContributionCapture
-  | DiagnosticsSecondaryParticleOverdrawCapture;
+  | DiagnosticsSecondaryParticleOverdrawCapture
+  | DiagnosticsHeroBreakerFoamCapture;
 
 /**
  * Diagnostics present request. The exact key is `outputs`. Named outputs must
@@ -975,7 +997,7 @@ export interface HostDiagnosticsRoute {
 }
 
 /**
- * Confirms `value` is one of the forty diagnostic capture names.
+ * Confirms `value` is one of the forty-one diagnostic capture names.
  *
  * @public
  */
@@ -1249,12 +1271,14 @@ function isNormalizedEffectCaptureName(
   | "underwater-caustics"
   | "underwater-particles"
   | "underwater-bubbles"
-  | "lens-wetness" {
+  | "lens-wetness"
+  | "hero-breaker-foam" {
   return (
     value === "underwater-caustics" ||
     value === "underwater-particles" ||
     value === "underwater-bubbles" ||
-    value === "lens-wetness"
+    value === "lens-wetness" ||
+    value === "hero-breaker-foam"
   );
 }
 

@@ -872,11 +872,12 @@ describe("Body Physics Adapter seam", () => {
       maxAttachedBodies: 32,
       maxQueryPointsPerTick: 2_048,
       maxActiveDisturbances: 128,
+      maxActiveHeroBreakers: 8,
       interactionField: {
         radiusMetres: 48,
         edgeFadeMetres: 8,
         maxSnapshotAgeTicks: 1,
-        disturbanceKinds: ["radial-impact", "directional-wake"],
+        disturbanceKinds: ["radial-impact", "directional-wake", "hero-breaker"],
       },
       bodyInteraction: {
         fixedTickHz: 60,

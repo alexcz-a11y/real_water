@@ -42,6 +42,7 @@ describe("Reference Host Simulation Controller", () => {
 
   it("runs every 60 Hz Host integration before a 30 FPS presentation", () => {
     const integratedTicks: number[] = [];
+    const completedTicks: number[] = [];
     const controller: {
       current?: ReturnType<typeof createReferenceHostSimulationController>;
     } = {};
@@ -49,13 +50,35 @@ describe("Reference Host Simulation Controller", () => {
       integrateFixedStep: () => {
         integratedTicks.push(controller.current?.snapshot().tick ?? -1);
       },
+      afterFixedStep: (state) => {
+        completedTicks.push(state.tick);
+        expect(controller.current?.snapshot()).toEqual(state);
+      },
     });
     controller.current = simulation;
 
     simulation.start(0);
     expect(simulation.beforePresent(34).tick).toBe(2);
     expect(integratedTicks).toEqual([0, 1]);
+    expect(completedTicks).toEqual([1, 2]);
     expect(simulation.interpolationAlpha(42)).toBeCloseTo(0.52, 12);
+  });
+
+  it("reports every crossed fixed tick exactly once after incrementing it", () => {
+    const completedTicks: number[] = [];
+    const simulation = createReferenceHostSimulationController({
+      afterFixedStep: ({ tick }) => {
+        completedTicks.push(tick);
+      },
+    });
+
+    simulation.start(0);
+    expect(simulation.beforePresent(84).tick).toBe(5);
+    expect(completedTicks).toEqual([1, 2, 3, 4, 5]);
+
+    simulation.beforePresent(84);
+    simulation.beforePresent(50);
+    expect(completedTicks).toEqual([1, 2, 3, 4, 5]);
   });
 
   it("rejects a long gap before starting an unbounded catch-up spiral", () => {

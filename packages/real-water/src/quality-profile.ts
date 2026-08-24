@@ -4,6 +4,7 @@ import {
   INTERACTION_FIELD_RADIUS_METRES,
   MAX_ATTACHED_BODIES,
   MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
   MAX_SECONDARY_PARTICLES,
 } from "./capabilities.js";
 import {
@@ -24,7 +25,7 @@ export const QUALITY_PROFILE_SCHEMA = "real-water/quality-profile" as const;
  *
  * @public
  */
-export const QUALITY_PROFILE_VERSION = 13 as const;
+export const QUALITY_PROFILE_VERSION = 14 as const;
 
 /**
  * Built-in structural configurations for the minimal-water surface.
@@ -65,6 +66,8 @@ export interface QualityProfileInteractionField {
   readonly maxSnapshotAgeTicks: 1;
   readonly radialImpactRoute: "analytic-uniform-array";
   readonly directionalWakeRoute: "analytic-uniform-array";
+  readonly maxActiveHeroBreakers: 8;
+  readonly heroBreakerRoute: "art-directed-overturning-uniform-array";
 }
 
 /**
@@ -201,7 +204,7 @@ export interface QualityProfileSpectralWhitecaps {
   readonly tileSizeMetres: 256;
   readonly fieldFormat: "rgba16float";
   readonly stageLayout: "generation-history-advection-decay";
-  readonly sourceLayout: "whitecap-wake-impact-combined";
+  readonly sourceLayout: "whitecap-wake-impact-hero-combined";
   readonly localHistoryBanks: 2;
   readonly maxLocalSources: 128;
   /** Preallocated fixed-tick CPU journal of controls plus interaction state. */
@@ -654,14 +657,14 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:fe3581f672279216b2fe41dd658b7ae47140a58fb555badf2f1b05477781f663",
+      "sha256:9fb629031064c5718584b77355748965e9cfafe11cba7e3f4675eedf715cd684",
     widthSegments: 128,
     heightSegments: 128,
     whitecapFieldResolution: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:e21f2d7c73e0efec73e8e01b21bfcd52ba7d059c5fb857bc73fee3d11bc89148",
+      "sha256:9780385fa033a0aeb2ad9de04ad04d6d5635398377da6b4000541044120f650b",
     widthSegments: 256,
     heightSegments: 256,
     whitecapFieldResolution: 256,
@@ -735,6 +738,11 @@ type QualityProfileKey = (typeof QUALITY_PROFILE_KEYS)[number];
 type SsrHistoryKey = (typeof SSR_HISTORY_KEYS)[number];
 type InteractionFieldKey = (typeof INTERACTION_FIELD_KEYS)[number];
 
+const PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS = Object.freeze([
+  "maxActiveHeroBreakers",
+  "heroBreakerRoute",
+] as const);
+
 interface LegacyQualityProfileVariant {
   readonly absentKeys: readonly QualityProfileKey[];
   readonly absentSsrHistoryKeys: readonly SsrHistoryKey[];
@@ -747,6 +755,13 @@ interface LegacyQualityProfileVariant {
   // layout. This flag keeps those exact key/value contracts recoverable after
   // version 10 expands the stable `whitecaps` key into the unified field.
   readonly legacySpectralWhitecaps?: true;
+  // Version 13 carries the complete unified field, but predates the Hero
+  // Breaker source channel. Preserve its exact source layout independently of
+  // the current profile.
+  readonly whitecapSourceLayout?: "whitecap-wake-impact-combined";
+  // Version 13 is the first legacy rung whose underwater and post-TRAA
+  // structures already match the current complete T22 shape.
+  readonly completeT22?: true;
   readonly profiles: Readonly<
     Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
   >;
@@ -787,7 +802,7 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
-      absentInteractionFieldKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
       profiles: Object.freeze({
         "minimal": Object.freeze({
@@ -814,7 +829,7 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze(["resetVelocityFormat"] as const),
-      absentInteractionFieldKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
       profiles: Object.freeze({
         "minimal": Object.freeze({
@@ -851,16 +866,47 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
 // the shared secondary-particle pool and ordered post-TRAA plan. Version 12 is
 // #28's committed pool and post-TRAA shape; version 13 adds the complete T22
 // underwater tracer: bounded caustics, three underwater particle consumers,
-// and lens wetness.
+// and lens wetness. Version 14 adds the bounded Hero Breaker interaction and
+// its fourth unified-foam source.
 // The discarded pre-rebase caustics v12 never entered history and is not a
 // legacy rung.
+const LEGACY_V13_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([
+        "maxActiveHeroBreakers",
+        "heroBreakerRoute",
+      ] as const),
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      whitecapSourceLayout: "whitecap-wake-impact-combined",
+      completeT22: true,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:fe3581f672279216b2fe41dd658b7ae47140a58fb555badf2f1b05477781f663",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:e21f2d7c73e0efec73e8e01b21bfcd52ba7d059c5fb857bc73fee3d11bc89148",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
 const LEGACY_V12_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
       absentKeys: Object.freeze([] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
-      absentInteractionFieldKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
       ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      whitecapSourceLayout: "whitecap-wake-impact-combined",
       profiles: Object.freeze({
         "minimal": Object.freeze({
           profileHash:
@@ -886,8 +932,9 @@ const LEGACY_V11_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
-      absentInteractionFieldKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
       ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      whitecapSourceLayout: "whitecap-wake-impact-combined",
       profiles: Object.freeze({
         "minimal": Object.freeze({
           profileHash:
@@ -913,7 +960,7 @@ const LEGACY_V10_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
-      absentInteractionFieldKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
       ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
       legacySpectralWhitecaps: true,
       profiles: Object.freeze({
@@ -939,8 +986,9 @@ const LEGACY_V10_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
-      absentInteractionFieldKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
       ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      whitecapSourceLayout: "whitecap-wake-impact-combined",
       profiles: Object.freeze({
         "minimal": Object.freeze({
           profileHash:
@@ -972,7 +1020,7 @@ const LEGACY_V9_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
-      absentInteractionFieldKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
       ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
       legacySpectralWhitecaps: true,
       profiles: Object.freeze({
@@ -1001,6 +1049,8 @@ const LEGACY_V9_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([
         "directionalWakeRoute",
+        "maxActiveHeroBreakers",
+        "heroBreakerRoute",
       ] as const),
       ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
       legacySpectralWhitecaps: true,
@@ -1036,6 +1086,8 @@ const LEGACY_V8_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([
         "directionalWakeRoute",
+        "maxActiveHeroBreakers",
+        "heroBreakerRoute",
       ] as const),
       ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
       legacySpectralWhitecaps: true,
@@ -1073,6 +1125,8 @@ const LEGACY_V7_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([
         "directionalWakeRoute",
+        "maxActiveHeroBreakers",
+        "heroBreakerRoute",
       ] as const),
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
       legacySpectralWhitecaps: true,
@@ -1101,7 +1155,7 @@ const LEGACY_V7_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
-      absentInteractionFieldKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
       profiles: Object.freeze({
         "minimal": Object.freeze({
@@ -1133,6 +1187,8 @@ const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([
         "directionalWakeRoute",
+        "maxActiveHeroBreakers",
+        "heroBreakerRoute",
       ] as const),
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
       profiles: Object.freeze({
@@ -1159,7 +1215,7 @@ const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
-      absentInteractionFieldKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
       legacySpectralWhitecaps: true,
       profiles: Object.freeze({
@@ -1190,7 +1246,7 @@ const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
-      absentInteractionFieldKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
       ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
       profiles: Object.freeze({
         "minimal": Object.freeze({
@@ -1376,6 +1432,8 @@ const INTERACTION_FIELD_KEYS = [
   "maxSnapshotAgeTicks",
   "radialImpactRoute",
   "directionalWakeRoute",
+  "maxActiveHeroBreakers",
+  "heroBreakerRoute",
 ] as const;
 const BODY_COUPLING_KEYS = [
   "fixedTickHz",
@@ -1493,6 +1551,8 @@ export function createMinimalWaterQualityProfile(
         maxSnapshotAgeTicks: 1,
         radialImpactRoute: "analytic-uniform-array",
         directionalWakeRoute: "analytic-uniform-array",
+        maxActiveHeroBreakers: MAX_ACTIVE_HERO_BREAKERS,
+        heroBreakerRoute: "art-directed-overturning-uniform-array",
       },
     },
     bodyCoupling: {
@@ -1512,7 +1572,7 @@ export function createMinimalWaterQualityProfile(
       tileSizeMetres: 256,
       fieldFormat: "rgba16float",
       stageLayout: "generation-history-advection-decay",
-      sourceLayout: "whitecap-wake-impact-combined",
+      sourceLayout: "whitecap-wake-impact-hero-combined",
       localHistoryBanks: 2,
       maxLocalSources: MAX_ACTIVE_DISTURBANCES,
       foamTimelineCapacityTicks: 128,
@@ -1580,6 +1640,10 @@ export function normalizeQualityProfile(
       supported.interaction.field.radialImpactRoute ||
     value.interaction.field.directionalWakeRoute !==
       supported.interaction.field.directionalWakeRoute ||
+    value.interaction.field.maxActiveHeroBreakers !==
+      supported.interaction.field.maxActiveHeroBreakers ||
+    value.interaction.field.heroBreakerRoute !==
+      supported.interaction.field.heroBreakerRoute ||
     !isRecord(value.bodyCoupling) ||
     !hasExactKeys(value.bodyCoupling, BODY_COUPLING_KEYS) ||
     value.bodyCoupling.fixedTickHz !== supported.bodyCoupling.fixedTickHz ||
@@ -1851,6 +1915,7 @@ function matchesLegacyUnderwaterVolume(
 function isSupportedSpectralWhitecaps(
   value: unknown,
   supported: QualityProfileSpectralWhitecaps,
+  legacySourceLayout?: "whitecap-wake-impact-combined",
 ): boolean {
   if (
     !isRecord(value) ||
@@ -1872,7 +1937,7 @@ function isSupportedSpectralWhitecaps(
     value.tileSizeMetres === supported.tileSizeMetres &&
     value.fieldFormat === supported.fieldFormat &&
     value.stageLayout === supported.stageLayout &&
-    value.sourceLayout === supported.sourceLayout &&
+    value.sourceLayout === (legacySourceLayout ?? supported.sourceLayout) &&
     value.localHistoryBanks === supported.localHistoryBanks &&
     value.maxLocalSources === supported.maxLocalSources &&
     value.foamTimelineCapacityTicks === supported.foamTimelineCapacityTicks &&
@@ -1895,6 +1960,15 @@ export function migrateQualityProfile(candidate: unknown): QualityProfile {
     } catch {
       throw new TypeError("The Quality Profile cannot be migrated.");
     }
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 13 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV13Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
   }
 
   if (
@@ -2146,6 +2220,15 @@ function matchesLegacyV12Profile(
   );
 }
 
+function matchesLegacyV13Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V13_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
 function matchesLegacyV6Profile(
   value: Record<string, unknown>,
   id: MinimalWaterQualityProfileId,
@@ -2192,6 +2275,7 @@ function matchesLegacyVariant(
         : isSupportedSpectralWhitecaps(
             value.whitecaps,
             supported.whitecaps,
+            variant.whitecapSourceLayout,
           ))) &&
     (!carriesSecondaryParticles ||
       isSupportedSecondaryParticles(
@@ -2199,9 +2283,19 @@ function matchesLegacyVariant(
         supported.secondaryParticles,
       )) &&
     (!carriesUnderwater ||
-      matchesLegacyUnderwaterVolume(value.underwater, supported.underwater)) &&
+      (variant.completeT22 === true
+        ? isSupportedUnderwaterVolume(value.underwater, supported.underwater)
+        : matchesLegacyUnderwaterVolume(
+            value.underwater,
+            supported.underwater,
+          ))) &&
     (!carriesPostTraaComposition ||
-      matchesLegacyPostTraaComposition(value.postTraaComposition))
+      (variant.completeT22 === true
+        ? isSupportedPostTraaComposition(
+            value.postTraaComposition,
+            supported.postTraaComposition,
+          )
+        : matchesLegacyPostTraaComposition(value.postTraaComposition)))
   );
 }
 
@@ -2284,7 +2378,13 @@ function matchesVariantInteraction(
     value.field.maxSnapshotAgeTicks === supported.field.maxSnapshotAgeTicks &&
     value.field.radialImpactRoute === supported.field.radialImpactRoute &&
     (variant.absentInteractionFieldKeys.includes("directionalWakeRoute") ||
-      value.field.directionalWakeRoute === supported.field.directionalWakeRoute)
+      value.field.directionalWakeRoute ===
+        supported.field.directionalWakeRoute) &&
+    (variant.absentInteractionFieldKeys.includes("maxActiveHeroBreakers") ||
+      value.field.maxActiveHeroBreakers ===
+        supported.field.maxActiveHeroBreakers) &&
+    (variant.absentInteractionFieldKeys.includes("heroBreakerRoute") ||
+      value.field.heroBreakerRoute === supported.field.heroBreakerRoute)
   );
 }
 

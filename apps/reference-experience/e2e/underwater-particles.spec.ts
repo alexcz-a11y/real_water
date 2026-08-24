@@ -7,8 +7,8 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV15,
-  type QaPresentationReceiptV15,
+  type QaHarnessV16,
+  type QaPresentationReceiptV16,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32 } from "./qa-capture-bytes.js";
@@ -62,7 +62,7 @@ const PRESSURE_CAMERA = Object.freeze({
   far: 300,
 }) satisfies QaCameraV1;
 
-type SecondaryParticlesReceipt = QaPresentationReceiptV15["secondaryParticles"];
+type SecondaryParticlesReceipt = QaPresentationReceiptV16["secondaryParticles"];
 
 test.describe.configure({ mode: "serial" });
 
@@ -87,7 +87,7 @@ test("replays independent bounded tracer AOVs and soft-fades them against scene 
   const captureAt = async (foregroundVisible: boolean) =>
     page.evaluate(
       async ({ camera, controls, foreground, seed, tick }) => {
-        const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+        const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
         if (harness === undefined) {
           throw new Error("QA Harness is unavailable.");
         }
@@ -226,7 +226,7 @@ test("drives genuine four-consumer pressure and permanently suppresses pressure-
 
   const result = await page.evaluate(
     async ({ camera, controls, seed, tick }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

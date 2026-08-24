@@ -7,7 +7,7 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV15,
+  type QaHarnessV16,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
@@ -73,7 +73,7 @@ async function openQaStage(page: Page): Promise<void> {
 async function captureEmergence(page: Page) {
   return page.evaluate(
     async ({ ages, belowCamera, controls, emergedCamera, seed, tick }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

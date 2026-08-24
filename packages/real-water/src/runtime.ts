@@ -160,6 +160,8 @@ export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
   readonly interactionAnchor: InteractionAnchor;
   readonly interactionAnchorRevision: number;
   readonly activeDisturbanceCount: number;
+  /** Active Hero Breakers inside the global Disturbance population. */
+  readonly activeHeroBreakerCount: number;
   readonly activeBodyWakeCount: number;
   readonly attachedBodyCount: number;
 }
@@ -228,12 +230,44 @@ export interface DirectionalWakeDisturbanceBatch {
 }
 
 /**
+ * Caller-owned structure-of-arrays batch for authored Hero Breakers.
+ * Directions are normalized XYZ triples with a horizontal component. Lifetime
+ * uses fixed Host ticks and is independent of `timeSeconds`.
+ *
+ * @public
+ */
+export interface HeroBreakerDisturbanceBatch {
+  readonly kind: "hero-breaker";
+  readonly count: number;
+  /** Caller identities, unique across this batch and all active Disturbances. */
+  readonly ids: Uint32Array;
+  /** Tightly packed XYZ centers in the current Host frame. */
+  readonly positions: Float32Array;
+  /** Tightly packed normalized XYZ directions with horizontal support. */
+  readonly directions: Float32Array;
+  /** Authored footprint radii in the inclusive range 0.0001 to 48 metres. */
+  readonly radii: Float32Array;
+  /** Authored crest amplitudes in the inclusive range 0 to 4 metres. */
+  readonly amplitudes: Float32Array;
+  /** Dedicated foam amounts in the inclusive range 0 to 1. */
+  readonly foamAmounts: Float32Array;
+  /** Shared-pool spray amounts in the inclusive range 0 to 1. */
+  readonly sprayAmounts: Float32Array;
+  /** Fixed-tick lifetimes in the inclusive range 1 to 600. */
+  readonly lifetimeTicks: Uint16Array;
+  /** Unsigned visual priority; overflow preserves older equal-priority input. */
+  readonly priorities: Uint8Array;
+}
+
+/**
  * Batched Disturbance input supported by this runtime slice.
  *
  * @public
  */
 export type DisturbanceBatch =
-  RadialImpactDisturbanceBatch | DirectionalWakeDisturbanceBatch;
+  | RadialImpactDisturbanceBatch
+  | DirectionalWakeDisturbanceBatch
+  | HeroBreakerDisturbanceBatch;
 
 /**
  * Deterministic accepted/dropped outcome of one Disturbance submission.
@@ -493,12 +527,21 @@ export function createRealWaterRuntime(
       readHostPresentationState(presentation);
       const state = readHostSimulationState(simulation);
       let receipt: DisturbanceSubmissionReceipt;
-      if (batch.kind === "radial-impact") {
-        validateRadialImpactDisturbanceBatch(batch);
-        receipt = localInteraction.submitRadialImpacts(batch, state);
-      } else {
-        validateDirectionalWakeDisturbanceBatch(batch);
-        receipt = localInteraction.submitDirectionalWakes(batch, state);
+      switch (batch.kind) {
+        case "radial-impact":
+          validateRadialImpactDisturbanceBatch(batch);
+          receipt = localInteraction.submitRadialImpacts(batch, state);
+          break;
+        case "directional-wake":
+          validateDirectionalWakeDisturbanceBatch(batch);
+          receipt = localInteraction.submitDirectionalWakes(batch, state);
+          break;
+        case "hero-breaker":
+          validateHeroBreakerDisturbanceBatch(batch);
+          receipt = localInteraction.submitHeroBreakers(batch, state);
+          break;
+        default:
+          throw new TypeError("Unsupported Disturbance batch kind.");
       }
       if (batch.count > 0) {
         synchronizeSink(
@@ -783,6 +826,7 @@ function readSnapshot(
     interactionAnchor: interaction.anchor,
     interactionAnchorRevision: interaction.revision,
     activeDisturbanceCount: interaction.activeDisturbanceCount,
+    activeHeroBreakerCount: interaction.activeHeroBreakerCount,
     activeBodyWakeCount: interaction.activeBodyWakeCount,
     attachedBodyCount,
   });
@@ -850,7 +894,13 @@ function validateDirectionalWakeDisturbanceBatch(
   validateDisturbanceBatchStorage(
     batch,
     "Directional-wake",
-    () => requireLength(batch.directions, batch.count * 3, "directions"),
+    () =>
+      requireFloat32DisturbanceLength(
+        batch.directions,
+        batch.count * 3,
+        "Directional-wake",
+        "directions",
+      ),
     (_index, vectorIndex) => {
       const directionX = batch.directions[vectorIndex];
       const directionY = batch.directions[vectorIndex + 1];
@@ -873,6 +923,102 @@ function validateDirectionalWakeDisturbanceBatch(
   );
 }
 
+function validateHeroBreakerDisturbanceBatch(
+  batch: HeroBreakerDisturbanceBatch,
+): void {
+  const value: unknown = batch;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "kind",
+      "count",
+      "ids",
+      "positions",
+      "directions",
+      "radii",
+      "amplitudes",
+      "foamAmounts",
+      "sprayAmounts",
+      "lifetimeTicks",
+      "priorities",
+    ]) ||
+    value.kind !== "hero-breaker"
+  ) {
+    throw new TypeError(
+      "Hero-breaker batches must use the exact supported contract.",
+    );
+  }
+  validateDisturbanceBatchStorage(
+    batch,
+    "Hero-breaker",
+    () => {
+      requireFloat32DisturbanceLength(
+        batch.directions,
+        batch.count * 3,
+        "Hero-breaker",
+        "directions",
+      );
+      requireFloat32DisturbanceLength(
+        batch.foamAmounts,
+        batch.count,
+        "Hero-breaker",
+        "foamAmounts",
+      );
+      requireFloat32DisturbanceLength(
+        batch.sprayAmounts,
+        batch.count,
+        "Hero-breaker",
+        "sprayAmounts",
+      );
+      requireUint16DisturbanceLength(
+        batch.lifetimeTicks,
+        batch.count,
+        "lifetimeTicks",
+      );
+    },
+    (index, vectorIndex) => {
+      validateNormalizedDisturbanceDirection(
+        batch.directions,
+        vectorIndex,
+        "Hero-breaker",
+      );
+      const foamAmount = batch.foamAmounts[index];
+      const sprayAmount = batch.sprayAmounts[index];
+      if (
+        !Number.isFinite(foamAmount) ||
+        foamAmount === undefined ||
+        foamAmount < 0 ||
+        foamAmount > 1
+      ) {
+        throw new RangeError(
+          "Hero-breaker foamAmounts must be between 0 and 1.",
+        );
+      }
+      if (
+        !Number.isFinite(sprayAmount) ||
+        sprayAmount === undefined ||
+        sprayAmount < 0 ||
+        sprayAmount > 1
+      ) {
+        throw new RangeError(
+          "Hero-breaker sprayAmounts must be between 0 and 1.",
+        );
+      }
+      const lifetimeTicks = batch.lifetimeTicks[index];
+      if (
+        lifetimeTicks === undefined ||
+        lifetimeTicks < 1 ||
+        lifetimeTicks > 600
+      ) {
+        throw new RangeError(
+          "Hero-breaker lifetimeTicks must be between 1 and 600 ticks.",
+        );
+      }
+    },
+    0,
+  );
+}
+
 type SharedDisturbanceBatch = Pick<
   RadialImpactDisturbanceBatch,
   "amplitudes" | "count" | "ids" | "positions" | "priorities" | "radii"
@@ -880,9 +1026,10 @@ type SharedDisturbanceBatch = Pick<
 
 function validateDisturbanceBatchStorage(
   batch: SharedDisturbanceBatch,
-  label: "Directional-wake" | "Radial-impact",
+  label: "Directional-wake" | "Hero-breaker" | "Radial-impact",
   validateAdditionalStorage?: () => void,
   validatePoint?: (index: number, vectorIndex: number) => void,
+  minimumAmplitude = -MAX_RADIAL_IMPACT_AMPLITUDE_METRES,
 ): void {
   if (!Number.isSafeInteger(batch.count) || batch.count < 0) {
     throw new RangeError(
@@ -890,9 +1037,19 @@ function validateDisturbanceBatchStorage(
     );
   }
   requireUint32Length(batch.ids, batch.count, "ids");
-  requireLength(batch.positions, batch.count * 3, "positions");
-  requireLength(batch.radii, batch.count, "radii");
-  requireLength(batch.amplitudes, batch.count, "amplitudes");
+  requireFloat32DisturbanceLength(
+    batch.positions,
+    batch.count * 3,
+    label,
+    "positions",
+  );
+  requireFloat32DisturbanceLength(batch.radii, batch.count, label, "radii");
+  requireFloat32DisturbanceLength(
+    batch.amplitudes,
+    batch.count,
+    label,
+    "amplitudes",
+  );
   requireUint8DisturbanceLength(batch.priorities, batch.count, "priorities");
   validateAdditionalStorage?.();
   const ids = new Set<number>();
@@ -921,11 +1078,11 @@ function validateDisturbanceBatchStorage(
     if (
       !Number.isFinite(amplitude) ||
       amplitude === undefined ||
-      amplitude < -MAX_RADIAL_IMPACT_AMPLITUDE_METRES ||
+      amplitude < minimumAmplitude ||
       amplitude > MAX_RADIAL_IMPACT_AMPLITUDE_METRES
     ) {
       throw new RangeError(
-        `${label} amplitudes must be between -4 and 4 metres.`,
+        `${label} amplitudes must be between ${String(minimumAmplitude)} and 4 metres.`,
       );
     }
     const id = batch.ids[index] ?? 0;
@@ -933,6 +1090,30 @@ function validateDisturbanceBatchStorage(
       throw new TypeError(`${label} batches require unique Disturbance ids.`);
     }
     ids.add(id);
+  }
+}
+
+function validateNormalizedDisturbanceDirection(
+  directions: Float32Array,
+  vectorIndex: number,
+  label: "Directional-wake" | "Hero-breaker",
+): void {
+  const directionX = directions[vectorIndex];
+  const directionY = directions[vectorIndex + 1];
+  const directionZ = directions[vectorIndex + 2];
+  const directionLength = Math.hypot(
+    directionX ?? Number.NaN,
+    directionY ?? Number.NaN,
+    directionZ ?? Number.NaN,
+  );
+  if (
+    !Number.isFinite(directionLength) ||
+    Math.abs(directionLength - 1) > 1e-5 ||
+    Math.hypot(directionX ?? 0, directionZ ?? 0) < 1e-6
+  ) {
+    throw new RangeError(
+      `${label} directions must be normalized with a horizontal component.`,
+    );
   }
 }
 
@@ -956,6 +1137,31 @@ function requireUint8DisturbanceLength(
   if (!(buffer instanceof Uint8Array) || buffer.length < required) {
     throw new RangeError(
       `The Disturbance ${label} buffer requires at least ${required} Uint8 values.`,
+    );
+  }
+}
+
+function requireFloat32DisturbanceLength(
+  buffer: Float32Array,
+  required: number,
+  disturbance: "Directional-wake" | "Hero-breaker" | "Radial-impact",
+  field: string,
+): void {
+  if (!(buffer instanceof Float32Array) || buffer.length < required) {
+    throw new RangeError(
+      `The ${disturbance} Disturbance ${field} buffer requires at least ${required} Float32 values.`,
+    );
+  }
+}
+
+function requireUint16DisturbanceLength(
+  buffer: Uint16Array,
+  required: number,
+  label: string,
+): void {
+  if (!(buffer instanceof Uint16Array) || buffer.length < required) {
+    throw new RangeError(
+      `The Disturbance ${label} buffer requires at least ${required} Uint16 values.`,
     );
   }
 }

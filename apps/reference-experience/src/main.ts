@@ -20,7 +20,7 @@ import {
   type RealWaterLease,
   type WebGPUDeviceLoss,
 } from "real-water";
-import type { QaFrameSource, QaHarnessV15 } from "./qa-harness.js";
+import type { QaFrameSource, QaHarnessV16 } from "./qa-harness.js";
 import {
   createQaPlanarReflectionFixture,
   disposeQaPlanarReflectionFixture,
@@ -36,6 +36,7 @@ import {
   type ReferenceHostPresentationController,
 } from "./reference-presentation-controller.js";
 import { createReferenceHostSimulationController } from "./reference-simulation-controller.js";
+import { createReferenceShowcaseSchedule } from "./reference-showcase-schedule.js";
 import {
   REFERENCE_PROXY_VESSEL_SOCKETS,
   createReferenceProxyVessel,
@@ -361,12 +362,19 @@ function createThreeReferenceHostAttempt(
   });
   const qaPresentation = qaModule?.createQaHostPresentationController();
   let referencePresentation: ReferenceHostPresentationController | undefined;
+  const referenceShowcaseSchedule =
+    qaSimulation === undefined ? createReferenceShowcaseSchedule() : undefined;
   const referenceSimulation =
     qaSimulation === undefined
       ? createReferenceHostSimulationController({
           ...(proxyVessel === undefined
             ? {}
             : { integrateFixedStep: proxyVessel.integrateFixedStep }),
+          ...(referenceShowcaseSchedule === undefined
+            ? {}
+            : {
+                afterFixedStep: referenceShowcaseSchedule.afterFixedStep,
+              }),
         })
       : undefined;
   let referenceSimulationStarted = false;
@@ -426,6 +434,7 @@ function createThreeReferenceHostAttempt(
       createReadyStage: (lease: RealWaterLease) => {
         frameSource?.bindLease(lease);
         proxyVessel?.attach(lease);
+        referenceShowcaseSchedule?.bindLease(lease);
         const stage = createCanvasStage(renderer, lease);
         referencePresentation?.start();
         return stage;
@@ -618,6 +627,6 @@ function readRevealFrames(
 
 declare global {
   interface Window {
-    __REAL_WATER_QA__?: QaHarnessV15;
+    __REAL_WATER_QA__?: QaHarnessV16;
   }
 }

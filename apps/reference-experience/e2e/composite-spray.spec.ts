@@ -6,9 +6,9 @@ import {
 } from "real-water";
 import type {
   QaCameraV1,
-  QaCaptureV15,
-  QaHarnessV15,
-  QaPresentationReceiptV15,
+  QaCaptureV16,
+  QaHarnessV16,
+  QaPresentationReceiptV16,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
@@ -41,19 +41,19 @@ const CONTRIBUTION_THRESHOLD = 1 / 1_024;
 const ALLOWED_SUPPORT_DILATION_PIXELS = 2;
 const FINAL_RESIDUAL_LSB = 1;
 
-type SecondaryParticlesReceipt = QaPresentationReceiptV15["secondaryParticles"];
+type SecondaryParticlesReceipt = QaPresentationReceiptV16["secondaryParticles"];
 type SecondaryParticleReceipt = SecondaryParticlesReceipt["consumers"][number];
 
 interface CaptureShape {
-  readonly name: QaCaptureV15["name"];
+  readonly name: QaCaptureV16["name"];
   readonly width: number;
   readonly height: number;
-  readonly origin: QaCaptureV15["origin"];
-  readonly format: QaCaptureV15["format"];
-  readonly elementType: QaCaptureV15["elementType"];
-  readonly components: QaCaptureV15["components"];
-  readonly dataEncoding: QaCaptureV15["dataEncoding"];
-  readonly byteOrder: QaCaptureV15["byteOrder"];
+  readonly origin: QaCaptureV16["origin"];
+  readonly format: QaCaptureV16["format"];
+  readonly elementType: QaCaptureV16["elementType"];
+  readonly components: QaCaptureV16["components"];
+  readonly dataEncoding: QaCaptureV16["dataEncoding"];
+  readonly byteOrder: QaCaptureV16["byteOrder"];
 }
 
 interface SprayRouteFrame {
@@ -92,7 +92,7 @@ async function captureSprayRoute(
       primeTicks,
       seed,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -120,7 +120,7 @@ async function captureSprayRoute(
       frames.push(await captureFrame(harness));
       return frames;
 
-      async function captureFrame(qa: QaHarnessV15): Promise<SprayRouteFrame> {
+      async function captureFrame(qa: QaHarnessV16): Promise<SprayRouteFrame> {
         const presentation = await qa.present();
         const [final, contribution, overdraw] = await Promise.all([
           qa.capture("final-color"),
@@ -138,7 +138,7 @@ async function captureSprayRoute(
         };
       }
 
-      function captureShape(capture: QaCaptureV15): CaptureShape {
+      function captureShape(capture: QaCaptureV16): CaptureShape {
         return {
           name: capture.name,
           width: capture.width,

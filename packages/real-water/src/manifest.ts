@@ -25,16 +25,16 @@ export const PREWARM_MANIFEST_SCHEMA = "real-water/prewarm" as const;
 /**
  * The only Prewarm Manifest version accepted by this release.
  *
- * Version 10 adds the complete T22 underwater tracer to version 9's shared
- * pool and ordered post-TRAA plan: bounded caustics, three underwater particle
- * consumers, and lens wetness. There is no migration rung: the only consumer
+ * Version 11 adds the bounded art-directed Hero Breaker to version 10's
+ * complete T22 underwater tracer: prewarmed deformation, dedicated foam,
+ * shared-pool spray, and diagnostics. There is no migration rung: the only consumer
  * is an equality gate that rejects any other value, so the number is an
  * identity stamp for a declaration set, not a payload that can be carried
  * forward.
  *
  * @public
  */
-export const PREWARM_MANIFEST_VERSION = 10 as const;
+export const PREWARM_MANIFEST_VERSION = 11 as const;
 
 /**
  * Immutable physical drawing-buffer dimensions bound into a Prewarm Manifest.
@@ -170,6 +170,10 @@ export const SUPPORTED_EFFECT_VARIANTS: readonly PrewarmEffectVariant[] =
       effectId: "lens-wetness",
       variantId: "bounded-emergence-decay",
     }),
+    Object.freeze({
+      effectId: "hero-breaker",
+      variantId: "art-directed-overturning",
+    }),
   ]);
 
 export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
@@ -185,6 +189,14 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
     "water-local-interaction-radial-impact-route",
   localInteractionDirectionalWakeRoute:
     "water-local-interaction-directional-wake-route",
+  heroBreakerState: "water-hero-breaker-state",
+  heroBreakerDeformationRoute: "water-hero-breaker-deformation-route",
+  heroBreakerFoamRoute: "water-hero-breaker-foam-route",
+  heroBreakerSprayRoute: "water-hero-breaker-spray-route",
+  heroBreakerFoamDiagnosticsTarget:
+    "water-hero-breaker-foam-diagnostics-target",
+  heroBreakerFoamDiagnosticsRoute: "water-hero-breaker-foam-diagnostics-route",
+  heroBreakerFoamProbe: "water-hero-breaker-foam-probe",
   bodySocketEmissionRoute: "water-body-socket-emission-route",
   spectralBandSwell: "water-spectral-band-swell",
   spectralBandWind: "water-spectral-band-wind",
@@ -397,6 +409,7 @@ const DRAWING_BUFFER_BOUND_DECLARATION_IDS: ReadonlySet<string> = new Set([
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapStageRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapProbe,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceIdentityTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.heroBreakerFoamDiagnosticsTarget,
 ]);
 const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
@@ -452,9 +465,10 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.localInteractionBuffers,
     kind: "resource",
     label:
-      "Preallocated current/previous local Disturbance uniform arrays (128 shared slots; radial, directional wake, and propeller-wash descriptors)",
+      "Preallocated current/previous local Disturbance uniform arrays (128 shared slots plus 8 Hero Breaker slots; radial, directional wake, propeller-wash, and art-directed overturning descriptors; host-fixed 60Hz; Hero lifetime 1..600 ticks)",
     fingerprint:
-      "sha256:d5eb5a7a2e878c0f08cf2a6540a966ec45b1d674cee0e0f320fcf88955e21085",
+      // Provenance: #29 reminted the reproducible seed from this declaration's expanded exact label bytes.
+      "sha256:5b314ffb9d6a63500d1c406ede0b10cf05dbb7f919e50db46b67f36107ddc3b0",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.localInteractionRadialImpactRoute,
@@ -471,6 +485,69 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
       "Analytic directional-wake deformation and zero-or-one-tick local correction snapshot route",
     fingerprint:
       "sha256:0f10fe46295e2ce29efbb4ece51e4c9c0b56b218415c66b96eecea2394ac8c9f",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.heroBreakerState,
+    kind: "resource",
+    label:
+      "Hero Breaker current/previous fixed-tick uniform-array state (8 slots; host-fixed 60Hz; lifetime 1..600 ticks)",
+    fingerprint:
+      // Provenance: #29 minted this reproducible seed from the declaration's exact label bytes.
+      "sha256:d2c0f70342df3753c767ca747ffb6bd7c8e98ad66d3a9854deba43295cb81654",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.heroBreakerDeformationRoute,
+    kind: "conditional-route",
+    label:
+      "Art-directed asymmetric Hero Breaker overturning deformation route (uniform-array; host-fixed 60Hz; initial crest center -0.2 radii; forward travel 0.75 radii; back/front widths 0.72/0.26 radii; forward hollow center/width/depth 0.38/0.24 radii/0.42; lateral width 0.7 radii; attack/release-start fractions 0.18/0.68; forward curl 0.35)",
+    fingerprint:
+      // Provenance: #29 minted this reproducible seed from the declaration's exact label bytes.
+      "sha256:184521c4f2e18a147db2ae679dccf5327f63f63da0a08fcc88bd52ece6bbd808",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.heroBreakerFoamRoute,
+    kind: "conditional-route",
+    label:
+      "Dedicated Hero Breaker foam injection (third local source channel: R wake, G impact, B Hero, A union; RGBA16F 128x128 anchor-local ping-pong; host-fixed 60Hz)",
+    fingerprint:
+      // Provenance: #29 minted this reproducible seed from the declaration's exact label bytes.
+      "sha256:7b610af44ca748e6832c503f79727c6d12dffd46df4310e2c1a7281eed23fe1d",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.heroBreakerSprayRoute,
+    kind: "conditional-route",
+    label:
+      "Hero Breaker spray generation through the existing spray-droplet-mist consumer partition (up to 4,096 deterministic candidates per active Hero; shared-pool post-TRAA)",
+    fingerprint:
+      // Provenance: #29 minted this reproducible seed from the declaration's exact label bytes.
+      "sha256:a14193d923605cd51acf4fb8ec7df00871e0ce627db9f2a4670464bff053dd5d",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.heroBreakerFoamDiagnosticsTarget,
+    kind: "resource",
+    label:
+      "Hero Breaker foam diagnostics target (RGBA16F, drawing-buffer-exact; R scalar Hero foam)",
+    fingerprint:
+      // Provenance: #29 minted this reproducible seed from the declaration's exact label bytes.
+      "sha256:3e57313110292e7292a28f379183191e87a37c252e3ede01a808393a923046aa",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.heroBreakerFoamDiagnosticsRoute,
+    kind: "conditional-route",
+    label:
+      "On-request Hero Breaker foam diagnostics route (R scalar unpacked from the RGBA16F drawing-buffer-exact target)",
+    fingerprint:
+      // Provenance: #29 minted this reproducible seed from the declaration's exact label bytes.
+      "sha256:1e34854cd60391c94cfd13888346053efeb4b444ee6ebfb129aaa01a7f885977",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.heroBreakerFoamProbe,
+    kind: "conditional-route",
+    label:
+      "GPU completion probe of Hero Breaker deformation, dedicated foam, shared-pool spray, and RGBA16F drawing-buffer-exact foam diagnostics target",
+    fingerprint:
+      // Provenance: #29 minted this reproducible seed from the declaration's exact label bytes.
+      "sha256:791a1f852d2d6e5c3c1648490c9a5e7cedada270d85c3e20f8d81f6c02f76566",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.bodySocketEmissionRoute,
@@ -596,16 +673,18 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalFieldA,
     kind: "resource",
     label:
-      "Unified foam local field A (RGBA16F 128x128 anchor-local ping-pong, 48m radius, 8m Hermite edge fade, stable final identity)",
+      "Unified foam local field A (RGBA16F 128x128 anchor-local ping-pong, R wake/G impact/B Hero/A union, 48m radius, 8m Hermite edge fade, stable final identity)",
     fingerprint:
+      // Provenance: this historical fingerprint's reproducible source was not recorded; #29 changed only the label and retained the committed value.
       "sha256:654d41ced88d65264012da784dd5d6d45a16dcfac7873a7cd7ea578a78f04a2b",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalFieldB,
     kind: "resource",
     label:
-      "Unified foam local field B (RGBA16F 128x128 anchor-local ping-pong scratch, 48m radius, 8m Hermite edge fade)",
+      "Unified foam local field B (RGBA16F 128x128 anchor-local ping-pong scratch, R wake/G impact/B Hero/A union, 48m radius, 8m Hermite edge fade)",
     fingerprint:
+      // Provenance: this historical fingerprint's reproducible source was not recorded; #29 changed only the label and retained the committed value.
       "sha256:82dac57c07467b78a7bc2bc880daef08ffbd422daf546aa958855f2a72814aab",
   },
   {
@@ -621,23 +700,25 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceHistory,
     kind: "effect-state",
     label:
-      "Bounded foam history (128-source, two GPU banks, 128-tick preallocated CPU foam-state timeline with Artistic Controls and source poses/lifetimes for 60Hz simulation, 30Hz present, and bounded catch-up)",
+      "Bounded foam history (128-source including at most 8 Hero Breakers, two GPU banks, 128-tick preallocated CPU foam-state timeline with Artistic Controls and source poses/lifetimes for 60Hz simulation, 30Hz present, and bounded catch-up)",
     fingerprint:
+      // Provenance: this historical fingerprint's reproducible source was not recorded; #29 changed only the label and retained the committed value.
       "sha256:b6921d58b2beb103bc12115f47b2430d7db11117842c74213ffef5812e75eaae",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalAdvectionRoute,
     kind: "conditional-route",
     label:
-      "Anchor-local unified foam advection compute route (A to B, host fixed tick, 128x128)",
+      "Anchor-local unified foam RGB wake/impact/Hero advection compute route (A to B, host fixed tick, 128x128)",
     fingerprint:
+      // Provenance: this historical fingerprint's reproducible source was not recorded; #29 changed only the label and retained the committed value.
       "sha256:ae50160423e8c912dfe71eba8b3a6cf91c0aad2323cab5796a61ca3902e1dcd5",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalResolveRoute,
     kind: "conditional-route",
     label:
-      "Source-prioritized whitecap, wake, and impact foam plus current local-surface resolve compute route (B to A plus caustics field, 128x128)",
+      "Source-prioritized whitecap, wake, impact, and Hero Breaker foam plus current local-surface resolve compute route (B to A as R wake/G impact/B Hero/A union plus caustics field, 128x128)",
     fingerprint:
       // Provenance: this historical fingerprint's reproducible source was not recorded; #33 changed only the label and retained the committed value.
       "sha256:61617d619104b9e50914d24d287b3fda56af58041a35fc013321c282bbc898c3",
@@ -646,33 +727,36 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceIdentityTarget,
     kind: "resource",
     label:
-      "Unified foam source-identity diagnostics (RGBA16F canonical anchor-local 96m field, drawing-buffer-exact)",
+      "Unified foam source-identity diagnostics (RGBA16F spectral/wake/impact/union with Hero Breaker included in union, canonical anchor-local 96m field, drawing-buffer-exact)",
     fingerprint:
+      // Provenance: this historical fingerprint's reproducible source was not recorded; #29 changed only the label and retained the committed value.
       "sha256:7aed6a2a182c10f42c5853d5e86b07c27800aebcf7c82e15830fc48d7f0774f8",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceIdentityRoute,
     kind: "conditional-route",
     label:
-      "Drawing-buffer canonical anchor-local whitecap, wake, and impact source-identity diagnostics route",
+      "Drawing-buffer canonical anchor-local spectral, wake, impact, and Hero-inclusive union source-identity diagnostics route",
     fingerprint:
+      // Provenance: this historical fingerprint's reproducible source was not recorded; #29 changed only the label and retained the committed value.
       "sha256:00a84dfdb990f853318915cc3b164e201bf8e548c32ea12d851e336d1f5054b2",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceIdentityProbe,
     kind: "conditional-route",
     label:
-      "GPU completion probe of canonical anchor-local unified foam source identity",
+      "GPU completion probe of canonical anchor-local unified foam source identity with Hero-inclusive union",
     fingerprint:
+      // Provenance: this historical fingerprint's reproducible source was not recorded; #29 changed only the label and retained the committed value.
       "sha256:8bc0852433ba4552576bc066f3af3728b95fa9dd03048c34ef3243698b5925a8",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.material,
     kind: "effect-state",
     label:
-      "Double-sided minimal water material with persistent unified source-resolved foam response",
-    // Identity covers the double-sided material plus combined spectral
-    // whitecap, wake, and impact foam shading.
+      "Double-sided minimal water material with persistent unified whitecap, wake, impact, and Hero Breaker source-resolved foam response",
+    // Provenance: this historical fingerprint's reproducible source was not
+    // recorded; #29 changed only the label and retained the committed value.
     fingerprint:
       "sha256:0bac2d6549fce1b062e2b79e104109eddef671ab3478d6f75fc35600838fbd85",
   },
@@ -680,9 +764,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.opticalRoute,
     kind: "effect-state",
     label:
-      "Waterline optical composition route (planar+environment fallback, air/water refraction, underside Fresnel and TIR, RGB Beer-Lambert, unified source-resolved foam reflection/transmission/roughness/micro detail)",
-    // Identity covers the waterline optics plus combined spectral whitecap,
-    // wake, and impact foam response.
+      "Waterline optical composition route (planar+environment fallback, air/water refraction, underside Fresnel and TIR, RGB Beer-Lambert, unified whitecap/wake/impact/Hero Breaker foam reflection/transmission/roughness/micro detail)",
+    // Provenance: this historical fingerprint's reproducible source was not
+    // recorded; #29 changed only the label and retained the committed value.
     fingerprint:
       "sha256:b526b877082981792ee86708b08d71525a43be1471b06a08ab82567c51a7f044",
   },
@@ -1107,7 +1191,7 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
     kind: "conditional-route",
     label:
-      "Fixed-tick whitecaps and shared particle allocation, waterline-gated planar aux, one jittered main MRT, current-frame SSR, underwater volume/caustics/tracers, stock TRAA, then ordered secondary-particle and lens-wetness composition",
+      "Fixed-tick whitecaps plus Hero Breaker deformation/foam and shared particle allocation, waterline-gated planar aux, one jittered main MRT, current-frame SSR, underwater volume/caustics/tracers, stock TRAA, then ordered secondary-particle and lens-wetness composition",
     fingerprint:
       // Provenance: this BASE fingerprint's reproducible source was not recorded and cannot be recovered; #28 and #33 changed only the label and did not remint this value.
       "sha256:f7f44a7ddf3041a2cda3654fb87e9181f0ca87730eb64017725c664995bafb91",
@@ -1350,10 +1434,10 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
     kind: "conditional-route",
     label:
-      "Forty named diagnostics output routes including unified foam identity, underwater caustics/particles/bubbles, lens wetness, plus secondary-particle contribution and overdraw",
+      "Forty-one named diagnostics output routes including unified foam identity, Hero Breaker foam, underwater caustics/particles/bubbles, lens wetness, plus secondary-particle contribution and overdraw",
     fingerprint:
-      // Provenance: #33 minted this reproducible value from the exact UTF-8 label bytes above (no trailing newline; quotes excluded) for the final 40-output T22 registry.
-      "sha256:94e65cb8d4ad5c047715315b129abaa5c9ff0e6f58f7671f1acdd2e370284b9e",
+      // Provenance: #29 reminted #33's reproducible seed from the declaration's expanded exact label bytes.
+      "sha256:cac4b057b2128af8a3336bafc8381573bed8c406794e1163a8ee30e4ad2a923d",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.hiddenStabilization,
@@ -1368,10 +1452,10 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.completionProbe,
     kind: "conditional-route",
     label:
-      "GPU completion probe of all forty named output routes including underwater volume/tracers, lens wetness, unified foam identity, and secondary-particle contribution/overdraw",
+      "GPU completion probe of all forty-one named output routes including Hero Breaker foam, underwater volume/tracers, lens wetness, unified foam identity, and secondary-particle contribution/overdraw",
     fingerprint:
-      // Provenance: #33 minted this reproducible value from the exact UTF-8 label bytes above (no trailing newline; quotes excluded) for the final 40-output T22 completion registry.
-      "sha256:a3377b51000b3c8df474f6c5d3710d2857df5c695337fb6c7f028560d3154b88",
+      // Provenance: #29 reminted #33's reproducible seed from the declaration's expanded exact label bytes.
+      "sha256:8b7be2e1119ef683210e89c3350cb114f633adc492739f1588fc180e15084903",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.mainCameraGuard,
@@ -1423,6 +1507,9 @@ function highDetailDeclaration(
     [MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalResolveRoute]:
       // Provenance: this historical high-detail fingerprint's reproducible source was not recorded; #33 changed only the effective 256x256 label and retained the committed value.
       "sha256:c914cf36381b90065a8e759b57c6621b16b9316c22f9df01b3c530625aab69f8",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.heroBreakerFoamRoute]:
+      // Provenance: #29 minted this high-detail reproducible seed from the declaration's effective 256x256 label bytes.
+      "sha256:e45ff48a5dca6426a15b0f8ea70cbcb5690560d2d9ce938f5f8c958970bde56b",
   });
   const fingerprint = fingerprints[declaration.id];
   if (fingerprint === undefined) {

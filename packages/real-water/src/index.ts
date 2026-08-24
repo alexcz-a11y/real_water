@@ -61,6 +61,7 @@ export type {
 export {
   MAX_ATTACHED_BODIES,
   MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
   MAX_GAMEPLAY_QUERY_POINTS,
   MAX_SECONDARY_PARTICLES,
 } from "./capabilities.js";
@@ -86,6 +87,7 @@ export type {
   ArtisticControlUpdateReceipt,
   GameplayQueryBatch,
   GameplayQueryResults,
+  HeroBreakerDisturbanceBatch,
   DisturbanceBatch,
   DisturbanceSubmissionReceipt,
   DirectionalWakeDisturbanceBatch,

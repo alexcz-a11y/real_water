@@ -14,6 +14,7 @@ import {
 import {
   abs,
   cos,
+  exp,
   float,
   floor,
   Fn,
@@ -28,6 +29,7 @@ import {
   pow,
   sin,
   smoothstep,
+  sqrt,
   step,
   texture,
   textureLoad,
@@ -36,12 +38,14 @@ import {
   uniformArray,
   uvec2,
   vec2,
+  vec3,
   vec4,
 } from "three/tsl";
 import {
   INTERACTION_FIELD_EDGE_FADE_METRES,
   INTERACTION_FIELD_RADIUS_METRES,
   MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
 } from "../capabilities.js";
 import type { QualityProfileSpectralWhitecaps } from "../quality-profile.js";
 import type { OpenWaterRuntimeSnapshot, RuntimeStateSink } from "../runtime.js";
@@ -64,6 +68,19 @@ import {
   RADIAL_IMPACT_LIFETIME_SECONDS,
   type LocalInteractionRenderSnapshot,
 } from "./local-interaction.js";
+import {
+  HERO_BREAKER_ATTACK_FRACTION,
+  HERO_BREAKER_BACK_WIDTH_RADII,
+  HERO_BREAKER_FIXED_TICKS_PER_SECOND,
+  HERO_BREAKER_FORWARD_HOLLOW_CENTER_RADII,
+  HERO_BREAKER_FORWARD_HOLLOW_DEPTH,
+  HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII,
+  HERO_BREAKER_FORWARD_TRAVEL_RADII,
+  HERO_BREAKER_FRONT_WIDTH_RADII,
+  HERO_BREAKER_INITIAL_CREST_CENTER_RADII,
+  HERO_BREAKER_LATERAL_WIDTH_RADII,
+  HERO_BREAKER_RELEASE_START_FRACTION,
+} from "./hero-breaker.js";
 import {
   NON_PERIODIC_BLEND_K1,
   NON_PERIODIC_BLEND_K2,
@@ -110,6 +127,7 @@ const LOCAL_FOAM_DIAMETER_METRES = INTERACTION_FIELD_RADIUS_METRES * 2;
 interface UnifiedFoamComputeUniforms {
   readonly phaseOffset: FloatUniform;
   readonly timeSeconds: FloatUniform;
+  readonly tick: FloatUniform;
   readonly timeScale: FloatUniform;
   readonly crestSharpness: FloatUniform;
   readonly whitecapAmount: FloatUniform;
@@ -124,6 +142,10 @@ interface UnifiedFoamComputeUniforms {
   readonly interactionCount: IntUniform;
   readonly interactionGeometry: ReturnType<typeof uniformArray<"vec4">>;
   readonly interactionTiming: ReturnType<typeof uniformArray<"vec4">>;
+  readonly heroBreakerCount: IntUniform;
+  readonly heroBreakerGeometry: ReturnType<typeof uniformArray<"vec4">>;
+  readonly heroBreakerTiming: ReturnType<typeof uniformArray<"vec4">>;
+  readonly heroBreakerArt: ReturnType<typeof uniformArray<"vec4">>;
   readonly resetHistory: FloatUniform;
   readonly bands: readonly WhitecapBandUniforms[];
 }
@@ -173,7 +195,7 @@ export interface UnifiedFoamField {
   readonly spectralStageTexture: StorageTexture;
   /**
    * Anchor-local, non-repeating source-history attachment. RGBA is
-   * wake/impact/local-union/local-union.
+   * wake/impact/Hero-Breaker/local-union.
    */
   readonly localSourceHistoryTexture: StorageTexture;
   /** Samples the global spectral diagnostic stages at a Host-frame XZ point. */
@@ -202,6 +224,11 @@ export interface UnifiedFoamField {
    * independent of camera projection, depth, and temporal jitter.
    */
   sampleSourcesAtFieldUv(uvXNode: FloatNode, uvYNode: FloatNode): Vec4Node;
+  /** Samples dedicated Hero Breaker foam on the canonical local-field UV. */
+  sampleHeroBreakerFoamAtFieldUv(
+    uvXNode: FloatNode,
+    uvYNode: FloatNode,
+  ): FloatNode;
   /** Runtime sink used to stage the latest hot controls and world origin. */
   readonly runtimeStateSink: RuntimeStateSink;
   /** Advances every missing authoritative fixed tick exactly once. */
@@ -257,9 +284,24 @@ export function createUnifiedFoamField(
     { length: MAX_ACTIVE_DISTURBANCES },
     () => new Vector4(),
   );
+  const heroBreakerGeometryValues = Array.from(
+    { length: MAX_ACTIVE_HERO_BREAKERS },
+    () => new Vector4(),
+  );
+  const heroBreakerTimingValues = Array.from(
+    { length: MAX_ACTIVE_HERO_BREAKERS },
+    () => new Vector4(),
+  );
+  const heroBreakerArtValues = Array.from(
+    { length: MAX_ACTIVE_HERO_BREAKERS },
+    () => new Vector4(),
+  );
   const uniforms = createUnifiedFoamUniforms(
     interactionGeometryValues,
     interactionTimingValues,
+    heroBreakerGeometryValues,
+    heroBreakerTimingValues,
+    heroBreakerArtValues,
   );
   const kernels = createUnifiedFoamKernels(
     finalStageTexture,
@@ -359,7 +401,11 @@ export function createUnifiedFoamField(
     const spectral = stageSample(hostXNode, hostZNode).a.clamp(0, 1);
     const wake = local.r.clamp(0, 1);
     const impact = local.g.clamp(0, 1);
-    const localUnion = saturatingUnionNode(wake, impact);
+    const heroBreaker = local.b.clamp(0, 1);
+    const localUnion = saturatingUnionNode(
+      saturatingUnionNode(wake, impact),
+      heroBreaker,
+    );
     const union = saturatingUnionNode(spectral, localUnion);
     return vec4(spectral, wake, impact, union);
   };
@@ -375,6 +421,26 @@ export function createUnifiedFoamField(
         uvYNode.sub(0.5).mul(LOCAL_FOAM_DIAMETER_METRES),
       ),
     );
+  const heroBreakerFieldUvSample = (
+    uvXNode: FloatNode,
+    uvYNode: FloatNode,
+  ): FloatNode => {
+    const localX = uvXNode.sub(0.5).mul(LOCAL_FOAM_DIAMETER_METRES);
+    const localZ = uvYNode.sub(0.5).mul(LOCAL_FOAM_DIAMETER_METRES);
+    const anchorDistance = length(vec2(localX, localZ));
+    const fadeStart =
+      INTERACTION_FIELD_RADIUS_METRES - INTERACTION_FIELD_EDGE_FADE_METRES;
+    const fadeT = anchorDistance
+      .sub(fadeStart)
+      .div(INTERACTION_FIELD_EDGE_FADE_METRES)
+      .clamp(0, 1);
+    const fieldFade = float(1).sub(
+      fadeT.mul(fadeT).mul(float(3).sub(fadeT.mul(2))),
+    );
+    return texture(localFinalTexture, vec2(uvXNode, uvYNode))
+      .b.mul(fieldFade)
+      .clamp(0, 1);
+  };
   const localSurfaceSample = (hostXNode: FloatNode, hostZNode: FloatNode) => {
     const relativeX = hostXNode.sub(uniforms.localSampleAnchorHostX);
     const relativeZ = hostZNode.sub(uniforms.localSampleAnchorHostZ);
@@ -444,6 +510,7 @@ export function createUnifiedFoamField(
     sampleSources: sourceSample,
     sampleLocalSurface: localSurfaceSample,
     sampleSourcesAtFieldUv: sourceFieldUvSample,
+    sampleHeroBreakerFoamAtFieldUv: heroBreakerFieldUvSample,
     runtimeStateSink,
     synchronize(
       renderer: Renderer,
@@ -496,6 +563,9 @@ export function createUnifiedFoamField(
             appliedState.interaction,
             interactionGeometryValues,
             interactionTimingValues,
+            heroBreakerGeometryValues,
+            heroBreakerTimingValues,
+            heroBreakerArtValues,
           );
           writeLocalAnchorUniforms(
             uniforms,
@@ -654,6 +724,9 @@ export function createUnifiedFoamField(
           interaction,
           interactionGeometryValues,
           interactionTimingValues,
+          heroBreakerGeometryValues,
+          heroBreakerTimingValues,
+          heroBreakerArtValues,
         );
         writeLocalAnchorUniforms(uniforms, liveSnapshot, liveAnchor, undefined);
 
@@ -898,10 +971,14 @@ function createLocalFoamTexture(
 function createUnifiedFoamUniforms(
   interactionGeometryValues: Vector4[],
   interactionTimingValues: Vector4[],
+  heroBreakerGeometryValues: Vector4[],
+  heroBreakerTimingValues: Vector4[],
+  heroBreakerArtValues: Vector4[],
 ): UnifiedFoamComputeUniforms {
   return {
     phaseOffset: uniform(0),
     timeSeconds: uniform(0),
+    tick: uniform(0),
     timeScale: uniform(1),
     crestSharpness: uniform(1),
     whitecapAmount: uniform(0),
@@ -922,6 +999,18 @@ function createUnifiedFoamUniforms(
       interactionTimingValues,
       "vec4",
     ).setName("unifiedFoamInteractionTiming"),
+    heroBreakerCount: uniform(0, "int"),
+    heroBreakerGeometry: uniformArray<"vec4">(
+      heroBreakerGeometryValues,
+      "vec4",
+    ).setName("unifiedFoamHeroBreakerGeometry"),
+    heroBreakerTiming: uniformArray<"vec4">(
+      heroBreakerTimingValues,
+      "vec4",
+    ).setName("unifiedFoamHeroBreakerTiming"),
+    heroBreakerArt: uniformArray<"vec4">(heroBreakerArtValues, "vec4").setName(
+      "unifiedFoamHeroBreakerArt",
+    ),
     resetHistory: uniform(1),
     bands: SPECTRAL_BANDS.map((band) => ({
       amplitude: uniform(band.amplitudeMetres),
@@ -1126,14 +1215,14 @@ function createUnifiedFoamKernels(
       travelBand.directionX,
     ).div(resolution);
     const diffused = texture(localStagingTexture, texel.uv)
-      .rg.mul(SPECTRAL_WHITECAP_DIFFUSION_CENTER_WEIGHT)
+      .rgb.mul(SPECTRAL_WHITECAP_DIFFUSION_CENTER_WEIGHT)
       .add(
-        texture(localStagingTexture, texel.uv.add(crossTexel)).rg.mul(
+        texture(localStagingTexture, texel.uv.add(crossTexel)).rgb.mul(
           SPECTRAL_WHITECAP_DIFFUSION_SIDE_WEIGHT,
         ),
       )
       .add(
-        texture(localStagingTexture, texel.uv.sub(crossTexel)).rg.mul(
+        texture(localStagingTexture, texel.uv.sub(crossTexel)).rgb.mul(
           SPECTRAL_WHITECAP_DIFFUSION_SIDE_WEIGHT,
         ),
       );
@@ -1157,11 +1246,15 @@ function createUnifiedFoamKernels(
     );
     const wake = saturatingUnionNode(history.x, generated.x);
     const impact = saturatingUnionNode(history.y, generated.y);
-    const localUnion = saturatingUnionNode(wake, impact);
+    const heroBreaker = saturatingUnionNode(history.z, generated.z);
+    const localUnion = saturatingUnionNode(
+      saturatingUnionNode(wake, impact),
+      heroBreaker,
+    );
     textureStore(
       localFinalTexture,
       texel.coordinate,
-      vec4(wake, impact, localUnion, localUnion),
+      vec4(wake, impact, heroBreaker, localUnion),
     ).toWriteOnly();
   })().compute(resolution * resolution, [WORKGROUP_SIZE]);
   resolveLocal.name = "Real Water unified foam resolve local B to A";
@@ -1192,6 +1285,7 @@ function createLocalGenerationAndSurfaceNode(
   return Fn(() => {
     const wake = float(0).toVar();
     const impact = float(0).toVar();
+    const heroBreaker = float(0).toVar();
     // This is the texture form of local-interaction.ts's analytic correction.
     // Foam and surface output deliberately share the descriptor windows and
     // phases below so the two GPU representations cannot drift independently.
@@ -1422,6 +1516,161 @@ function createLocalGenerationAndSurfaceNode(
         });
       },
     );
+    // TSL form of hero-breaker.ts's authored CPU evaluator. This fixed 8-slot
+    // bank gives deformation, caustics, and dedicated foam one profile source.
+    Loop(
+      {
+        start: 0,
+        end: MAX_ACTIVE_HERO_BREAKERS,
+        type: "int",
+        condition: "<",
+      },
+      ({ i }) => {
+        If(i.lessThan(uniforms.heroBreakerCount), () => {
+          const descriptor = vec4(uniforms.heroBreakerGeometry.element(i));
+          const timing = vec4(uniforms.heroBreakerTiming.element(i));
+          const art = vec4(uniforms.heroBreakerArt.element(i));
+          const directionX = timing.z;
+          const directionZ = timing.w;
+          const dx = localX.sub(descriptor.x);
+          const dz = localZ.sub(descriptor.y);
+          const along = dx.mul(directionX).add(dz.mul(directionZ));
+          const lateral = dx.mul(directionZ).mul(-1).add(dz.mul(directionX));
+          const radius = descriptor.z;
+          const lifetimeTicks = timing.y.max(1);
+          const ageTicks = uniforms.tick.sub(timing.x);
+          const progress = ageTicks.div(lifetimeTicks).clamp(0, 1);
+          const active = step(0, ageTicks).mul(
+            float(1).sub(step(lifetimeTicks, ageTicks)),
+          );
+          const attackT = progress
+            .div(HERO_BREAKER_ATTACK_FRACTION)
+            .clamp(0, 1);
+          const attack = attackT.mul(attackT).mul(float(3).sub(attackT.mul(2)));
+          const attackDerivative = attackT
+            .mul(float(1).sub(attackT))
+            .mul(6 / HERO_BREAKER_ATTACK_FRACTION);
+          const releaseDuration = 1 - HERO_BREAKER_RELEASE_START_FRACTION;
+          const releaseT = progress
+            .sub(HERO_BREAKER_RELEASE_START_FRACTION)
+            .div(releaseDuration)
+            .clamp(0, 1);
+          const release = float(1).sub(
+            releaseT.mul(releaseT).mul(float(3).sub(releaseT.mul(2))),
+          );
+          const releaseDerivative = releaseT
+            .mul(float(1).sub(releaseT))
+            .mul(-6 / releaseDuration);
+          const envelope = attack.mul(release);
+          const envelopeDerivative = attackDerivative
+            .mul(release)
+            .add(attack.mul(releaseDerivative));
+          const lateralWidth = radius.mul(HERO_BREAKER_LATERAL_WIDTH_RADII);
+          const lateralT = abs(lateral).div(lateralWidth);
+          const clampedLateralT = lateralT.clamp(0, 1);
+          const lateralWindow = float(1).sub(
+            clampedLateralT
+              .mul(clampedLateralT)
+              .mul(float(3).sub(clampedLateralT.mul(2))),
+          );
+          const lateralActive = float(1).sub(step(1, lateralT));
+          const lateralSign = step(0, lateral).mul(2).sub(1);
+          const lateralDerivative = lateralT
+            .mul(float(1).sub(lateralT))
+            .mul(-6)
+            .div(lateralWidth)
+            .mul(lateralSign)
+            .mul(lateralActive);
+          const crestCenter = float(
+            HERO_BREAKER_INITIAL_CREST_CENTER_RADII,
+          ).add(progress.mul(HERO_BREAKER_FORWARD_TRAVEL_RADII));
+          const localAlong = along.div(radius).sub(crestCenter);
+          const crestWidth = mix(
+            float(HERO_BREAKER_BACK_WIDTH_RADII),
+            float(HERO_BREAKER_FRONT_WIDTH_RADII),
+            step(0, localAlong),
+          );
+          const crestNormalized = localAlong.div(crestWidth);
+          const crest = exp(crestNormalized.mul(crestNormalized).mul(-0.5));
+          const crestDerivative = localAlong
+            .mul(crest)
+            .mul(-1)
+            .div(crestWidth.mul(crestWidth));
+          const hollowAlong = localAlong.sub(
+            HERO_BREAKER_FORWARD_HOLLOW_CENTER_RADII,
+          );
+          const hollowNormalized = hollowAlong.div(
+            HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII,
+          );
+          const forwardHollow = exp(
+            hollowNormalized.mul(hollowNormalized).mul(-0.5),
+          );
+          const forwardHollowDerivative = hollowAlong
+            .mul(forwardHollow)
+            .mul(-1)
+            .div(
+              HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII *
+                HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII,
+            );
+          const shape = crest.sub(
+            forwardHollow.mul(HERO_BREAKER_FORWARD_HOLLOW_DEPTH),
+          );
+          const shapeDerivative = crestDerivative.sub(
+            forwardHollowDerivative.mul(HERO_BREAKER_FORWARD_HOLLOW_DEPTH),
+          );
+          const amplitudeEnvelope = descriptor.w.mul(envelope);
+          const height = amplitudeEnvelope
+            .mul(lateralWindow)
+            .mul(shape)
+            .mul(lateralActive)
+            .mul(active);
+          const slopeAlong = amplitudeEnvelope
+            .mul(lateralWindow)
+            .mul(shapeDerivative)
+            .div(radius)
+            .mul(lateralActive)
+            .mul(active);
+          const slopeLateral = amplitudeEnvelope
+            .mul(lateralDerivative)
+            .mul(shape)
+            .mul(active);
+          const velocityY = descriptor.w
+            .mul(lateralWindow)
+            .mul(
+              envelopeDerivative
+                .mul(shape)
+                .sub(
+                  envelope
+                    .mul(shapeDerivative)
+                    .mul(HERO_BREAKER_FORWARD_TRAVEL_RADII),
+                ),
+            )
+            .mul(HERO_BREAKER_FIXED_TICKS_PER_SECOND)
+            .div(lifetimeTicks)
+            .mul(lateralActive)
+            .mul(active);
+          surfaceCorrection.x.addAssign(height);
+          surfaceCorrection.y.addAssign(
+            slopeAlong.mul(directionX).sub(slopeLateral.mul(directionZ)),
+          );
+          surfaceCorrection.z.addAssign(
+            slopeAlong.mul(directionZ).add(slopeLateral.mul(directionX)),
+          );
+          surfaceCorrection.w.addAssign(velocityY);
+          const generatedFoam = art.x
+            .clamp(0, 1)
+            .mul(sqrt(envelope))
+            .mul(lateralWindow)
+            .mul(crest.mul(0.72).add(forwardHollow.mul(0.58)).clamp(0, 1))
+            .mul(lateralActive)
+            .mul(active)
+            .clamp(0, 1);
+          heroBreaker.addAssign(
+            generatedFoam.mul(float(1).sub(heroBreaker)).clamp(0, 1),
+          );
+        });
+      },
+    );
     const anchorDistance = length(vec2(localX, localZ));
     const fadeStart =
       INTERACTION_FIELD_RADIUS_METRES - INTERACTION_FIELD_EDGE_FADE_METRES;
@@ -1460,7 +1709,7 @@ function createLocalGenerationAndSurfaceNode(
         surfaceCorrection.w.mul(fieldFade),
       ),
     ).toWriteOnly();
-    return vec2(wake, impact);
+    return vec3(wake, impact, heroBreaker);
   })();
 }
 
@@ -1557,6 +1806,7 @@ function writeSnapshotUniforms(
 ): void {
   uniforms.phaseOffset.value = spectralBandPhaseOffset(snapshot.seed);
   uniforms.timeSeconds.value = snapshot.timeSeconds;
+  uniforms.tick.value = snapshot.tick;
   uniforms.timeScale.value = snapshot.artisticControls.timeScale;
   uniforms.crestSharpness.value = snapshot.artisticControls.crestSharpness;
   uniforms.whitecapAmount.value = snapshot.artisticControls.whitecapAmount;
@@ -1591,20 +1841,50 @@ function writeInteractionUniforms(
   interaction: LocalInteractionRenderSnapshot,
   geometryValues: Vector4[],
   timingValues: Vector4[],
+  heroBreakerGeometryValues: Vector4[],
+  heroBreakerTimingValues: Vector4[],
+  heroBreakerArtValues: Vector4[],
 ): void {
-  const count = Math.min(interaction.impacts.length, MAX_ACTIVE_DISTURBANCES);
-  uniforms.interactionCount.value = count;
-  for (let index = 0; index < MAX_ACTIVE_DISTURBANCES; index += 1) {
-    const geometry = geometryValues[index];
-    const timing = timingValues[index];
-    if (geometry === undefined || timing === undefined) {
+  const sourceCount = Math.min(
+    interaction.impacts.length,
+    MAX_ACTIVE_DISTURBANCES,
+  );
+  let count = 0;
+  let heroBreakerCount = 0;
+  for (let index = 0; index < sourceCount; index += 1) {
+    const source = interaction.impacts[index];
+    if (source === undefined) {
       continue;
     }
-    const source = index < count ? interaction.impacts[index] : undefined;
-    if (source === undefined) {
-      geometry.set(0, 0, MIN_RADIAL_IMPACT_RADIUS_METRES, 0);
-      timing.set(0, LOCAL_INTERACTION_KIND_RADIAL_IMPACT, 0, 0);
+    if (source.kind === "hero-breaker") {
+      if (heroBreakerCount >= MAX_ACTIVE_HERO_BREAKERS) {
+        throw new Error("Unified foam Hero Breaker capacity was exceeded.");
+      }
+      heroBreakerGeometryValues[heroBreakerCount]?.set(
+        source.x - interaction.anchorX,
+        source.z - interaction.anchorZ,
+        source.radius,
+        source.amplitude,
+      );
+      heroBreakerTimingValues[heroBreakerCount]?.set(
+        source.startTick - (interaction.revision === -1 ? 1 : 0),
+        source.lifetimeTicks,
+        source.directionX,
+        source.directionZ,
+      );
+      heroBreakerArtValues[heroBreakerCount]?.set(
+        source.foamAmount,
+        source.sprayAmount,
+        0,
+        0,
+      );
+      heroBreakerCount += 1;
       continue;
+    }
+    const geometry = geometryValues[count];
+    const timing = timingValues[count];
+    if (geometry === undefined || timing === undefined) {
+      throw new Error("Unified foam interaction scratch is undersized.");
     }
     // Both operands are JavaScript doubles. Only the small anchor-relative
     // result crosses the uniform boundary.
@@ -1616,15 +1896,14 @@ function writeInteractionUniforms(
     );
     timing.set(
       source.startTimeSeconds,
-      source.kind === "radial-impact"
-        ? LOCAL_INTERACTION_KIND_RADIAL_IMPACT
-        : source.kind === "directional-wake"
-          ? LOCAL_INTERACTION_KIND_DIRECTIONAL_WAKE
-          : LOCAL_INTERACTION_KIND_PROPELLER_WASH,
+      localInteractionKindValue(source.kind),
       source.directionX,
       source.directionZ,
     );
+    count += 1;
   }
+  uniforms.interactionCount.value = count;
+  uniforms.heroBreakerCount.value = heroBreakerCount;
 }
 
 function writeLocalAnchorUniforms(
@@ -1700,5 +1979,20 @@ function wrapWorldCoordinate(value: number, period: number): number {
 function assertNotDisposed(disposed: boolean): void {
   if (disposed) {
     throw new Error("The spectral whitecap field has been disposed.");
+  }
+}
+
+function localInteractionKindValue(
+  kind: "radial-impact" | "directional-wake" | "propeller-wash",
+): number {
+  switch (kind) {
+    case "radial-impact":
+      return LOCAL_INTERACTION_KIND_RADIAL_IMPACT;
+    case "directional-wake":
+      return LOCAL_INTERACTION_KIND_DIRECTIONAL_WAKE;
+    case "propeller-wash":
+      return LOCAL_INTERACTION_KIND_PROPELLER_WASH;
+    default:
+      throw new Error("Unified foam received an unknown interaction kind.");
   }
 }

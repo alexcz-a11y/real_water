@@ -32,6 +32,7 @@ import {
   type DiagnosticsCapture,
   type DiagnosticsCaptureName,
   type DiagnosticsFoamSourceIdentityCapture,
+  type DiagnosticsHeroBreakerFoamCapture,
   type DiagnosticsMotionVectorCapture,
   type DiagnosticsOpticalScalarCapture,
   type DiagnosticsSsrRoughnessCapture,
@@ -668,6 +669,7 @@ export async function compileAndPrimePreparedWaterPresentation(
     true,
     true,
     true,
+    true,
   );
   renderHistoryRejection(renderer, resources);
   resources.resetUniform.value = 0;
@@ -698,6 +700,7 @@ export function renderHiddenStabilizationFrames(
         scene,
         camera,
         resources,
+        false,
         false,
         false,
         false,
@@ -733,6 +736,7 @@ export async function renderMainCameraGuard(
     scene,
     camera,
     resources,
+    false,
     false,
     false,
     false,
@@ -815,6 +819,8 @@ export function createPresentationRouteBridge(
       const captureFoamSources = accepted.outputs.includes(
         "foam-source-identity",
       );
+      const captureHeroBreakerFoam =
+        accepted.outputs.includes("hero-breaker-foam");
       renderPreparedPresentationColor(
         renderer,
         scene,
@@ -824,6 +830,7 @@ export function createPresentationRouteBridge(
         captureFoamSources,
         accepted.outputs.some(isUnderwaterVolumeCaptureName),
         accepted.outputs.includes("underwater-caustics"),
+        captureHeroBreakerFoam,
       );
       if (accepted.outputs.includes("current-color")) {
         renderCurrentColorConversion(renderer, resources);
@@ -1151,6 +1158,7 @@ function renderPreparedPresentationColor(
   captureFoamSources: boolean,
   captureUnderwaterDiagnostics: boolean,
   captureUnderwaterCaustics: boolean,
+  captureHeroBreakerFoam: boolean,
 ): void {
   renderTemporalFrame(
     renderer,
@@ -1161,6 +1169,7 @@ function renderPreparedPresentationColor(
     captureFoamSources,
     captureUnderwaterDiagnostics,
     captureUnderwaterCaustics,
+    captureHeroBreakerFoam,
   );
   resources.postTraaComposition.render();
 }
@@ -1174,6 +1183,7 @@ function renderTemporalFrame(
   captureFoamSources: boolean,
   captureUnderwaterDiagnostics: boolean,
   captureUnderwaterCaustics: boolean,
+  captureHeroBreakerFoam: boolean,
 ): void {
   const actual = readDrawingBufferSize(renderer);
   if (actual.width !== resources.width || actual.height !== resources.height) {
@@ -1202,12 +1212,14 @@ function renderTemporalFrame(
       renderer.setRenderTarget(resources.currentColorTarget);
       resources.ssr.sceneTriggerPipeline.render();
       resources.counters.sceneRenderCount += 1;
-      if (captureWhitecapStages && captureFoamSources) {
-        resources.foamDiagnostics.renderAll(renderer, camera);
-      } else if (captureWhitecapStages) {
+      if (captureWhitecapStages) {
         resources.foamDiagnostics.renderStages(renderer, camera);
-      } else if (captureFoamSources) {
+      }
+      if (captureFoamSources) {
         resources.foamDiagnostics.renderSources(renderer);
+      }
+      if (captureHeroBreakerFoam) {
+        resources.foamDiagnostics.renderHeroBreakerFoam(renderer);
       }
       renderCurrentFrameSsr(renderer, resources.ssr);
       const historyHostState = captureHostState(renderer, scene, camera);
@@ -1398,6 +1410,11 @@ async function probeNamedOutputRoutes(
     renderer,
     resources,
     resources.foamDiagnostics.sourceIdentityTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.foamDiagnostics.heroBreakerFoamTarget,
   );
 }
 
@@ -1652,7 +1669,7 @@ async function readNamedOutput(
     case "underwater-caustics":
       return readUnderwaterCausticsCapture(renderer, resources);
     case "underwater-particles":
-      return readT22ScalarCapture(
+      return readNormalizedScalarCapture(
         renderer,
         resources,
         name,
@@ -1660,7 +1677,7 @@ async function readNamedOutput(
         3,
       );
     case "underwater-bubbles":
-      return readT22ScalarCapture(
+      return readNormalizedScalarCapture(
         renderer,
         resources,
         name,
@@ -1668,7 +1685,7 @@ async function readNamedOutput(
         3,
       );
     case "lens-wetness":
-      return readT22ScalarCapture(
+      return readNormalizedScalarCapture(
         renderer,
         resources,
         name,
@@ -1679,6 +1696,14 @@ async function readNamedOutput(
     case "secondary-particle-overdraw":
       throw new Error(
         "The packed secondary-particle diagnostic route has not been prepared.",
+      );
+    case "hero-breaker-foam":
+      return readNormalizedScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.foamDiagnostics.heroBreakerFoamTarget,
+        0,
       );
     case "planar-color":
       return readPlanarColorCapture(renderer, resources);
@@ -2021,18 +2046,19 @@ async function readUnderwaterCausticsCapture(
   });
 }
 
-type T22ScalarCapture =
+type NormalizedScalarCapture =
   | DiagnosticsUnderwaterParticlesCapture
   | DiagnosticsUnderwaterBubblesCapture
-  | DiagnosticsLensWetnessCapture;
+  | DiagnosticsLensWetnessCapture
+  | DiagnosticsHeroBreakerFoamCapture;
 
-async function readT22ScalarCapture(
+async function readNormalizedScalarCapture(
   renderer: Renderer,
   resources: PreparedWaterPresentationResources,
-  name: T22ScalarCapture["name"],
+  name: NormalizedScalarCapture["name"],
   target: RenderTarget,
   channel: 0 | 3,
-): Promise<T22ScalarCapture> {
+): Promise<NormalizedScalarCapture> {
   const raw = await renderer.readRenderTargetPixelsAsync(
     target,
     0,
@@ -2076,6 +2102,12 @@ async function readT22ScalarCapture(
         format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
       });
     case "lens-wetness":
+      return Object.freeze({
+        ...base,
+        name,
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+      });
+    case "hero-breaker-foam":
       return Object.freeze({
         ...base,
         name,
