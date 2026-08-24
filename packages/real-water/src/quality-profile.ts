@@ -347,15 +347,10 @@ export interface QualityProfileSecondaryParticles {
  *
  * @public
  */
-export type QualityProfilePostTraaStage =
-  | {
-      readonly id: "secondary-particles";
-      readonly after: "traa";
-    }
-  | {
-      readonly id: "lens-wetness";
-      readonly after: "secondary-particles";
-    };
+export interface QualityProfilePostTraaStage {
+  readonly id: "secondary-particles" | "lens-wetness";
+  readonly after: "traa" | "secondary-particles";
+}
 
 /**
  * Bounded output-resolution lens wetness driven only by emergence impulses.
@@ -387,11 +382,14 @@ export interface QualityProfilePostTraaComposition {
   readonly finalColorFormat: "rgba8unorm-srgb";
   readonly samples: 0;
   readonly stages: readonly [
-    Extract<
-      QualityProfilePostTraaStage,
-      { readonly id: "secondary-particles" }
-    >,
-    Extract<QualityProfilePostTraaStage, { readonly id: "lens-wetness" }>,
+    QualityProfilePostTraaStage & {
+      readonly id: "secondary-particles";
+      readonly after: "traa";
+    },
+    QualityProfilePostTraaStage & {
+      readonly id: "lens-wetness";
+      readonly after: "secondary-particles";
+    },
   ];
   readonly lensWetness: QualityProfileLensWetness;
 }

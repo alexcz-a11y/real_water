@@ -1211,23 +1211,24 @@ export interface QualityProfilePostTraaComposition {
     readonly samples: 0;
     // (undocumented)
     readonly stages: readonly [
-    Extract<QualityProfilePostTraaStage, {
+    QualityProfilePostTraaStage & {
         readonly id: "secondary-particles";
-    }>,
-    Extract<QualityProfilePostTraaStage, {
+        readonly after: "traa";
+    },
+    QualityProfilePostTraaStage & {
         readonly id: "lens-wetness";
-    }>
+        readonly after: "secondary-particles";
+    }
     ];
 }
 
 // @public
-export type QualityProfilePostTraaStage = {
-    readonly id: "secondary-particles";
-    readonly after: "traa";
-} | {
-    readonly id: "lens-wetness";
-    readonly after: "secondary-particles";
-};
+export interface QualityProfilePostTraaStage {
+    // (undocumented)
+    readonly after: "traa" | "secondary-particles";
+    // (undocumented)
+    readonly id: "secondary-particles" | "lens-wetness";
+}
 
 // @public
 export interface QualityProfileReflection {
