@@ -35,6 +35,8 @@ jobs:
           fi
       - name: Check declaration labels distinguish sibling fingerprints
         run: node scripts/check-declaration-labels.mjs
+      - name: Check diagnostics capture count sites
+        run: node scripts/check-capture-count-sites.mjs
       - run: pnpm build
       - id: test
         run: pnpm test
