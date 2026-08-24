@@ -134,7 +134,7 @@ Terms §2.3 attaches a licence that runs the other way, and its scope depends on
 > training its artificial intelligence models. If you are using a Paid Account, you may opt-out of
 > the use of Your Content for model training by selecting the opt-out option on your Account page.
 
-### Two facts this record cannot settle
+### Facts this record cannot settle
 
 1. ~~The account tier of the generating account is not recorded here.~~ **Settled 2026-08-24: the
    generating account was on the Reve **Free plan** at the time of this pack, read from the account
@@ -153,7 +153,8 @@ Terms §2.3 attaches a licence that runs the other way, and its scope depends on
    Services". Whether an agent operating the published UI falls inside that phrase is not settled
    by the text, and §1.4 addresses agents acting on a user's behalf without resolving it either way.
 
-Both are recorded as open facts, not as findings.
+Item 1 is closed; item 2 remains an open fact, not a finding. The heading carries no count, so
+closing the rest will not date it again.
 
 ### Owner's determination
 
