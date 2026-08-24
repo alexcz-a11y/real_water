@@ -140,13 +140,83 @@ for (const [pattern, label] of qaDriverBans) {
   }
 }
 
+const controlPresenters = [
+  {
+    path: resolve("apps/reference-experience/src/artist-control-presenter.ts"),
+    allowedModules: new Set(["./reference-control-model.js"]),
+  },
+  {
+    path: resolve(
+      "apps/reference-experience/src/engineering-control-presenter.ts",
+    ),
+    allowedModules: new Set(["./reference-control-model.js", "tweakpane"]),
+  },
+];
+const controlPresenterBans = [
+  [/\bHostPresentationRoute\b/u, "HostPresentationRoute seam"],
+  [/\breadHostPresentationRoute\b/u, "readHostPresentationRoute seam"],
+  [/\breadHostDiagnosticsRoute\b/u, "readHostDiagnosticsRoute seam"],
+  [/\b(?:WebGPU|WebGL)?Renderer\b/u, "renderer ownership"],
+  [/\brenderer\b/u, "renderer ownership"],
+  [/\bScene\b/u, "scene ownership"],
+  [/\bscene\b/u, "scene ownership"],
+  [/\b(?:WebGPU|WebGL)?RenderTarget\b/u, "render-target ownership"],
+  [/\bRenderPipeline\b/u, "render-pipeline ownership"],
+];
+let checkedControlPresenterCount = 0;
+for (const presenter of controlPresenters) {
+  const source = await readOptionalSource(presenter.path);
+  if (source === undefined) {
+    continue;
+  }
+  checkedControlPresenterCount += 1;
+
+  for (const specifier of moduleSpecifiers(source)) {
+    if (!presenter.allowedModules.has(specifier)) {
+      failures.push(
+        `${presenter.path}: forbidden presenter import ${JSON.stringify(specifier)}`,
+      );
+    }
+  }
+  for (const [pattern, label] of controlPresenterBans) {
+    if (pattern.test(source)) {
+      failures.push(`${presenter.path}: forbidden ${label}`);
+    }
+  }
+}
+
 if (failures.length > 0) {
   throw new Error(failures.join("\n"));
 }
 
 console.log(
-  "Core boundary check passed: no UI, network, persistence, framework, physics-engine, hidden Three ownership, TSL node package seam, or QA scene/TRAA ownership.",
+  `Core boundary check passed: no UI, network, persistence, framework, physics-engine, hidden Three ownership, TSL node package seam, QA scene/TRAA ownership, or control-presenter rendering ownership; checked ${checkedControlPresenterCount} control presenters.`,
 );
+
+async function readOptionalSource(path) {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+function moduleSpecifiers(source) {
+  const specifiers = [];
+  const staticModules =
+    /\b(?:import|export)\s+(?:type\s+)?(?:[\w*{},\s]+\s+from\s+)?["']([^"']+)["']/gu;
+  const loadedModules = /\b(?:import|require)\s*\(\s*["']([^"']+)["']/gu;
+
+  for (const pattern of [staticModules, loadedModules]) {
+    for (const match of source.matchAll(pattern)) {
+      specifiers.push(match[1]);
+    }
+  }
+  return specifiers;
+}
 
 async function sourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

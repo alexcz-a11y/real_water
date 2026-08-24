@@ -25,11 +25,12 @@ export const PREWARM_MANIFEST_SCHEMA = "real-water/prewarm" as const;
 /**
  * The only Prewarm Manifest version accepted by this release.
  *
- * Version 11 adds the bounded art-directed Hero Breaker to version 10's
+ * Version 12 comes from #30's complete prepared Storm Front route. Version 11
+ * added the bounded art-directed Hero Breaker to version 10's
  * complete T22 underwater tracer: prewarmed deformation, dedicated foam,
- * shared-pool spray, and diagnostics. There is no migration rung: the only consumer
- * is an equality gate that rejects any other value, so the number is an
- * identity stamp for a declaration set, not a payload that can be carried
+ * shared-pool spray, and diagnostics. There is no migration rung: the only
+ * consumer is an equality gate that rejects any other value, so the number is
+ * an identity stamp for a declaration set, not a payload that can be carried
  * forward.
  *
  * @public

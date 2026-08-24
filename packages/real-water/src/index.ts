@@ -81,8 +81,14 @@ export type {
   StartupPhase,
 } from "./errors.js";
 
-export { createStaticHostSimulationAdapter } from "./runtime.js";
+export {
+  ARTISTIC_CONTROL_DESCRIPTORS,
+  ARTISTIC_CONTROL_KEYS,
+  createStaticHostSimulationAdapter,
+} from "./runtime.js";
 export type {
+  ArtisticControlDescriptor,
+  ArtisticControlGroup,
   ArtisticControls,
   ArtisticControlTransition,
   ArtisticControlUpdateOptions,

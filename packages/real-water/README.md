@@ -9,6 +9,12 @@ migration codec. It also exposes the Startup and ready Runtime Interfaces,
 normalized Core WebGPU and Gameplay Query capabilities, structured errors, and
 Memory and Three r185 Host Adapters.
 
+`ARTISTIC_CONTROL_DESCRIPTORS` is the UI-neutral source for the complete hot
+control order, perceptual labels, descriptions, groups, and accepted ranges.
+Hosts still submit one complete `ArtisticControls` snapshot through the ready
+Runtime Interface; the descriptor data does not add a UI dependency or turn a
+structural Quality Profile value into a live control.
+
 `importPresetJson(...)` recognizes all four schema discriminators, validates
 current data, and migrates only exact historical Water, Environment, Quality,
 and Showcase snapshots. Invalid, unknown, unsupported, and future JSON is

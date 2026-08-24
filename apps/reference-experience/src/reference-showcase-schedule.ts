@@ -63,9 +63,12 @@ export interface ReferenceShowcaseCamera {
   setCamera(keyframe: ShowcaseCameraKeyframe): void;
 }
 
+export type ReferenceShowcaseLookControlOwner = "showcase" | "manual";
+
 export interface ReferenceShowcaseSchedule {
   bindLease(lease: ReferenceShowcaseRuntime): void;
   afterFixedStep(state: HostSimulationState): void;
+  setLookControlOwner(owner: ReferenceShowcaseLookControlOwner): void;
   reset(): void;
 }
 
@@ -118,6 +121,7 @@ export function createReferenceShowcaseSchedule(
   let lease: ReferenceShowcaseRuntime | null = null;
   let lastFixedTick = 0;
   let simulationResetRevision: number | undefined;
+  let lookControlOwner: ReferenceShowcaseLookControlOwner = "showcase";
 
   const resetTraversal = (): void => {
     lastFixedTick = 0;
@@ -125,8 +129,14 @@ export function createReferenceShowcaseSchedule(
   };
 
   const applyBaseLook = (): void => {
+    if (lookControlOwner !== "showcase") {
+      return;
+    }
     options.environment.setEnvironmentState(referenceEnvironment);
     lease?.updateArtisticControls(swellControls);
+  };
+
+  const applyFirstCamera = (): void => {
     const firstCamera = showcase.cameraTimeline[0];
     if (firstCamera !== undefined) {
       options.camera.setCamera(firstCamera);
@@ -134,7 +144,7 @@ export function createReferenceShowcaseSchedule(
   };
 
   const applyStormLook = (tick: number): void => {
-    if (stormEvent === undefined) {
+    if (lookControlOwner !== "showcase" || stormEvent === undefined) {
       return;
     }
     const traversalTick = positiveModulo(tick, showcase.durationTicks);
@@ -146,11 +156,25 @@ export function createReferenceShowcaseSchedule(
     );
   };
 
+  const applyCurrentShowcaseLook = (): void => {
+    if (lease === null || lookControlOwner !== "showcase") {
+      return;
+    }
+    const traversalTick = positiveModulo(lastFixedTick, showcase.durationTicks);
+    if (stormEvent !== undefined && traversalTick >= stormEvent.tick) {
+      lease.updateArtisticControls(stormControls);
+      applyStormLook(lastFixedTick);
+      return;
+    }
+    applyBaseLook();
+  };
+
   return Object.freeze({
     bindLease(nextLease: ReferenceShowcaseRuntime): void {
       lease = nextLease;
       resetTraversal();
       applyBaseLook();
+      applyFirstCamera();
     },
     afterFixedStep(state: HostSimulationState): void {
       assertFixedStepState(state);
@@ -165,6 +189,7 @@ export function createReferenceShowcaseSchedule(
       ) {
         resetTraversal();
         applyBaseLook();
+        applyFirstCamera();
       }
       simulationResetRevision = state.simulationResetRevision;
       if (state.tick < lastFixedTick) {
@@ -195,7 +220,9 @@ export function createReferenceShowcaseSchedule(
         ) {
           submitHeroBreaker(lease, state, batch);
         } else if (event.id === stormEvent?.id) {
-          lease.updateArtisticControls(stormControls);
+          if (lookControlOwner === "showcase") {
+            lease.updateArtisticControls(stormControls);
+          }
           applyStormLook(event.absoluteTick);
         }
       }
@@ -205,9 +232,19 @@ export function createReferenceShowcaseSchedule(
       }
       lastFixedTick = state.tick;
     },
+    setLookControlOwner(owner: ReferenceShowcaseLookControlOwner): void {
+      if (owner === lookControlOwner) {
+        return;
+      }
+      lookControlOwner = owner;
+      if (owner === "showcase") {
+        applyCurrentShowcaseLook();
+      }
+    },
     reset(): void {
       resetTraversal();
       applyBaseLook();
+      applyFirstCamera();
     },
   });
 }

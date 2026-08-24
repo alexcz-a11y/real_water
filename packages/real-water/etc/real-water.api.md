@@ -5,6 +5,26 @@
 ```ts
 
 // @public
+export const ARTISTIC_CONTROL_DESCRIPTORS: readonly ArtisticControlDescriptor[];
+
+// @public
+export const ARTISTIC_CONTROL_KEYS: readonly (keyof ArtisticControls)[];
+
+// @public
+export interface ArtisticControlDescriptor {
+    readonly description: string;
+    readonly group: ArtisticControlGroup;
+    readonly key: keyof ArtisticControls;
+    readonly label: string;
+    readonly max: number;
+    readonly min: number;
+    readonly step: number;
+}
+
+// @public
+export type ArtisticControlGroup = "sea-character" | "surface-optics" | "whitewater" | "underwater";
+
+// @public
 export interface ArtisticControls {
     readonly choppiness: number;
     readonly crestGlow: number;

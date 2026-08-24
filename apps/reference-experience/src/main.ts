@@ -33,6 +33,12 @@ import {
 import type * as QaHarnessModuleContract from "./qa-harness.js";
 import { createLocalPresetLibrary } from "./local-preset-library.js";
 import {
+  createReferenceControlModel,
+  type ReferenceControlBinding,
+  type ReferenceControlModel,
+} from "./reference-control-model.js";
+import { createReferenceControlPresenters } from "./reference-control-presenters.js";
+import {
   createReferenceHostPresentationController,
   type ReferenceHostPresentationController,
 } from "./reference-presentation-controller.js";
@@ -43,10 +49,15 @@ import {
   createReferenceProxyVessel,
   type ReferenceProxyVessel,
 } from "./reference-proxy-vessel.js";
-import { createReferenceEnvironmentAdapter } from "./reference-optical-inputs.js";
+import {
+  createReferenceEnvironmentAdapter,
+  type ReferenceEnvironmentAdapter,
+} from "./reference-optical-inputs.js";
 import {
   startReferenceExperience,
   type ReferenceHostAttempt,
+  type ReferenceExperienceSession,
+  type ReadyStageDecoration,
 } from "./start-reference-experience.js";
 
 const mount = document.querySelector("#app");
@@ -58,20 +69,38 @@ if (mount === null) {
 const parameters = new URLSearchParams(window.location.search);
 const qaHarnessModule =
   import.meta.env.MODE === "test" ? await import("./qa-harness.js") : null;
+const referenceSessionReference: {
+  current: ReferenceExperienceSession | null;
+} = { current: null };
+const referenceControlModel = createReferenceControlModel({
+  applyQualityProfile: (profile) => {
+    const session = referenceSessionReference.current;
+    if (session === null) {
+      throw new Error("The Reference Experience session is not available.");
+    }
+    return session.applyQualityProfile(profile);
+  },
+});
 const presentationFailureSink: {
   report(cause: unknown): void;
 } = {
   report() {},
 };
-const hostSetup = createHostSetup(parameters, qaHarnessModule, (cause) => {
-  presentationFailureSink.report(cause);
-});
+const hostSetup = createHostSetup(
+  parameters,
+  qaHarnessModule,
+  referenceControlModel,
+  (cause) => {
+    presentationFailureSink.report(cause);
+  },
+);
 const referenceSession = startReferenceExperience(mount, {
   createHostAttempt: hostSetup.createHostAttempt,
   initialDrawingBuffer: readPhysicalDrawingBuffer(),
   presetLibrary: createLocalPresetLibrary(),
   revealDelayFrames: readRevealFrames(parameters, qaHarnessModule !== null),
 });
+referenceSessionReference.current = referenceSession;
 presentationFailureSink.report = (cause) => {
   void referenceSession.reportPresentationFailure(cause);
 };
@@ -117,7 +146,12 @@ const session = Object.freeze({
       window.removeEventListener("resize", handleViewportResize);
       document.removeEventListener("freeze", markLifecycleSuspension);
       document.removeEventListener("resume", recoverFromLifecycleSuspension);
-      await referenceSession.dispose();
+      try {
+        await referenceSession.dispose();
+      } finally {
+        referenceSessionReference.current = null;
+        referenceControlModel.dispose();
+      }
     })();
     return disposal;
   },
@@ -161,6 +195,7 @@ interface ReferenceHostSetup {
 function createHostSetup(
   parameters: URLSearchParams,
   qaModule: QaHarnessModule | null,
+  controlModel: ReferenceControlModel,
   onPresentationError?: (cause: unknown) => void,
 ): ReferenceHostSetup {
   if (
@@ -187,14 +222,22 @@ function createHostSetup(
               }
             : scenario;
         preparationAttempt += 1;
+        const environment = createReferenceEnvironmentAdapter();
         const control = createControllableMemoryHost(
           qaModule,
           attemptScenario,
           stepDelayMs,
+          environment,
         );
         activeControl = control;
         return {
           host: control.host,
+          decorateReadyStage: (stage, lease) =>
+            bindReferenceControlStage(stage, controlModel, {
+              lease,
+              environment,
+              claimManualLook() {},
+            }),
           dispose: () => {
             if (activeControl === control) {
               activeControl = null;
@@ -219,6 +262,7 @@ function createHostSetup(
         parameters,
         parameters.get("qa") === "1" ? qaModule : null,
         drawingBuffer,
+        controlModel,
         onPresentationError,
       );
       activeFrameSource = created.frameSource;
@@ -248,11 +292,12 @@ function createControllableMemoryHost(
   qaModule: QaHarnessModule,
   scenario: MemoryHostScenario,
   stepDelayMs: number,
+  environment: ReferenceEnvironmentAdapter,
 ): MemoryDeviceLossControl {
   const base = qaModule.createQaMemoryHostLifecycleAdapter({
     scenario,
     simulation: createStaticHostSimulationAdapter(),
-    environment: createReferenceEnvironmentAdapter(),
+    environment,
     presentation: createStaticHostPresentationAdapter(),
     stepDelayMs,
   });
@@ -309,6 +354,7 @@ function createThreeReferenceHostAttempt(
   parameters: URLSearchParams,
   qaModule: QaHarnessModule | null,
   drawingBuffer: PrewarmDrawingBuffer,
+  controlModel: ReferenceControlModel,
   onPresentationError?: (cause: unknown) => void,
 ): CreatedThreeReferenceHostAttempt {
   const renderer = new WebGPURenderer({
@@ -464,6 +510,17 @@ function createThreeReferenceHostAttempt(
         referencePresentation?.start();
         return stage;
       },
+      decorateReadyStage: (stage: HTMLElement, lease: RealWaterLease) =>
+        bindReferenceControlStage(stage, controlModel, {
+          lease,
+          environment,
+          claimManualLook: () => {
+            referenceShowcaseSchedule?.setLookControlOwner("manual");
+          },
+          ...(referencePresentation === undefined
+            ? {}
+            : { diagnostics: referencePresentation }),
+        }),
       dispose: () => {
         if (!disposed) {
           disposed = true;
@@ -476,6 +533,32 @@ function createThreeReferenceHostAttempt(
           }
         }
       },
+    },
+  });
+}
+
+function bindReferenceControlStage(
+  stage: HTMLElement,
+  model: ReferenceControlModel,
+  binding: ReferenceControlBinding,
+): ReadyStageDecoration {
+  model.bind(binding);
+  let presenters: ReturnType<typeof createReferenceControlPresenters>;
+  try {
+    presenters = createReferenceControlPresenters(stage, model);
+  } catch (cause) {
+    model.unbind(binding.lease);
+    throw cause;
+  }
+  let disposed = false;
+  return Object.freeze({
+    dispose(): void {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      presenters.dispose();
+      model.unbind(binding.lease);
     },
   });
 }
@@ -503,7 +586,11 @@ function bindReferenceVesselControls(vessel: ReferenceProxyVessel): () => void {
     });
   };
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (!acceptedKeys.has(event.code) || event.repeat) {
+    if (
+      !acceptedKeys.has(event.code) ||
+      event.repeat ||
+      isControlKeyboardTarget(event.target)
+    ) {
       return;
     }
     held.add(event.code);
@@ -523,6 +610,15 @@ function bindReferenceVesselControls(vessel: ReferenceProxyVessel): () => void {
     window.removeEventListener("keyup", onKeyUp);
     held.clear();
   };
+}
+
+function isControlKeyboardTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest(
+      "input, select, textarea, button, [contenteditable='true']",
+    ) !== null
+  );
 }
 
 function createCanvasStage(
