@@ -50,4 +50,10 @@ Real Water defines the language for a reusable real-time open-water experience w
 
 **Prewarm Manifest**: A versioned declaration of every effect state, resource, and conditional path that must be prepared before a Real Water runtime can become ready. _Avoid_: Feature wishlist, runtime discovery
 
+**Declaration Seed**: The authored, arbitrary, permanently stable starting value carried by one Prewarm Manifest declaration, which exists only to keep that declaration distinguishable from another and asserts nothing on its own. _Avoid_: Fingerprint, salt, content hash
+
+**Declaration Fingerprint**: The published identity of one Prewarm Manifest declaration under its structural inputs, composed from that declaration's Declaration Seed. Equal fingerprints do not claim that the code preparing the work is unchanged. _Avoid_: Label hash, content hash, declaration checksum
+
+**Radiance Credential**: The digest of the canonical Host environment radiance bytes that a Host Integration asserts and Real Water verifies without ever reading those bytes back. _Avoid_: Radiance fingerprint, environment fingerprint
+
 **Host Integration**: A third-party Three.js experience that uses Real Water while retaining responsibility for its own composition, lighting, assets, frame budget, and final visual quality. _Avoid_: Reference Experience
