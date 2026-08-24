@@ -1285,7 +1285,7 @@ test("ignores Host scene environment and lights and follows only the Environment
     "underwater-shadow",
     "underwater-caustics",
   ] as const;
-  expect(Object.keys(result.baseline.captures)).toHaveLength(37);
+  expect(Object.keys(result.baseline.captures)).toHaveLength(40);
   expect(
     Object.fromEntries(
       shadingNames.map((name) => [name, result.decoy.captures[name]]),
