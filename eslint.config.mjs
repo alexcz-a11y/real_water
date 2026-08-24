@@ -11,6 +11,8 @@ export default tseslint.config(
       "**/test-results/**",
       "**/*.api.md",
       ".firecrawl/**",
+      // img2threejs reconstruction workspace: generated pipeline artifacts, gitignored.
+      ".img2threejs/**",
     ],
   },
   eslint.configs.recommended,
