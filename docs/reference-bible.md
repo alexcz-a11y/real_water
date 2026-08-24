@@ -234,6 +234,27 @@ Fixed: submerged receiver structure with clear semantic regions; wet concrete an
 biological growth limited to what does not obscure the silhouette. It is a caustic and volume
 receiver, so its upper surfaces must read as broad and continuous.
 
+The semantic regions are fixed here, because "clear semantic regions" is an acceptance criterion of
+`#39` and generation will otherwise invent a different set for every view:
+
+- **A broad flat concrete deck across the top**, unbroken except where the instrument bay opens.
+  This is the caustic receiver: it is the reason the asset exists, and nothing may clutter it.
+- **A recessed graphite instrument bay set into the deck**, its opening a plain rectangle.
+- **Four square concrete legs**, one at each corner, carrying the deck.
+- **A single continuous concrete footing slab** joining the legs at the bottom.
+
+Three parts the structure's function requires and a three-quarter anchor cannot show. Fixed in
+advance under §11:
+
+- **The underside of the deck is a flat, unbroken concrete soffit.** It bounds the shadowed volume
+  between the legs, which is the volume half of "caustic and volume receiver", so it is geometry the
+  reconstruction needs and no top-down or horizon-level view reveals.
+- **The footing slab's outer edge is chamfered and its underside is flat**, so the structure meets
+  the seabed on a definite plane rather than trailing off into it.
+- **Biological growth covers the legs and the footing from the slab upward to roughly deck height,
+  and stops clear of the deck surface.** The deck stays bare concrete, because growth on it would
+  break the continuous receiver surface the asset exists to provide.
+
 ### Basalt sea stack — 250–300 m
 
 Fixed: columnar basalt sea stack; warm grey to graphite; no beach, no shoreline, no vegetation mass.
