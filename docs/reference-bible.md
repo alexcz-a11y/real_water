@@ -260,6 +260,19 @@ advance under §11:
 Fixed: columnar basalt sea stack; warm grey to graphite; no beach, no shoreline, no vegetation mass.
 Distant silhouette and reflection subject only.
 
+Two things the stack's role requires that a three-quarter anchor cannot show, fixed in advance under
+§11:
+
+- **The waterline band is a single horizontal dark stain running unbroken around the whole stack**,
+  darker than the rock above it and free of weed. The stack is a reflection subject, so where its
+  silhouette meets the water is the part the reflection reads from, and it must not vary by view.
+- **The base below the waterline continues straight down as the same columnar rock**, without
+  flaring into a plinth or a skirt of debris. Nothing in this world sees it, but the reconstruction
+  needs the silhouette to terminate somewhere definite.
+
+This is the one asset with no top view: Bible §6 omits it because the stack is a distant silhouette
+and is not reconstructed at part level.
+
 ## 11. Two checklists, each covering a different half
 
 Every asset gets both. Run them at different moments, because they answer opposite questions.
