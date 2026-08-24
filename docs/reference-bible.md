@@ -206,6 +206,21 @@ none of them, which is why they are written here rather than discovered mid-pack
 Fixed: closed marine shipping crate; composite or timber body in warm grey; graphite corner
 hardware and banding; no markings, no stencilled text.
 
+Three parts the crate's function requires and a three-quarter anchor cannot show. Fixed in advance
+under §11:
+
+- **Two graphite skids run the full length of the underside, lifting the body clear of whatever it
+  rests on.** They set the crate's floating attitude and the height of its waterline, so their depth
+  is a modelling input.
+- **A recessed graphite rope becket is set into each end panel.** The crate has to be moved by hand
+  or by line, and the beckets are where a rope or a hook takes hold.
+- **The lid meets the body on a single continuous seam around all four sides, closed by four
+  graphite over-centre clamps, one per side.** The seam is where the geometry splits, so its height
+  on the body is fixed here rather than left to whichever view happens to show it.
+
+Every crate view that includes the underside or an end panel shows these. The three-quarter anchor
+shows the clamps and one becket and hides the skids entirely.
+
 ### Underwater structure — 8 m
 
 Fixed: submerged receiver structure with clear semantic regions; wet concrete and graphite;
