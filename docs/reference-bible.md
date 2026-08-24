@@ -186,9 +186,15 @@ so that generation does not get to invent them:
 - **A graphite ballast keel hangs beneath the hull on a short central shaft, its mass concentrated
   in a weight at the very bottom.** The buoy's righting moment comes from this weight, so its depth
   below the waterline is a modelling input, not decoration.
-- **A single heavy graphite mooring ring is set into the base of the hull, with the first links of
-  an anchor chain shackled through it.** This is the visible mooring hardware named above, seen
-  from below.
+- **A single heavy graphite mooring ring is set into the base of the hull directly below the lifting
+  eye, with the first links of an anchor chain shackled through it, and the chain hangs from that
+  ring alone.** This is the visible mooring hardware named above. Its angular position is fixed here
+  because generation does not keep it consistent: derivative views rotate the lifting eye correctly
+  and leave the ring where it was, and three of eight candidates dropped the ring entirely and let
+  the chain float free. Where an approved view disagrees with this sentence, this sentence wins.
+- **The ballast shaft is rigid and the chain is not.** They are separate parts that both hang below
+  the hull, and generation repeatedly merges them — hanging the ballast weight on the chain, which
+  would leave the buoy with no righting moment at all. The weight is carried by the shaft.
 - **A band of dark green-brown biological growth covers the hull from the waterline downward**,
   ending where the ballast shaft begins.
 
