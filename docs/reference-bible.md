@@ -174,6 +174,21 @@ Their semantics are fixed by the proxy vessel and are not renegotiated by the vi
 Fixed: floating navigation buoy; matte white body with a safety orange band; graphite fittings;
 visible mooring hardware; no light or radar reflector beyond what the anchor shows.
 
+Three parts the buoy's function requires and no floating view can show. Fixed in advance under §11
+so that generation does not get to invent them:
+
+- **A graphite ballast keel hangs beneath the hull on a short central shaft, its mass concentrated
+  in a weight at the very bottom.** The buoy's righting moment comes from this weight, so its depth
+  below the waterline is a modelling input, not decoration.
+- **A single heavy graphite mooring ring is set into the base of the hull, with the first links of
+  an anchor chain shackled through it.** This is the visible mooring hardware named above, seen
+  from below.
+- **A band of dark green-brown biological growth covers the hull from the waterline downward**,
+  ending where the ballast shaft begins.
+
+Every buoy view that includes the underwater body shows all three. The floating anchor view shows
+none of them, which is why they are written here rather than discovered mid-pack.
+
 ### Marine crate — 1.2 m
 
 Fixed: closed marine shipping crate; composite or timber body in warm grey; graphite corner
