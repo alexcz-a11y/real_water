@@ -214,9 +214,16 @@ under §11:
   is a modelling input.
 - **A recessed graphite rope becket is set into each end panel.** The crate has to be moved by hand
   or by line, and the beckets are where a rope or a hook takes hold.
-- **The lid meets the body on a single continuous seam around all four sides, closed by four
-  graphite over-centre clamps, one per side.** The seam is where the geometry splits, so its height
-  on the body is fixed here rather than left to whichever view happens to show it.
+- **The lid meets the body on a single continuous seam around all four sides, closed by six graphite
+  over-centre clamps — two on each long side and one on each end panel.** The seam is where the
+  geometry splits, so its height on the body is fixed here rather than left to whichever view
+  happens to show it. The count was written as four per the original guess and corrected to six from
+  the approved anchor, which distributed them that way in every candidate.
+
+Two graphite bands run over the lid and down both long sides, and the eight corners carry graphite
+castings. The crate carries no painted marking of any colour: safety orange appeared on two anchor
+candidates as stripes and bands, which §2 reserves for markings and signal elements — a cargo crate
+in this world has neither.
 
 Every crate view that includes the underside or an end panel shows these. The three-quarter anchor
 shows the clamps and one becket and hides the skids entirely.
