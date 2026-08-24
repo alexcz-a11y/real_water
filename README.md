@@ -103,39 +103,46 @@ foundation:
 
 - an accessible Loading Experience appears before preparation begins;
 - the canonical minimal-water Prewarm Manifest declares exactly one hundred
-  three work units: a texture, Host equirect environment radiance, viewport
+  twenty-two work units: a texture, Host equirect environment radiance, viewport
   scene color, viewport scene depth, 6-attachment MRT, camera-relative clipmap,
   four spectral bands, two fixed RGBA16F spectral-stage fields and two fixed
-  anchor-local RGBA16F source-history fields, reset/generate/history/advect/
-  diffuse/decay routes, a packed output-resolution whitecap stage target and
-  probe, a double-sided TSL NodeMaterial, a stable camera-medium waterline
-  state, a shared waterline history reset, a deterministic lens-wetness handoff,
-  waterline/underside optical route, planar reflection target/route, environment
-  fallback, planar probe, current-frame SSR raw/blur/composite targets and
-  routes plus probe, dedicated TemporalReproject history and resolve targets,
-  beauty input target/route, resolved diagnostics copy target/route, previous
-  depth/normal, seed/resolve/accumulate/reset/probe routes, reset-velocity
-  target/route, drawing-buffer-exact per-ray underwater volume and on-request
-  packed diagnostics targets, depth-aware composition, deterministic
-  sun-shaft/shadow routes and probe, one Core main scene render plus one
-  auxiliary planar scene render when facing, procedural motion, velocity,
-  independent inverse-linear depth conversion, packed view-normal RGB plus water
-  roughness A, optical factors, a diagnostics-only GPU history-rejection
-  target/route, optical diagnostics A/B, Core final-color and current-color
-  targets, stock TRAA color+depth history, resolve/jitter route, shared
-  no-allocation TRAA+SSR reset route, a render-stage-neutral 131,072-slot
-  secondary-particle pool and four-consumer allocation route, ordered
-  output-resolution post-TRAA resolved/accumulation/final targets plus spray,
-  composite, diagnostics, and completion-probe routes, current-color conversion,
-  thirty-six named diagnostics output routes, eight hidden temporal
-  stabilization frames, named-output completion probes, and main-camera guard
-  frame, plus the local interaction field, its fixed current/previous uniform
-  buffers, and the hidden-executed radial-impact, directional-wake, and Body
-  socket emission routes, plus bounded local-foam reproject/resolve and
-  source-identity target/probe routes, plus the bounded 128-tick foam-state
-  timeline. Version 8 binds the physical drawing buffer into that work plan;
-  Version 9 adds the shared secondary-particle allocation and ordered post-TRAA
-  synthesis route; a viewport change creates a new manifest and lease;
+  anchor-local RGBA16F source-history fields, a current anchor-local RGBA16F
+  height/slope/velocity field for bounded caustic sampling,
+  reset/generate/history/advect/diffuse/decay routes, a packed output-resolution
+  whitecap stage target and probe, a double-sided TSL NodeMaterial, a stable
+  camera-medium waterline state, a shared waterline history reset, a
+  deterministic lens-wetness handoff, waterline/underside optical route, planar
+  reflection target/route, environment fallback, planar probe, current-frame SSR
+  raw/blur/composite targets and routes plus probe, dedicated TemporalReproject
+  history and resolve targets, beauty input target/route, resolved diagnostics
+  copy target/route, previous depth/normal, seed/resolve/accumulate/reset/probe
+  routes, reset-velocity target/route, drawing-buffer-exact per-ray underwater
+  volume and on-request packed diagnostics targets, depth-aware composition,
+  deterministic sun-shaft/shadow routes and probe, prepared-surface caustics on
+  bounded visible receivers with an independent diagnostics target/route/probe,
+  three deterministic shared-pool underwater consumers, depth-aware suspended
+  and bubble accumulation targets, their pre-TRAA composite and completion
+  probe, one Core main scene render plus one auxiliary planar scene render when
+  facing, procedural motion, velocity, independent inverse-linear depth
+  conversion, packed view-normal RGB plus water roughness A, optical factors, a
+  diagnostics-only GPU history-rejection target/route, optical diagnostics A/B,
+  Core final-color and current-color targets, stock TRAA color+depth history,
+  resolve/jitter route, shared no-allocation TRAA+SSR reset route, a
+  render-stage-neutral 131,072-slot secondary-particle pool and four-consumer
+  allocation route, ordered output-resolution post-TRAA
+  resolved/accumulation/intermediate targets plus spray and a bounded
+  emergence-driven lens-wetness final stage with independent diagnostics and
+  completion probes, current-color conversion, forty named diagnostics output
+  routes, eight hidden temporal stabilization frames, named-output completion
+  probes, and main-camera guard frame, plus the local interaction field, its
+  fixed current/previous uniform buffers, and the hidden-executed radial-impact,
+  directional-wake, and Body socket emission routes, plus bounded local-foam
+  reproject/resolve and source-identity target/probe routes, plus the bounded
+  128-tick foam-state timeline. Version 8 binds the physical drawing buffer into
+  that work plan; Version 9 adds the shared secondary-particle allocation and
+  ordered post-TRAA synthesis route; Version 10 adds the complete bounded
+  underwater caustic/tracer and lens-wetness routes; a viewport change creates a
+  new manifest and lease;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
   restores their state after preparation, and never disposes them;
 - progress advances monotonically only when declared manifest work completes;
@@ -170,8 +177,9 @@ foundation:
   camera-cut transition, presents once, and addresses final color, linear depth,
   view-space normal, and named optical intermediate captures including Fresnel,
   metric refraction thickness, scattering, crest transmission, and packed
-  underwater transmittance, scattering, light-shaft, and shadow factors;
-  production builds do not install the QA Harness global;
+  underwater transmittance, scattering, light-shaft, shadow, and independent
+  prepared-surface caustics factors; production builds do not install the QA
+  Harness global;
 - seed, tick, time, origin, and Artistic Control revision feed the prepared
   surface; Playwright verifies repeatability, ocean-scale horizon coverage,
   non-periodic blending, distance LOD, distant-detail stability, origin-shift
@@ -179,13 +187,14 @@ foundation:
   wall-clock sleeps or animation-frame polling;
 - the Reference Experience keeps the canvas hidden through preparation and
   reveals it on the next refresh after readiness;
-- immutable version-9 `minimal` and `minimal-high-detail` Quality Profiles pin
+- immutable version-13 `minimal` and `minimal-high-detail` Quality Profiles pin
   the Native temporal policy (TRAA at render scale 1; TAAU, dynamic resolution,
   frame generation, and MSAA samples off) and the implemented reflection layer
   (Host-adapter environment, drawing-buffer-exact planar, current-frame SSR, and
   dedicated specular TemporalReproject history), the post-SSR/pre-TRAA
-  drawing-buffer-exact underwater volume, and derive distinct manifest hashes
-  and geometry structures;
+  drawing-buffer-exact underwater volume plus bounded visible-receiver caustics,
+  shared-pool underwater tracers, and finite post-TRAA lens wetness, and derive
+  distinct manifest hashes and geometry structures;
 - applying any Quality Profile explicitly, or resuming after a confirmed long
   suspension, conceals the stage and repeats the complete Readiness Gate;
 - ready leases expose long-suspension and device-loss invalidation through the
@@ -205,8 +214,11 @@ origin shifts, shades it with a complete basic optical path, and ships stock
 r185 current-frame SSR, dedicated specular TemporalReproject history, plus TRAA
 on the Core presentation route after ready. Issue #22 and Native certification
 are not complete until the final slice audit. TRAA regression acceptance is
-work-in-progress. It does not claim complete production whitewater or the
-remaining underwater caustic, particle, bubble, and wetness systems.
+work-in-progress. It does not yet claim complete production whitewater or
+browser-certified underwater output. The implemented suspended particles, bubble
+clouds, rising bubbles, and finite lens wetness share #28's global particle
+pressure and ordered post-TRAA infrastructure; their browser evidence remains
+pending the GPU gate.
 
 ## Required toolchain
 

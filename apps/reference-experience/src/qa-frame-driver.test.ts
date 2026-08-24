@@ -139,7 +139,10 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
     postTraaComposition: {
       width: 320,
       height: 180,
-      stages: [{ id: "secondary-particles", after: "traa" }],
+      stages: [
+        { id: "secondary-particles", after: "traa" },
+        { id: "lens-wetness", after: "secondary-particles" },
+      ],
       accumulationFormat: "rgba16float",
       finalColorFormat: "rgba8unorm-srgb",
     },
@@ -183,6 +186,46 @@ function createCapture(
       height,
       origin: "top-left",
       data: new Uint8Array(width * height * 4),
+    };
+  }
+  if (name === "underwater-caustics") {
+    return {
+      name,
+      format: "r32float-underwater-caustics",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "underwater-particles") {
+    return {
+      name,
+      format: "r32float-underwater-particles",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "underwater-bubbles") {
+    return {
+      name,
+      format: "r32float-underwater-bubbles",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "lens-wetness") {
+    return {
+      name,
+      format: "r32float-lens-wetness",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
     };
   }
   if (name === "foam-source-identity") {
@@ -570,9 +613,9 @@ function coreFrame(
 }
 
 describe("QA frame driver Core association", () => {
-  it("publishes a v13 capture-contract mapped to actual Core declaration IDs", () => {
-    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(13);
-    expect(QA_FRAME_PREWARM_MANIFEST.captures).toHaveLength(36);
+  it("publishes a v14 capture-contract mapped to actual Core declaration IDs", () => {
+    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(14);
+    expect(QA_FRAME_PREWARM_MANIFEST.captures).toHaveLength(40);
     expect(QA_FRAME_PREWARM_MANIFEST.coreDeclarations).toEqual(
       QA_TO_CORE_DECLARATION_IDS,
     );
@@ -591,6 +634,36 @@ describe("QA frame driver Core association", () => {
     expect(QA_TO_CORE_DECLARATION_IDS["secondary-particle-overdraw"]).toBe(
       "water-secondary-particle-accumulation-target",
     );
+    expect(QA_TO_CORE_DECLARATION_IDS["underwater-caustics"]).toBe(
+      "water-underwater-caustics-diagnostics-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["underwater-particles"]).toBe(
+      "water-underwater-suspended-particle-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["underwater-bubbles"]).toBe(
+      "water-underwater-bubble-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["lens-wetness"]).toBe(
+      "water-lens-wetness-diagnostics-target",
+    );
+    expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(23, 27)).toEqual([
+      {
+        name: "underwater-caustics",
+        preparedFormat: "rgba16float-underwater-caustics-diagnostics",
+      },
+      {
+        name: "underwater-particles",
+        preparedFormat: "rgba16float-underwater-suspended-particles",
+      },
+      {
+        name: "underwater-bubbles",
+        preparedFormat: "rgba16float-underwater-bubbles",
+      },
+      {
+        name: "lens-wetness",
+        preparedFormat: "rgba16float-lens-wetness-diagnostics",
+      },
+    ]);
     expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(9, 12)).toEqual([
       {
         name: "foam-source-identity",
@@ -642,6 +715,10 @@ describe("QA frame driver Core association", () => {
       "water-optical-diagnostics-b",
       "water-optical-diagnostics-a",
       "water-underwater-diagnostics-target",
+      "water-underwater-caustics-diagnostics-target",
+      "water-underwater-suspended-particle-target",
+      "water-underwater-bubble-target",
+      "water-lens-wetness-diagnostics-target",
       "water-planar-reflection-target",
       "water-ssr-raw-target",
       "water-ssr-composite-target",
@@ -650,8 +727,8 @@ describe("QA frame driver Core association", () => {
       "water-ssr-history-beauty-target",
       "water-secondary-particle-accumulation-target",
     ]);
-    expect(receipt.progress.completedWork).toBe(19);
-    expect(receipt.progress.totalWork).toBe(19);
+    expect(receipt.progress.completedWork).toBe(23);
+    expect(receipt.progress.totalWork).toBe(23);
   });
 
   it("rejects a Core manifest that is missing a mapped declaration", () => {
@@ -697,7 +774,14 @@ describe("QA frame driver Core association", () => {
     });
     const frame = await driver.present({
       advanceFixedTicks: 6,
-      captures: ["final-color", "depth"],
+      captures: [
+        "final-color",
+        "depth",
+        "underwater-caustics",
+        "underwater-particles",
+        "underwater-bubbles",
+        "lens-wetness",
+      ],
     });
     expect(frame.seed).toBe(0x4000_0000);
     expect(frame.tick).toBe(6);
@@ -721,6 +805,25 @@ describe("QA frame driver Core association", () => {
     expect(frame.captures.map((capture) => capture.name)).toEqual([
       "final-color",
       "depth",
+      "underwater-caustics",
+      "underwater-particles",
+      "underwater-bubbles",
+      "lens-wetness",
+    ]);
+    expect(frame.captures[2]).toMatchObject({
+      name: "underwater-caustics",
+      format: "r32float-underwater-caustics",
+    });
+    expect(frame.captures.slice(3)).toMatchObject([
+      {
+        name: "underwater-particles",
+        format: "r32float-underwater-particles",
+      },
+      {
+        name: "underwater-bubbles",
+        format: "r32float-underwater-bubbles",
+      },
+      { name: "lens-wetness", format: "r32float-lens-wetness" },
     ]);
 
     const mismatching = createQaFrameDriver({

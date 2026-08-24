@@ -5,7 +5,7 @@
 ```ts
 
 // @public
-export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "whitecap-generation", "whitecap-history", "whitecap-advection", "whitecap-decay", "foam-source-identity", "waterline", "history-rejection", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "underwater-transmittance", "underwater-scattering", "underwater-light-shafts", "underwater-shadow", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color", "secondary-particle-contribution", "secondary-particle-overdraw"];
+export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "whitecap-generation", "whitecap-history", "whitecap-advection", "whitecap-decay", "foam-source-identity", "waterline", "history-rejection", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "underwater-transmittance", "underwater-scattering", "underwater-light-shafts", "underwater-shadow", "underwater-caustics", "underwater-particles", "underwater-bubbles", "lens-wetness", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color", "secondary-particle-contribution", "secondary-particle-overdraw"];
 
 // @public
 export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
@@ -124,6 +124,26 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
         elementType: "float32";
         components: 1;
     }>;
+    "underwater-caustics": Readonly<{
+        format: "r32float-underwater-caustics";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "underwater-particles": Readonly<{
+        format: "r32float-underwater-particles";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "underwater-bubbles": Readonly<{
+        format: "r32float-underwater-bubbles";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "lens-wetness": Readonly<{
+        format: "r32float-lens-wetness";
+        elementType: "float32";
+        components: 1;
+    }>;
     "planar-color": Readonly<{
         format: "rgba8unorm-srgb";
         elementType: "uint8";
@@ -192,7 +212,7 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
 }>;
 
 // @public
-export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsWhitecapStageCapture | DiagnosticsFoamSourceIdentityCapture | DiagnosticsWaterlineCapture | DiagnosticsHistoryRejectionCapture | DiagnosticsOpticalScalarCapture | DiagnosticsUnderwaterVolumeCapture | DiagnosticsSecondaryParticleContributionCapture | DiagnosticsSecondaryParticleOverdrawCapture;
+export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsWhitecapStageCapture | DiagnosticsFoamSourceIdentityCapture | DiagnosticsWaterlineCapture | DiagnosticsHistoryRejectionCapture | DiagnosticsOpticalScalarCapture | DiagnosticsUnderwaterVolumeCapture | DiagnosticsUnderwaterCausticsCapture | DiagnosticsUnderwaterParticlesCapture | DiagnosticsUnderwaterBubblesCapture | DiagnosticsLensWetnessCapture | DiagnosticsSecondaryParticleContributionCapture | DiagnosticsSecondaryParticleOverdrawCapture;
 
 // @public
 export interface DiagnosticsCaptureBase {
@@ -237,6 +257,13 @@ export interface DiagnosticsHistoryRejectionCapture extends DiagnosticsCaptureBa
     readonly data: Float32Array;
     readonly format: "r32float-history-rejection";
     readonly name: "history-rejection";
+}
+
+// @public
+export interface DiagnosticsLensWetnessCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-lens-wetness";
+    readonly name: "lens-wetness";
 }
 
 // @public
@@ -370,6 +397,27 @@ export interface DiagnosticsSsrRoughnessCapture extends DiagnosticsCaptureBase {
     readonly data: Float32Array;
     readonly format: "r32float-ssr-roughness";
     readonly name: "ssr-roughness";
+}
+
+// @public
+export interface DiagnosticsUnderwaterBubblesCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-underwater-bubbles";
+    readonly name: "underwater-bubbles";
+}
+
+// @public
+export interface DiagnosticsUnderwaterCausticsCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-underwater-caustics";
+    readonly name: "underwater-caustics";
+}
+
+// @public
+export interface DiagnosticsUnderwaterParticlesCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-underwater-particles";
+    readonly name: "underwater-particles";
 }
 
 // @public

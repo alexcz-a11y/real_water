@@ -155,6 +155,15 @@ export type SecondaryParticleContributionQuantizer = (
   projectedAreaPixels: number,
   opacity: number,
   contrast: number,
+  /**
+   * CPU-known visibility at allocation time. Current consumers use output-
+   * frustum visibility here; scene-depth occlusion stays in the GPU render
+   * adapter's soft fusion because the pool has no render timing or readback
+   * dependency. Consequently, a particle hidden entirely by opaque geometry
+   * can still occupy a retained slot. A previous-frame occlusion estimate is a
+   * known one-frame-latency option, deliberately deferred until visual evidence
+   * justifies that extra seam.
+   */
   depthVisibility: number,
 ) => number;
 

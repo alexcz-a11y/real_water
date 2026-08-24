@@ -19,6 +19,7 @@ import {
   readHostDiagnosticsPresentRequest,
   readHostDiagnosticsPresentedFrame,
   readHostDiagnosticsRoute,
+  type DiagnosticsCapture,
   type DiagnosticsSecondaryParticles,
 } from "../src/diagnostics.js";
 
@@ -152,7 +153,7 @@ function createPresentedFrame(): HostPresentedFrame {
 }
 
 describe("real-water/diagnostics", () => {
-  it("publishes the thirty-six frozen CPU capture names and shapes only", () => {
+  it("publishes the forty frozen CPU capture names and shapes only", () => {
     expect(DIAGNOSTICS_CAPTURE_NAMES).toEqual([
       "final-color",
       "current-color",
@@ -177,6 +178,10 @@ describe("real-water/diagnostics", () => {
       "underwater-scattering",
       "underwater-light-shafts",
       "underwater-shadow",
+      "underwater-caustics",
+      "underwater-particles",
+      "underwater-bubbles",
+      "lens-wetness",
       "planar-color",
       "planar-target-alpha",
       "ssr-hit",
@@ -229,6 +234,24 @@ describe("real-water/diagnostics", () => {
     ] as const) {
       expect(DIAGNOSTICS_CAPTURE_SHAPES[name]).toEqual({
         format: "r32float-underwater-volume",
+        elementType: "float32",
+        components: 1,
+      });
+      expect(isDiagnosticsCaptureName(name)).toBe(true);
+    }
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["underwater-caustics"]).toEqual({
+      format: "r32float-underwater-caustics",
+      elementType: "float32",
+      components: 1,
+    });
+    expect(isDiagnosticsCaptureName("underwater-caustics")).toBe(true);
+    for (const [name, format] of [
+      ["underwater-particles", "r32float-underwater-particles"],
+      ["underwater-bubbles", "r32float-underwater-bubbles"],
+      ["lens-wetness", "r32float-lens-wetness"],
+    ] as const) {
+      expect(DIAGNOSTICS_CAPTURE_SHAPES[name]).toEqual({
+        format,
         elementType: "float32",
         components: 1,
       });
@@ -778,5 +801,118 @@ describe("real-water/diagnostics", () => {
         sceneRenderCount: -1,
       }),
     ).toThrowError(/sceneRenderCount/i);
+  });
+
+  it("strictly reads the independent finite normalized T22 effect captures", () => {
+    const receipt = createPresentedFrame();
+    const captures = [
+      {
+        name: "underwater-caustics",
+        format: "r32float-underwater-caustics",
+        width: 2,
+        height: 1,
+        origin: "top-left" as const,
+        data: Float32Array.of(0.25, 1),
+      },
+      {
+        name: "underwater-particles",
+        format: "r32float-underwater-particles",
+        width: 2,
+        height: 1,
+        origin: "top-left" as const,
+        data: Float32Array.of(0.25, 1),
+      },
+      {
+        name: "underwater-bubbles",
+        format: "r32float-underwater-bubbles",
+        width: 2,
+        height: 1,
+        origin: "top-left" as const,
+        data: Float32Array.of(0.25, 1),
+      },
+      {
+        name: "lens-wetness",
+        format: "r32float-lens-wetness",
+        width: 2,
+        height: 1,
+        origin: "top-left" as const,
+        data: Float32Array.of(0.25, 1),
+      },
+    ] as const satisfies readonly DiagnosticsCapture[];
+    for (const capture of captures) {
+      const { name, format } = capture;
+      const valid = {
+        ...receipt,
+        outputs: [capture],
+        compileCount: 1,
+        probeCount: 1,
+        diagnosticReadbackCount: 1,
+        sceneRenderCount: 1,
+        waterline: ABOVE_WATERLINE,
+        secondaryParticles: createSecondaryParticles(),
+        width: 2,
+        height: 1,
+      };
+
+      const accepted = readHostDiagnosticsPresentedFrame(valid);
+      expect(accepted.outputs[0]).toMatchObject({
+        name,
+        format,
+        data: Float32Array.of(0.25, 1),
+      });
+      expect(() =>
+        readHostDiagnosticsPresentedFrame({
+          ...valid,
+          outputs: [{ ...capture, extra: true } as never],
+        }),
+      ).toThrowError(
+        new RegExp(
+          `${name}.*exact name, format, width, height, origin, and data keys`,
+          "i",
+        ),
+      );
+      expect(() =>
+        readHostDiagnosticsPresentedFrame({
+          ...valid,
+          outputs: [
+            {
+              ...capture,
+              format: "r32float-underwater-volume",
+            } as never,
+          ],
+        }),
+      ).toThrowError(new RegExp(`${name}.*${format}`, "i"));
+      for (const invalid of [
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+        -0.01,
+        1.01,
+      ]) {
+        expect(() =>
+          readHostDiagnosticsPresentedFrame({
+            ...valid,
+            outputs: [
+              {
+                ...capture,
+                data: Float32Array.of(0.25, invalid),
+              },
+            ],
+          }),
+        ).toThrowError(
+          new RegExp(`${name}.*finite normalized scalar data`, "i"),
+        );
+      }
+      expect(() =>
+        readHostDiagnosticsPresentedFrame({
+          ...valid,
+          outputs: [
+            {
+              ...capture,
+              data: new Uint8Array(2),
+            } as never,
+          ],
+        }),
+      ).toThrowError(new RegExp(`${name}.*packed Float32 data`, "i"));
+    }
   });
 });

@@ -189,7 +189,10 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
     postTraaComposition: {
       width: 320,
       height: 180,
-      stages: [{ id: "secondary-particles", after: "traa" }],
+      stages: [
+        { id: "secondary-particles", after: "traa" },
+        { id: "lens-wetness", after: "secondary-particles" },
+      ],
       accumulationFormat: "rgba16float",
       finalColorFormat: "rgba8unorm-srgb",
     },
@@ -987,19 +990,39 @@ describe("Regression acceptance version-3 reader", () => {
     expect(document.qaPrewarmManifest).toMatchObject({
       capabilities: READY_CAPABILITIES,
       manifest: {
-        version: 13,
+        version: 14,
         captures: expect.arrayContaining([
           {
             name: "foam-source-identity",
             preparedFormat: "rgba16float-foam-source-identity",
           },
+          {
+            name: "underwater-caustics",
+            preparedFormat: "rgba16float-underwater-caustics-diagnostics",
+          },
+          {
+            name: "underwater-particles",
+            preparedFormat: "rgba16float-underwater-suspended-particles",
+          },
+          {
+            name: "underwater-bubbles",
+            preparedFormat: "rgba16float-underwater-bubbles",
+          },
+          {
+            name: "lens-wetness",
+            preparedFormat: "rgba16float-lens-wetness-diagnostics",
+          },
         ]),
         coreDeclarations: expect.objectContaining({
           "foam-source-identity": "water-foam-source-identity-target",
+          "underwater-caustics": "water-underwater-caustics-diagnostics-target",
+          "underwater-particles": "water-underwater-suspended-particle-target",
+          "underwater-bubbles": "water-underwater-bubble-target",
+          "lens-wetness": "water-lens-wetness-diagnostics-target",
         }),
       },
     });
-    expect(document.qaPrewarmManifest?.manifest.captures).toHaveLength(36);
+    expect(document.qaPrewarmManifest?.manifest.captures).toHaveLength(40);
   });
 
   it("rejects raw base64 capture payloads and a forged schema", () => {

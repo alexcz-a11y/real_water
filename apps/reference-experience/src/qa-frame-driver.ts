@@ -50,6 +50,10 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
   "underwater-scattering": "water-underwater-diagnostics-target",
   "underwater-light-shafts": "water-underwater-diagnostics-target",
   "underwater-shadow": "water-underwater-diagnostics-target",
+  "underwater-caustics": "water-underwater-caustics-diagnostics-target",
+  "underwater-particles": "water-underwater-suspended-particle-target",
+  "underwater-bubbles": "water-underwater-bubble-target",
+  "lens-wetness": "water-lens-wetness-diagnostics-target",
   "planar-color": "water-planar-reflection-target",
   "planar-target-alpha": "water-planar-reflection-target",
   "ssr-hit": "water-ssr-raw-target",
@@ -68,7 +72,7 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
 
 export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
   schema: "real-water/qa-frame-prewarm" as const,
-  version: 13 as const,
+  version: 14 as const,
   id: "reference-qa-frame" as const,
   captures: Object.freeze([
     Object.freeze({
@@ -162,6 +166,22 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
     Object.freeze({
       name: "underwater-shadow" as const,
       preparedFormat: "rgba16float-underwater-volume-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "underwater-caustics" as const,
+      preparedFormat: "rgba16float-underwater-caustics-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "underwater-particles" as const,
+      preparedFormat: "rgba16float-underwater-suspended-particles" as const,
+    }),
+    Object.freeze({
+      name: "underwater-bubbles" as const,
+      preparedFormat: "rgba16float-underwater-bubbles" as const,
+    }),
+    Object.freeze({
+      name: "lens-wetness" as const,
+      preparedFormat: "rgba16float-lens-wetness-diagnostics" as const,
     }),
     Object.freeze({
       name: "planar-color" as const,
@@ -330,6 +350,30 @@ export interface QaFrameDriverSecondaryParticleCapture extends QaFrameDriverCapt
   readonly data: Float32Array;
 }
 
+export interface QaFrameDriverUnderwaterCausticsCapture extends QaFrameDriverCaptureBase {
+  readonly name: "underwater-caustics";
+  readonly format: "r32float-underwater-caustics";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverUnderwaterParticlesCapture extends QaFrameDriverCaptureBase {
+  readonly name: "underwater-particles";
+  readonly format: "r32float-underwater-particles";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverUnderwaterBubblesCapture extends QaFrameDriverCaptureBase {
+  readonly name: "underwater-bubbles";
+  readonly format: "r32float-underwater-bubbles";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverLensWetnessCapture extends QaFrameDriverCaptureBase {
+  readonly name: "lens-wetness";
+  readonly format: "r32float-lens-wetness";
+  readonly data: Float32Array;
+}
+
 export interface QaFrameDriverSsrColorCapture extends QaFrameDriverCaptureBase {
   readonly name: "ssr-color";
   readonly format: "rgb32float-linear-ssr";
@@ -392,7 +436,11 @@ export type QaFrameDriverCapture =
   | QaFrameDriverHistoryRejectionCapture
   | QaFrameDriverOpticalScalarCapture
   | QaFrameDriverUnderwaterVolumeCapture
-  | QaFrameDriverSecondaryParticleCapture;
+  | QaFrameDriverSecondaryParticleCapture
+  | QaFrameDriverUnderwaterCausticsCapture
+  | QaFrameDriverUnderwaterParticlesCapture
+  | QaFrameDriverUnderwaterBubblesCapture
+  | QaFrameDriverLensWetnessCapture;
 
 export interface QaFrameDriverStateReceipt {
   readonly seed: number;

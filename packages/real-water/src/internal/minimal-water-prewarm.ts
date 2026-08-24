@@ -61,6 +61,7 @@ import {
   createSecondarySprayParticles,
   type SecondarySprayParticles,
 } from "./secondary-spray-particles.js";
+import { createUnderwaterSecondaryParticleAllocationParticipants } from "./underwater-secondary-particles.js";
 import type { LocalInteractionRenderSnapshot } from "./local-interaction.js";
 import {
   createSecondaryParticleAllocationRoute,
@@ -230,18 +231,6 @@ export async function prepareMinimalWaterPlane(
       }),
     });
     partial.secondarySpray = secondarySpray;
-    const secondaryParticleAllocationRoute =
-      createSecondaryParticleAllocationRoute({
-        pool: secondaryParticlePool,
-        participants: [
-          createSecondarySprayAllocationParticipant(secondarySpray, camera),
-        ],
-      });
-    partial.secondaryParticleAllocationRoute = secondaryParticleAllocationRoute;
-    secondaryParticleAllocationRoute.advance(
-      preparationSnapshot,
-      createPreparationLocalInteraction(preparationSnapshot),
-    );
     const waterTexture = createWaterTexture();
     partial.waterTexture = waterTexture;
     const foamField = createUnifiedFoamField(
@@ -254,11 +243,27 @@ export async function prepareMinimalWaterPlane(
       waterline.preview(
         camera,
         createInitialWaterlineSampleState(
-          readHostSimulationState(options.simulation),
-          createWaterPreset("swell").artisticControls,
+          preparationSnapshot,
+          preparationSnapshot.artisticControls,
         ),
       ),
     );
+
+    throwIfAborted(options.request.signal);
+    const geometry = createCameraRelativeClipmapGeometry(
+      geometrySegments.widthSegments,
+    );
+    partial.geometry = geometry;
+    const innerCellMetres = clipmapInnerCellMetres(
+      geometrySegments.widthSegments,
+    );
+    const spectralBand = createSpectralBandRendering(
+      options.simulation,
+      options.presentation,
+      innerCellMetres,
+      foamField,
+    );
+    partial.spectralBand = spectralBand;
 
     throwIfAborted(options.request.signal);
     const createdPresentation = createPreparedWaterPresentationResources(
@@ -270,33 +275,36 @@ export async function prepareMinimalWaterPlane(
       secondaryParticlePool,
       secondaryParticlePolicy,
       secondarySpray,
+      options.request.manifest.qualityProfile.postTraaComposition,
       options.environment,
       options.request.manifest.qualityProfile.underwater,
+      spectralBand.surfaceSampler,
+      preparationSnapshot,
       initialWaterline,
     );
     partial.presentation = createdPresentation.resources;
     partial.presentationPartial = createdPresentation.partial;
-
-    throwIfAborted(options.request.signal);
-    const geometry = createCameraRelativeClipmapGeometry(
-      geometrySegments.widthSegments,
+    const secondaryParticleAllocationRoute =
+      createSecondaryParticleAllocationRoute({
+        pool: secondaryParticlePool,
+        participants: [
+          createSecondarySprayAllocationParticipant(secondarySpray, camera),
+          ...createUnderwaterSecondaryParticleAllocationParticipants(
+            createdPresentation.resources.underwaterParticles,
+            camera,
+          ),
+        ],
+      });
+    partial.secondaryParticleAllocationRoute = secondaryParticleAllocationRoute;
+    secondaryParticleAllocationRoute.advance(
+      preparationSnapshot,
+      createPreparationLocalInteraction(preparationSnapshot),
     );
-    partial.geometry = geometry;
     const material = new NodeMaterial();
     partial.material = material;
     material.name = "Real Water minimal material";
     material.lights = false;
     material.fog = false;
-    const innerCellMetres = clipmapInnerCellMetres(
-      geometrySegments.widthSegments,
-    );
-    const spectralBand = createSpectralBandRendering(
-      options.simulation,
-      options.presentation,
-      innerCellMetres,
-      foamField,
-    );
-    partial.spectralBand = spectralBand;
     const opticalPath = createWaterOpticsRendering(
       spectralBand,
       options.environment,
@@ -340,6 +348,7 @@ export async function prepareMinimalWaterPlane(
       "whitecapDecayRoute",
       "foamLocalFieldA",
       "foamLocalFieldB",
+      "underwaterCausticsLocalSurfaceField",
       "foamSourceHistory",
       "foamLocalAdvectionRoute",
       "foamLocalResolveRoute",
@@ -396,6 +405,17 @@ export async function prepareMinimalWaterPlane(
       "underwaterSunShaftShadowRoute",
       "underwaterDiagnosticsTarget",
       "underwaterDiagnosticsRoute",
+      "underwaterCausticsReceiverRoute",
+      "underwaterCausticsDiagnosticsTarget",
+      "underwaterCausticsDiagnosticsRoute",
+      "underwaterParticleCandidateState",
+      "underwaterParticleAllocationRoutes",
+      "underwaterSuspendedParticleTarget",
+      "underwaterSuspendedParticleRoute",
+      "underwaterBubbleTarget",
+      "underwaterBubbleRoute",
+      "underwaterTracerCompositeTarget",
+      "underwaterTracerCompositeRoute",
       "renderRoute",
       "proceduralMotion",
       "motionVectors",
@@ -416,9 +436,13 @@ export async function prepareMinimalWaterPlane(
       "postTraaCompositionPlan",
       "traaResolvedTarget",
       "secondaryParticleAccumulationTarget",
+      "secondaryParticleCompositeTarget",
       "secondaryParticleStageRoute",
       "secondaryParticleCompositeRoute",
       "secondaryParticleDiagnosticsRoute",
+      "lensWetnessDiagnosticsTarget",
+      "lensWetnessStageRoute",
+      "lensWetnessDiagnosticsRoute",
       "currentColorConversion",
       "namedOutputRoutes",
     ]);
@@ -461,9 +485,12 @@ export async function prepareMinimalWaterPlane(
       "ssrHistoryResetVelocityRoute",
       "ssrHistoryProbe",
       "underwaterProbe",
+      "underwaterCausticsProbe",
+      "underwaterTracerProbe",
       "whitecapProbe",
       "foamSourceIdentityProbe",
       "secondaryParticleProbe",
+      "lensWetnessProbe",
       "completionProbe",
     ]);
 

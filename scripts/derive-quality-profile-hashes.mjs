@@ -127,6 +127,81 @@ const CANONICAL_POST_TRAA_FIELDS = Object.freeze([
   "finalColorFormat",
   "samples",
   "stages",
+  "lensWetness",
+]);
+const LEGACY_POST_TRAA_FIELDS = Object.freeze([
+  "mode",
+  "resolutionPolicy",
+  "accumulationFormat",
+  "finalColorFormat",
+  "samples",
+  "stages",
+]);
+const CANONICAL_LENS_WETNESS_FIELDS = Object.freeze([
+  "mode",
+  "stageId",
+  "after",
+  "resolutionPolicy",
+  "diagnosticsFormat",
+  "samples",
+  "trigger",
+  "updateCadence",
+]);
+
+const CANONICAL_UNDERWATER_FIELDS = Object.freeze([
+  "mode",
+  "composition",
+  "resolutionPolicy",
+  "colorFormat",
+  "diagnosticsFormat",
+  "samples",
+  "maxDistanceMetres",
+  "shadowRoute",
+  "shaftRoute",
+  "updateCadence",
+  "caustics",
+  "tracers",
+]);
+
+const LEGACY_UNDERWATER_FIELDS = Object.freeze([
+  "mode",
+  "composition",
+  "resolutionPolicy",
+  "colorFormat",
+  "diagnosticsFormat",
+  "samples",
+  "maxDistanceMetres",
+  "shadowRoute",
+  "shaftRoute",
+  "updateCadence",
+]);
+
+const CANONICAL_UNDERWATER_CAUSTICS_FIELDS = Object.freeze([
+  "mode",
+  "composition",
+  "resolutionPolicy",
+  "diagnosticsFormat",
+  "samples",
+  "localSurfaceFieldFormat",
+  "localSurfaceFieldLayout",
+  "localSurfaceFieldResolutionPolicy",
+  "localSurfaceFieldUpdateCadence",
+  "maxLocalSurfaceSnapshotAgeTicks",
+  "maxReceiverDistanceMetres",
+  "receiverNormalMinY",
+  "updateCadence",
+]);
+const CANONICAL_UNDERWATER_TRACER_FIELDS = Object.freeze([
+  "mode",
+  "composition",
+  "resolutionPolicy",
+  "accumulationFormat",
+  "samples",
+  "depthRoute",
+  "suspendedConsumerId",
+  "bubbleCloudConsumerId",
+  "risingBubbleConsumerId",
+  "updateCadence",
 ]);
 
 let failures = 0;
@@ -210,8 +285,40 @@ function canonicalJson(label, profile, variant) {
     checkKeys(
       `${label} post-TRAA composition`,
       Object.keys(profile.postTraaComposition),
-      CANONICAL_POST_TRAA_FIELDS,
+      variant === undefined
+        ? CANONICAL_POST_TRAA_FIELDS
+        : LEGACY_POST_TRAA_FIELDS,
     );
+    if (profile.postTraaComposition.lensWetness !== undefined) {
+      checkKeys(
+        `${label} lens wetness`,
+        Object.keys(profile.postTraaComposition.lensWetness),
+        CANONICAL_LENS_WETNESS_FIELDS,
+      );
+    }
+  }
+  if (profile.underwater !== undefined) {
+    checkKeys(
+      `${label} underwater`,
+      Object.keys(profile.underwater),
+      variant === undefined
+        ? CANONICAL_UNDERWATER_FIELDS
+        : LEGACY_UNDERWATER_FIELDS,
+    );
+    if (profile.underwater.caustics !== undefined) {
+      checkKeys(
+        `${label} underwater caustics`,
+        Object.keys(profile.underwater.caustics),
+        CANONICAL_UNDERWATER_CAUSTICS_FIELDS,
+      );
+    }
+    if (profile.underwater.tracers !== undefined) {
+      checkKeys(
+        `${label} underwater tracers`,
+        Object.keys(profile.underwater.tracers),
+        CANONICAL_UNDERWATER_TRACER_FIELDS,
+      );
+    }
   }
   return JSON.stringify(
     Object.fromEntries(fields.map((field) => [field, profile[field]])),
@@ -436,6 +543,19 @@ const COMMITTED_LEGACY_VARIANTS = [
         "sha256:e1e1c7af79374e668a1f82c4b5c742d42e5009f5162389d8f3dc0ead9978d5a9",
     },
   },
+  {
+    label: "12 (shared particles and post-TRAA, no caustics)",
+    version: 12,
+    absentKeys: [],
+    absentInteractionFieldKeys: [],
+    ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    hashes: {
+      "minimal":
+        "sha256:a9ea5e4aaf2d703f7e2ad85fb8e89afd9289c0ad9ae2a157f0d4f67044d74539",
+      "minimal-high-detail":
+        "sha256:6498d05bd7491015c457d6183b90654c1df14e81352c1da13e8de34d6f9285a4",
+    },
+  },
 ];
 
 function omitKeys(record, omitted) {
@@ -467,6 +587,15 @@ function legacyProfile(profile, variant) {
         "foamTimelineCapacityTicks",
       ]),
       mode: "spectral-ping-pong",
+    };
+  }
+  if (reduced.underwater !== undefined) {
+    reduced.underwater = omitKeys(reduced.underwater, ["caustics", "tracers"]);
+  }
+  if (reduced.postTraaComposition !== undefined) {
+    reduced.postTraaComposition = {
+      ...omitKeys(reduced.postTraaComposition, ["lensWetness"]),
+      stages: reduced.postTraaComposition.stages.slice(0, 1),
     };
   }
   return {
@@ -540,9 +669,9 @@ for (const variant of COMMITTED_LEGACY_VARIANTS) {
 // public fields in declared order, with manifestHash itself excluded.
 const COMMITTED_MANIFEST_HASHES = {
   "minimal":
-    "sha256:0675c9a0f7b99bcdcceb508446e889f059a8542847328266715c2f7e73661ef2",
+    "sha256:e567cfb3a578dc468b763bb5fba2059aab547314fbb8424f6a00915ffb901cb9",
   "minimal-high-detail":
-    "sha256:f9b2adc6daf8834d2867a24c1d062084a432f3e8169ff937a612e925021e7f1a",
+    "sha256:c4bb02b7c8bc0024b2176ef8230183e96819afbf6dcc376d80dc58960b4b4d58",
 };
 
 function canonicalManifestJson(manifest) {

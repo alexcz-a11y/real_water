@@ -25,15 +25,16 @@ export const PREWARM_MANIFEST_SCHEMA = "real-water/prewarm" as const;
 /**
  * The only Prewarm Manifest version accepted by this release.
  *
- * Version 4 and version 3 were declared in parallel on two branches, each
- * describing a different work-unit set. This version describes the merged set,
- * which neither of them did. There is no migration rung: the only consumer is
- * an equality gate that rejects any other value, so the number is an identity
- * stamp for a declaration set, not a payload that can be carried forward.
+ * Version 10 adds the complete T22 underwater tracer to version 9's shared
+ * pool and ordered post-TRAA plan: bounded caustics, three underwater particle
+ * consumers, and lens wetness. There is no migration rung: the only consumer
+ * is an equality gate that rejects any other value, so the number is an
+ * identity stamp for a declaration set, not a payload that can be carried
+ * forward.
  *
  * @public
  */
-export const PREWARM_MANIFEST_VERSION = 9 as const;
+export const PREWARM_MANIFEST_VERSION = 10 as const;
 
 /**
  * Immutable physical drawing-buffer dimensions bound into a Prewarm Manifest.
@@ -153,6 +154,22 @@ export const SUPPORTED_EFFECT_VARIANTS: readonly PrewarmEffectVariant[] =
       effectId: "secondary-particles",
       variantId: "bounded-post-traa",
     }),
+    Object.freeze({
+      effectId: "underwater-caustics",
+      variantId: "prepared-surface-visible-receivers",
+    }),
+    Object.freeze({
+      effectId: "underwater-particles",
+      variantId: "deterministic-depth-aware",
+    }),
+    Object.freeze({
+      effectId: "underwater-bubbles",
+      variantId: "cloud-and-rising-depth-aware",
+    }),
+    Object.freeze({
+      effectId: "lens-wetness",
+      variantId: "bounded-emergence-decay",
+    }),
   ]);
 
 export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
@@ -189,6 +206,8 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   foamSourceHistory: "water-foam-source-history",
   foamLocalAdvectionRoute: "water-foam-local-advection-route",
   foamLocalResolveRoute: "water-foam-local-resolve-route",
+  underwaterCausticsLocalSurfaceField:
+    "water-underwater-caustics-local-surface-field",
   foamSourceIdentityTarget: "water-foam-source-identity-target",
   foamSourceIdentityRoute: "water-foam-source-identity-route",
   foamSourceIdentityProbe: "water-foam-source-identity-probe",
@@ -232,6 +251,23 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   underwaterDiagnosticsTarget: "water-underwater-diagnostics-target",
   underwaterDiagnosticsRoute: "water-underwater-diagnostics-route",
   underwaterProbe: "water-underwater-probe",
+  underwaterCausticsReceiverRoute: "water-underwater-caustics-receiver-route",
+  underwaterCausticsDiagnosticsTarget:
+    "water-underwater-caustics-diagnostics-target",
+  underwaterCausticsDiagnosticsRoute:
+    "water-underwater-caustics-diagnostics-route",
+  underwaterCausticsProbe: "water-underwater-caustics-probe",
+  underwaterParticleCandidateState: "water-underwater-particle-candidate-state",
+  underwaterParticleAllocationRoutes:
+    "water-underwater-particle-allocation-routes",
+  underwaterSuspendedParticleTarget:
+    "water-underwater-suspended-particle-target",
+  underwaterSuspendedParticleRoute: "water-underwater-suspended-particle-route",
+  underwaterBubbleTarget: "water-underwater-bubble-target",
+  underwaterBubbleRoute: "water-underwater-bubble-route",
+  underwaterTracerCompositeTarget: "water-underwater-tracer-composite-target",
+  underwaterTracerCompositeRoute: "water-underwater-tracer-composite-route",
+  underwaterTracerProbe: "water-underwater-tracer-probe",
   renderRoute: "water-render-route",
   proceduralMotion: "water-procedural-motion",
   motionVectors: "water-motion-vectors",
@@ -253,11 +289,16 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   traaResolvedTarget: "water-traa-resolved-target",
   secondaryParticleAccumulationTarget:
     "water-secondary-particle-accumulation-target",
+  secondaryParticleCompositeTarget: "water-secondary-particle-composite-target",
   secondaryParticleStageRoute: "water-secondary-particle-stage-route",
   secondaryParticleCompositeRoute: "water-secondary-particle-composite-route",
   secondaryParticleDiagnosticsRoute:
     "water-secondary-particle-diagnostics-route",
   secondaryParticleProbe: "water-secondary-particle-probe",
+  lensWetnessDiagnosticsTarget: "water-lens-wetness-diagnostics-target",
+  lensWetnessStageRoute: "water-lens-wetness-stage-route",
+  lensWetnessDiagnosticsRoute: "water-lens-wetness-diagnostics-route",
+  lensWetnessProbe: "water-lens-wetness-probe",
   currentColorConversion: "water-current-color-conversion",
   namedOutputRoutes: "water-named-output-routes",
   hiddenStabilization: "water-hidden-stabilization",
@@ -295,10 +336,15 @@ const DRAWING_BUFFER_BOUND_DECLARATION_IDS: ReadonlySet<string> = new Set([
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.postTraaCompositionPlan,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.traaResolvedTarget,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleAccumulationTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleCompositeTarget,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleStageRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleCompositeRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleDiagnosticsRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleProbe,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.lensWetnessDiagnosticsTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.lensWetnessStageRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.lensWetnessDiagnosticsRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.lensWetnessProbe,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.currentColorConversion,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
@@ -335,6 +381,18 @@ const DRAWING_BUFFER_BOUND_DECLARATION_IDS: ReadonlySet<string> = new Set([
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterDiagnosticsTarget,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterDiagnosticsRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterProbe,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterCausticsReceiverRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterCausticsDiagnosticsTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterCausticsDiagnosticsRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterCausticsProbe,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterParticleAllocationRoutes,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterSuspendedParticleTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterSuspendedParticleRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterBubbleTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterBubbleRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterTracerCompositeTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterTracerCompositeRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterTracerProbe,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapStageTarget,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapStageRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapProbe,
@@ -550,6 +608,15 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
       "sha256:82dac57c07467b78a7bc2bc880daef08ffbd422daf546aa958855f2a72814aab",
   },
   {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterCausticsLocalSurfaceField,
+    kind: "resource",
+    label:
+      "Underwater caustics local surface field (RGBA16F 128x128 anchor-local current height/slope/velocity, 48m radius, 8m Hermite edge fade)",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:0d2b1c6a6f9e294675c9d50614dac4b0820997d0e03163c969038805d4a30862",
+  },
+  {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceHistory,
     kind: "effect-state",
     label:
@@ -569,8 +636,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalResolveRoute,
     kind: "conditional-route",
     label:
-      "Source-prioritized whitecap, wake, and impact foam resolve compute route (B to A, 128x128)",
+      "Source-prioritized whitecap, wake, and impact foam plus current local-surface resolve compute route (B to A plus caustics field, 128x128)",
     fingerprint:
+      // Provenance: this historical fingerprint's reproducible source was not recorded; #33 changed only the label and retained the committed value.
       "sha256:61617d619104b9e50914d24d287b3fda56af58041a35fc013321c282bbc898c3",
   },
   {
@@ -866,16 +934,18 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterVolumeTarget,
     kind: "resource",
     label:
-      "Underwater volume color (RGBA16F, samples 0, drawing-buffer-exact, post-SSR pre-TRAA)",
+      "Underwater volume plus prepared-surface caustics color (RGBA16F, samples 0, drawing-buffer-exact, post-SSR pre-TRAA)",
     fingerprint:
+      // Provenance: this historical fingerprint's reproducible source was not recorded; #33 changed only the label and retained the committed value.
       "sha256:6a75542631256bd1f689adb7a8e6b8c81cbc6a9d11f41d22b874b596dfa49474",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterVolumeRoute,
     kind: "conditional-route",
     label:
-      "Per-ray underwater absorption, haze, scattering, color, and exposure composition from scene depth, local interface, and Host Environment",
+      "Per-ray underwater absorption, haze, scattering, color, exposure, and prepared-surface caustics composition from scene depth, local interface, and Host Environment",
     fingerprint:
+      // Provenance: this historical fingerprint's reproducible source was not recorded; #33 changed only the label and retained the committed value.
       "sha256:07b5b5d14dac572c25546f04cf86ce2cf41c8e895bfc95d7f90806f42ee52821",
   },
   {
@@ -919,12 +989,126 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
       "sha256:e634ca001324670cad2f7ef46a7b011bb753692940733a1e108ebbf8d53f422d",
   },
   {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterCausticsReceiverRoute,
+    kind: "conditional-route",
+    label:
+      "Prepared-surface dynamic caustics on non-sky, non-water, upward-facing visible receivers within 48m",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:403f4e25ac454354683e7c9b0032726ebd5a11cc4a58bba02be688ca110a0a17",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterCausticsDiagnosticsTarget,
+    kind: "resource",
+    label:
+      "Underwater caustics diagnostics (R in RGBA16F, drawing-buffer-exact)",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:ef4aee18704adb533480019f188212abf0788bd272ade556ebdb103ca8447e4c",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterCausticsDiagnosticsRoute,
+    kind: "conditional-route",
+    label: "On-request independent underwater caustics scalar output",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:8f4006e4caaabeed9397ecbbcd79fdffd5e5fb079116f636c25c2f4e04282a5d",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterCausticsProbe,
+    kind: "conditional-route",
+    label: "GPU completion probe of underwater caustics diagnostics target",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:de4dc7c236b8ff82ca5c881a0b86befebd03cc34203751ba1ef4e4e5564140bd",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterParticleCandidateState,
+    kind: "resource",
+    label:
+      "Underwater secondary-particle candidate and retained payload storage (three predeclared consumers; fixed maximum arrays)",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:d3277abe8ee69d2cec1aae2961665b96dda5354238b5fe98704ba909fce0fa78",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterParticleAllocationRoutes,
+    kind: "conditional-route",
+    label:
+      "Underwater secondary-particle participants in the shared submit-all/resolve-once/apply-all transaction",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:85da9f932339dea1e75c79cfbd21f4ced7a7aa761edce093b854ea9b3f6ae0c2",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterSuspendedParticleTarget,
+    kind: "resource",
+    label:
+      "Suspended-particle accumulation (RGBA16F depth-aware, drawing-buffer-exact, pre-TRAA)",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:35cf15ad7dc9e097f87b3125d2f0883b19e772c7ca01998c971a4bcf8339823d",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterSuspendedParticleRoute,
+    kind: "conditional-route",
+    label: "Depth-aware suspended-particle accumulation route before TRAA",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:af3dd6c207d3bf02eddda925ed6cbbbae06b5eba1fe843592f14b0fc52e8bdaf",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterBubbleTarget,
+    kind: "resource",
+    label:
+      "Subsurface foam-cloud and rising-bubble accumulation (RGBA16F depth-aware, drawing-buffer-exact, pre-TRAA)",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:3c4c4444be41867e6d958c9a10b67b5c6cac9634fc0c11e716f82b6b36a539bd",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterBubbleRoute,
+    kind: "conditional-route",
+    label:
+      "Depth-aware subsurface foam-cloud and rising-bubble accumulation route before TRAA",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:7843678ab677997778028d776c4e000ed46def2105d610f69df80fb1a75bf15c",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterTracerCompositeTarget,
+    kind: "resource",
+    label:
+      "Underwater tracer composite (RGBA16F particles plus bubbles, drawing-buffer-exact, pre-TRAA)",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:a681c952e2b38dca2722fb7d97f886aaf85cadb7f671b6a030877e3b90fa8a22",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterTracerCompositeRoute,
+    kind: "conditional-route",
+    label:
+      "Underwater volume plus particle and bubble composite route before TRAA",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:269fcb2c1927da6f2b8c681f0092b54b720b52c8f18d0b63a991353f7b1c6135",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterTracerProbe,
+    kind: "conditional-route",
+    label:
+      "Completion probe of underwater particle, bubble, and tracer-composite targets",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:87963d7431f5ca046b790d0f78eabc004d13c1cb50e82de7388026e1ba04d892",
+  },
+  {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
     kind: "conditional-route",
     label:
-      "Fixed-tick whitecaps and shared particle allocation, waterline-gated planar aux, one jittered main MRT, current-frame SSR, per-ray underwater volume, stock TRAA, then ordered post-TRAA secondary-particle composition",
+      "Fixed-tick whitecaps and shared particle allocation, waterline-gated planar aux, one jittered main MRT, current-frame SSR, underwater volume/caustics/tracers, stock TRAA, then ordered secondary-particle and lens-wetness composition",
     fingerprint:
-      // Provenance: this BASE fingerprint's reproducible source was not recorded and cannot be recovered; #28 changed only the label and did not remint this value.
+      // Provenance: this BASE fingerprint's reproducible source was not recorded and cannot be recovered; #28 and #33 changed only the label and did not remint this value.
       "sha256:f7f44a7ddf3041a2cda3654fb87e9181f0ca87730eb64017725c664995bafb91",
   },
   {
@@ -1054,10 +1238,10 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.postTraaCompositionPlan,
     kind: "effect-state",
     label:
-      "Ordered post-TRAA composition plan (drawing-buffer-exact: TRAA -> secondary-particles -> presentation)",
+      "Ordered post-TRAA composition plan (drawing-buffer-exact: TRAA -> secondary-particles -> lens-wetness -> presentation)",
     fingerprint:
-      // Provenance: #28 introduced this value, minted from the exact UTF-8 label bytes (no trailing newline; quotes excluded): "Ordered post-TRAA composition plan (drawing-buffer-exact: TRAA -> secondary-particles -> presentation)"
-      "sha256:610e1049899cd8b0b2f76fc9e5d6f75d2d2ace774a8edc1ab433aa445e482f6b",
+      // Provenance: #33 reminted #28's reproducible value from the exact UTF-8 label bytes above (no trailing newline; quotes excluded) when lens wetness extended the plan.
+      "sha256:811bf0a23d3c91185fcc5efe1478c2850f20c07eef52efdc1c038a699fc90822",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.traaResolvedTarget,
@@ -1077,6 +1261,15 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
       "sha256:e21721a0f3dd09ddcdcd1546022ede326713f190253d2f24ae2ef3f8c34aa053",
   },
   {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleCompositeTarget,
+    kind: "resource",
+    label:
+      "Secondary-particle composite output (RGBA8, drawing-buffer-exact, post-TRAA intermediate)",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:b602533b267c26de51eb517a720cb89049b551a298e0604e4fafb9f54e68a9da",
+  },
+  {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleStageRoute,
     kind: "conditional-route",
     label:
@@ -1088,10 +1281,10 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleCompositeRoute,
     kind: "conditional-route",
-    label: "Post-TRAA secondary-particle composite into final color",
+    label: "Post-TRAA secondary-particle composite for the next declared stage",
     fingerprint:
-      // Provenance: #28 introduced this value, minted from the exact UTF-8 label bytes (no trailing newline; quotes excluded): "Post-TRAA secondary-particle composite into final color"
-      "sha256:08a743eec5984c4cb5c462c290739b90aeff23abc6c67ffea8d4d44c48caa39c",
+      // Provenance: #33 reminted #28's reproducible value from the exact UTF-8 label bytes above (no trailing newline; quotes excluded) when the composite became an intermediate stage output.
+      "sha256:d45e9fbb4292f4384108f621e634e7b5faabe775ef87c07c9111316d29e56893",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleDiagnosticsRoute,
@@ -1105,53 +1298,87 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleProbe,
     kind: "conditional-route",
     label:
-      "Completion probe of shared secondary-particle allocation canary, accumulation, and post-TRAA final color",
+      "Completion probe of shared secondary-particle allocation canary, accumulation, and intermediate composite",
     fingerprint:
-      // Provenance: #28 introduced this value, minted from the exact UTF-8 label bytes (no trailing newline; quotes excluded): "Completion probe of shared secondary-particle allocation canary, accumulation, and post-TRAA final color"
-      "sha256:9b6e9d13d14f58796b2d250b2193587fc5c73d7e4e007a2b2d45fe668737540b",
+      // Provenance: #33 reminted #28's reproducible value from the exact UTF-8 label bytes above (no trailing newline; quotes excluded) after lens wetness became the final stage.
+      "sha256:a84045371ce814a6b2899f98b0eac6f93fa43d23014ac1573bcb0f18a9c87548",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.lensWetnessDiagnosticsTarget,
+    kind: "resource",
+    label: "Lens-wetness diagnostics (R in RGBA16F, drawing-buffer-exact)",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:a0bec0c560242b5154b76a55261076c46b6e61e1c0c882c74ec498b84636c4fa",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.lensWetnessStageRoute,
+    kind: "conditional-route",
+    label:
+      "Bounded emergence-driven lens-wetness stage after secondary particles",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:64975f47b2c5dfc5b406f11524f08bc9fa91c05b7d0ab9972c1f62c90bda4ca1",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.lensWetnessDiagnosticsRoute,
+    kind: "conditional-route",
+    label: "On-request independent lens-wetness scalar output",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:a615dbe3b7e5408e41b5e89378665d89c9ffc4731ee27732773dd5bf5af2df15",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.lensWetnessProbe,
+    kind: "conditional-route",
+    label: "Completion probe of lens-wetness output and diagnostics targets",
+    fingerprint:
+      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
+      "sha256:1b06d93ac9ee8a5a5f20e4d355a255407df55de0579ec13c0ec6ebf14f6430e7",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.currentColorConversion,
     kind: "conditional-route",
     label:
-      "Current-color conversion sampling pre-TRAA underwater-volume RGB with restored scene alpha",
+      "Current-color conversion sampling pre-TRAA underwater-volume, caustics, particles, and bubbles with restored scene alpha",
     fingerprint:
+      // Provenance: this historical fingerprint's reproducible source was not recorded; #33 changed only the label and retained the committed value.
       "sha256:750febf150f950dd006fc0a7df54e7e5faa9aace9e026c452f1b9aa0f639a0c8",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
     kind: "conditional-route",
     label:
-      "Thirty-six named diagnostics output routes including unified foam identity plus secondary-particle contribution and overdraw",
+      "Forty named diagnostics output routes including unified foam identity, underwater caustics/particles/bubbles, lens wetness, plus secondary-particle contribution and overdraw",
     fingerprint:
-      // Provenance: #27 established reproducible sha256(label); #28 reminted this value solely because the capture count changed 34 -> 36. Exact UTF-8 label bytes (no trailing newline; quotes excluded): "Thirty-six named diagnostics output routes including unified foam identity plus secondary-particle contribution and overdraw"
-      "sha256:2b420394f0212d9692366db0e5cceac67945038c92eec4bbcd4c0e5de41a3ea5",
+      // Provenance: #33 minted this reproducible value from the exact UTF-8 label bytes above (no trailing newline; quotes excluded) for the final 40-output T22 registry.
+      "sha256:94e65cb8d4ad5c047715315b129abaa5c9ff0e6f58f7671f1acdd2e370284b9e",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.hiddenStabilization,
     kind: "effect-state",
     label:
-      "Eight hidden underwater-composition, TRAA, SSR-history, and ordered post-TRAA stabilization frames",
+      "Eight hidden underwater-volume/caustics/tracers, TRAA, SSR-history, and ordered particle/lens-wetness stabilization frames",
     fingerprint:
-      // Provenance: this BASE fingerprint's reproducible source was not recorded and cannot be recovered; #28 changed only the label and did not remint this value.
+      // Provenance: this BASE fingerprint's reproducible source was not recorded and cannot be recovered; #28 and #33 changed only the label and did not remint this value.
       "sha256:caf44b79f85f7ef51388340b5a0b802e9f6d1974d25d28e3e3644c9856fcc441",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.completionProbe,
     kind: "conditional-route",
     label:
-      "GPU completion probe of all thirty-six named output routes including underwater volume, unified foam identity, and secondary-particle contribution/overdraw",
+      "GPU completion probe of all forty named output routes including underwater volume/tracers, lens wetness, unified foam identity, and secondary-particle contribution/overdraw",
     fingerprint:
-      // Provenance: #27 established reproducible sha256(label); #28 reminted this value solely because the capture count changed 34 -> 36. Exact UTF-8 label bytes (no trailing newline; quotes excluded): "GPU completion probe of all thirty-six named output routes including underwater volume, unified foam identity, and secondary-particle contribution/overdraw"
-      "sha256:7ed559729bcd40570d350782e7be5f984d56c72e8ad8d3226aac7346fdec54c3",
+      // Provenance: #33 minted this reproducible value from the exact UTF-8 label bytes above (no trailing newline; quotes excluded) for the final 40-output T22 completion registry.
+      "sha256:a3377b51000b3c8df474f6c5d3710d2857df5c695337fb6c7f028560d3154b88",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.mainCameraGuard,
     kind: "conditional-route",
     label:
-      "Main-camera guard frame including underwater volume and ordered post-TRAA secondary-particle composition",
+      "Main-camera guard frame including underwater volume/caustics/tracers and ordered post-TRAA secondary-particle/lens-wetness composition",
     fingerprint:
-      // Provenance: this BASE fingerprint's reproducible source was not recorded and cannot be recovered; #28 changed only the label and did not remint this value.
+      // Provenance: this BASE fingerprint's reproducible source was not recorded and cannot be recovered; #28 and #33 changed only the label and did not remint this value.
       "sha256:e59db4a839b5f36edfaec493a1f334f44ba6bae5a5046a758c0ceb69ea143841",
   },
 ];
@@ -1187,9 +1414,13 @@ function highDetailDeclaration(
       "sha256:ee4d471913df6f0f09bff048557fd863e1f5ce7a681c76c86951df5bf295a148",
     [MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalFieldB]:
       "sha256:a0ef7d6c0c3601881f8dfc57a080cd5cc454dada02f3ed5500a998e640a9e031",
+    [MINIMAL_WATER_PREWARM_DECLARATION_IDS.underwaterCausticsLocalSurfaceField]:
+      // Provenance: #33 introduced this high-detail value, minted from the exact UTF-8 label bytes after replacing 128x128 with 256x256 (no trailing newline; quotes excluded).
+      "sha256:6b972c2678244b436a0590a16141db4449b2fd44315e2de7921d1be1db392ce7",
     [MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalAdvectionRoute]:
       "sha256:bf745e588618cc8e7effc2e2367058fe7216c7768e18be7da63dbface4906b8b",
     [MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamLocalResolveRoute]:
+      // Provenance: this historical high-detail fingerprint's reproducible source was not recorded; #33 changed only the effective 256x256 label and retained the committed value.
       "sha256:c914cf36381b90065a8e759b57c6621b16b9316c22f9df01b3c530625aab69f8",
   });
   const fingerprint = fingerprints[declaration.id];

@@ -24,7 +24,7 @@ export const QUALITY_PROFILE_SCHEMA = "real-water/quality-profile" as const;
  *
  * @public
  */
-export const QUALITY_PROFILE_VERSION = 12 as const;
+export const QUALITY_PROFILE_VERSION = 13 as const;
 
 /**
  * Built-in structural configurations for the minimal-water surface.
@@ -220,6 +220,48 @@ export interface QualityProfileSpectralWhitecaps {
 }
 
 /**
+ * Bounded dynamic caustics projected from the prepared water surface onto
+ * visible underwater receivers. Pure presentation coefficients remain outside
+ * this structural contract.
+ *
+ * @public
+ */
+export interface QualityProfileUnderwaterCaustics {
+  readonly mode: "prepared-surface-visible-receivers";
+  readonly composition: "post-ssr-pre-traa";
+  readonly resolutionPolicy: "drawing-buffer-exact";
+  readonly diagnosticsFormat: "rgba16float";
+  readonly samples: 0;
+  readonly localSurfaceFieldFormat: "rgba16float";
+  readonly localSurfaceFieldLayout: "height-slope-x-slope-z-vertical-velocity";
+  readonly localSurfaceFieldResolutionPolicy: "match-unified-foam-field";
+  readonly localSurfaceFieldUpdateCadence: "host-fixed-tick";
+  readonly maxLocalSurfaceSnapshotAgeTicks: 1;
+  readonly maxReceiverDistanceMetres: 48;
+  readonly receiverNormalMinY: 0.05;
+  readonly updateCadence: "host-present";
+}
+
+/**
+ * Pre-TRAA depth-aware rendering for the three underwater consumers already
+ * declared by the shared secondary-particle pool.
+ *
+ * @public
+ */
+export interface QualityProfileUnderwaterTracers {
+  readonly mode: "shared-pool-depth-aware";
+  readonly composition: "pre-traa";
+  readonly resolutionPolicy: "drawing-buffer-exact";
+  readonly accumulationFormat: "rgba16float";
+  readonly samples: 0;
+  readonly depthRoute: "soft-scene-depth";
+  readonly suspendedConsumerId: "underwater-suspended-particles";
+  readonly bubbleCloudConsumerId: "subsurface-foam-bubble-cloud";
+  readonly risingBubbleConsumerId: "rising-bubbles";
+  readonly updateCadence: "host-fixed-tick";
+}
+
+/**
  * Fixed full-frame underwater composition prepared before visibility. Haze,
  * turbidity, shaft strength, color, and exposure remain hot Artistic Controls.
  *
@@ -236,6 +278,8 @@ export interface QualityProfileUnderwaterVolume {
   readonly shadowRoute: "screen-space-depth-occlusion";
   readonly shaftRoute: "deterministic-epipolar";
   readonly updateCadence: "host-present";
+  readonly caustics: QualityProfileUnderwaterCaustics;
+  readonly tracers: QualityProfileUnderwaterTracers;
 }
 
 /**
@@ -303,9 +347,31 @@ export interface QualityProfileSecondaryParticles {
  *
  * @public
  */
-export interface QualityProfilePostTraaStage {
-  readonly id: "secondary-particles";
-  readonly after: "traa";
+export type QualityProfilePostTraaStage =
+  | {
+      readonly id: "secondary-particles";
+      readonly after: "traa";
+    }
+  | {
+      readonly id: "lens-wetness";
+      readonly after: "secondary-particles";
+    };
+
+/**
+ * Bounded output-resolution lens wetness driven only by emergence impulses.
+ * Presentation coefficients remain private implementation constants.
+ *
+ * @public
+ */
+export interface QualityProfileLensWetness {
+  readonly mode: "bounded-emergence-decay";
+  readonly stageId: "lens-wetness";
+  readonly after: "secondary-particles";
+  readonly resolutionPolicy: "drawing-buffer-exact";
+  readonly diagnosticsFormat: "rgba16float";
+  readonly samples: 0;
+  readonly trigger: "waterline-emergence-impulse";
+  readonly updateCadence: "host-fixed-tick";
 }
 
 /**
@@ -320,7 +386,14 @@ export interface QualityProfilePostTraaComposition {
   readonly accumulationFormat: "rgba16float";
   readonly finalColorFormat: "rgba8unorm-srgb";
   readonly samples: 0;
-  readonly stages: readonly [QualityProfilePostTraaStage];
+  readonly stages: readonly [
+    Extract<
+      QualityProfilePostTraaStage,
+      { readonly id: "secondary-particles" }
+    >,
+    Extract<QualityProfilePostTraaStage, { readonly id: "lens-wetness" }>,
+  ];
+  readonly lensWetness: QualityProfileLensWetness;
 }
 
 /**
@@ -454,6 +527,33 @@ const NATIVE_UNDERWATER: QualityProfileUnderwaterVolume = Object.freeze({
   shadowRoute: "screen-space-depth-occlusion",
   shaftRoute: "deterministic-epipolar",
   updateCadence: "host-present",
+  caustics: Object.freeze({
+    mode: "prepared-surface-visible-receivers",
+    composition: "post-ssr-pre-traa",
+    resolutionPolicy: "drawing-buffer-exact",
+    diagnosticsFormat: "rgba16float",
+    samples: 0,
+    localSurfaceFieldFormat: "rgba16float",
+    localSurfaceFieldLayout: "height-slope-x-slope-z-vertical-velocity",
+    localSurfaceFieldResolutionPolicy: "match-unified-foam-field",
+    localSurfaceFieldUpdateCadence: "host-fixed-tick",
+    maxLocalSurfaceSnapshotAgeTicks: 1,
+    maxReceiverDistanceMetres: 48,
+    receiverNormalMinY: 0.05,
+    updateCadence: "host-present",
+  }),
+  tracers: Object.freeze({
+    mode: "shared-pool-depth-aware",
+    composition: "pre-traa",
+    resolutionPolicy: "drawing-buffer-exact",
+    accumulationFormat: "rgba16float",
+    samples: 0,
+    depthRoute: "soft-scene-depth",
+    suspendedConsumerId: "underwater-suspended-particles",
+    bubbleCloudConsumerId: "subsurface-foam-bubble-cloud",
+    risingBubbleConsumerId: "rising-bubbles",
+    updateCadence: "host-fixed-tick",
+  }),
 });
 // Declaration order is stable identity evidence, not allocation priority. The
 // allocator canonicalizes by consumerId before global contribution selection.
@@ -523,7 +623,18 @@ const NATIVE_POST_TRAA_COMPOSITION: QualityProfilePostTraaComposition =
     samples: 0,
     stages: Object.freeze([
       Object.freeze({ id: "secondary-particles", after: "traa" }),
+      Object.freeze({ id: "lens-wetness", after: "secondary-particles" }),
     ] as const),
+    lensWetness: Object.freeze({
+      mode: "bounded-emergence-decay",
+      stageId: "lens-wetness",
+      after: "secondary-particles",
+      resolutionPolicy: "drawing-buffer-exact",
+      diagnosticsFormat: "rgba16float",
+      samples: 0,
+      trigger: "waterline-emergence-impulse",
+      updateCadence: "host-fixed-tick",
+    }),
   });
 // "waterline-crossing" is deliberately absent here. Whitecap foam is simulated
 // in the wave field, so its history only has to be dropped when that field is
@@ -545,14 +656,14 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:a9ea5e4aaf2d703f7e2ad85fb8e89afd9289c0ad9ae2a157f0d4f67044d74539",
+      "sha256:fe3581f672279216b2fe41dd658b7ae47140a58fb555badf2f1b05477781f663",
     widthSegments: 128,
     heightSegments: 128,
     whitecapFieldResolution: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:6498d05bd7491015c457d6183b90654c1df14e81352c1da13e8de34d6f9285a4",
+      "sha256:e21f2d7c73e0efec73e8e01b21bfcd52ba7d059c5fb857bc73fee3d11bc89148",
     widthSegments: 256,
     heightSegments: 256,
     whitecapFieldResolution: 256,
@@ -739,7 +850,36 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
 // carried the spectral-only whitecap field, and #27's 10 was version 9 plus the
 // unified foam field and never saw the underwater volume. Version 11 is the
 // first that carries both. Version 11 is the merged shape immediately before
-// the shared secondary-particle pool and ordered post-TRAA plan.
+// the shared secondary-particle pool and ordered post-TRAA plan. Version 12 is
+// #28's committed pool and post-TRAA shape; version 13 adds the complete T22
+// underwater tracer: bounded caustics, three underwater particle consumers,
+// and lens wetness.
+// The discarded pre-rebase caustics v12 never entered history and is not a
+// legacy rung.
+const LEGACY_V12_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([] as const),
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:a9ea5e4aaf2d703f7e2ad85fb8e89afd9289c0ad9ae2a157f0d4f67044d74539",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:6498d05bd7491015c457d6183b90654c1df14e81352c1da13e8de34d6f9285a4",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
 const LEGACY_V11_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
@@ -1127,6 +1267,47 @@ const UNDERWATER_KEYS = [
   "shadowRoute",
   "shaftRoute",
   "updateCadence",
+  "caustics",
+  "tracers",
+] as const;
+const LEGACY_UNDERWATER_KEYS = [
+  "mode",
+  "composition",
+  "resolutionPolicy",
+  "colorFormat",
+  "diagnosticsFormat",
+  "samples",
+  "maxDistanceMetres",
+  "shadowRoute",
+  "shaftRoute",
+  "updateCadence",
+] as const;
+const UNDERWATER_CAUSTICS_KEYS = [
+  "mode",
+  "composition",
+  "resolutionPolicy",
+  "diagnosticsFormat",
+  "samples",
+  "localSurfaceFieldFormat",
+  "localSurfaceFieldLayout",
+  "localSurfaceFieldResolutionPolicy",
+  "localSurfaceFieldUpdateCadence",
+  "maxLocalSurfaceSnapshotAgeTicks",
+  "maxReceiverDistanceMetres",
+  "receiverNormalMinY",
+  "updateCadence",
+] as const;
+const UNDERWATER_TRACER_KEYS = [
+  "mode",
+  "composition",
+  "resolutionPolicy",
+  "accumulationFormat",
+  "samples",
+  "depthRoute",
+  "suspendedConsumerId",
+  "bubbleCloudConsumerId",
+  "risingBubbleConsumerId",
+  "updateCadence",
 ] as const;
 const SECONDARY_PARTICLE_KEYS = [
   "mode",
@@ -1167,8 +1348,27 @@ const POST_TRAA_COMPOSITION_KEYS = [
   "finalColorFormat",
   "samples",
   "stages",
+  "lensWetness",
+] as const;
+const LEGACY_POST_TRAA_COMPOSITION_KEYS = [
+  "mode",
+  "resolutionPolicy",
+  "accumulationFormat",
+  "finalColorFormat",
+  "samples",
+  "stages",
 ] as const;
 const POST_TRAA_STAGE_KEYS = ["id", "after"] as const;
+const LENS_WETNESS_KEYS = [
+  "mode",
+  "stageId",
+  "after",
+  "resolutionPolicy",
+  "diagnosticsFormat",
+  "samples",
+  "trigger",
+  "updateCadence",
+] as const;
 const INTERACTION_KEYS = ["anchorCount", "field"] as const;
 const INTERACTION_FIELD_KEYS = [
   "radiusMetres",
@@ -1503,7 +1703,9 @@ function isSupportedPostTraaComposition(
     !isRecord(value) ||
     !hasExactKeys(value, POST_TRAA_COMPOSITION_KEYS) ||
     !Array.isArray(value.stages) ||
-    value.stages.length !== supported.stages.length
+    value.stages.length !== supported.stages.length ||
+    !isRecord(value.lensWetness) ||
+    !hasExactKeys(value.lensWetness, LENS_WETNESS_KEYS)
   ) {
     return false;
   }
@@ -1523,7 +1725,40 @@ function isSupportedPostTraaComposition(
     value.resolutionPolicy === supported.resolutionPolicy &&
     value.accumulationFormat === supported.accumulationFormat &&
     value.finalColorFormat === supported.finalColorFormat &&
-    value.samples === supported.samples
+    value.samples === supported.samples &&
+    value.lensWetness.mode === supported.lensWetness.mode &&
+    value.lensWetness.stageId === supported.lensWetness.stageId &&
+    value.lensWetness.after === supported.lensWetness.after &&
+    value.lensWetness.resolutionPolicy ===
+      supported.lensWetness.resolutionPolicy &&
+    value.lensWetness.diagnosticsFormat ===
+      supported.lensWetness.diagnosticsFormat &&
+    value.lensWetness.samples === supported.lensWetness.samples &&
+    value.lensWetness.trigger === supported.lensWetness.trigger &&
+    value.lensWetness.updateCadence === supported.lensWetness.updateCadence
+  );
+}
+
+function matchesLegacyPostTraaComposition(value: unknown): boolean {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, LEGACY_POST_TRAA_COMPOSITION_KEYS) ||
+    !Array.isArray(value.stages) ||
+    value.stages.length !== 1
+  ) {
+    return false;
+  }
+  const stage = value.stages[0];
+  return (
+    isRecord(stage) &&
+    hasExactKeys(stage, POST_TRAA_STAGE_KEYS) &&
+    stage.id === "secondary-particles" &&
+    stage.after === "traa" &&
+    value.mode === "ordered-declarative-stages" &&
+    value.resolutionPolicy === "drawing-buffer-exact" &&
+    value.accumulationFormat === "rgba16float" &&
+    value.finalColorFormat === "rgba8unorm-srgb" &&
+    value.samples === 0
   );
 }
 
@@ -1534,6 +1769,74 @@ function isSupportedUnderwaterVolume(
   return (
     isRecord(value) &&
     hasExactKeys(value, UNDERWATER_KEYS) &&
+    value.mode === supported.mode &&
+    value.composition === supported.composition &&
+    value.resolutionPolicy === supported.resolutionPolicy &&
+    value.colorFormat === supported.colorFormat &&
+    value.diagnosticsFormat === supported.diagnosticsFormat &&
+    value.samples === supported.samples &&
+    value.maxDistanceMetres === supported.maxDistanceMetres &&
+    value.shadowRoute === supported.shadowRoute &&
+    value.shaftRoute === supported.shaftRoute &&
+    value.updateCadence === supported.updateCadence &&
+    isSupportedUnderwaterCaustics(value.caustics, supported.caustics) &&
+    isSupportedUnderwaterTracers(value.tracers, supported.tracers)
+  );
+}
+
+function isSupportedUnderwaterCaustics(
+  value: unknown,
+  supported: QualityProfileUnderwaterCaustics,
+): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, UNDERWATER_CAUSTICS_KEYS) &&
+    value.mode === supported.mode &&
+    value.composition === supported.composition &&
+    value.resolutionPolicy === supported.resolutionPolicy &&
+    value.diagnosticsFormat === supported.diagnosticsFormat &&
+    value.samples === supported.samples &&
+    value.localSurfaceFieldFormat === supported.localSurfaceFieldFormat &&
+    value.localSurfaceFieldLayout === supported.localSurfaceFieldLayout &&
+    value.localSurfaceFieldResolutionPolicy ===
+      supported.localSurfaceFieldResolutionPolicy &&
+    value.localSurfaceFieldUpdateCadence ===
+      supported.localSurfaceFieldUpdateCadence &&
+    value.maxLocalSurfaceSnapshotAgeTicks ===
+      supported.maxLocalSurfaceSnapshotAgeTicks &&
+    value.maxReceiverDistanceMetres === supported.maxReceiverDistanceMetres &&
+    value.receiverNormalMinY === supported.receiverNormalMinY &&
+    value.updateCadence === supported.updateCadence
+  );
+}
+
+function isSupportedUnderwaterTracers(
+  value: unknown,
+  supported: QualityProfileUnderwaterTracers,
+): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, UNDERWATER_TRACER_KEYS) &&
+    value.mode === supported.mode &&
+    value.composition === supported.composition &&
+    value.resolutionPolicy === supported.resolutionPolicy &&
+    value.accumulationFormat === supported.accumulationFormat &&
+    value.samples === supported.samples &&
+    value.depthRoute === supported.depthRoute &&
+    value.suspendedConsumerId === supported.suspendedConsumerId &&
+    value.bubbleCloudConsumerId === supported.bubbleCloudConsumerId &&
+    value.risingBubbleConsumerId === supported.risingBubbleConsumerId &&
+    value.updateCadence === supported.updateCadence
+  );
+}
+
+function matchesLegacyUnderwaterVolume(
+  value: unknown,
+  supported: QualityProfileUnderwaterVolume,
+): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, LEGACY_UNDERWATER_KEYS) &&
     value.mode === supported.mode &&
     value.composition === supported.composition &&
     value.resolutionPolicy === supported.resolutionPolicy &&
@@ -1594,6 +1897,15 @@ export function migrateQualityProfile(candidate: unknown): QualityProfile {
     } catch {
       throw new TypeError("The Quality Profile cannot be migrated.");
     }
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 12 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV12Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
   }
 
   if (
@@ -1827,6 +2139,15 @@ function matchesLegacyV11Profile(
   );
 }
 
+function matchesLegacyV12Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V12_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
 function matchesLegacyV6Profile(
   value: Record<string, unknown>,
   id: MinimalWaterQualityProfileId,
@@ -1880,12 +2201,9 @@ function matchesLegacyVariant(
         supported.secondaryParticles,
       )) &&
     (!carriesUnderwater ||
-      isSupportedUnderwaterVolume(value.underwater, supported.underwater)) &&
+      matchesLegacyUnderwaterVolume(value.underwater, supported.underwater)) &&
     (!carriesPostTraaComposition ||
-      isSupportedPostTraaComposition(
-        value.postTraaComposition,
-        supported.postTraaComposition,
-      ))
+      matchesLegacyPostTraaComposition(value.postTraaComposition))
   );
 }
 
@@ -2174,7 +2492,11 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
         ),
       ) as QualityProfileSecondaryParticles["consumers"],
     }),
-    underwater: Object.freeze({ ...profile.underwater }),
+    underwater: Object.freeze({
+      ...profile.underwater,
+      caustics: Object.freeze({ ...profile.underwater.caustics }),
+      tracers: Object.freeze({ ...profile.underwater.tracers }),
+    }),
     postTraaComposition: Object.freeze({
       ...profile.postTraaComposition,
       stages: Object.freeze(
@@ -2182,6 +2504,9 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
           Object.freeze({ ...stage }),
         ),
       ) as QualityProfilePostTraaComposition["stages"],
+      lensWetness: Object.freeze({
+        ...profile.postTraaComposition.lensWetness,
+      }),
     }),
   });
 }

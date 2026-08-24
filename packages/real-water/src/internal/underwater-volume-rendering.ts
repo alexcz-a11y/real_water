@@ -27,6 +27,10 @@ import {
 import type { QualityProfileUnderwaterVolume } from "../quality-profile.js";
 import type { OpenWaterRuntimeSnapshot, RuntimeStateSink } from "../runtime.js";
 import { createWaterPreset } from "../water-preset.js";
+import {
+  createUnderwaterCausticsRendering,
+  type PreparedUnderwaterSurfaceSampler,
+} from "./underwater-caustics-rendering.js";
 import type { WaterlineFrameState } from "./waterline-state.js";
 
 const INITIAL_ARTISTIC_CONTROLS = createWaterPreset("swell").artisticControls;
@@ -38,11 +42,26 @@ const SATURATED_VOLUME_COLOR = vec3(0.008, 0.3, 0.4);
 export function createUnderwaterVolumeRendering(
   sourceColor: Texture,
   sceneDepth: Texture,
+  packedViewNormal: Texture,
+  opticalFactors: Texture,
   camera: PerspectiveCamera,
   environment: HostEnvironmentAdapter,
   initialWaterline: WaterlineFrameState,
   policy: QualityProfileUnderwaterVolume,
+  surfaceSampler: PreparedUnderwaterSurfaceSampler,
+  initialSnapshot: OpenWaterRuntimeSnapshot,
 ) {
+  const caustics = createUnderwaterCausticsRendering(
+    sceneDepth,
+    packedViewNormal,
+    opticalFactors,
+    camera,
+    environment,
+    initialWaterline,
+    policy.caustics,
+    surfaceSampler,
+    initialSnapshot,
+  );
   const initialEnvironment = readHostEnvironmentState(environment);
   const underwaterHaze = uniform(INITIAL_ARTISTIC_CONTROLS.underwaterHaze);
   const underwaterTurbidity = uniform(
@@ -220,6 +239,7 @@ export function createUnderwaterVolumeRendering(
   const shaftRadiance = sunColor.mul(sunIntensity).mul(shaftAmount).mul(0.65);
   const exposure = underwaterExposure.mul(0.5).add(0.5);
   const underwaterRgb = source.rgb
+    .add(caustics.radianceNode)
     .mul(transmittanceRgb)
     .add(ambientScattering)
     .add(directionalScattering)
@@ -227,6 +247,12 @@ export function createUnderwaterVolumeRendering(
     .mul(exposure);
   const composedRgb = mix(source.rgb, underwaterRgb, volumeCoverage);
   const colorNode = vec4(composedRgb, source.a);
+  const causticsDiagnosticsNode = vec4(
+    caustics.diagnosticsNode.mul(volumeCoverage),
+    float(0),
+    float(0),
+    float(1),
+  );
   const diagnosticsNode = vec4(
     mix(float(1), transmittance, volumeCoverage),
     scatteringAmount.mul(volumeCoverage),
@@ -243,25 +269,35 @@ export function createUnderwaterVolumeRendering(
     underwaterExposure.value = snapshot.artisticControls.underwaterExposure;
   };
   const sink: RuntimeStateSink = Object.freeze({
-    synchronize(snapshot: OpenWaterRuntimeSnapshot): void {
+    synchronize(
+      snapshot: OpenWaterRuntimeSnapshot,
+      interaction: Parameters<RuntimeStateSink["synchronize"]>[1],
+    ): void {
       applySnapshot(snapshot);
+      caustics.sink.synchronize(snapshot, interaction);
+    },
+    observe(snapshot: OpenWaterRuntimeSnapshot): void {
+      caustics.sink.observe?.(snapshot);
     },
   });
 
   return Object.freeze({
     colorNode,
     diagnosticsNode,
+    causticsDiagnosticsNode,
     sink,
     waterline: Object.freeze({
       synchronize(state: WaterlineFrameState): void {
         submersion.value = state.submersion;
         signedCameraDistance.value = state.signedDistanceMetres;
+        caustics.waterline.synchronize(state);
       },
     }),
     syncCamera(nextCamera: PerspectiveCamera): void {
       projectionMatrixInverse.value.copy(nextCamera.projectionMatrixInverse);
       viewMatrix.value.copy(nextCamera.matrixWorldInverse);
       cameraWorldMatrix.value.copy(nextCamera.matrixWorld);
+      caustics.syncCamera(nextCamera);
     },
   });
 }

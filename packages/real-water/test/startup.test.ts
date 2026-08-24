@@ -180,6 +180,10 @@ const TEST_POST_TRAA_CAPABILITIES = Object.freeze({
       id: "secondary-particles" as const,
       after: "traa" as const,
     }),
+    Object.freeze({
+      id: "lens-wetness" as const,
+      after: "secondary-particles" as const,
+    }),
   ] as const),
   accumulationFormat: "rgba16float" as const,
   finalColorFormat: "rgba8unorm-srgb" as const,
@@ -827,12 +831,12 @@ describe("prepareRealWater", () => {
     );
     expect(lease.manifest).toEqual({
       schema: "real-water/prewarm",
-      version: 9,
+      version: 10,
       id: manifest.id,
       manifestHash: manifest.manifestHash,
       qualityProfile: {
         schema: "real-water/quality-profile",
-        version: 12,
+        version: 13,
         id: "minimal",
         profileHash: manifest.qualityProfile.profileHash,
       },
@@ -854,6 +858,22 @@ describe("prepareRealWater", () => {
         {
           effectId: "secondary-particles",
           variantId: "bounded-post-traa",
+        },
+        {
+          effectId: "underwater-caustics",
+          variantId: "prepared-surface-visible-receivers",
+        },
+        {
+          effectId: "underwater-particles",
+          variantId: "deterministic-depth-aware",
+        },
+        {
+          effectId: "underwater-bubbles",
+          variantId: "cloud-and-rising-depth-aware",
+        },
+        {
+          effectId: "lens-wetness",
+          variantId: "bounded-emergence-decay",
         },
       ],
     });
@@ -1034,7 +1054,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 103,
+        totalWork: 122,
       },
     });
   });
@@ -1702,7 +1722,7 @@ describe("prepareRealWater", () => {
 
     expect(Object.isFrozen(manifest)).toBe(true);
     expect(Object.isFrozen(manifest.drawingBuffer)).toBe(true);
-    expect(manifest.version).toBe(9);
+    expect(manifest.version).toBe(10);
     expect(manifest.drawingBuffer).toEqual({ width: 320, height: 180 });
     expect(Object.isFrozen(manifest.declarations)).toBe(true);
     expect(Object.isFrozen(first)).toBe(true);
@@ -1735,6 +1755,7 @@ describe("prepareRealWater", () => {
       "water-whitecap-probe",
       "water-foam-local-field-a",
       "water-foam-local-field-b",
+      "water-underwater-caustics-local-surface-field",
       "water-foam-source-history",
       "water-foam-local-advection-route",
       "water-foam-local-resolve-route",
@@ -1781,6 +1802,19 @@ describe("prepareRealWater", () => {
       "water-underwater-diagnostics-target",
       "water-underwater-diagnostics-route",
       "water-underwater-probe",
+      "water-underwater-caustics-receiver-route",
+      "water-underwater-caustics-diagnostics-target",
+      "water-underwater-caustics-diagnostics-route",
+      "water-underwater-caustics-probe",
+      "water-underwater-particle-candidate-state",
+      "water-underwater-particle-allocation-routes",
+      "water-underwater-suspended-particle-target",
+      "water-underwater-suspended-particle-route",
+      "water-underwater-bubble-target",
+      "water-underwater-bubble-route",
+      "water-underwater-tracer-composite-target",
+      "water-underwater-tracer-composite-route",
+      "water-underwater-tracer-probe",
       "water-render-route",
       "water-procedural-motion",
       "water-motion-vectors",
@@ -1801,10 +1835,15 @@ describe("prepareRealWater", () => {
       "water-post-traa-composition-plan",
       "water-traa-resolved-target",
       "water-secondary-particle-accumulation-target",
+      "water-secondary-particle-composite-target",
       "water-secondary-particle-stage-route",
       "water-secondary-particle-composite-route",
       "water-secondary-particle-diagnostics-route",
       "water-secondary-particle-probe",
+      "water-lens-wetness-diagnostics-target",
+      "water-lens-wetness-stage-route",
+      "water-lens-wetness-diagnostics-route",
+      "water-lens-wetness-probe",
       "water-current-color-conversion",
       "water-named-output-routes",
       "water-hidden-stabilization",
