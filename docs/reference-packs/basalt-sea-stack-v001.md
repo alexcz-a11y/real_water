@@ -44,8 +44,34 @@ record of the service's output terms applies to this pack too.
 - **The anchor's waterline stain was applied by a region edit.** Of the four anchor candidates, the
   one with the best columnar geology carried only a diffuse darkening at its foot that followed the
   column steps rather than a level line. A Spotlight selection over the lower band, instructed to
-  change colour only and leave every column and joint untouched, produced the level stain that all
-  three elevations derive from. The pre-edit image is retained in the album as `fe3f7368`.
+  change colour only and leave every column and joint untouched, produced a **level** boundary at
+  the foot, and that is the anchor all three elevations derive from. The pre-edit image is retained
+  in the album as `fe3f7368`.
+
+  **Corrected 2026-08-24 — this record previously called that edit "the level stain".** It is level,
+  but it is not a stain. The `#49` reconstruction measured colour across the boundary and I verified
+  it independently on the same four files:
+
+  | View | luma | R−B | saturation | reads as |
+  |---|---|---|---|---|
+  | Anchor | −19.9 | +1.6 → +0.1 (**−1.4**) | −0.003 | shading |
+  | Front elevation | −33.8 | +3.9 → **+11.1 (+7.2)** | **+0.112** | a stain |
+  | Back elevation | −24.7 | −0.5 | +0.001 | shading |
+  | Side elevation | no boundary found | — | — | absent |
+
+  Only the **front elevation** carries a chromatic waterline stain; it generated one on its own. The
+  anchor, back and side lose warmth across their boundary, which is a lit rock face turning away
+  from the light, not a deposit. The Spotlight edit changed luminance, not hue — so the anchor still
+  shows geology-following tonality of the kind this record elsewhere describes as rejected, merely
+  levelled.
+
+  All eight sha256 prefixes were re-verified against the table above before this correction, so the
+  measured files are the approved ones and not a stale export.
+
+  **This changes nothing about the model.** Bible §10 outranks any approved view and already requires
+  a single level chromatic band running unbroken around the whole stack. The reconstruction takes the
+  waterline from the Bible, as it was always going to. What changed is that this record no longer
+  claims the pixels show something they do not.
 
   This mattered more here than a cosmetic fix would: Bible §10 makes the waterline the part the
   reflection reads from, so a stain that wandered with the geology would have propagated a wandering
