@@ -87,6 +87,62 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
         },
       },
     },
+    secondaryParticles: {
+      capacity: 131_072,
+      maximumCandidateCount: 147_456,
+      contributionReference: {
+        width: 320,
+        height: 180,
+        space: "output-drawing-buffer",
+        screenAreaDivisor: 3_600,
+        quantization: "q16-unorm-round-nearest",
+      },
+      hysteresis: {
+        retainedContributionBonusQ16: 4_096,
+        minimumResidenceTicks: 4,
+        reentryCooldownTicks: 4,
+      },
+      consumers: [
+        {
+          consumerId: "spray-droplet-mist",
+          maximumRequestCount: 65_536,
+          softRequestCeiling: 32_768,
+          minimumRetainedSlots: 2_048,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "underwater-suspended-particles",
+          maximumRequestCount: 49_152,
+          softRequestCeiling: 24_576,
+          minimumRetainedSlots: 2_048,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "subsurface-foam-bubble-cloud",
+          maximumRequestCount: 24_576,
+          softRequestCeiling: 12_288,
+          minimumRetainedSlots: 1_024,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "rising-bubbles",
+          maximumRequestCount: 8_192,
+          softRequestCeiling: 4_096,
+          minimumRetainedSlots: 256,
+          pressureReentryPolicy: "forbidden-until-absent",
+        },
+      ],
+      selection: "q16-global-contribution-radix",
+      updateCadence: "host-fixed-tick",
+      renderPhaseKnowledge: "none",
+    },
+    postTraaComposition: {
+      width: 320,
+      height: 180,
+      stages: [{ id: "secondary-particles", after: "traa" }],
+      accumulationFormat: "rgba16float",
+      finalColorFormat: "rgba8unorm-srgb",
+    },
   },
   gameplay: {
     maxAttachedBodies: MAX_ATTACHED_BODIES,
@@ -289,6 +345,26 @@ function createCapture(
       data: new Float32Array(width * height),
     };
   }
+  if (name === "secondary-particle-contribution") {
+    return {
+      name,
+      format: "r32float-secondary-particle-contribution",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "secondary-particle-overdraw") {
+    return {
+      name,
+      format: "r32float-secondary-particle-overdraw",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
   return {
     name,
     format: "r32float-optical",
@@ -347,6 +423,135 @@ function coreFrame(
       transitionRevision: 0,
       lensWetnessImpulse: false,
     },
+    secondaryParticles: {
+      capacity: 131_072,
+      maximumCandidateCount: 147_456,
+      requested: 0,
+      retained: 0,
+      thinned: 0,
+      invisibleOrOccluded: 0,
+      reentryCooldown: 0,
+      lifecycleReentryForbidden: 0,
+      retainedByFloor: 0,
+      retainedByGlobalCompetition: 0,
+      retainedIncumbents: 0,
+      requestedAboveSoftCeiling: 0,
+      overSubscribed: false,
+      contributionMinimumQ16: null,
+      contributionMaximumQ16: null,
+      dropReasons: {
+        invisibleOrOccluded: 0,
+        globalContributionPressure: 0,
+        reentryCooldown: 0,
+        lifecycleReentryForbidden: 0,
+      },
+      consumers: [
+        {
+          consumerId: "spray-droplet-mist",
+          maximumRequestCount: 65_536,
+          minimumRetainedSlots: 2_048,
+          softRequestCeiling: 32_768,
+          pressureReentryPolicy: "after-shared-cooldown",
+          requested: 0,
+          retained: 0,
+          thinned: 0,
+          invisibleOrOccluded: 0,
+          reentryCooldown: 0,
+          lifecycleReentryForbidden: 0,
+          retainedByFloor: 0,
+          retainedByGlobalCompetition: 0,
+          retainedIncumbents: 0,
+          requestedAboveSoftCeiling: 0,
+          overSubscribed: false,
+          contributionMinimumQ16: null,
+          contributionMaximumQ16: null,
+          dropReasons: {
+            invisibleOrOccluded: 0,
+            globalContributionPressure: 0,
+            reentryCooldown: 0,
+            lifecycleReentryForbidden: 0,
+          },
+        },
+        {
+          consumerId: "underwater-suspended-particles",
+          maximumRequestCount: 49_152,
+          minimumRetainedSlots: 2_048,
+          softRequestCeiling: 24_576,
+          pressureReentryPolicy: "after-shared-cooldown",
+          requested: 0,
+          retained: 0,
+          thinned: 0,
+          invisibleOrOccluded: 0,
+          reentryCooldown: 0,
+          lifecycleReentryForbidden: 0,
+          retainedByFloor: 0,
+          retainedByGlobalCompetition: 0,
+          retainedIncumbents: 0,
+          requestedAboveSoftCeiling: 0,
+          overSubscribed: false,
+          contributionMinimumQ16: null,
+          contributionMaximumQ16: null,
+          dropReasons: {
+            invisibleOrOccluded: 0,
+            globalContributionPressure: 0,
+            reentryCooldown: 0,
+            lifecycleReentryForbidden: 0,
+          },
+        },
+        {
+          consumerId: "subsurface-foam-bubble-cloud",
+          maximumRequestCount: 24_576,
+          minimumRetainedSlots: 1_024,
+          softRequestCeiling: 12_288,
+          pressureReentryPolicy: "after-shared-cooldown",
+          requested: 0,
+          retained: 0,
+          thinned: 0,
+          invisibleOrOccluded: 0,
+          reentryCooldown: 0,
+          lifecycleReentryForbidden: 0,
+          retainedByFloor: 0,
+          retainedByGlobalCompetition: 0,
+          retainedIncumbents: 0,
+          requestedAboveSoftCeiling: 0,
+          overSubscribed: false,
+          contributionMinimumQ16: null,
+          contributionMaximumQ16: null,
+          dropReasons: {
+            invisibleOrOccluded: 0,
+            globalContributionPressure: 0,
+            reentryCooldown: 0,
+            lifecycleReentryForbidden: 0,
+          },
+        },
+        {
+          consumerId: "rising-bubbles",
+          maximumRequestCount: 8_192,
+          minimumRetainedSlots: 256,
+          softRequestCeiling: 4_096,
+          pressureReentryPolicy: "forbidden-until-absent",
+          requested: 0,
+          retained: 0,
+          thinned: 0,
+          invisibleOrOccluded: 0,
+          reentryCooldown: 0,
+          lifecycleReentryForbidden: 0,
+          retainedByFloor: 0,
+          retainedByGlobalCompetition: 0,
+          retainedIncumbents: 0,
+          requestedAboveSoftCeiling: 0,
+          overSubscribed: false,
+          contributionMinimumQ16: null,
+          contributionMaximumQ16: null,
+          dropReasons: {
+            invisibleOrOccluded: 0,
+            globalContributionPressure: 0,
+            reentryCooldown: 0,
+            lifecycleReentryForbidden: 0,
+          },
+        },
+      ],
+    },
     outputs: request.outputs.map((name) =>
       createCapture(
         name,
@@ -365,9 +570,9 @@ function coreFrame(
 }
 
 describe("QA frame driver Core association", () => {
-  it("publishes a v12 capture-contract mapped to actual Core declaration IDs", () => {
-    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(12);
-    expect(QA_FRAME_PREWARM_MANIFEST.captures).toHaveLength(34);
+  it("publishes a v13 capture-contract mapped to actual Core declaration IDs", () => {
+    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(13);
+    expect(QA_FRAME_PREWARM_MANIFEST.captures).toHaveLength(36);
     expect(QA_FRAME_PREWARM_MANIFEST.coreDeclarations).toEqual(
       QA_TO_CORE_DECLARATION_IDS,
     );
@@ -379,6 +584,12 @@ describe("QA frame driver Core association", () => {
     );
     expect(QA_TO_CORE_DECLARATION_IDS["foam-source-identity"]).toBe(
       "water-foam-source-identity-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["secondary-particle-contribution"]).toBe(
+      "water-secondary-particle-accumulation-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["secondary-particle-overdraw"]).toBe(
+      "water-secondary-particle-accumulation-target",
     );
     expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(9, 12)).toEqual([
       {
@@ -437,9 +648,10 @@ describe("QA frame driver Core association", () => {
       "water-render-target",
       "water-ssr-history-resolved-capture-target",
       "water-ssr-history-beauty-target",
+      "water-secondary-particle-accumulation-target",
     ]);
-    expect(receipt.progress.completedWork).toBe(18);
-    expect(receipt.progress.totalWork).toBe(18);
+    expect(receipt.progress.completedWork).toBe(19);
+    expect(receipt.progress.totalWork).toBe(19);
   });
 
   it("rejects a Core manifest that is missing a mapped declaration", () => {
@@ -502,6 +714,10 @@ describe("QA frame driver Core association", () => {
       lensWetnessImpulse: false,
     });
     expect(frame.temporal.resetReason).toBe("qa-reset");
+    expect(frame.secondaryParticles.lifecycleReentryForbidden).toBe(0);
+    expect(frame.secondaryParticles.dropReasons.lifecycleReentryForbidden).toBe(
+      0,
+    );
     expect(frame.captures.map((capture) => capture.name)).toEqual([
       "final-color",
       "depth",

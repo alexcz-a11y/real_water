@@ -33,7 +33,7 @@ export const PREWARM_MANIFEST_SCHEMA = "real-water/prewarm" as const;
  *
  * @public
  */
-export const PREWARM_MANIFEST_VERSION = 8 as const;
+export const PREWARM_MANIFEST_VERSION = 9 as const;
 
 /**
  * Immutable physical drawing-buffer dimensions bound into a Prewarm Manifest.
@@ -149,6 +149,10 @@ export const SUPPORTED_EFFECT_VARIANTS: readonly PrewarmEffectVariant[] =
       effectId: "underwater-volume",
       variantId: "depth-aware",
     }),
+    Object.freeze({
+      effectId: "secondary-particles",
+      variantId: "bounded-post-traa",
+    }),
   ]);
 
 export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
@@ -243,6 +247,17 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
   stockTraaHistory: "water-stock-traa-history",
   traaResolveJitter: "water-traa-resolve-jitter",
   traaResetRoute: "water-traa-reset-route",
+  secondaryParticlePool: "water-secondary-particle-pool",
+  secondaryParticleAllocationRoute: "water-secondary-particle-allocation-route",
+  postTraaCompositionPlan: "water-post-traa-composition-plan",
+  traaResolvedTarget: "water-traa-resolved-target",
+  secondaryParticleAccumulationTarget:
+    "water-secondary-particle-accumulation-target",
+  secondaryParticleStageRoute: "water-secondary-particle-stage-route",
+  secondaryParticleCompositeRoute: "water-secondary-particle-composite-route",
+  secondaryParticleDiagnosticsRoute:
+    "water-secondary-particle-diagnostics-route",
+  secondaryParticleProbe: "water-secondary-particle-probe",
   currentColorConversion: "water-current-color-conversion",
   namedOutputRoutes: "water-named-output-routes",
   hiddenStabilization: "water-hidden-stabilization",
@@ -276,6 +291,14 @@ const DRAWING_BUFFER_BOUND_DECLARATION_IDS: ReadonlySet<string> = new Set([
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.currentColorTarget,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.stockTraaHistory,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.traaResolveJitter,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleAllocationRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.postTraaCompositionPlan,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.traaResolvedTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleAccumulationTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleStageRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleCompositeRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleDiagnosticsRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleProbe,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.currentColorConversion,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
@@ -899,8 +922,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
     kind: "conditional-route",
     label:
-      "Fixed-tick whitecaps, waterline-gated planar aux, one jittered main MRT, current-frame SSR, per-ray underwater volume with on-request diagnostics, then stock TRAA",
+      "Fixed-tick whitecaps and shared particle allocation, waterline-gated planar aux, one jittered main MRT, current-frame SSR, per-ray underwater volume, stock TRAA, then ordered post-TRAA secondary-particle composition",
     fingerprint:
+      // Provenance: this BASE fingerprint's reproducible source was not recorded and cannot be recovered; #28 changed only the label and did not remint this value.
       "sha256:f7f44a7ddf3041a2cda3654fb87e9181f0ca87730eb64017725c664995bafb91",
   },
   {
@@ -1009,6 +1033,84 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
       "sha256:3f32ddae6ca9dde0bcfedf7e8c12e2d7f8c1c71d5fb53de9e2fb4e958e660239",
   },
   {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticlePool,
+    kind: "resource",
+    label:
+      "Shared secondary-particle pool (131,072 retained slots; 147,456 declared candidates across four consumers; render-stage-agnostic)",
+    fingerprint:
+      // Provenance: #28 introduced this value, minted once from the exact UTF-8 label bytes (no trailing newline; quotes excluded): "Shared secondary-particle pool (131,072 retained slots; 147,456 declared candidates across four consumers; render-stage-agnostic)"
+      "sha256:3bd2141be77da74f9a089795b154fa8cac0cd479f536cb5bdc0961141b13d2c5",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleAllocationRoute,
+    kind: "conditional-route",
+    label:
+      "Q16 global contribution allocation (four consumers; 5,376 borrowable survival-floor slots; stable-key ties; +4096 incumbent bonus; 4-tick residence/cooldown; lifecycle no-reentry)",
+    fingerprint:
+      // Provenance: #28 introduced this value, minted once from the exact UTF-8 label bytes (no trailing newline; quotes excluded): "Q16 global contribution allocation (four consumers; 5,376 borrowable survival-floor slots; stable-key ties; +4096 incumbent bonus; 4-tick residence/cooldown; lifecycle no-reentry)"
+      "sha256:5eb0ddd03a38ddad2925ef38280e21fe9f240f07a0875a9f2067c0b2bea80a71",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.postTraaCompositionPlan,
+    kind: "effect-state",
+    label:
+      "Ordered post-TRAA composition plan (drawing-buffer-exact: TRAA -> secondary-particles -> presentation)",
+    fingerprint:
+      // Provenance: #28 introduced this value, minted from the exact UTF-8 label bytes (no trailing newline; quotes excluded): "Ordered post-TRAA composition plan (drawing-buffer-exact: TRAA -> secondary-particles -> presentation)"
+      "sha256:610e1049899cd8b0b2f76fc9e5d6f75d2d2ace774a8edc1ab433aa445e482f6b",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.traaResolvedTarget,
+    kind: "resource",
+    label: "Stock TRAA resolved color (RGBA8, drawing-buffer-exact)",
+    fingerprint:
+      // Provenance: #28 introduced this value, minted from the exact UTF-8 label bytes (no trailing newline; quotes excluded): "Stock TRAA resolved color (RGBA8, drawing-buffer-exact)"
+      "sha256:97f0c10a22209f0f6644438d126fa062aa296245e7d18429cc4a42e58730fb09",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleAccumulationTarget,
+    kind: "resource",
+    label:
+      "Secondary-particle additive accumulation and diagnostics (RGBA16F RGB contribution plus A overdraw, drawing-buffer-exact)",
+    fingerprint:
+      // Provenance: #28 introduced this value, minted from the exact UTF-8 label bytes (no trailing newline; quotes excluded): "Secondary-particle additive accumulation and diagnostics (RGBA16F RGB contribution plus A overdraw, drawing-buffer-exact)"
+      "sha256:e21721a0f3dd09ddcdcd1546022ede326713f190253d2f24ae2ef3f8c34aa053",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleStageRoute,
+    kind: "conditional-route",
+    label:
+      "Secondary-particle spray, droplet, and mist accumulation stage after TRAA",
+    fingerprint:
+      // Provenance: #28 introduced this value, minted from the exact UTF-8 label bytes (no trailing newline; quotes excluded): "Secondary-particle spray, droplet, and mist accumulation stage after TRAA"
+      "sha256:2e01c9f15616e821e3be2f3347c8bff7cff47435ed46086d38492279bb2b5b81",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleCompositeRoute,
+    kind: "conditional-route",
+    label: "Post-TRAA secondary-particle composite into final color",
+    fingerprint:
+      // Provenance: #28 introduced this value, minted from the exact UTF-8 label bytes (no trailing newline; quotes excluded): "Post-TRAA secondary-particle composite into final color"
+      "sha256:08a743eec5984c4cb5c462c290739b90aeff23abc6c67ffea8d4d44c48caa39c",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleDiagnosticsRoute,
+    kind: "conditional-route",
+    label: "Secondary-particle contribution and overdraw diagnostics route",
+    fingerprint:
+      // Provenance: #28 introduced this value, minted from the exact UTF-8 label bytes (no trailing newline; quotes excluded): "Secondary-particle contribution and overdraw diagnostics route"
+      "sha256:3b379f85cfe563c2a0dccf32deb4f5eebe4c42b1f034851efda2bd678f874bfa",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleProbe,
+    kind: "conditional-route",
+    label:
+      "Completion probe of shared secondary-particle allocation canary, accumulation, and post-TRAA final color",
+    fingerprint:
+      // Provenance: #28 introduced this value, minted from the exact UTF-8 label bytes (no trailing newline; quotes excluded): "Completion probe of shared secondary-particle allocation canary, accumulation, and post-TRAA final color"
+      "sha256:9b6e9d13d14f58796b2d250b2193587fc5c73d7e4e007a2b2d45fe668737540b",
+  },
+  {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.currentColorConversion,
     kind: "conditional-route",
     label:
@@ -1020,45 +1122,36 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
     kind: "conditional-route",
     label:
-      "Thirty-four named diagnostics output routes including canonical anchor-local unified foam source identity",
-    // Identity covers the complete thirty-four-route diagnostics registry.
-    // Minted for the merged label by the #27 merge, because neither parent's
-    // value survives a label neither parent wrote. Reproduce this one with
-    // sha256("Thirty-four named diagnostics output routes including canonical
-    // anchor-local unified foam source identity") - the label above, exactly,
-    // as a single line with no trailing newline. This is a note about THIS
-    // value only: most fingerprints in this file are not sha256 of anything
-    // recoverable, and none of them should be recomputed to match it.
+      "Thirty-six named diagnostics output routes including unified foam identity plus secondary-particle contribution and overdraw",
     fingerprint:
-      "sha256:6a4a626dc1b6a2f7fa185eedfdbc53f031399f390168f589ed8cf0ab87ddd03b",
+      // Provenance: #27 established reproducible sha256(label); #28 reminted this value solely because the capture count changed 34 -> 36. Exact UTF-8 label bytes (no trailing newline; quotes excluded): "Thirty-six named diagnostics output routes including unified foam identity plus secondary-particle contribution and overdraw"
+      "sha256:2b420394f0212d9692366db0e5cceac67945038c92eec4bbcd4c0e5de41a3ea5",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.hiddenStabilization,
     kind: "effect-state",
     label:
-      "Eight hidden underwater-composition, TRAA, and SSR history stabilization frames",
+      "Eight hidden underwater-composition, TRAA, SSR-history, and ordered post-TRAA stabilization frames",
     fingerprint:
+      // Provenance: this BASE fingerprint's reproducible source was not recorded and cannot be recovered; #28 changed only the label and did not remint this value.
       "sha256:caf44b79f85f7ef51388340b5a0b802e9f6d1974d25d28e3e3644c9856fcc441",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.completionProbe,
     kind: "conditional-route",
     label:
-      "GPU completion probe of all thirty-four named output routes including underwater volume and canonical anchor-local unified foam source identity",
-    // Minted for the merged label by the #27 merge, on the same footing as the
-    // named-output-routes fingerprint above. Reproduce this one with
-    // sha256("GPU completion probe of all thirty-four named output routes
-    // including underwater volume and canonical anchor-local unified foam
-    // source identity") - the label above, exactly, as a single line with no
-    // trailing newline. Again: a note about THIS value, not a convention.
+      "GPU completion probe of all thirty-six named output routes including underwater volume, unified foam identity, and secondary-particle contribution/overdraw",
     fingerprint:
-      "sha256:11ae558fe8ebdeba4eb10a198b002aab59c0c7b4f7b510f97a69cba647f6c4fd",
+      // Provenance: #27 established reproducible sha256(label); #28 reminted this value solely because the capture count changed 34 -> 36. Exact UTF-8 label bytes (no trailing newline; quotes excluded): "GPU completion probe of all thirty-six named output routes including underwater volume, unified foam identity, and secondary-particle contribution/overdraw"
+      "sha256:7ed559729bcd40570d350782e7be5f984d56c72e8ad8d3226aac7346fdec54c3",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.mainCameraGuard,
     kind: "conditional-route",
-    label: "Main-camera guard frame including the underwater volume",
+    label:
+      "Main-camera guard frame including underwater volume and ordered post-TRAA secondary-particle composition",
     fingerprint:
+      // Provenance: this BASE fingerprint's reproducible source was not recorded and cannot be recovered; #28 changed only the label and did not remint this value.
       "sha256:e59db4a839b5f36edfaec493a1f334f44ba6bae5a5046a758c0ceb69ea143841",
   },
 ];

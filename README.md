@@ -102,14 +102,14 @@ Issue #18 extended the coherent spectral runtime and deterministic QA
 foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly ninety-four work
-  units: a texture, Host equirect environment radiance, viewport scene color,
-  viewport scene depth, 6-attachment MRT, camera-relative clipmap, four spectral
-  bands, two fixed RGBA16F spectral-stage fields and two fixed anchor-local
-  RGBA16F source-history fields, reset/generate/history/advect/ diffuse/decay
-  routes, a packed output-resolution whitecap stage target and probe, a
-  double-sided TSL NodeMaterial, a stable camera-medium waterline state, a
-  shared waterline history reset, a deterministic lens-wetness handoff,
+- the canonical minimal-water Prewarm Manifest declares exactly one hundred
+  three work units: a texture, Host equirect environment radiance, viewport
+  scene color, viewport scene depth, 6-attachment MRT, camera-relative clipmap,
+  four spectral bands, two fixed RGBA16F spectral-stage fields and two fixed
+  anchor-local RGBA16F source-history fields, reset/generate/history/advect/
+  diffuse/decay routes, a packed output-resolution whitecap stage target and
+  probe, a double-sided TSL NodeMaterial, a stable camera-medium waterline
+  state, a shared waterline history reset, a deterministic lens-wetness handoff,
   waterline/underside optical route, planar reflection target/route, environment
   fallback, planar probe, current-frame SSR raw/blur/composite targets and
   routes plus probe, dedicated TemporalReproject history and resolve targets,
@@ -123,15 +123,19 @@ foundation:
   roughness A, optical factors, a diagnostics-only GPU history-rejection
   target/route, optical diagnostics A/B, Core final-color and current-color
   targets, stock TRAA color+depth history, resolve/jitter route, shared
-  no-allocation TRAA+SSR reset route, current-color conversion, thirty-four
-  named diagnostics output routes, eight hidden temporal stabilization frames,
-  named-output completion probes, and main-camera guard frame, plus the local
-  interaction field, its fixed current/previous uniform buffers, and the
-  hidden-executed radial-impact, directional-wake, and Body socket emission
-  routes, plus bounded local-foam reproject/resolve and source-identity
-  target/probe routes, plus the bounded 128-tick foam-state timeline. Version 8
-  binds the physical drawing buffer into that work plan; a viewport change
-  creates a new manifest and lease;
+  no-allocation TRAA+SSR reset route, a render-stage-neutral 131,072-slot
+  secondary-particle pool and four-consumer allocation route, ordered
+  output-resolution post-TRAA resolved/accumulation/final targets plus spray,
+  composite, diagnostics, and completion-probe routes, current-color conversion,
+  thirty-six named diagnostics output routes, eight hidden temporal
+  stabilization frames, named-output completion probes, and main-camera guard
+  frame, plus the local interaction field, its fixed current/previous uniform
+  buffers, and the hidden-executed radial-impact, directional-wake, and Body
+  socket emission routes, plus bounded local-foam reproject/resolve and
+  source-identity target/probe routes, plus the bounded 128-tick foam-state
+  timeline. Version 8 binds the physical drawing buffer into that work plan;
+  Version 9 adds the shared secondary-particle allocation and ordered post-TRAA
+  synthesis route; a viewport change creates a new manifest and lease;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
   restores their state after preparation, and never disposes them;
 - progress advances monotonically only when declared manifest work completes;

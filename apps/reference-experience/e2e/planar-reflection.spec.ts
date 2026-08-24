@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createWaterPreset, type ArtisticControls } from "real-water";
 import type {
   QaCameraV1,
-  QaHarnessV13,
+  QaHarnessV14,
   QaPlanarReflectionFixtureHotColor,
   QaPlanarReflectionFixtureState,
 } from "../src/qa-harness.js";
@@ -64,7 +64,7 @@ async function presentPlanarEvidence(
 }> {
   return page.evaluate(
     async ({ fixtureEnabled, fixtureColor, camera, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -127,7 +127,7 @@ test("keeps the BackSide planar fixture visible and scale-disabled through ready
 }) => {
   await openQaStage(page);
   const ready = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -296,7 +296,7 @@ test("keeps Host environment fallback independent of scene.environment", async (
 }) => {
   await openQaStage(page);
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -326,7 +326,7 @@ test("restores planar output on the same lease after rising above the plane", as
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ below, above }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

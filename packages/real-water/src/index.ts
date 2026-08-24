@@ -18,6 +18,10 @@ export type {
   QualityProfileReflectionSsr,
   QualityProfileReflectionSsrHistory,
   QualityProfileSpectralWhitecaps,
+  QualityProfileSecondaryParticleConsumer,
+  QualityProfileSecondaryParticles,
+  QualityProfilePostTraaStage,
+  QualityProfilePostTraaComposition,
   QualityProfileSurface,
   QualityProfileTemporal,
   QualityProfileUnderwaterVolume,
@@ -47,12 +51,15 @@ export type {
   RenderingCapabilitiesReflectionSsr,
   RenderingCapabilitiesReflectionSsrBlur,
   RenderingCapabilitiesReflectionSsrHistory,
+  RenderingCapabilitiesSecondaryParticles,
+  RenderingCapabilitiesPostTraaComposition,
   RenderingCapabilitiesTemporal,
 } from "./capabilities.js";
 export {
   MAX_ATTACHED_BODIES,
   MAX_ACTIVE_DISTURBANCES,
   MAX_GAMEPLAY_QUERY_POINTS,
+  MAX_SECONDARY_PARTICLES,
 } from "./capabilities.js";
 
 export { RealWaterRuntimeError, RealWaterStartupError } from "./errors.js";

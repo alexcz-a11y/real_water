@@ -137,6 +137,62 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
         },
       },
     },
+    secondaryParticles: {
+      capacity: 131_072,
+      maximumCandidateCount: 147_456,
+      contributionReference: {
+        width: 320,
+        height: 180,
+        space: "output-drawing-buffer",
+        screenAreaDivisor: 3_600,
+        quantization: "q16-unorm-round-nearest",
+      },
+      hysteresis: {
+        retainedContributionBonusQ16: 4_096,
+        minimumResidenceTicks: 4,
+        reentryCooldownTicks: 4,
+      },
+      consumers: [
+        {
+          consumerId: "spray-droplet-mist",
+          maximumRequestCount: 65_536,
+          softRequestCeiling: 32_768,
+          minimumRetainedSlots: 2_048,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "underwater-suspended-particles",
+          maximumRequestCount: 49_152,
+          softRequestCeiling: 24_576,
+          minimumRetainedSlots: 2_048,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "subsurface-foam-bubble-cloud",
+          maximumRequestCount: 24_576,
+          softRequestCeiling: 12_288,
+          minimumRetainedSlots: 1_024,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "rising-bubbles",
+          maximumRequestCount: 8_192,
+          softRequestCeiling: 4_096,
+          minimumRetainedSlots: 256,
+          pressureReentryPolicy: "forbidden-until-absent",
+        },
+      ],
+      selection: "q16-global-contribution-radix",
+      updateCadence: "host-fixed-tick",
+      renderPhaseKnowledge: "none",
+    },
+    postTraaComposition: {
+      width: 320,
+      height: 180,
+      stages: [{ id: "secondary-particles", after: "traa" }],
+      accumulationFormat: "rgba16float",
+      finalColorFormat: "rgba8unorm-srgb",
+    },
   },
   gameplay: {
     maxAttachedBodies: MAX_ATTACHED_BODIES,
@@ -931,7 +987,7 @@ describe("Regression acceptance version-3 reader", () => {
     expect(document.qaPrewarmManifest).toMatchObject({
       capabilities: READY_CAPABILITIES,
       manifest: {
-        version: 12,
+        version: 13,
         captures: expect.arrayContaining([
           {
             name: "foam-source-identity",
@@ -943,7 +999,7 @@ describe("Regression acceptance version-3 reader", () => {
         }),
       },
     });
-    expect(document.qaPrewarmManifest?.manifest.captures).toHaveLength(34);
+    expect(document.qaPrewarmManifest?.manifest.captures).toHaveLength(36);
   });
 
   it("rejects raw base64 capture payloads and a forged schema", () => {

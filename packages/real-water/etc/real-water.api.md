@@ -832,6 +832,9 @@ export const MAX_CONVEX_HULL_VERTICES: 64;
 export const MAX_GAMEPLAY_QUERY_POINTS: 2048;
 
 // @public
+export const MAX_SECONDARY_PARTICLES: 131072;
+
+// @public
 export interface MemoryBodyPhysicsAdapter extends BodyPhysicsAdapter {
     // (undocumented)
     integrateFixedStep(): BodyPhysicsState;
@@ -1000,7 +1003,7 @@ export type PresetRecoveryReason = "invalid-json" | "unknown-schema" | "invalid-
 export const PREWARM_MANIFEST_SCHEMA: "real-water/prewarm";
 
 // @public
-export const PREWARM_MANIFEST_VERSION: 8;
+export const PREWARM_MANIFEST_VERSION: 9;
 
 // @public
 export interface PrewarmDeclaration {
@@ -1082,7 +1085,7 @@ export type PrimitiveInteractionShape = SphereInteractionShape | BoxInteractionS
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 11;
+export const QUALITY_PROFILE_VERSION: 12;
 
 // @public
 export interface QualityProfile {
@@ -1093,11 +1096,15 @@ export interface QualityProfile {
     // (undocumented)
     readonly interaction: QualityProfileInteraction;
     // (undocumented)
+    readonly postTraaComposition: QualityProfilePostTraaComposition;
+    // (undocumented)
     readonly profileHash: string;
     // (undocumented)
     readonly reflection: QualityProfileReflection;
     // (undocumented)
     readonly schema: typeof QUALITY_PROFILE_SCHEMA;
+    // (undocumented)
+    readonly secondaryParticles: QualityProfileSecondaryParticles;
     // (undocumented)
     readonly surface: QualityProfileSurface;
     // (undocumented)
@@ -1165,6 +1172,30 @@ export interface QualityProfileInteractionField {
     readonly radiusMetres: 48;
     // (undocumented)
     readonly snapshotBanks: 2;
+}
+
+// @public
+export interface QualityProfilePostTraaComposition {
+    // (undocumented)
+    readonly accumulationFormat: "rgba16float";
+    // (undocumented)
+    readonly finalColorFormat: "rgba8unorm-srgb";
+    // (undocumented)
+    readonly mode: "ordered-declarative-stages";
+    // (undocumented)
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly samples: 0;
+    // (undocumented)
+    readonly stages: readonly [QualityProfilePostTraaStage];
+}
+
+// @public
+export interface QualityProfilePostTraaStage {
+    // (undocumented)
+    readonly after: "traa";
+    // (undocumented)
+    readonly id: "secondary-particles";
 }
 
 // @public
@@ -1261,6 +1292,61 @@ export interface QualityProfileReflectionSsrHistory {
     readonly resolveFormat: "rgba16float";
     // (undocumented)
     readonly updateCadence: "host-present";
+}
+
+// @public
+export interface QualityProfileSecondaryParticleConsumer {
+    // (undocumented)
+    readonly consumerId: "spray-droplet-mist" | "underwater-suspended-particles" | "subsurface-foam-bubble-cloud" | "rising-bubbles";
+    // (undocumented)
+    readonly contributionReference: "manifest-output-drawing-buffer";
+    // (undocumented)
+    readonly maximumRequestCount: 65_536 | 49_152 | 24_576 | 8_192;
+    // (undocumented)
+    readonly minimumRetainedSlots: 2_048 | 1_024 | 256;
+    // (undocumented)
+    readonly pressureReentryPolicy: "after-shared-cooldown" | "forbidden-until-absent";
+    // (undocumented)
+    readonly softRequestCeiling: 32_768 | 24_576 | 12_288 | 4_096;
+}
+
+// @public
+export interface QualityProfileSecondaryParticles {
+    // (undocumented)
+    readonly capacity: 131_072;
+    // (undocumented)
+    readonly consumers: readonly [
+    QualityProfileSecondaryParticleConsumer,
+    QualityProfileSecondaryParticleConsumer,
+    QualityProfileSecondaryParticleConsumer,
+    QualityProfileSecondaryParticleConsumer
+    ];
+    // (undocumented)
+    readonly contribution: {
+        readonly projectedAreaReference: "manifest-output-drawing-buffer";
+        readonly screenAreaDivisor: 3_600;
+        readonly formula: "saturating-pixel-energy";
+        readonly quantization: "q16-unorm-round-nearest";
+    };
+    // (undocumented)
+    readonly hysteresis: {
+        readonly mode: "incumbent-bonus-residence-cooldown";
+        readonly retainedContributionBonusQ16: 4_096;
+        readonly minimumResidenceTicks: 4;
+        readonly reentryCooldownTicks: 4;
+    };
+    // (undocumented)
+    readonly maximumCandidateCount: 147_456;
+    // (undocumented)
+    readonly mode: "shared-global-contribution-pool";
+    // (undocumented)
+    readonly payloadOwnership: "consumer";
+    // (undocumented)
+    readonly renderPhaseKnowledge: "none";
+    // (undocumented)
+    readonly selection: "q16-global-contribution-radix";
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
 }
 
 // @public
@@ -1501,11 +1587,34 @@ export interface RenderingCapabilities {
     // (undocumented)
     readonly backend: "core-webgpu";
     // (undocumented)
+    readonly postTraaComposition: RenderingCapabilitiesPostTraaComposition;
+    // (undocumented)
     readonly reflection: RenderingCapabilitiesReflection;
+    // (undocumented)
+    readonly secondaryParticles: RenderingCapabilitiesSecondaryParticles;
     // (undocumented)
     readonly temporal: RenderingCapabilitiesTemporal;
     // (undocumented)
     readonly timestampQuery: boolean;
+}
+
+// @public
+export interface RenderingCapabilitiesPostTraaComposition {
+    // (undocumented)
+    readonly accumulationFormat: "rgba16float";
+    // (undocumented)
+    readonly finalColorFormat: "rgba8unorm-srgb";
+    // (undocumented)
+    readonly height: number;
+    // (undocumented)
+    readonly stages: readonly [
+        {
+        readonly id: "secondary-particles";
+        readonly after: "traa";
+    }
+    ];
+    // (undocumented)
+    readonly width: number;
 }
 
 // @public
@@ -1601,6 +1710,65 @@ export interface RenderingCapabilitiesReflectionSsrHistory {
     readonly updateCadence: "host-present";
     // (undocumented)
     readonly width: number;
+}
+
+// @public
+export interface RenderingCapabilitiesSecondaryParticles {
+    // (undocumented)
+    readonly capacity: 131_072;
+    // (undocumented)
+    readonly consumers: readonly [
+        {
+        readonly consumerId: "spray-droplet-mist";
+        readonly maximumRequestCount: 65_536;
+        readonly softRequestCeiling: 32_768;
+        readonly minimumRetainedSlots: 2_048;
+        readonly pressureReentryPolicy: "after-shared-cooldown";
+    },
+        {
+        readonly consumerId: "underwater-suspended-particles";
+        readonly maximumRequestCount: 49_152;
+        readonly softRequestCeiling: 24_576;
+        readonly minimumRetainedSlots: 2_048;
+        readonly pressureReentryPolicy: "after-shared-cooldown";
+    },
+        {
+        readonly consumerId: "subsurface-foam-bubble-cloud";
+        readonly maximumRequestCount: 24_576;
+        readonly softRequestCeiling: 12_288;
+        readonly minimumRetainedSlots: 1_024;
+        readonly pressureReentryPolicy: "after-shared-cooldown";
+    },
+        {
+        readonly consumerId: "rising-bubbles";
+        readonly maximumRequestCount: 8_192;
+        readonly softRequestCeiling: 4_096;
+        readonly minimumRetainedSlots: 256;
+        readonly pressureReentryPolicy: "forbidden-until-absent";
+    }
+    ];
+    // (undocumented)
+    readonly contributionReference: {
+        readonly width: number;
+        readonly height: number;
+        readonly space: "output-drawing-buffer";
+        readonly screenAreaDivisor: 3_600;
+        readonly quantization: "q16-unorm-round-nearest";
+    };
+    // (undocumented)
+    readonly hysteresis: {
+        readonly retainedContributionBonusQ16: 4_096;
+        readonly minimumResidenceTicks: 4;
+        readonly reentryCooldownTicks: 4;
+    };
+    // (undocumented)
+    readonly maximumCandidateCount: 147_456;
+    // (undocumented)
+    readonly renderPhaseKnowledge: "none";
+    // (undocumented)
+    readonly selection: "q16-global-contribution-radix";
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
 }
 
 // @public

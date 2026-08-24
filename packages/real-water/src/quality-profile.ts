@@ -4,6 +4,7 @@ import {
   INTERACTION_FIELD_RADIUS_METRES,
   MAX_ATTACHED_BODIES,
   MAX_ACTIVE_DISTURBANCES,
+  MAX_SECONDARY_PARTICLES,
 } from "./capabilities.js";
 import {
   MAX_BODY_INTERACTION_SOCKETS,
@@ -23,7 +24,7 @@ export const QUALITY_PROFILE_SCHEMA = "real-water/quality-profile" as const;
  *
  * @public
  */
-export const QUALITY_PROFILE_VERSION = 11 as const;
+export const QUALITY_PROFILE_VERSION = 12 as const;
 
 /**
  * Built-in structural configurations for the minimal-water surface.
@@ -238,6 +239,91 @@ export interface QualityProfileUnderwaterVolume {
 }
 
 /**
+ * One structurally declared consumer of the shared secondary-particle pool.
+ * Contribution construction and payload remain consumer-owned.
+ *
+ * @public
+ */
+export interface QualityProfileSecondaryParticleConsumer {
+  readonly consumerId:
+    | "spray-droplet-mist"
+    | "underwater-suspended-particles"
+    | "subsurface-foam-bubble-cloud"
+    | "rising-bubbles";
+  readonly maximumRequestCount: 65_536 | 49_152 | 24_576 | 8_192;
+  readonly softRequestCeiling: 32_768 | 24_576 | 12_288 | 4_096;
+  readonly minimumRetainedSlots: 2_048 | 1_024 | 256;
+  readonly contributionReference: "manifest-output-drawing-buffer";
+  readonly pressureReentryPolicy:
+    "after-shared-cooldown" | "forbidden-until-absent";
+}
+
+/**
+ * Fixed render-stage-agnostic allocation policy for the global 131,072-slot
+ * secondary-particle pool. Consumers submit final Q16 contribution; the pool
+ * does not know depth, motion, payload, or pre/post-TRAA render timing.
+ *
+ * @public
+ */
+export interface QualityProfileSecondaryParticles {
+  readonly mode: "shared-global-contribution-pool";
+  readonly capacity: 131_072;
+  readonly maximumCandidateCount: 147_456;
+  readonly selection: "q16-global-contribution-radix";
+  readonly contribution: {
+    /**
+     * Consumers convert projected area to the Manifest output drawing buffer,
+     * then submit roundQ16(1 - exp(-(areaPx * opacity * contrast *
+     * depthVisibility) / (width * height / 3600))).
+     */
+    readonly projectedAreaReference: "manifest-output-drawing-buffer";
+    readonly screenAreaDivisor: 3_600;
+    readonly formula: "saturating-pixel-energy";
+    readonly quantization: "q16-unorm-round-nearest";
+  };
+  readonly hysteresis: {
+    readonly mode: "incumbent-bonus-residence-cooldown";
+    readonly retainedContributionBonusQ16: 4_096;
+    readonly minimumResidenceTicks: 4;
+    readonly reentryCooldownTicks: 4;
+  };
+  readonly consumers: readonly [
+    QualityProfileSecondaryParticleConsumer,
+    QualityProfileSecondaryParticleConsumer,
+    QualityProfileSecondaryParticleConsumer,
+    QualityProfileSecondaryParticleConsumer,
+  ];
+  readonly updateCadence: "host-fixed-tick";
+  readonly payloadOwnership: "consumer";
+  readonly renderPhaseKnowledge: "none";
+}
+
+/**
+ * One construction-time stage in the ordered post-TRAA composition plan.
+ *
+ * @public
+ */
+export interface QualityProfilePostTraaStage {
+  readonly id: "secondary-particles";
+  readonly after: "traa";
+}
+
+/**
+ * Fixed drawing-buffer-exact composition stages after TRAA and before Host
+ * presentation. Runtime registration is deliberately absent.
+ *
+ * @public
+ */
+export interface QualityProfilePostTraaComposition {
+  readonly mode: "ordered-declarative-stages";
+  readonly resolutionPolicy: "drawing-buffer-exact";
+  readonly accumulationFormat: "rgba16float";
+  readonly finalColorFormat: "rgba8unorm-srgb";
+  readonly samples: 0;
+  readonly stages: readonly [QualityProfilePostTraaStage];
+}
+
+/**
  * A closed, versioned structural configuration prepared by the Readiness Gate.
  *
  * @public
@@ -253,7 +339,9 @@ export interface QualityProfile {
   readonly temporal: QualityProfileTemporal;
   readonly reflection: QualityProfileReflection;
   readonly whitecaps: QualityProfileSpectralWhitecaps;
+  readonly secondaryParticles: QualityProfileSecondaryParticles;
   readonly underwater: QualityProfileUnderwaterVolume;
+  readonly postTraaComposition: QualityProfilePostTraaComposition;
 }
 
 /**
@@ -332,7 +420,8 @@ export const CURRENT_FRAME_SSR_POLICY: QualityProfileReflectionSsr =
 // Each static hash is the SHA-256 digest of the profile's canonical JSON,
 // excluding profileHash and preserving the public field order:
 // schema, version, id, surface, interaction, bodyCoupling, temporal,
-// reflection, whitecaps, underwater.
+// reflection, whitecaps, secondaryParticles, underwater,
+// postTraaComposition.
 const NATIVE_TEMPORAL: QualityProfileTemporal = Object.freeze({
   mode: "TRAA",
   renderScale: 1,
@@ -366,6 +455,76 @@ const NATIVE_UNDERWATER: QualityProfileUnderwaterVolume = Object.freeze({
   shaftRoute: "deterministic-epipolar",
   updateCadence: "host-present",
 });
+// Declaration order is stable identity evidence, not allocation priority. The
+// allocator canonicalizes by consumerId before global contribution selection.
+const NATIVE_SECONDARY_PARTICLE_CONSUMERS = Object.freeze([
+  Object.freeze({
+    consumerId: "spray-droplet-mist",
+    maximumRequestCount: 65_536,
+    softRequestCeiling: 32_768,
+    minimumRetainedSlots: 2_048,
+    contributionReference: "manifest-output-drawing-buffer",
+    pressureReentryPolicy: "after-shared-cooldown",
+  }),
+  Object.freeze({
+    consumerId: "underwater-suspended-particles",
+    maximumRequestCount: 49_152,
+    softRequestCeiling: 24_576,
+    minimumRetainedSlots: 2_048,
+    contributionReference: "manifest-output-drawing-buffer",
+    pressureReentryPolicy: "after-shared-cooldown",
+  }),
+  Object.freeze({
+    consumerId: "subsurface-foam-bubble-cloud",
+    maximumRequestCount: 24_576,
+    softRequestCeiling: 12_288,
+    minimumRetainedSlots: 1_024,
+    contributionReference: "manifest-output-drawing-buffer",
+    pressureReentryPolicy: "after-shared-cooldown",
+  }),
+  Object.freeze({
+    consumerId: "rising-bubbles",
+    maximumRequestCount: 8_192,
+    softRequestCeiling: 4_096,
+    minimumRetainedSlots: 256,
+    contributionReference: "manifest-output-drawing-buffer",
+    pressureReentryPolicy: "forbidden-until-absent",
+  }),
+] as const);
+const NATIVE_SECONDARY_PARTICLES: QualityProfileSecondaryParticles =
+  Object.freeze({
+    mode: "shared-global-contribution-pool",
+    capacity: MAX_SECONDARY_PARTICLES,
+    maximumCandidateCount: 147_456,
+    selection: "q16-global-contribution-radix",
+    contribution: Object.freeze({
+      projectedAreaReference: "manifest-output-drawing-buffer",
+      screenAreaDivisor: 3_600,
+      formula: "saturating-pixel-energy",
+      quantization: "q16-unorm-round-nearest",
+    }),
+    hysteresis: Object.freeze({
+      mode: "incumbent-bonus-residence-cooldown",
+      retainedContributionBonusQ16: 4_096,
+      minimumResidenceTicks: 4,
+      reentryCooldownTicks: 4,
+    }),
+    consumers: NATIVE_SECONDARY_PARTICLE_CONSUMERS,
+    updateCadence: "host-fixed-tick",
+    payloadOwnership: "consumer",
+    renderPhaseKnowledge: "none",
+  });
+const NATIVE_POST_TRAA_COMPOSITION: QualityProfilePostTraaComposition =
+  Object.freeze({
+    mode: "ordered-declarative-stages",
+    resolutionPolicy: "drawing-buffer-exact",
+    accumulationFormat: "rgba16float",
+    finalColorFormat: "rgba8unorm-srgb",
+    samples: 0,
+    stages: Object.freeze([
+      Object.freeze({ id: "secondary-particles", after: "traa" }),
+    ] as const),
+  });
 // "waterline-crossing" is deliberately absent here. Whitecap foam is simulated
 // in the wave field, so its history only has to be dropped when that field is
 // discontinuous — a reset, a reseed, a rewind, a sea-state cut. A waterline
@@ -386,14 +545,14 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:6f6ccb6262b8b3239dcfbcfc80dd3322ca75408260ea947cdd5892a16a8ef908",
+      "sha256:a9ea5e4aaf2d703f7e2ad85fb8e89afd9289c0ad9ae2a157f0d4f67044d74539",
     widthSegments: 128,
     heightSegments: 128,
     whitecapFieldResolution: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:e1e1c7af79374e668a1f82c4b5c742d42e5009f5162389d8f3dc0ead9978d5a9",
+      "sha256:6498d05bd7491015c457d6183b90654c1df14e81352c1da13e8de34d6f9285a4",
     widthSegments: 256,
     heightSegments: 256,
     whitecapFieldResolution: 256,
@@ -514,7 +673,9 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "interaction",
         "bodyCoupling",
         "whitecaps",
+        "secondaryParticles",
         "underwater",
+        "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([] as const),
@@ -539,7 +700,9 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "interaction",
         "bodyCoupling",
         "whitecaps",
+        "secondaryParticles",
         "underwater",
+        "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze(["resetVelocityFormat"] as const),
       absentInteractionFieldKeys: Object.freeze([] as const),
@@ -575,11 +738,42 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
 // parallel: this branch's 10 was version 9 plus the underwater volume and still
 // carried the spectral-only whitecap field, and #27's 10 was version 9 plus the
 // unified foam field and never saw the underwater volume. Version 11 is the
-// first that carries both.
+// first that carries both. Version 11 is the merged shape immediately before
+// the shared secondary-particle pool and ordered post-TRAA plan.
+const LEGACY_V11_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "secondaryParticles",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([] as const),
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:6f6ccb6262b8b3239dcfbcfc80dd3322ca75408260ea947cdd5892a16a8ef908",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:e1e1c7af79374e668a1f82c4b5c742d42e5009f5162389d8f3dc0ead9978d5a9",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
 const LEGACY_V10_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
-      absentKeys: Object.freeze([] as const),
+      absentKeys: Object.freeze([
+        "secondaryParticles",
+        "postTraaComposition",
+      ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([] as const),
       ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
@@ -601,7 +795,11 @@ const LEGACY_V10_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
     }),
     // #27's version 10: the unified foam field, and no underwater volume.
     Object.freeze({
-      absentKeys: Object.freeze(["underwater"] as const),
+      absentKeys: Object.freeze([
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([] as const),
       ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
@@ -630,7 +828,11 @@ const LEGACY_V10_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
 const LEGACY_V9_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
-      absentKeys: Object.freeze(["underwater"] as const),
+      absentKeys: Object.freeze([
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([] as const),
       ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
@@ -653,7 +855,11 @@ const LEGACY_V9_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
     // #32's version 9: the underwater volume, and neither bodyCoupling nor the
     // directional wake route.
     Object.freeze({
-      absentKeys: Object.freeze(["bodyCoupling"] as const),
+      absentKeys: Object.freeze([
+        "bodyCoupling",
+        "secondaryParticles",
+        "postTraaComposition",
+      ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([
         "directionalWakeRoute",
@@ -683,7 +889,12 @@ const LEGACY_V9_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
 const LEGACY_V8_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
-      absentKeys: Object.freeze(["bodyCoupling", "underwater"] as const),
+      absentKeys: Object.freeze([
+        "bodyCoupling",
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([
         "directionalWakeRoute",
@@ -715,7 +926,12 @@ const LEGACY_V8_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
 const LEGACY_V7_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
-      absentKeys: Object.freeze(["bodyCoupling", "underwater"] as const),
+      absentKeys: Object.freeze([
+        "bodyCoupling",
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([
         "directionalWakeRoute",
@@ -740,7 +956,12 @@ const LEGACY_V7_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
     // #25's version 7: interaction with a directional wake route, plus
     // bodyCoupling, and no whitecaps.
     Object.freeze({
-      absentKeys: Object.freeze(["whitecaps", "underwater"] as const),
+      absentKeys: Object.freeze([
+        "whitecaps",
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([] as const),
       ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
@@ -767,7 +988,9 @@ const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
       absentKeys: Object.freeze([
         "bodyCoupling",
         "whitecaps",
+        "secondaryParticles",
         "underwater",
+        "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([
@@ -793,7 +1016,9 @@ const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
       absentKeys: Object.freeze([
         "interaction",
         "bodyCoupling",
+        "secondaryParticles",
         "underwater",
+        "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([] as const),
@@ -822,7 +1047,9 @@ const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
         "interaction",
         "bodyCoupling",
         "whitecaps",
+        "secondaryParticles",
         "underwater",
+        "postTraaComposition",
       ] as const),
       absentSsrHistoryKeys: Object.freeze([] as const),
       absentInteractionFieldKeys: Object.freeze([] as const),
@@ -855,7 +1082,9 @@ const QUALITY_PROFILE_KEYS = [
   "temporal",
   "reflection",
   "whitecaps",
+  "secondaryParticles",
   "underwater",
+  "postTraaComposition",
 ] as const;
 const SPECTRAL_WHITECAP_KEYS = [
   "mode",
@@ -899,6 +1128,47 @@ const UNDERWATER_KEYS = [
   "shaftRoute",
   "updateCadence",
 ] as const;
+const SECONDARY_PARTICLE_KEYS = [
+  "mode",
+  "capacity",
+  "maximumCandidateCount",
+  "selection",
+  "contribution",
+  "hysteresis",
+  "consumers",
+  "updateCadence",
+  "payloadOwnership",
+  "renderPhaseKnowledge",
+] as const;
+const SECONDARY_PARTICLE_CONTRIBUTION_KEYS = [
+  "projectedAreaReference",
+  "screenAreaDivisor",
+  "formula",
+  "quantization",
+] as const;
+const SECONDARY_PARTICLE_HYSTERESIS_KEYS = [
+  "mode",
+  "retainedContributionBonusQ16",
+  "minimumResidenceTicks",
+  "reentryCooldownTicks",
+] as const;
+const SECONDARY_PARTICLE_CONSUMER_KEYS = [
+  "consumerId",
+  "maximumRequestCount",
+  "softRequestCeiling",
+  "minimumRetainedSlots",
+  "contributionReference",
+  "pressureReentryPolicy",
+] as const;
+const POST_TRAA_COMPOSITION_KEYS = [
+  "mode",
+  "resolutionPolicy",
+  "accumulationFormat",
+  "finalColorFormat",
+  "samples",
+  "stages",
+] as const;
+const POST_TRAA_STAGE_KEYS = ["id", "after"] as const;
 const INTERACTION_KEYS = ["anchorCount", "field"] as const;
 const INTERACTION_FIELD_KEYS = [
   "radiusMetres",
@@ -1054,7 +1324,9 @@ export function createMinimalWaterQualityProfile(
       captureFormat: "rgba16float",
       resetDomains: SPECTRAL_WHITECAP_RESET_DOMAINS,
     },
+    secondaryParticles: NATIVE_SECONDARY_PARTICLES,
     underwater: NATIVE_UNDERWATER,
+    postTraaComposition: NATIVE_POST_TRAA_COMPOSITION,
   });
 }
 
@@ -1150,7 +1422,15 @@ export function normalizeQualityProfile(
     value.reflection.planar.samples !== supported.reflection.planar.samples ||
     !isSupportedSsrPolicy(value.reflection.ssr, supported.reflection.ssr) ||
     !isSupportedSpectralWhitecaps(value.whitecaps, supported.whitecaps) ||
-    !isSupportedUnderwaterVolume(value.underwater, supported.underwater)
+    !isSupportedSecondaryParticles(
+      value.secondaryParticles,
+      supported.secondaryParticles,
+    ) ||
+    !isSupportedUnderwaterVolume(value.underwater, supported.underwater) ||
+    !isSupportedPostTraaComposition(
+      value.postTraaComposition,
+      supported.postTraaComposition,
+    )
   ) {
     throw new TypeError(
       "The Quality Profile does not match a supported structural configuration.",
@@ -1158,6 +1438,93 @@ export function normalizeQualityProfile(
   }
 
   return supported;
+}
+
+function isSupportedSecondaryParticles(
+  value: unknown,
+  supported: QualityProfileSecondaryParticles,
+): boolean {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, SECONDARY_PARTICLE_KEYS) ||
+    !isRecord(value.contribution) ||
+    !hasExactKeys(value.contribution, SECONDARY_PARTICLE_CONTRIBUTION_KEYS) ||
+    !isRecord(value.hysteresis) ||
+    !hasExactKeys(value.hysteresis, SECONDARY_PARTICLE_HYSTERESIS_KEYS) ||
+    !Array.isArray(value.consumers) ||
+    value.consumers.length !== supported.consumers.length
+  ) {
+    return false;
+  }
+  const consumers = value.consumers as unknown[];
+  const consumersMatch = supported.consumers.every((consumer, index) => {
+    const candidate = consumers[index];
+    return (
+      isRecord(candidate) &&
+      hasExactKeys(candidate, SECONDARY_PARTICLE_CONSUMER_KEYS) &&
+      candidate.consumerId === consumer.consumerId &&
+      candidate.maximumRequestCount === consumer.maximumRequestCount &&
+      candidate.softRequestCeiling === consumer.softRequestCeiling &&
+      candidate.minimumRetainedSlots === consumer.minimumRetainedSlots &&
+      candidate.contributionReference === consumer.contributionReference &&
+      candidate.pressureReentryPolicy === consumer.pressureReentryPolicy
+    );
+  });
+  return (
+    consumersMatch &&
+    value.mode === supported.mode &&
+    value.capacity === supported.capacity &&
+    value.maximumCandidateCount === supported.maximumCandidateCount &&
+    value.selection === supported.selection &&
+    value.contribution.projectedAreaReference ===
+      supported.contribution.projectedAreaReference &&
+    value.contribution.screenAreaDivisor ===
+      supported.contribution.screenAreaDivisor &&
+    value.contribution.formula === supported.contribution.formula &&
+    value.contribution.quantization === supported.contribution.quantization &&
+    value.hysteresis.mode === supported.hysteresis.mode &&
+    value.hysteresis.retainedContributionBonusQ16 ===
+      supported.hysteresis.retainedContributionBonusQ16 &&
+    value.hysteresis.minimumResidenceTicks ===
+      supported.hysteresis.minimumResidenceTicks &&
+    value.hysteresis.reentryCooldownTicks ===
+      supported.hysteresis.reentryCooldownTicks &&
+    value.updateCadence === supported.updateCadence &&
+    value.payloadOwnership === supported.payloadOwnership &&
+    value.renderPhaseKnowledge === supported.renderPhaseKnowledge
+  );
+}
+
+function isSupportedPostTraaComposition(
+  value: unknown,
+  supported: QualityProfilePostTraaComposition,
+): boolean {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, POST_TRAA_COMPOSITION_KEYS) ||
+    !Array.isArray(value.stages) ||
+    value.stages.length !== supported.stages.length
+  ) {
+    return false;
+  }
+  const stages = value.stages as unknown[];
+  const stagesMatch = supported.stages.every((stage, index) => {
+    const candidate = stages[index];
+    return (
+      isRecord(candidate) &&
+      hasExactKeys(candidate, POST_TRAA_STAGE_KEYS) &&
+      candidate.id === stage.id &&
+      candidate.after === stage.after
+    );
+  });
+  return (
+    stagesMatch &&
+    value.mode === supported.mode &&
+    value.resolutionPolicy === supported.resolutionPolicy &&
+    value.accumulationFormat === supported.accumulationFormat &&
+    value.finalColorFormat === supported.finalColorFormat &&
+    value.samples === supported.samples
+  );
 }
 
 function isSupportedUnderwaterVolume(
@@ -1227,6 +1594,15 @@ export function migrateQualityProfile(candidate: unknown): QualityProfile {
     } catch {
       throw new TypeError("The Quality Profile cannot be migrated.");
     }
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 11 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV11Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
   }
 
   if (
@@ -1442,6 +1818,15 @@ function matchesLegacyV10Profile(
   );
 }
 
+function matchesLegacyV11Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V11_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
 function matchesLegacyV6Profile(
   value: Record<string, unknown>,
   id: MinimalWaterQualityProfileId,
@@ -1459,7 +1844,12 @@ function matchesLegacyVariant(
   const carriesInteraction = !variant.absentKeys.includes("interaction");
   const carriesBodyCoupling = !variant.absentKeys.includes("bodyCoupling");
   const carriesWhitecaps = !variant.absentKeys.includes("whitecaps");
+  const carriesSecondaryParticles =
+    !variant.absentKeys.includes("secondaryParticles");
   const carriesUnderwater = !variant.absentKeys.includes("underwater");
+  const carriesPostTraaComposition = !variant.absentKeys.includes(
+    "postTraaComposition",
+  );
   const supported = createMinimalWaterQualityProfile(id);
   return (
     hasExactKeys(
@@ -1484,8 +1874,18 @@ function matchesLegacyVariant(
             value.whitecaps,
             supported.whitecaps,
           ))) &&
+    (!carriesSecondaryParticles ||
+      isSupportedSecondaryParticles(
+        value.secondaryParticles,
+        supported.secondaryParticles,
+      )) &&
     (!carriesUnderwater ||
-      isSupportedUnderwaterVolume(value.underwater, supported.underwater))
+      isSupportedUnderwaterVolume(value.underwater, supported.underwater)) &&
+    (!carriesPostTraaComposition ||
+      isSupportedPostTraaComposition(
+        value.postTraaComposition,
+        supported.postTraaComposition,
+      ))
   );
 }
 
@@ -1762,7 +2162,27 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
         ...profile.whitecaps.resetDomains,
       ]) as QualityProfileSpectralWhitecaps["resetDomains"],
     }),
+    secondaryParticles: Object.freeze({
+      ...profile.secondaryParticles,
+      contribution: Object.freeze({
+        ...profile.secondaryParticles.contribution,
+      }),
+      hysteresis: Object.freeze({ ...profile.secondaryParticles.hysteresis }),
+      consumers: Object.freeze(
+        profile.secondaryParticles.consumers.map((consumer) =>
+          Object.freeze({ ...consumer }),
+        ),
+      ) as QualityProfileSecondaryParticles["consumers"],
+    }),
     underwater: Object.freeze({ ...profile.underwater }),
+    postTraaComposition: Object.freeze({
+      ...profile.postTraaComposition,
+      stages: Object.freeze(
+        profile.postTraaComposition.stages.map((stage) =>
+          Object.freeze({ ...stage }),
+        ),
+      ) as QualityProfilePostTraaComposition["stages"],
+    }),
   });
 }
 

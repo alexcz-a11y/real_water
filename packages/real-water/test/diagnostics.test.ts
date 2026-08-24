@@ -19,6 +19,7 @@ import {
   readHostDiagnosticsPresentRequest,
   readHostDiagnosticsPresentedFrame,
   readHostDiagnosticsRoute,
+  type DiagnosticsSecondaryParticles,
 } from "../src/diagnostics.js";
 
 const VALID_MANIFEST_HASH = `sha256:${"cd".repeat(32)}`;
@@ -31,6 +32,104 @@ const ABOVE_WATERLINE = Object.freeze({
   transitionRevision: 0,
   lensWetnessImpulse: false,
 });
+
+function createSecondaryParticles(): DiagnosticsSecondaryParticles {
+  return {
+    capacity: 131_072,
+    maximumCandidateCount: 147_456,
+    requested: 6,
+    retained: 2,
+    thinned: 1,
+    invisibleOrOccluded: 1,
+    reentryCooldown: 1,
+    lifecycleReentryForbidden: 1,
+    retainedByFloor: 1,
+    retainedByGlobalCompetition: 1,
+    retainedIncumbents: 0,
+    requestedAboveSoftCeiling: 0,
+    overSubscribed: true,
+    contributionMinimumQ16: 1_024,
+    contributionMaximumQ16: 49_152,
+    dropReasons: {
+      invisibleOrOccluded: 1,
+      globalContributionPressure: 1,
+      reentryCooldown: 1,
+      lifecycleReentryForbidden: 1,
+    },
+    consumers: [
+      {
+        consumerId: "spray-droplet-mist",
+        maximumRequestCount: 65_536,
+        minimumRetainedSlots: 2_048,
+        softRequestCeiling: 32_768,
+        pressureReentryPolicy: "after-shared-cooldown",
+        requested: 6,
+        retained: 2,
+        thinned: 1,
+        invisibleOrOccluded: 1,
+        reentryCooldown: 1,
+        lifecycleReentryForbidden: 1,
+        retainedByFloor: 1,
+        retainedByGlobalCompetition: 1,
+        retainedIncumbents: 0,
+        requestedAboveSoftCeiling: 0,
+        overSubscribed: false,
+        contributionMinimumQ16: 1_024,
+        contributionMaximumQ16: 49_152,
+        dropReasons: {
+          invisibleOrOccluded: 1,
+          globalContributionPressure: 1,
+          reentryCooldown: 1,
+          lifecycleReentryForbidden: 1,
+        },
+      },
+      ...[
+        {
+          consumerId: "underwater-suspended-particles" as const,
+          maximumRequestCount: 49_152,
+          minimumRetainedSlots: 2_048,
+          softRequestCeiling: 24_576,
+          pressureReentryPolicy: "after-shared-cooldown" as const,
+        },
+        {
+          consumerId: "subsurface-foam-bubble-cloud" as const,
+          maximumRequestCount: 24_576,
+          minimumRetainedSlots: 1_024,
+          softRequestCeiling: 12_288,
+          pressureReentryPolicy: "after-shared-cooldown" as const,
+        },
+        {
+          consumerId: "rising-bubbles" as const,
+          maximumRequestCount: 8_192,
+          minimumRetainedSlots: 256,
+          softRequestCeiling: 4_096,
+          pressureReentryPolicy: "forbidden-until-absent" as const,
+        },
+      ].map((plan) => ({
+        ...plan,
+        requested: 0,
+        retained: 0,
+        thinned: 0,
+        invisibleOrOccluded: 0,
+        reentryCooldown: 0,
+        lifecycleReentryForbidden: 0,
+        retainedByFloor: 0,
+        retainedByGlobalCompetition: 0,
+        retainedIncumbents: 0,
+        requestedAboveSoftCeiling: 0,
+        overSubscribed: false,
+        contributionMinimumQ16: null,
+        contributionMaximumQ16: null,
+        dropReasons: {
+          invisibleOrOccluded: 0,
+          globalContributionPressure: 0,
+          reentryCooldown: 0,
+          lifecycleReentryForbidden: 0,
+        },
+      })),
+    ],
+  } as DiagnosticsSecondaryParticles;
+}
 
 function createPresentedFrame(): HostPresentedFrame {
   return {
@@ -53,7 +152,7 @@ function createPresentedFrame(): HostPresentedFrame {
 }
 
 describe("real-water/diagnostics", () => {
-  it("publishes the thirty-four frozen CPU capture names and shapes only", () => {
+  it("publishes the thirty-six frozen CPU capture names and shapes only", () => {
     expect(DIAGNOSTICS_CAPTURE_NAMES).toEqual([
       "final-color",
       "current-color",
@@ -89,6 +188,8 @@ describe("real-water/diagnostics", () => {
       "ssr-history-color",
       "ssr-history-frame-weight",
       "ssr-history-input-color",
+      "secondary-particle-contribution",
+      "secondary-particle-overdraw",
     ]);
     expect(isDiagnosticsCaptureName("ssr-history")).toBe(false);
     expect(isDiagnosticsCaptureName("ssr-history-color")).toBe(true);
@@ -173,6 +274,22 @@ describe("real-water/diagnostics", () => {
       elementType: "float32",
       components: 3,
     });
+    expect(
+      DIAGNOSTICS_CAPTURE_SHAPES["secondary-particle-contribution"],
+    ).toEqual({
+      format: "r32float-secondary-particle-contribution",
+      elementType: "float32",
+      components: 1,
+    });
+    expect(DIAGNOSTICS_CAPTURE_SHAPES["secondary-particle-overdraw"]).toEqual({
+      format: "r32float-secondary-particle-overdraw",
+      elementType: "float32",
+      components: 1,
+    });
+    expect(isDiagnosticsCaptureName("secondary-particle-contribution")).toBe(
+      true,
+    );
+    expect(isDiagnosticsCaptureName("secondary-particle-overdraw")).toBe(true);
     expect(Object.isFrozen(DIAGNOSTICS_CAPTURE_NAMES)).toBe(true);
     expect(Object.isFrozen(DIAGNOSTICS_CAPTURE_SHAPES)).toBe(true);
     expect(DIAGNOSTICS_CAPTURE_SHAPES["final-color"]).toEqual({
@@ -326,10 +443,262 @@ describe("real-water/diagnostics", () => {
         diagnosticReadbackCount: 2,
         sceneRenderCount: 1,
         waterline: ABOVE_WATERLINE,
+        secondaryParticles: createSecondaryParticles(),
         width: 2,
         height: 1,
       }),
     ).toThrowError(/dimensions must match presentation/i);
+  });
+
+  it("accepts a required frozen exact secondary-particle receipt and scalar captures", () => {
+    const accepted = readHostDiagnosticsPresentedFrame({
+      ...createPresentedFrame(),
+      outputs: [
+        {
+          name: "secondary-particle-contribution",
+          format: "r32float-secondary-particle-contribution",
+          width: 2,
+          height: 1,
+          origin: "top-left",
+          data: Float32Array.of(0.25, 0.75),
+        },
+        {
+          name: "secondary-particle-overdraw",
+          format: "r32float-secondary-particle-overdraw",
+          width: 2,
+          height: 1,
+          origin: "top-left",
+          data: Float32Array.of(1, 2),
+        },
+      ],
+      compileCount: 1,
+      probeCount: 1,
+      diagnosticReadbackCount: 2,
+      sceneRenderCount: 1,
+      waterline: ABOVE_WATERLINE,
+      secondaryParticles: createSecondaryParticles(),
+      width: 2,
+      height: 1,
+    });
+
+    expect(Object.isFrozen(accepted)).toBe(true);
+    expect(Object.isFrozen(accepted.outputs[0])).toBe(true);
+    expect(Object.isFrozen(accepted.secondaryParticles)).toBe(true);
+    expect(Object.keys(accepted.secondaryParticles ?? {})).toEqual([
+      "capacity",
+      "maximumCandidateCount",
+      "requested",
+      "retained",
+      "thinned",
+      "invisibleOrOccluded",
+      "reentryCooldown",
+      "lifecycleReentryForbidden",
+      "retainedByFloor",
+      "retainedByGlobalCompetition",
+      "retainedIncumbents",
+      "requestedAboveSoftCeiling",
+      "overSubscribed",
+      "contributionMinimumQ16",
+      "contributionMaximumQ16",
+      "dropReasons",
+      "consumers",
+    ]);
+    expect(Object.isFrozen(accepted.secondaryParticles?.dropReasons)).toBe(
+      true,
+    );
+    expect(Object.isFrozen(accepted.secondaryParticles?.consumers)).toBe(true);
+    expect(Object.isFrozen(accepted.secondaryParticles?.consumers[0])).toBe(
+      true,
+    );
+    expect(
+      Object.isFrozen(accepted.secondaryParticles?.consumers[0]?.dropReasons),
+    ).toBe(true);
+    expect(
+      Object.keys(accepted.secondaryParticles?.consumers[0] ?? {}),
+    ).toEqual([
+      "consumerId",
+      "maximumRequestCount",
+      "minimumRetainedSlots",
+      "softRequestCeiling",
+      "pressureReentryPolicy",
+      "requested",
+      "retained",
+      "thinned",
+      "invisibleOrOccluded",
+      "reentryCooldown",
+      "lifecycleReentryForbidden",
+      "retainedByFloor",
+      "retainedByGlobalCompetition",
+      "retainedIncumbents",
+      "requestedAboveSoftCeiling",
+      "overSubscribed",
+      "contributionMinimumQ16",
+      "contributionMaximumQ16",
+      "dropReasons",
+    ]);
+    expect(
+      accepted.secondaryParticles?.consumers.map((consumer) =>
+        Reflect.get(consumer, "pressureReentryPolicy"),
+      ),
+    ).toEqual([
+      "after-shared-cooldown",
+      "after-shared-cooldown",
+      "after-shared-cooldown",
+      "forbidden-until-absent",
+    ]);
+    expect(accepted.secondaryParticles).toMatchObject({
+      requested: 6,
+      retained: 2,
+      thinned: 1,
+      contributionMinimumQ16: 1_024,
+      contributionMaximumQ16: 49_152,
+      dropReasons: {
+        invisibleOrOccluded: 1,
+        globalContributionPressure: 1,
+        reentryCooldown: 1,
+        lifecycleReentryForbidden: 1,
+      },
+    });
+    expect(accepted.secondaryParticles?.consumers).toHaveLength(4);
+    expect(accepted.secondaryParticles?.consumers[0]).toMatchObject({
+      consumerId: "spray-droplet-mist",
+      requested: 6,
+      retained: 2,
+      thinned: 1,
+      contributionMinimumQ16: 1_024,
+      contributionMaximumQ16: 49_152,
+      dropReasons: {
+        invisibleOrOccluded: 1,
+        globalContributionPressure: 1,
+        reentryCooldown: 1,
+        lifecycleReentryForbidden: 1,
+      },
+    });
+  });
+
+  it("fail-closes invalid secondary-particle receipts and non-exact captures", () => {
+    const secondaryParticles = createSecondaryParticles();
+    const base = {
+      ...createPresentedFrame(),
+      outputs: [],
+      compileCount: 1,
+      probeCount: 1,
+      diagnosticReadbackCount: 0,
+      sceneRenderCount: 1,
+      waterline: ABOVE_WATERLINE,
+      secondaryParticles,
+      width: 2,
+      height: 1,
+    };
+    const consumer = secondaryParticles.consumers[0];
+    if (consumer === undefined) {
+      throw new Error("expected a secondary-particle consumer");
+    }
+    expect(() =>
+      readHostDiagnosticsPresentedFrame({
+        ...base,
+        secondaryParticles: {
+          ...secondaryParticles,
+          consumers: [
+            {
+              ...consumer,
+              pressureReentryPolicy: "unknown",
+            },
+            ...secondaryParticles.consumers.slice(1),
+          ],
+        },
+      } as never),
+    ).toThrowError(/pressureReentryPolicy.*after-shared-cooldown/i);
+    const {
+      pressureReentryPolicy: omittedPressureReentryPolicy,
+      ...consumerWithoutPressureReentryPolicy
+    } = consumer;
+    expect(omittedPressureReentryPolicy).toBe("after-shared-cooldown");
+    expect(() =>
+      readHostDiagnosticsPresentedFrame({
+        ...base,
+        secondaryParticles: {
+          ...secondaryParticles,
+          consumers: [
+            consumerWithoutPressureReentryPolicy,
+            ...secondaryParticles.consumers.slice(1),
+          ],
+        },
+      } as never),
+    ).toThrowError(/consumer.*exact receipt contract/i);
+
+    expect(() =>
+      readHostDiagnosticsPresentedFrame({
+        ...base,
+        secondaryParticles: {
+          ...secondaryParticles,
+          retained: 3,
+        },
+      }),
+    ).toThrowError(/requested must equal retained/i);
+    expect(() =>
+      readHostDiagnosticsPresentedFrame({
+        ...base,
+        secondaryParticles: {
+          ...secondaryParticles,
+          lifecycleReentryForbidden: 0,
+        },
+      }),
+    ).toThrowError(/requested must equal retained/i);
+    expect(() =>
+      readHostDiagnosticsPresentedFrame({
+        ...base,
+        secondaryParticles: {
+          ...secondaryParticles,
+          contributionMaximumQ16: 65_536,
+        },
+      }),
+    ).toThrowError(/\[0, 65535\]/i);
+    expect(() =>
+      readHostDiagnosticsPresentedFrame({
+        ...base,
+        secondaryParticles: {
+          ...secondaryParticles,
+          consumers: [
+            {
+              ...consumer,
+              requested: -1,
+            },
+          ],
+        },
+      }),
+    ).toThrowError(/requested.*non-negative safe integer/i);
+    expect(() =>
+      readHostDiagnosticsPresentedFrame({
+        ...base,
+        secondaryParticles: {
+          ...secondaryParticles,
+          extra: true,
+        },
+      } as never),
+    ).toThrowError(/secondaryParticles.*exact receipt contract/i);
+    const { secondaryParticles: omitted, ...withoutSecondaryParticles } = base;
+    expect(omitted).toBe(secondaryParticles);
+    expect(() =>
+      readHostDiagnosticsPresentedFrame(withoutSecondaryParticles as never),
+    ).toThrowError(/exact receipt contract/i);
+    expect(() =>
+      readHostDiagnosticsPresentedFrame({
+        ...base,
+        outputs: [
+          {
+            name: "secondary-particle-overdraw",
+            format: "r32float-secondary-particle-overdraw",
+            width: 2,
+            height: 1,
+            origin: "top-left",
+            data: new Float32Array(2),
+            extra: true,
+          },
+        ],
+        diagnosticReadbackCount: 1,
+      } as never),
+    ).toThrowError(/supported name/i);
   });
 
   it("fail-closes diagnostics frames with extra keys, wrong format, length, or counters", () => {
@@ -360,6 +729,7 @@ describe("real-water/diagnostics", () => {
       diagnosticReadbackCount: 2,
       sceneRenderCount: 1,
       waterline: ABOVE_WATERLINE,
+      secondaryParticles: createSecondaryParticles(),
       width: 2,
       height: 1,
     };

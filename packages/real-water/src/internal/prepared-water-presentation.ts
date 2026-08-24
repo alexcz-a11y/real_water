@@ -34,6 +34,11 @@ import {
   type DiagnosticsMotionVectorCapture,
   type DiagnosticsOpticalScalarCapture,
   type DiagnosticsSsrRoughnessCapture,
+  type DiagnosticsSecondaryParticleConsumer,
+  type DiagnosticsSecondaryParticleContributionCapture,
+  type DiagnosticsSecondaryParticleOverdrawCapture,
+  type DiagnosticsSecondaryParticleReceipt,
+  type DiagnosticsSecondaryParticles,
   type DiagnosticsUnderwaterVolumeCapture,
   type DiagnosticsWhitecapStageCapture,
   type HostDiagnosticsPresentRequest,
@@ -43,12 +48,15 @@ import {
 import type {
   HostPresentationRoute,
   HostPresentedFrame,
-  HostTemporalResetReason,
 } from "../presentation.js";
 import type { OpenWaterRuntimeSnapshot } from "../runtime.js";
 import type { HostEnvironmentAdapter } from "../environment.js";
-import type { QualityProfileUnderwaterVolume } from "../quality-profile.js";
+import type {
+  QualityProfileSecondaryParticles,
+  QualityProfileUnderwaterVolume,
+} from "../quality-profile.js";
 import { unpackPackedViewNormalRgb } from "../ssr.js";
+import { createHostSnapshotContinuityTracker } from "../temporal-continuity.js";
 import { installHostDiagnosticsRoute } from "./diagnostics-route-bridge.js";
 import type { HostPresentationRouteBridge } from "./presentation-route-bridge.js";
 import {
@@ -87,6 +95,19 @@ import type {
   WaterlineStateController,
 } from "./waterline-state.js";
 import { createUnderwaterVolumeRendering } from "./underwater-volume-rendering.js";
+import {
+  createPostTraaComposition,
+  type PreparedPostTraaComposition,
+} from "../post-traa-composition.js";
+import {
+  createSecondaryParticlePostTraaStageRegistration,
+  SECONDARY_PARTICLE_POST_TRAA_PLAN,
+} from "./secondary-particle-post-traa-stage.js";
+import type {
+  SecondaryParticleConsumerReceipt,
+  SecondaryParticlePool,
+} from "../secondary-particle-pool.js";
+import type { SecondarySprayParticles } from "./secondary-spray-particles.js";
 
 export const PREWARM_HISTORY_EPOCH = 1;
 export const HIDDEN_STABILIZATION_FRAME_COUNT = 8;
@@ -112,13 +133,16 @@ export interface PreparedWaterPresentationResources {
   readonly presentationPipeline: RenderPipeline;
   readonly currentColorPipeline: RenderPipeline;
   readonly temporalPipeline: RenderPipeline;
+  readonly postTraaComposition: PreparedPostTraaComposition;
   readonly traaNode: ReturnType<typeof traa>;
   readonly jitterAdapter: TraaJitterAdapter;
   readonly resetUniform: ReturnType<typeof createTraaResetUniform>;
   readonly historyRejectionPipeline: RenderPipeline;
   readonly historyRejectionTarget: RenderTarget;
   readonly currentColorTarget: RenderTarget;
+  readonly traaResolvedTarget: RenderTarget;
   readonly finalColorTarget: RenderTarget;
+  readonly secondaryParticleDiagnosticsTarget: RenderTarget;
   readonly scenePass: ReturnType<typeof pass>;
   readonly ssr: CurrentFrameSsrStack;
   readonly underwater: ReturnType<typeof createUnderwaterVolumeRendering>;
@@ -127,6 +151,9 @@ export interface PreparedWaterPresentationResources {
   readonly underwaterDiagnosticsPipeline: RenderPipeline;
   readonly underwaterDiagnosticsTarget: RenderTarget;
   readonly foamField: UnifiedFoamField;
+  readonly secondaryParticlePool: SecondaryParticlePool;
+  readonly secondaryParticlePolicy: QualityProfileSecondaryParticles;
+  readonly secondarySpray: SecondarySprayParticles;
   readonly foamDiagnostics: UnifiedFoamDiagnostics;
   readonly inverseLinearDepthTextureIndex: number;
   readonly viewNormalTextureIndex: number;
@@ -153,6 +180,9 @@ export function createPreparedWaterPresentationResources(
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
   foamField: UnifiedFoamField,
+  secondaryParticlePool: SecondaryParticlePool,
+  secondaryParticlePolicy: QualityProfileSecondaryParticles,
+  secondarySpray: SecondarySprayParticles,
   environment: HostEnvironmentAdapter,
   underwaterPolicy: QualityProfileUnderwaterVolume,
   initialWaterline: WaterlineFrameState,
@@ -168,6 +198,9 @@ export function createPreparedWaterPresentationResources(
       camera,
       drawingBuffer,
       foamField,
+      secondaryParticlePool,
+      secondaryParticlePolicy,
+      secondarySpray,
       environment,
       underwaterPolicy,
       initialWaterline,
@@ -185,6 +218,9 @@ function constructPreparedWaterPresentationResources(
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
   foamField: UnifiedFoamField,
+  secondaryParticlePool: SecondaryParticlePool,
+  secondaryParticlePolicy: QualityProfileSecondaryParticles,
+  secondarySpray: SecondarySprayParticles,
   environment: HostEnvironmentAdapter,
   underwaterPolicy: QualityProfileUnderwaterVolume,
   initialWaterline: WaterlineFrameState,
@@ -200,6 +236,7 @@ function constructPreparedWaterPresentationResources(
     diagnosticReadbackCount: 0,
     sceneRenderCount: 0,
   };
+  partial.secondarySpray = secondarySpray;
   const waterline = { current: initialWaterline };
   partial.waterline = waterline;
   const resetUniform = createTraaResetUniform();
@@ -347,7 +384,7 @@ function constructPreparedWaterPresentationResources(
   partial.jitterAdapter = jitterAdapter;
   const temporalPipeline = new RenderPipeline(renderer, traaNode);
   partial.temporalPipeline = temporalPipeline;
-  const finalColorTarget = new RenderTarget(
+  const traaResolvedTarget = new RenderTarget(
     drawingBuffer.width,
     drawingBuffer.height,
     {
@@ -356,8 +393,31 @@ function constructPreparedWaterPresentationResources(
       type: UnsignedByteType,
     },
   );
+  partial.traaResolvedTarget = traaResolvedTarget;
+  traaResolvedTarget.texture.name = "Real Water TRAA resolved color";
+  const secondaryParticleStage =
+    createSecondaryParticlePostTraaStageRegistration({
+      onProbe(): void {
+        counters.probeCount += 1;
+      },
+      renderAccumulation(stageRenderer): void {
+        secondarySpray.renderAccumulation(stageRenderer, camera);
+      },
+    });
+  const postTraaComposition = createPostTraaComposition({
+    renderer,
+    source: traaResolvedTarget,
+    drawingBuffer,
+    plan: SECONDARY_PARTICLE_POST_TRAA_PLAN,
+    factories: [secondaryParticleStage.factory],
+  });
+  partial.postTraaComposition = postTraaComposition;
+  const finalColorTarget = postTraaComposition.output;
   partial.finalColorTarget = finalColorTarget;
-  finalColorTarget.texture.name = "Real Water final color";
+  const secondaryParticleDiagnosticsTarget =
+    secondaryParticleStage.diagnosticsTarget();
+  partial.secondaryParticleDiagnosticsTarget =
+    secondaryParticleDiagnosticsTarget;
   const currentColorTarget = new RenderTarget(
     drawingBuffer.width,
     drawingBuffer.height,
@@ -387,13 +447,16 @@ function constructPreparedWaterPresentationResources(
     presentationPipeline,
     currentColorPipeline,
     temporalPipeline,
+    postTraaComposition,
     traaNode,
     jitterAdapter,
     resetUniform,
     historyRejectionPipeline,
     historyRejectionTarget,
     currentColorTarget,
+    traaResolvedTarget,
     finalColorTarget,
+    secondaryParticleDiagnosticsTarget,
     scenePass,
     ssr,
     underwater,
@@ -402,6 +465,9 @@ function constructPreparedWaterPresentationResources(
     underwaterDiagnosticsPipeline,
     underwaterDiagnosticsTarget,
     foamField,
+    secondaryParticlePool,
+    secondaryParticlePolicy,
+    secondarySpray,
     foamDiagnostics,
     inverseLinearDepthTextureIndex: 0,
     viewNormalTextureIndex: textureIndex(
@@ -459,7 +525,9 @@ export async function compileAndPrimePreparedWaterPresentation(
   renderHistoryRejection(renderer, resources);
   resources.resetUniform.value = 0;
   renderCurrentColorConversion(renderer, resources);
-  await probeNamedOutputRoutes(renderer, resources);
+  await resources.postTraaComposition.prepare(signal);
+  throwIfAborted(signal);
+  await probeNamedOutputRoutes(renderer, resources, signal);
   throwIfAborted(signal);
 }
 
@@ -478,7 +546,7 @@ export function renderHiddenStabilizationFrames(
       resources.jitterAdapter.realign();
     }
     try {
-      renderTemporalFrame(
+      renderPreparedPresentationColor(
         renderer,
         scene,
         camera,
@@ -501,7 +569,7 @@ export async function probePreparedCompletion(
   resources: PreparedWaterPresentationResources,
   signal: AbortSignal,
 ): Promise<void> {
-  await probeNamedOutputRoutes(renderer, resources);
+  await probeNamedOutputRoutes(renderer, resources, signal);
   throwIfAborted(signal);
 }
 
@@ -512,7 +580,15 @@ export async function renderMainCameraGuard(
   resources: PreparedWaterPresentationResources,
   signal: AbortSignal,
 ): Promise<void> {
-  renderTemporalFrame(renderer, scene, camera, resources, false, false, false);
+  renderPreparedPresentationColor(
+    renderer,
+    scene,
+    camera,
+    resources,
+    false,
+    false,
+    false,
+  );
   renderCurrentColorConversion(renderer, resources);
   renderer.setRenderTarget(null);
   resources.presentationPipeline.render();
@@ -534,7 +610,7 @@ export function createPresentationRouteBridge(
   let connected = false;
   let activated = false;
   let inspectRuntime: (() => OpenWaterRuntimeSnapshot) | undefined;
-  let lastPresented: PresentedSnapshotKeys | undefined;
+  const continuity = createHostSnapshotContinuityTracker();
   let historyEpoch = PREWARM_HISTORY_EPOCH;
   let presentationId = 0;
   let tail = Promise.resolve();
@@ -560,10 +636,7 @@ export function createPresentationRouteBridge(
     }
     const snapshot = inspectRuntime();
     await resources.foamField.synchronize(renderer, snapshot);
-    const snapshotResetReason =
-      lastPresented === undefined
-        ? null
-        : detectPresentationReset(lastPresented, snapshot);
+    const snapshotResetReason = continuity.preview(snapshot);
     const waterlineCandidate = waterline.preview(
       camera,
       snapshot,
@@ -589,7 +662,7 @@ export function createPresentationRouteBridge(
       const captureFoamSources = accepted.outputs.includes(
         "foam-source-identity",
       );
-      renderTemporalFrame(
+      renderPreparedPresentationColor(
         renderer,
         scene,
         camera,
@@ -614,10 +687,18 @@ export function createPresentationRouteBridge(
       )
         ? await readUnderwaterVolumeCaptures(renderer, resources)
         : undefined;
+      const secondaryParticleCaptures = accepted.outputs.some(
+        isSecondaryParticleCaptureName,
+      )
+        ? await readSecondaryParticleCaptures(renderer, resources)
+        : undefined;
       if (whitecapCaptures !== undefined) {
         resources.counters.diagnosticReadbackCount += 1;
       }
       if (underwaterCaptures !== undefined) {
+        resources.counters.diagnosticReadbackCount += 1;
+      }
+      if (secondaryParticleCaptures !== undefined) {
         resources.counters.diagnosticReadbackCount += 1;
       }
       for (const name of accepted.outputs) {
@@ -629,6 +710,12 @@ export function createPresentationRouteBridge(
           outputs.push(capture);
         } else if (isUnderwaterVolumeCaptureName(name)) {
           const capture = underwaterCaptures?.get(name);
+          if (capture === undefined) {
+            throw new Error(`The ${name} packed capture is unavailable.`);
+          }
+          outputs.push(capture);
+        } else if (isSecondaryParticleCaptureName(name)) {
+          const capture = secondaryParticleCaptures?.get(name);
           if (capture === undefined) {
             throw new Error(`The ${name} packed capture is unavailable.`);
           }
@@ -647,7 +734,7 @@ export function createPresentationRouteBridge(
         }
       }
       presentationId += 1;
-      lastPresented = readPresentedSnapshotKeys(snapshot);
+      continuity.commit(snapshot);
       waterline.commit(waterlineCandidate);
       return Object.freeze({
         presentationId,
@@ -666,6 +753,10 @@ export function createPresentationRouteBridge(
           resetFrame: resetReason !== null,
         }),
         waterline: waterlineCandidate.state,
+        secondaryParticles: snapshotSecondaryParticleDiagnostics(
+          resources.secondaryParticlePool,
+          resources.secondaryParticlePolicy,
+        ),
         outputs: Object.freeze(outputs),
         compileCount: resources.counters.compileCount,
         probeCount: resources.counters.probeCount,
@@ -717,7 +808,7 @@ export function createPresentationRouteBridge(
       }
       connected = true;
       inspectRuntime = nextInspectRuntime;
-      lastPresented = readPresentedSnapshotKeys(nextInspectRuntime());
+      continuity.commit(nextInspectRuntime());
       const route = { present };
       installHostDiagnosticsRoute(route, diagnostics);
       return Object.freeze(route) satisfies HostPresentationRoute;
@@ -744,17 +835,19 @@ export function disposePreparedWaterPresentationResources(
   resources: PreparedWaterPresentationResources,
 ): void {
   resources.presentationPipeline.dispose();
+  resources.postTraaComposition.dispose();
+  resources.secondarySpray.dispose();
+  resources.currentColorPipeline.dispose();
+  resources.temporalPipeline.dispose();
+  resources.traaNode.dispose();
+  resources.currentColorTarget.dispose();
+  resources.traaResolvedTarget.dispose();
   resources.underwaterDiagnosticsPipeline.dispose();
   resources.underwaterDiagnosticsTarget.dispose();
   resources.underwaterVolumePipeline.dispose();
   resources.underwaterVolumeTarget.dispose();
   resources.historyRejectionPipeline.dispose();
   resources.historyRejectionTarget.dispose();
-  resources.currentColorPipeline.dispose();
-  resources.temporalPipeline.dispose();
-  resources.traaNode.dispose();
-  resources.currentColorTarget.dispose();
-  resources.finalColorTarget.dispose();
   resources.foamDiagnostics.dispose();
   resources.scenePass.dispose();
   disposeCurrentFrameSsrStack(resources.ssr);
@@ -766,17 +859,19 @@ export function disposePartialPreparedWaterPresentationResources(
 ): void {
   const disposals = [
     () => resources.presentationPipeline?.dispose(),
+    () => resources.postTraaComposition?.dispose(),
+    () => resources.secondarySpray?.dispose(),
+    () => resources.currentColorPipeline?.dispose(),
+    () => resources.temporalPipeline?.dispose(),
+    () => resources.traaNode?.dispose(),
+    () => resources.currentColorTarget?.dispose(),
+    () => resources.traaResolvedTarget?.dispose(),
     () => resources.underwaterDiagnosticsPipeline?.dispose(),
     () => resources.underwaterDiagnosticsTarget?.dispose(),
     () => resources.underwaterVolumePipeline?.dispose(),
     () => resources.underwaterVolumeTarget?.dispose(),
     () => resources.historyRejectionPipeline?.dispose(),
     () => resources.historyRejectionTarget?.dispose(),
-    () => resources.currentColorPipeline?.dispose(),
-    () => resources.temporalPipeline?.dispose(),
-    () => resources.traaNode?.dispose(),
-    () => resources.currentColorTarget?.dispose(),
-    () => resources.finalColorTarget?.dispose(),
     () => resources.foamDiagnostics?.dispose(),
     () => resources.scenePass?.dispose(),
     () => {
@@ -795,56 +890,6 @@ export function disposePartialPreparedWaterPresentationResources(
   }
 }
 
-interface PresentedSnapshotKeys {
-  readonly seed: number;
-  readonly tick: number;
-  readonly timeSeconds: number;
-  readonly simulationResetRevision: number;
-  readonly controlRevision: number;
-  readonly originRevision: number;
-  readonly cameraCutRevision: number;
-  readonly seaStateCutRevision: number;
-}
-
-function readPresentedSnapshotKeys(
-  snapshot: OpenWaterRuntimeSnapshot,
-): PresentedSnapshotKeys {
-  return {
-    seed: snapshot.seed,
-    tick: snapshot.tick,
-    timeSeconds: snapshot.timeSeconds,
-    simulationResetRevision: snapshot.simulationResetRevision,
-    controlRevision: snapshot.controlRevision,
-    originRevision: snapshot.originRevision,
-    cameraCutRevision: snapshot.cameraCutRevision,
-    seaStateCutRevision: snapshot.seaStateCutRevision,
-  };
-}
-
-function detectPresentationReset(
-  previous: PresentedSnapshotKeys,
-  current: OpenWaterRuntimeSnapshot,
-): HostTemporalResetReason | null {
-  if (
-    current.simulationResetRevision !== previous.simulationResetRevision ||
-    current.seed !== previous.seed ||
-    current.tick < previous.tick ||
-    current.timeSeconds < previous.timeSeconds
-  ) {
-    return "simulation-reset";
-  }
-  if (current.cameraCutRevision !== previous.cameraCutRevision) {
-    return "camera-cut";
-  }
-  if (current.originRevision !== previous.originRevision) {
-    return "origin-shift";
-  }
-  if (current.seaStateCutRevision !== previous.seaStateCutRevision) {
-    return "sea-state-cut";
-  }
-  return null;
-}
-
 function toRootPresentedFrame(
   frame: HostDiagnosticsPresentedFrame,
 ): HostPresentedFrame {
@@ -861,6 +906,92 @@ function toRootPresentedFrame(
     seaStateCutRevision: frame.seaStateCutRevision,
     temporal: frame.temporal,
   });
+}
+
+function snapshotSecondaryParticleDiagnostics(
+  pool: SecondaryParticlePool,
+  policy: QualityProfileSecondaryParticles,
+): DiagnosticsSecondaryParticles {
+  const frame = pool.current();
+  const consumers: DiagnosticsSecondaryParticleConsumer[] =
+    policy.consumers.map((consumer) => {
+      const receipt = pool.consumer(consumer.consumerId).receipt;
+      return Object.freeze({
+        consumerId: consumer.consumerId,
+        maximumRequestCount: consumer.maximumRequestCount,
+        minimumRetainedSlots: consumer.minimumRetainedSlots,
+        softRequestCeiling: consumer.softRequestCeiling,
+        pressureReentryPolicy: consumer.pressureReentryPolicy,
+        ...snapshotSecondaryParticleReceipt(
+          receipt,
+          receipt.requested > consumer.softRequestCeiling,
+        ),
+      });
+    });
+  return Object.freeze({
+    capacity: policy.capacity,
+    maximumCandidateCount: policy.maximumCandidateCount,
+    ...snapshotSecondaryParticleReceipt(
+      frame.globalReceipt,
+      frame.globalReceipt.thinned > 0,
+    ),
+    consumers: Object.freeze(consumers),
+  });
+}
+
+function snapshotSecondaryParticleReceipt(
+  receipt: SecondaryParticleConsumerReceipt,
+  overSubscribed: boolean,
+): DiagnosticsSecondaryParticleReceipt {
+  const visibleCount =
+    receipt.retained +
+    receipt.thinned +
+    receipt.reentryCooldown +
+    receipt.lifecycleReentryForbidden;
+  return Object.freeze({
+    requested: receipt.requested,
+    retained: receipt.retained,
+    thinned: receipt.thinned,
+    invisibleOrOccluded: receipt.invisibleOrOccluded,
+    reentryCooldown: receipt.reentryCooldown,
+    lifecycleReentryForbidden: receipt.lifecycleReentryForbidden,
+    retainedByFloor: receipt.floorRetained,
+    retainedByGlobalCompetition: receipt.globalRetained,
+    retainedIncumbents: receipt.residenceRetained,
+    requestedAboveSoftCeiling: receipt.requestedAboveSoftCeiling,
+    overSubscribed,
+    contributionMinimumQ16:
+      visibleCount === 0 ? null : receipt.contributionMinimumQ16,
+    contributionMaximumQ16:
+      visibleCount === 0 ? null : receipt.contributionMaximumQ16,
+    dropReasons: Object.freeze({
+      invisibleOrOccluded: receipt.invisibleOrOccluded,
+      globalContributionPressure: receipt.thinned,
+      reentryCooldown: receipt.reentryCooldown,
+      lifecycleReentryForbidden: receipt.lifecycleReentryForbidden,
+    }),
+  });
+}
+
+function renderPreparedPresentationColor(
+  renderer: Renderer,
+  scene: Scene,
+  camera: PerspectiveCamera,
+  resources: PreparedWaterPresentationResources,
+  captureWhitecapStages: boolean,
+  captureFoamSources: boolean,
+  captureUnderwaterDiagnostics: boolean,
+): void {
+  renderTemporalFrame(
+    renderer,
+    scene,
+    camera,
+    resources,
+    captureWhitecapStages,
+    captureFoamSources,
+    captureUnderwaterDiagnostics,
+  );
+  resources.postTraaComposition.render();
 }
 
 function renderTemporalFrame(
@@ -930,7 +1061,7 @@ function renderTemporalFrame(
       renderer.setRenderTarget(resources.ssr.depthConversionTarget);
       resources.ssr.depthConversionPipeline.render();
       resources.jitterAdapter.clearHostCameraViewOffset(camera);
-      renderer.setRenderTarget(resources.finalColorTarget);
+      renderer.setRenderTarget(resources.traaResolvedTarget);
       resources.temporalPipeline.render();
       succeeded = true;
     } catch (cause) {
@@ -983,8 +1114,9 @@ export function readDrawingBufferSize(renderer: Renderer): Readonly<{
 async function probeNamedOutputRoutes(
   renderer: Renderer,
   resources: PreparedWaterPresentationResources,
+  signal: AbortSignal,
 ): Promise<void> {
-  await probeCompletedFrame(renderer, resources, resources.finalColorTarget);
+  await resources.postTraaComposition.probe(signal);
   await probeCompletedFrame(renderer, resources, resources.currentColorTarget);
   await probeCompletedFrame(
     renderer,
@@ -1079,6 +1211,17 @@ function isUnderwaterVolumeCaptureName(
     name === "underwater-scattering" ||
     name === "underwater-light-shafts" ||
     name === "underwater-shadow"
+  );
+}
+
+function isSecondaryParticleCaptureName(
+  name: DiagnosticsCaptureName,
+): name is
+  | DiagnosticsSecondaryParticleContributionCapture["name"]
+  | DiagnosticsSecondaryParticleOverdrawCapture["name"] {
+  return (
+    name === "secondary-particle-contribution" ||
+    name === "secondary-particle-overdraw"
   );
 }
 
@@ -1299,6 +1442,11 @@ async function readNamedOutput(
       throw new Error(
         "The packed underwater diagnostic route has not been prepared.",
       );
+    case "secondary-particle-contribution":
+    case "secondary-particle-overdraw":
+      throw new Error(
+        "The packed secondary-particle diagnostic route has not been prepared.",
+      );
     case "planar-color":
       return readPlanarColorCapture(renderer, resources);
     case "planar-target-alpha":
@@ -1510,6 +1658,97 @@ async function readUnderwaterVolumeCaptures(
     );
   }
   return captures;
+}
+
+async function readSecondaryParticleCaptures(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<
+  ReadonlyMap<
+    | DiagnosticsSecondaryParticleContributionCapture["name"]
+    | DiagnosticsSecondaryParticleOverdrawCapture["name"],
+    | DiagnosticsSecondaryParticleContributionCapture
+    | DiagnosticsSecondaryParticleOverdrawCapture
+  >
+> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.secondaryParticleDiagnosticsTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array) && !(raw instanceof Float32Array)) {
+    throw new TypeError(
+      "Secondary-particle diagnostics readback did not return Float16 or Float32 RGBA data.",
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const contribution = new Float32Array(resources.width * resources.height);
+  const overdraw = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < contribution.length; pixel += 1) {
+    const source = pixel * 4;
+    const red = decodePackedFloat(rgba, source);
+    const green = decodePackedFloat(rgba, source + 1);
+    const blue = decodePackedFloat(rgba, source + 2);
+    const samples = decodePackedFloat(rgba, source + 3);
+    if (
+      !Number.isFinite(red) ||
+      !Number.isFinite(green) ||
+      !Number.isFinite(blue) ||
+      !Number.isFinite(samples) ||
+      red < 0 ||
+      green < 0 ||
+      blue < 0 ||
+      samples < 0
+    ) {
+      throw new RangeError(
+        "Secondary-particle diagnostics must contain finite nonnegative contribution and overdraw.",
+      );
+    }
+    contribution[pixel] = Math.min(1, Math.max(red, green, blue));
+    overdraw[pixel] = samples;
+  }
+  const captures = new Map<
+    | DiagnosticsSecondaryParticleContributionCapture["name"]
+    | DiagnosticsSecondaryParticleOverdrawCapture["name"],
+    | DiagnosticsSecondaryParticleContributionCapture
+    | DiagnosticsSecondaryParticleOverdrawCapture
+  >();
+  captures.set(
+    "secondary-particle-contribution",
+    Object.freeze({
+      name: "secondary-particle-contribution",
+      width: resources.width,
+      height: resources.height,
+      origin: "top-left",
+      format:
+        DIAGNOSTICS_CAPTURE_SHAPES["secondary-particle-contribution"].format,
+      data: contribution,
+    }),
+  );
+  captures.set(
+    "secondary-particle-overdraw",
+    Object.freeze({
+      name: "secondary-particle-overdraw",
+      width: resources.width,
+      height: resources.height,
+      origin: "top-left",
+      format: DIAGNOSTICS_CAPTURE_SHAPES["secondary-particle-overdraw"].format,
+      data: overdraw,
+    }),
+  );
+  return captures;
+}
+
+function decodePackedFloat(
+  data: Uint16Array | Float32Array,
+  index: number,
+): number {
+  const encoded = data[index] ?? 0;
+  return data instanceof Uint16Array
+    ? DataUtils.fromHalfFloat(encoded)
+    : encoded;
 }
 
 async function readFoamSourceIdentityCapture(

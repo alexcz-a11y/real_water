@@ -52,6 +52,21 @@ import {
   type UnifiedFoamField,
 } from "./spectral-whitecap-field.js";
 import {
+  createSecondaryParticleContributionQuantizer,
+  createSecondaryParticlePool,
+  type SecondaryParticlePool,
+} from "../secondary-particle-pool.js";
+import {
+  createSecondarySprayAllocationParticipant,
+  createSecondarySprayParticles,
+  type SecondarySprayParticles,
+} from "./secondary-spray-particles.js";
+import type { LocalInteractionRenderSnapshot } from "./local-interaction.js";
+import {
+  createSecondaryParticleAllocationRoute,
+  type SecondaryParticleAllocationRoute,
+} from "../secondary-particle-allocation-route.js";
+import {
   createInitialWaterlineSampleState,
   createWaterlineStateController,
 } from "./waterline-state.js";
@@ -88,6 +103,8 @@ interface PreparedResources {
   readonly material: NodeMaterial;
   readonly waterTexture: DataTexture;
   readonly foamField: UnifiedFoamField;
+  readonly secondaryParticlePool: SecondaryParticlePool;
+  readonly secondaryParticleAllocationRoute: SecondaryParticleAllocationRoute;
   readonly spectralBand: ReturnType<typeof createSpectralBandRendering>;
   readonly opticalPath: ReturnType<typeof createWaterOpticsRendering>;
   readonly waterline: ReturnType<typeof createWaterlineStateController>;
@@ -101,6 +118,7 @@ type PartialPreparedResources = {
 } & {
   presentation?: PreparedWaterPresentationResources;
   presentationPartial?: PartialPreparedWaterPresentationResources;
+  secondarySpray?: SecondarySprayParticles;
 };
 
 export async function prepareMinimalWaterPlane(
@@ -168,6 +186,62 @@ export async function prepareMinimalWaterPlane(
       options.environment.texture,
       "environment radiance",
     );
+    const preparationSnapshot = createPreparationFoamSnapshot(
+      options.simulation,
+      options.presentation,
+    );
+    const secondaryParticlePolicy =
+      options.request.manifest.qualityProfile.secondaryParticles;
+    const secondaryParticlePool = createSecondaryParticlePool({
+      capacity: secondaryParticlePolicy.capacity,
+      contribution: {
+        projectedAreaReference: "output-drawing-buffer",
+        referenceWidth: declaredDrawingBuffer.width,
+        referenceHeight: declaredDrawingBuffer.height,
+        screenAreaDivisor:
+          secondaryParticlePolicy.contribution.screenAreaDivisor,
+        quantization: secondaryParticlePolicy.contribution.quantization,
+      },
+      hysteresis: secondaryParticlePolicy.hysteresis,
+      consumers: secondaryParticlePolicy.consumers.map((consumer) => ({
+        consumerId: consumer.consumerId,
+        contributionReference: {
+          width: declaredDrawingBuffer.width,
+          height: declaredDrawingBuffer.height,
+          space: "output-drawing-buffer" as const,
+        },
+        maximumRequestCount: consumer.maximumRequestCount,
+        minimumRetainedSlots: consumer.minimumRetainedSlots,
+        softRequestCeiling: consumer.softRequestCeiling,
+        pressureReentryPolicy: consumer.pressureReentryPolicy,
+      })),
+    });
+    partial.secondaryParticlePool = secondaryParticlePool;
+    const contributionReference = Object.freeze({
+      width: declaredDrawingBuffer.width,
+      height: declaredDrawingBuffer.height,
+      space: "output-drawing-buffer" as const,
+    });
+    const secondarySpray = createSecondarySprayParticles({
+      contributionReference,
+      contributionQuantizer: createSecondaryParticleContributionQuantizer({
+        projectedAreaResolution: declaredDrawingBuffer,
+        referenceResolution: declaredDrawingBuffer,
+      }),
+    });
+    partial.secondarySpray = secondarySpray;
+    const secondaryParticleAllocationRoute =
+      createSecondaryParticleAllocationRoute({
+        pool: secondaryParticlePool,
+        participants: [
+          createSecondarySprayAllocationParticipant(secondarySpray, camera),
+        ],
+      });
+    partial.secondaryParticleAllocationRoute = secondaryParticleAllocationRoute;
+    secondaryParticleAllocationRoute.advance(
+      preparationSnapshot,
+      createPreparationLocalInteraction(preparationSnapshot),
+    );
     const waterTexture = createWaterTexture();
     partial.waterTexture = waterTexture;
     const foamField = createUnifiedFoamField(
@@ -193,6 +267,9 @@ export async function prepareMinimalWaterPlane(
       camera,
       declaredDrawingBuffer,
       foamField,
+      secondaryParticlePool,
+      secondaryParticlePolicy,
+      secondarySpray,
       options.environment,
       options.request.manifest.qualityProfile.underwater,
       initialWaterline,
@@ -251,10 +328,6 @@ export async function prepareMinimalWaterPlane(
     renderer.initTexture(waterTexture);
     renderer.initTexture(environmentRadiance);
     renderer.initTexture(createdPresentation.resources.planar.target.texture);
-    const preparationSnapshot = createPreparationFoamSnapshot(
-      options.simulation,
-      options.presentation,
-    );
     await foamField.prewarm(renderer, preparationSnapshot);
     await completeDeclaredWork(options.request.progress, [
       "whitecapFieldA",
@@ -338,6 +411,14 @@ export async function prepareMinimalWaterPlane(
       "stockTraaHistory",
       "traaResolveJitter",
       "traaResetRoute",
+      "secondaryParticlePool",
+      "secondaryParticleAllocationRoute",
+      "postTraaCompositionPlan",
+      "traaResolvedTarget",
+      "secondaryParticleAccumulationTarget",
+      "secondaryParticleStageRoute",
+      "secondaryParticleCompositeRoute",
+      "secondaryParticleDiagnosticsRoute",
       "currentColorConversion",
       "namedOutputRoutes",
     ]);
@@ -382,6 +463,7 @@ export async function prepareMinimalWaterPlane(
       "underwaterProbe",
       "whitecapProbe",
       "foamSourceIdentityProbe",
+      "secondaryParticleProbe",
       "completionProbe",
     ]);
 
@@ -406,6 +488,8 @@ export async function prepareMinimalWaterPlane(
         material,
         waterTexture,
         foamField,
+        secondaryParticlePool,
+        secondaryParticleAllocationRoute,
         spectralBand,
         opticalPath,
         waterline,
@@ -471,6 +555,13 @@ function createPreparedLease(
   drawingBuffer: Readonly<{ width: number; height: number }>,
   manifestHash: string,
 ): HostPreparedLease {
+  const leasePreparationSnapshot = createPreparationFoamSnapshot(
+    simulation,
+    presentation,
+  );
+  let secondaryParticleInteraction = createPreparationLocalInteraction(
+    leasePreparationSnapshot,
+  );
   const waterlineComposition = Object.freeze({
     synchronize(
       state: Parameters<typeof resources.opticalPath.waterline.synchronize>[0],
@@ -486,10 +577,16 @@ function createPreparedLease(
     ): void {
       resources.opticalPath.sink.synchronize(snapshot, interaction);
       resources.presentation.underwater.sink.synchronize(snapshot, interaction);
+      secondaryParticleInteraction = interaction;
+      resources.secondaryParticleAllocationRoute.advance(snapshot, interaction);
     },
     observe(snapshot: OpenWaterRuntimeSnapshot): void {
       resources.opticalPath.sink.observe?.(snapshot);
       resources.presentation.underwater.sink.observe?.(snapshot);
+      resources.secondaryParticleAllocationRoute.advance(
+        snapshot,
+        secondaryParticleInteraction,
+      );
     },
   });
   const presentationRoute = createPresentationRouteBridge(
@@ -557,6 +654,7 @@ function disposePartialResourcesSilently(
     () => resources.geometry?.dispose(),
     () => resources.waterTexture?.dispose(),
     () => resources.foamField?.dispose(),
+    () => resources.secondarySpray?.dispose(),
   ];
   for (const dispose of disposals) {
     try {
@@ -587,6 +685,17 @@ function createPreparationFoamSnapshot(
     // counts #25 added are zero for the same reason the disturbance count is.
     attachedBodyCount: 0,
     activeBodyWakeCount: 0,
+  });
+}
+
+function createPreparationLocalInteraction(
+  snapshot: OpenWaterRuntimeSnapshot,
+): LocalInteractionRenderSnapshot {
+  return Object.freeze({
+    revision: 0,
+    anchorX: snapshot.interactionAnchor.x,
+    anchorZ: snapshot.interactionAnchor.z,
+    impacts: Object.freeze([]),
   });
 }
 
