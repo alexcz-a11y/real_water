@@ -34,6 +34,7 @@ const contributionReference = Object.freeze({
   height: 180,
   space: "output-drawing-buffer" as const,
 });
+const MANUAL_SOURCE_DOMAIN_OFFSET = 0x1_0000_0000;
 
 function createParticles() {
   return createUnderwaterSecondaryParticleModel({
@@ -94,6 +95,7 @@ function interaction(count = 0): UnderwaterSecondaryParticleInteraction {
     impacts: Object.freeze(
       Array.from({ length: count }, (_, index) =>
         Object.freeze({
+          stableSourceId: MANUAL_SOURCE_DOMAIN_OFFSET + index + 1,
           kind: "radial-impact" as const,
           x: index * 0.5,
           z: -index * 0.25,
@@ -110,8 +112,14 @@ function interaction(count = 0): UnderwaterSecondaryParticleInteraction {
 
 type TestImpact = UnderwaterSecondaryParticleImpact;
 
-function testImpact(x: number, z: number, startTick: number): TestImpact {
+function testImpact(
+  x: number,
+  z: number,
+  startTick: number,
+  stableSourceId: number,
+): TestImpact {
   return Object.freeze({
+    stableSourceId,
     kind: "radial-impact" as const,
     x,
     z,
@@ -316,12 +324,103 @@ describe("underwater secondary-particle consumers", () => {
     replay.reset();
   });
 
+  it("separates same-position same-tick manual source partitions by domain identity", () => {
+    const particles = createParticles();
+    const view = camera();
+    const state = snapshot(73);
+    const baseCount = UNDERWATER_SUSPENDED_PARTICLE_SOFT_REQUEST_CEILING;
+    const partitionCount =
+      (MAX_UNDERWATER_SUSPENDED_PARTICLES - baseCount) / 16;
+    const batch = copyBatch(
+      particles.candidateBatch(
+        UNDERWATER_SUSPENDED_PARTICLE_CONSUMER_ID,
+        state,
+        interactionFromImpacts([
+          testImpact(0, 0, 12, MANUAL_SOURCE_DOMAIN_OFFSET + 17),
+          testImpact(0, 0, 12, MANUAL_SOURCE_DOMAIN_OFFSET + 29),
+        ]),
+        view,
+      ),
+    );
+
+    expect([batch.high[baseCount], batch.low[baseCount]]).not.toEqual([
+      batch.high[baseCount + partitionCount],
+      batch.low[baseCount + partitionCount],
+    ]);
+    particles.reset();
+  });
+
+  it("includes the stable source high word in underwater particle keys", () => {
+    const lowDomain = createParticles();
+    const manualDomain = createParticles();
+    const view = camera();
+    const state = snapshot(73);
+    const baseCount = UNDERWATER_SUSPENDED_PARTICLE_SOFT_REQUEST_CEILING;
+    const lowKey = copyBatch(
+      lowDomain.candidateBatch(
+        UNDERWATER_SUSPENDED_PARTICLE_CONSUMER_ID,
+        state,
+        interactionFromImpacts([testImpact(0, 0, 12, 17)]),
+        view,
+      ),
+    );
+    const manualKey = copyBatch(
+      manualDomain.candidateBatch(
+        UNDERWATER_SUSPENDED_PARTICLE_CONSUMER_ID,
+        state,
+        interactionFromImpacts([
+          testImpact(0, 0, 12, MANUAL_SOURCE_DOMAIN_OFFSET + 17),
+        ]),
+        view,
+      ),
+    );
+
+    expect([manualKey.high[baseCount], manualKey.low[baseCount]]).not.toEqual([
+      lowKey.high[baseCount],
+      lowKey.low[baseCount],
+    ]);
+    lowDomain.reset();
+    manualDomain.reset();
+  });
+
+  it("rejects invalid or duplicate participating source identities before mutating a lane", () => {
+    const particles = createParticles();
+    const view = camera();
+    const state = snapshot(73);
+    const candidateBatch = (impacts: readonly TestImpact[]) =>
+      particles.candidateBatch(
+        UNDERWATER_SUSPENDED_PARTICLE_CONSUMER_ID,
+        state,
+        interactionFromImpacts(impacts),
+        view,
+      );
+
+    expect(() =>
+      candidateBatch([
+        testImpact(0, 0, 0, MANUAL_SOURCE_DOMAIN_OFFSET + 31),
+        testImpact(1, 0, 0, MANUAL_SOURCE_DOMAIN_OFFSET + 31),
+      ]),
+    ).toThrow(/unique.*source partitions/i);
+    expect(() => candidateBatch([testImpact(0, 0, 0, -1)])).toThrow(
+      /non-negative safe integers/i,
+    );
+    expect(() =>
+      candidateBatch([testImpact(0, 0, 0, Number.MAX_SAFE_INTEGER + 1)]),
+    ).toThrow(/non-negative safe integers/i);
+    expect(
+      particles.inspect().candidateCounts[
+        UNDERWATER_SUSPENDED_PARTICLE_CONSUMER_ID
+      ],
+    ).toBe(0);
+    particles.reset();
+  });
+
   it("keeps absolute source identity while rendering in floating-origin local space", () => {
     const particles = createParticles();
     const view = camera();
     const absoluteX = 1_024;
     const local = interactionFromImpacts(
-      [testImpact(absoluteX, 0, 0)],
+      [testImpact(absoluteX, 0, 0, MANUAL_SOURCE_DOMAIN_OFFSET + 10)],
       absoluteX,
       0,
     );
@@ -358,8 +457,8 @@ describe("underwater secondary-particle consumers", () => {
     const particles = createParticles();
     const view = camera();
     const state = snapshot(73);
-    const impactA = testImpact(1, -0.5, 12);
-    const impactB = testImpact(-2, 0.75, 24);
+    const impactA = testImpact(1, -0.5, 12, MANUAL_SOURCE_DOMAIN_OFFSET + 11);
+    const impactB = testImpact(-2, 0.75, 24, MANUAL_SOURCE_DOMAIN_OFFSET + 12);
     const baseCount = UNDERWATER_SUSPENDED_PARTICLE_SOFT_REQUEST_CEILING;
     const impactPartitionCount =
       (MAX_UNDERWATER_SUSPENDED_PARTICLES - baseCount) / 16;
@@ -412,21 +511,48 @@ describe("underwater secondary-particle consumers", () => {
       onlyA.low.slice(baseCount, baseCount + impactPartitionCount),
       aThenB.low.slice(baseCount, baseCount + impactPartitionCount),
     );
-    expectTypedArrayEqual(
-      onlyA.high.slice(baseCount, baseCount + impactPartitionCount),
-      bThenA.high.slice(
-        baseCount + impactPartitionCount,
-        baseCount + impactPartitionCount * 2,
-      ),
-    );
-    expectTypedArrayEqual(
-      onlyA.low.slice(baseCount, baseCount + impactPartitionCount),
-      bThenA.low.slice(
-        baseCount + impactPartitionCount,
-        baseCount + impactPartitionCount * 2,
-      ),
-    );
+    expectTypedArrayEqual(aThenB.high, bThenA.high);
+    expectTypedArrayEqual(aThenB.low, bThenA.low);
+    expectTypedArrayEqual(aThenB.contributions, bThenA.contributions);
 
+    particles.reset();
+  });
+
+  it("selects the same canonical sixteen sources from larger reordered sets", () => {
+    const particles = createParticles();
+    const view = camera();
+    const state = snapshot(73);
+    const sources = Array.from({ length: 20 }, (_, index) =>
+      testImpact(
+        index - 10,
+        index * 0.25,
+        index,
+        MANUAL_SOURCE_DOMAIN_OFFSET + 100 + index,
+      ),
+    );
+    const build = (impacts: readonly TestImpact[]) =>
+      copyBatch(
+        particles.candidateBatch(
+          UNDERWATER_SUSPENDED_PARTICLE_CONSUMER_ID,
+          state,
+          interactionFromImpacts(impacts),
+          view,
+        ),
+      );
+    const canonicalSixteen = build(sources.slice(0, 16));
+    const forward = build(sources);
+    const reverse = build([...sources].reverse());
+    const rotate = build([...sources.slice(7), ...sources.slice(0, 7)]);
+
+    for (const reordered of [forward, reverse, rotate]) {
+      expect(reordered.count).toBe(canonicalSixteen.count);
+      expectTypedArrayEqual(reordered.high, canonicalSixteen.high);
+      expectTypedArrayEqual(reordered.low, canonicalSixteen.low);
+      expectTypedArrayEqual(
+        reordered.contributions,
+        canonicalSixteen.contributions,
+      );
+    }
     particles.reset();
   });
 
@@ -434,7 +560,9 @@ describe("underwater secondary-particle consumers", () => {
     const particles = createParticles();
     const view = camera();
     const startTick = 120;
-    const local = interactionFromImpacts([testImpact(0, 0, startTick)]);
+    const local = interactionFromImpacts([
+      testImpact(0, 0, startTick, MANUAL_SOURCE_DOMAIN_OFFSET + 13),
+    ]);
     const future = copyBatch(
       particles.candidateBatch(
         SUBSURFACE_BUBBLE_CLOUD_CONSUMER_ID,
@@ -474,8 +602,8 @@ describe("underwater secondary-particle consumers", () => {
   it("preserves rising lifecycles when unrelated impact partitions enter or leave", () => {
     const particles = createParticles();
     const view = camera();
-    const impactA = testImpact(1, 0, 0);
-    const impactB = testImpact(-1, 0, 0);
+    const impactA = testImpact(1, 0, 0, MANUAL_SOURCE_DOMAIN_OFFSET + 14);
+    const impactB = testImpact(-1, 0, 0, MANUAL_SOURCE_DOMAIN_OFFSET + 15);
     const baseCount = RISING_BUBBLE_SOFT_REQUEST_CEILING;
     const impactPartitionCount = (MAX_RISING_BUBBLES - baseCount) / 16;
     const onlyA = copyBatch(

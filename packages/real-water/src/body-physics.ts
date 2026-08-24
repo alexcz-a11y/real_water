@@ -17,6 +17,17 @@ const BODY_ATTACHMENT_WITH_SOCKETS_KEYS = [
   "shape",
   "sockets",
 ] as const;
+const BODY_ATTACHMENT_WITH_INTERACTION_SOURCE_ID_KEYS = [
+  "physics",
+  "shape",
+  "interactionSourceId",
+] as const;
+const BODY_ATTACHMENT_WITH_SOCKETS_AND_INTERACTION_SOURCE_ID_KEYS = [
+  "physics",
+  "shape",
+  "sockets",
+  "interactionSourceId",
+] as const;
 const SPHERE_INTERACTION_SHAPE_KEYS = ["kind", "radius"] as const;
 const BOX_INTERACTION_SHAPE_KEYS = ["kind", "halfExtents"] as const;
 const CAPSULE_INTERACTION_SHAPE_KEYS = [
@@ -328,6 +339,11 @@ export interface BodyAttachmentOptions {
   readonly physics: BodyPhysicsAdapter;
   readonly shape: InteractionShape;
   readonly sockets?: readonly BodyInteractionSocket[];
+  /**
+   * Canonical Host Body identity used by effect sockets. The identity comes
+   * from the Body domain, never an attachment handle, slot, or container order.
+   */
+  readonly interactionSourceId?: number;
 }
 
 /**
@@ -363,20 +379,43 @@ export function readBodyAttachmentOptions(
   physics: BodyPhysicsAdapter;
   shape: InteractionShape;
   sockets: readonly BodyInteractionSocket[];
+  interactionSourceId: number | undefined;
 }> {
   if (
     !isRecord(options) ||
     (!hasExactKeys(options, BODY_ATTACHMENT_KEYS) &&
-      !hasExactKeys(options, BODY_ATTACHMENT_WITH_SOCKETS_KEYS))
+      !hasExactKeys(options, BODY_ATTACHMENT_WITH_SOCKETS_KEYS) &&
+      !hasExactKeys(options, BODY_ATTACHMENT_WITH_INTERACTION_SOURCE_ID_KEYS) &&
+      !hasExactKeys(
+        options,
+        BODY_ATTACHMENT_WITH_SOCKETS_AND_INTERACTION_SOURCE_ID_KEYS,
+      ))
   ) {
     throw new TypeError(
-      "Body attachment options must use the exact physics, shape, and optional sockets contract.",
+      "Body attachment options must use the exact physics, shape, optional sockets, and optional interactionSourceId contract.",
+    );
+  }
+  const sockets = readBodyInteractionSockets(options.sockets ?? []);
+  const hasEffectSockets = sockets.some(
+    (socket) => socket.kind !== "interaction-anchor",
+  );
+  const interactionSourceId = options.interactionSourceId;
+  if (interactionSourceId !== undefined) {
+    if (!Number.isSafeInteger(interactionSourceId) || interactionSourceId < 0) {
+      throw new RangeError(
+        "A Body interactionSourceId must be a non-negative safe integer.",
+      );
+    }
+  } else if (hasEffectSockets) {
+    throw new TypeError(
+      "Body effect sockets require a canonical interactionSourceId from the Host Body domain.",
     );
   }
   return Object.freeze({
     physics: assertBodyPhysicsAdapter(options.physics),
     shape: readInteractionShape(options.shape),
-    sockets: readBodyInteractionSockets(options.sockets ?? []),
+    sockets,
+    interactionSourceId,
   });
 }
 
@@ -612,9 +651,14 @@ export function readBodyInteractionSockets(
       );
     }
     const id = socket.id.trim();
-    if (id.length === 0 || id !== socket.id || ids.has(id)) {
+    if (
+      id.length === 0 ||
+      id !== socket.id ||
+      id.normalize("NFC") !== id ||
+      ids.has(id)
+    ) {
       throw new TypeError(
-        "Body interaction socket ids must be non-empty, trimmed, and unique.",
+        "Body interaction socket ids must be non-empty, trimmed, NFC-normalized, and unique.",
       );
     }
     ids.add(id);

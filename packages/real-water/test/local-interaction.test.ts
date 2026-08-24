@@ -78,6 +78,7 @@ describe("ready local interaction runtime", () => {
       physics: body,
       shape: { kind: "sphere", radius: 0.6 },
       sockets: [createWakeSocket()],
+      interactionSourceId: 1,
     });
     runHostFixedStep?.();
     state = Object.freeze({ ...state, tick: 1, timeSeconds: 1 / 60 });
@@ -132,6 +133,7 @@ describe("ready local interaction runtime", () => {
       physics: body,
       shape: { kind: "sphere", radius: 0.6 },
       sockets: [createWakeSocket()],
+      interactionSourceId: 2,
     });
     runHostFixedStep?.();
 
@@ -176,6 +178,7 @@ describe("ready local interaction runtime", () => {
       physics: body,
       shape: { kind: "sphere", radius: 0.6 },
       sockets: [{ ...createWakeSocket(), priority: 0 }],
+      interactionSourceId: 3,
     });
     runHostFixedStep?.();
     lease.submitDisturbances({

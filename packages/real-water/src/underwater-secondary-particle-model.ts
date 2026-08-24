@@ -16,6 +16,8 @@ import type {
   SecondaryParticleContributionQuantizer,
   SecondaryParticleContributionReference,
 } from "./secondary-particle-pool.js";
+import { MAX_ACTIVE_DISTURBANCES } from "./capabilities.js";
+import { canonicalizeInteractionStableSources } from "./interaction-source-identity.js";
 
 export const UNDERWATER_SUSPENDED_PARTICLE_CONSUMER_ID =
   "underwater-suspended-particles" as const;
@@ -85,6 +87,8 @@ interface UnderwaterParticleLane {
   readonly retained: UnderwaterParticleRetainedStorage;
   readonly retainedLane: UnderwaterSecondaryParticleRetainedLane;
   readonly retentionHistory: UnderwaterParticleRetentionHistory | null;
+  readonly impactStableSourceIds: Float64Array;
+  readonly impactSourceOrder: Uint32Array;
   readonly batch: SecondaryParticleCandidateBatch;
   candidateCount: number;
   retainedCount: number;
@@ -96,6 +100,8 @@ interface UnderwaterParticleLane {
 }
 
 export interface UnderwaterSecondaryParticleImpact {
+  /** Domain-derived identity forwarded by the local-interaction seam. */
+  readonly stableSourceId: number;
   readonly kind: "radial-impact" | "directional-wake" | "propeller-wash";
   readonly x: number;
   readonly z: number;
@@ -323,6 +329,8 @@ function createLane(options: {
       options.kind === "rising"
         ? null
         : createUnderwaterParticleRetentionHistory(maximum),
+    impactStableSourceIds: new Float64Array(MAX_ACTIVE_DISTURBANCES),
+    impactSourceOrder: new Uint32Array(MAX_ACTIVE_DISTURBANCES),
     batch: undefined as unknown as SecondaryParticleCandidateBatch,
     candidateCount: 0,
     retainedCount: 0,
@@ -410,6 +418,12 @@ function writeCandidates(options: {
   readonly visibility: SecondaryParticleOutputFrustumVisibility;
 }): number {
   const { lane, snapshot, interaction, camera } = options;
+  const canonicalImpactCount = canonicalizeInteractionStableSources(
+    interaction.impacts,
+    lane.impactStableSourceIds,
+    lane.impactSourceOrder,
+  );
+  const impactCount = Math.min(canonicalImpactCount, MAX_PRESSURE_IMPACTS);
   beginLaneCandidateTick(lane, snapshot);
   camera.updateWorldMatrix(true, false);
   const cameraWorld = camera.matrixWorld.elements;
@@ -420,7 +434,6 @@ function writeCandidates(options: {
     options.contributionReference.height /
     (2 * Math.tan((camera.fov * Math.PI) / 360));
   const impacts = interaction.impacts;
-  const impactCount = Math.min(impacts.length, MAX_PRESSURE_IMPACTS);
   const storage = lane.candidate;
   let writeIndex = 0;
 
@@ -432,17 +445,20 @@ function writeCandidates(options: {
     partition < impactCount && writeIndex < options.desiredCount;
     partition += 1
   ) {
-    const impact = partition < 0 ? undefined : impacts[partition];
+    const sourceIndex =
+      partition < 0 ? undefined : lane.impactSourceOrder[partition];
+    const impact = sourceIndex === undefined ? undefined : impacts[sourceIndex];
     const partitionCount = Math.min(
       partition < 0
         ? baseCandidateCount(lane.kind)
         : candidatesPerImpact(lane.kind),
       options.desiredCount - writeIndex,
     );
-    const sourceId =
-      impact === undefined
-        ? globalSource(lane.kind)
-        : stableImpactSource(impact.x, impact.z, impact.startTimeSeconds);
+    const sourceId = sourceIdForPartition(
+      lane.kind,
+      sourceIndex,
+      lane.impactStableSourceIds,
+    );
     const sourceStartTick =
       impact === undefined
         ? 0
@@ -1021,19 +1037,21 @@ function globalSource(kind: UnderwaterSecondaryParticleKind): number {
   }
 }
 
-function stableImpactSource(
-  x: number,
-  z: number,
-  startTimeSeconds: number,
+function sourceIdForPartition(
+  kind: UnderwaterSecondaryParticleKind,
+  sourceIndex: number | undefined,
+  stableSourceIds: Float64Array,
 ): number {
-  const xMillimetres = Math.round(x * 1_000);
-  const zMillimetres = Math.round(z * 1_000);
-  const startTick = Math.round(startTimeSeconds * FIXED_TICKS_PER_SECOND);
-  return mix32(
-    Math.imul(xMillimetres, 0x27d4_eb2d) ^
-      Math.imul(zMillimetres, 0x1656_67b1) ^
-      startTick,
-  );
+  if (sourceIndex === undefined) {
+    return globalSource(kind);
+  }
+  const stableSourceId = stableSourceIds[sourceIndex];
+  if (stableSourceId === undefined) {
+    throw new Error(
+      "A validated underwater impact partition is missing its stable source identity.",
+    );
+  }
+  return stableSourceId;
 }
 
 function mix32(input: number): number {

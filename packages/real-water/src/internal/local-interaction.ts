@@ -14,6 +14,7 @@ import {
   INTERACTION_FIELD_RADIUS_METRES,
   MAX_ACTIVE_DISTURBANCES,
 } from "../capabilities.js";
+import { manualInteractionStableSourceId } from "../interaction-source-identity.js";
 
 export const RADIAL_IMPACT_LIFETIME_SECONDS = 2;
 export const MIN_RADIAL_IMPACT_RADIUS_METRES = 0.000_1;
@@ -39,6 +40,7 @@ type LocalInteractionRenderKind =
   "radial-impact" | "directional-wake" | "propeller-wash";
 
 interface ActiveDisturbanceBase {
+  readonly stableSourceId: number;
   readonly kind: LocalInteractionRenderKind;
   readonly x: number;
   readonly z: number;
@@ -69,6 +71,7 @@ type ActiveDisturbance = ActiveManualDisturbance | ActiveBodyWake;
 
 export interface BodyWakeSource {
   readonly socketId: string;
+  readonly stableSourceId: number;
   readonly kind: "bow" | "stern" | "propeller" | "wake";
   readonly x: number;
   readonly y: number;
@@ -81,6 +84,12 @@ export interface BodyWakeSource {
 }
 
 export interface LocalInteractionRenderImpact {
+  /**
+   * Stable identity supplied by the source domain: the manual Disturbance id or
+   * the canonical Host Body/socket tuple. It never comes from sequence, slot,
+   * attachment handle, or container order.
+   */
+  readonly stableSourceId: number;
   readonly kind: LocalInteractionRenderKind;
   readonly x: number;
   readonly z: number;
@@ -356,6 +365,9 @@ export function createLocalInteractionField(
           const vectorIndex = index * 3;
           const disturbance: ActiveManualDisturbance = {
             origin: "manual",
+            stableSourceId: manualInteractionStableSourceId(
+              batch.ids[index] ?? 0,
+            ),
             kind: "radial-impact",
             id: batch.ids[index] ?? 0,
             x: (batch.positions[vectorIndex] ?? 0) + state.originX,
@@ -389,6 +401,9 @@ export function createLocalInteractionField(
           );
           const disturbance: ActiveManualDisturbance = {
             origin: "manual",
+            stableSourceId: manualInteractionStableSourceId(
+              batch.ids[index] ?? 0,
+            ),
             kind: "directional-wake",
             id: batch.ids[index] ?? 0,
             x: (batch.positions[vectorIndex] ?? 0) + state.originX,
@@ -616,6 +631,7 @@ export function createLocalInteractionField(
               ? []
               : [
                   Object.freeze({
+                    stableSourceId: disturbance.stableSourceId,
                     kind: disturbance.kind,
                     x: disturbance.x,
                     z: disturbance.z,
@@ -645,6 +661,7 @@ function createActiveBodyWake(
   );
   return {
     origin: "body",
+    stableSourceId: source.stableSourceId,
     attachmentId,
     socketId: source.socketId,
     socketKind: source.kind,
@@ -773,6 +790,7 @@ function compactDisturbances(
 
 function sameBodyWake(left: ActiveBodyWake, right: ActiveBodyWake): boolean {
   return (
+    left.stableSourceId === right.stableSourceId &&
     left.kind === right.kind &&
     left.socketKind === right.socketKind &&
     left.x === right.x &&

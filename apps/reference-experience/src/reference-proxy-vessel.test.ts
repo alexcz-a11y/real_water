@@ -10,6 +10,7 @@ import {
 } from "real-water";
 import {
   REFERENCE_PROXY_VESSEL_INTERACTION_SHAPE,
+  REFERENCE_PROXY_VESSEL_INTERACTION_SOURCE_ID,
   REFERENCE_PROXY_VESSEL_NAME,
   REFERENCE_PROXY_VESSEL_SOCKETS,
   createReferenceProxyVessel,
@@ -18,6 +19,7 @@ import { createReferenceHostSimulationController } from "./reference-simulation-
 
 describe("Reference proxy vessel", () => {
   it("publishes one stable compound Interaction Shape and matching authored socket transforms", () => {
+    expect(REFERENCE_PROXY_VESSEL_INTERACTION_SOURCE_ID).toBe(1);
     expect(REFERENCE_PROXY_VESSEL_INTERACTION_SHAPE).toEqual({
       kind: "compound",
       children: [

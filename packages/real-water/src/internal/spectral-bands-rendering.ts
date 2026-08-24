@@ -84,6 +84,10 @@ import {
   type LocalInteractionRenderSnapshot,
 } from "./local-interaction.js";
 import type { UnifiedFoamField } from "./spectral-whitecap-field.js";
+import {
+  bodyInteractionStableSourceId,
+  manualInteractionStableSourceId,
+} from "../interaction-source-identity.js";
 
 const INITIAL_ARTISTIC_CONTROLS: ArtisticControls =
   createWaterPreset("swell").artisticControls;
@@ -1090,6 +1094,7 @@ export function createSpectralBandRendering(
         anchorZ: initialSimulationState.originZ,
         impacts: Object.freeze([
           Object.freeze({
+            stableSourceId: manualInteractionStableSourceId(1),
             kind: "radial-impact",
             x: initialSimulationState.originX,
             z: initialSimulationState.originZ,
@@ -1100,6 +1105,7 @@ export function createSpectralBandRendering(
             startTimeSeconds: initialSimulationState.timeSeconds,
           }),
           Object.freeze({
+            stableSourceId: manualInteractionStableSourceId(2),
             kind: "directional-wake",
             x: initialSimulationState.originX,
             z: initialSimulationState.originZ,
@@ -1110,6 +1116,10 @@ export function createSpectralBandRendering(
             startTimeSeconds: initialSimulationState.timeSeconds,
           }),
           Object.freeze({
+            stableSourceId: bodyInteractionStableSourceId(
+              0,
+              "prewarm-propeller",
+            ),
             kind: "propeller-wash",
             x: initialSimulationState.originX + 1,
             z: initialSimulationState.originZ,

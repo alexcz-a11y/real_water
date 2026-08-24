@@ -73,6 +73,7 @@ export interface BodyAttachment {
 
 // @public
 export interface BodyAttachmentOptions {
+    readonly interactionSourceId?: number;
     // (undocumented)
     readonly physics: BodyPhysicsAdapter;
     // (undocumented)
