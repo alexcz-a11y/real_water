@@ -33,6 +33,8 @@ jobs:
             echo "::error title=Committed hash mismatch requires diagnosis::A mismatch from this check cannot distinguish between (1) a value that should have been re-minted but was not and (2) a value that was legitimately re-minted but whose committed anchor was not re-baked. Determine which case applies before changing any hash; do not update the committed anchor merely to make CI pass."
             exit 1
           fi
+      - name: Check declaration labels distinguish sibling fingerprints
+        run: node scripts/check-declaration-labels.mjs
       - run: pnpm build
       - id: test
         run: pnpm test

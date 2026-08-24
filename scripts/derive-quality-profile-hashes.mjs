@@ -669,9 +669,9 @@ for (const variant of COMMITTED_LEGACY_VARIANTS) {
 // public fields in declared order, with manifestHash itself excluded.
 const COMMITTED_MANIFEST_HASHES = {
   "minimal":
-    "sha256:e567cfb3a578dc468b763bb5fba2059aab547314fbb8424f6a00915ffb901cb9",
+    "sha256:fd90e59c3bba7f87e2ffc9b80b6ada2ae83d4c3419d1bf09edf5570717fb18a1",
   "minimal-high-detail":
-    "sha256:c4bb02b7c8bc0024b2176ef8230183e96819afbf6dcc376d80dc58960b4b4d58",
+    "sha256:9e555955afde7d0e8ad7cddd0c976e8514e6a47d6d0582ead6096d5a9ab2e659",
 };
 
 function canonicalManifestJson(manifest) {
