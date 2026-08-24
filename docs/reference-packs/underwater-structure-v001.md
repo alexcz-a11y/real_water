@@ -26,17 +26,17 @@ record of the service's output terms applies to this pack too.
 
 ## Approved views
 
-| File | View | sha256 (first 16) |
-|---|---|---|
-| `sub-structure-anchor-3q-v001.png` | Identity anchor, three-quarter | `2a25df31c2d30d47` |
-| `sub-structure-elev-front-v001.png` | Front elevation | `62cee261a3b90f28` |
-| `sub-structure-elev-side-v001.png` | Side elevation | `46b28f52a10d12be` |
-| `sub-structure-elev-back-v001.png` | Back elevation | `5a8ec1eb46ae2928` |
-| `sub-structure-plan-top-v001.png` | Top view | `261ba2bd7c6299a4` |
-| `sub-structure-mat-deck-concrete-v001.png` | Material — bare deck concrete | `ef79454aa30ecb24` |
-| `sub-structure-mat-growth-boundary-v001.png` | Material — growth meeting bare concrete | `59142eb9acfaff1a` |
-| `sub-structure-mat-bay-rim-v001.png` | Material — instrument bay rim | `1b120fecdcac5ee3` |
-| `sub-structure-lookdev-wet-v001.png` | Wet look-dev | `12f9231093599aaf` |
+| File | View | Reve image id | sha256 (first 16) |
+|---|---|---|---|
+| `sub-structure-anchor-3q-v001.png` | Identity anchor, three-quarter | `95708e10-c0a4-4dae-aaac-f110cc648147` | `2a25df31c2d30d47` |
+| `sub-structure-elev-front-v001.png` | Front elevation | `60d323f5-8510-4e18-8a22-200eac283f68` | `62cee261a3b90f28` |
+| `sub-structure-elev-side-v001.png` | Side elevation | `36b92261-5af4-4cf9-9fed-99045d9b68d6` | `46b28f52a10d12be` |
+| `sub-structure-elev-back-v001.png` | Back elevation | `cd493f3c-e92c-4a78-98a5-19b3bf16999d` | `5a8ec1eb46ae2928` |
+| `sub-structure-plan-top-v001.png` | Top view | `7e208c1f-3ec9-41bc-8a8d-92fb0657c177` | `261ba2bd7c6299a4` |
+| `sub-structure-mat-deck-concrete-v001.png` | Material — bare deck concrete | `56ec731e-e72d-4a63-8750-4f47a635978c` | `ef79454aa30ecb24` |
+| `sub-structure-mat-growth-boundary-v001.png` | Material — growth meeting bare concrete | `c02ec6a7-5509-4bda-b731-6f7d33797ccf` | `59142eb9acfaff1a` |
+| `sub-structure-mat-bay-rim-v001.png` | Material — instrument bay rim | `859d85a4-fb6d-49e0-8954-a9cc51ae908c` | `1b120fecdcac5ee3` |
+| `sub-structure-lookdev-wet-v001.png` | Wet look-dev | `32700a27-f5d7-4418-a750-cf53b0ff6bfd` | `12f9231093599aaf` |
 
 ## Decisions forced by generation
 

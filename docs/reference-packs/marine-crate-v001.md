@@ -29,17 +29,17 @@ record of the service's output terms applies to this pack too.
 
 ## Approved views
 
-| File | View | sha256 (first 16) |
-|---|---|---|
-| `marine-crate-anchor-3q-v001.png` | Identity anchor, three-quarter | `e9b7faf18fc18d05` |
-| `marine-crate-elev-front-v001.png` | Front elevation, long side | `3cc2b16e7c05d153` |
-| `marine-crate-elev-end-v001.png` | End elevation, short side | `7dca71a6073b9736` |
-| `marine-crate-elev-back-v001.png` | Back elevation, opposite long side | `4b529c0b60541e96` |
-| `marine-crate-plan-top-v001.png` | Top view | `8c2153a340b2421b` |
-| `marine-crate-mat-timber-v001.png` | Material — body panel timber | `a485afabe46e9289` |
-| `marine-crate-mat-corner-casting-v001.png` | Material — corner casting meeting a band | `a6549c74cc947ad3` |
-| `marine-crate-mat-rope-becket-v001.png` | Material — rope becket in its frame | `89e86a2e1ba2df47` |
-| `marine-crate-lookdev-wet-v001.png` | Wet look-dev | `6e3c614386b00d2d` |
+| File | View | Reve image id | sha256 (first 16) |
+|---|---|---|---|
+| `marine-crate-anchor-3q-v001.png` | Identity anchor, three-quarter | `24a0d68d-d4df-43dd-92bf-1cac60e4d716` | `e9b7faf18fc18d05` |
+| `marine-crate-elev-front-v001.png` | Front elevation, long side | `068f243b-14a3-4d6c-8629-da271d24683f` | `3cc2b16e7c05d153` |
+| `marine-crate-elev-end-v001.png` | End elevation, short side | `03fcf06c-02c5-4cfa-9e5f-dae6b76bd67e` | `7dca71a6073b9736` |
+| `marine-crate-elev-back-v001.png` | Back elevation, opposite long side | `bb5197fd-2d38-4b5c-ad02-555c99e2072d` | `4b529c0b60541e96` |
+| `marine-crate-plan-top-v001.png` | Top view | `660fc1d7-8a07-49e5-9fe0-566826870f72` | `8c2153a340b2421b` |
+| `marine-crate-mat-timber-v001.png` | Material — body panel timber | `2e5a7734-a716-4194-84d6-d445e49f90cd` | `a485afabe46e9289` |
+| `marine-crate-mat-corner-casting-v001.png` | Material — corner casting meeting a band | `4b197e34-0406-432f-9fa1-629a45faee21` | `a6549c74cc947ad3` |
+| `marine-crate-mat-rope-becket-v001.png` | Material — rope becket in its frame | `06b5e637-9150-40dc-996b-0175f7539768` | `89e86a2e1ba2df47` |
+| `marine-crate-lookdev-wet-v001.png` | Wet look-dev | `9de96c09-45a9-40d8-b36a-7be2dae9d81a` | `6e3c614386b00d2d` |
 
 Only the five geometric views are Ingredients of `@marine-crate`, per Bible §6.
 

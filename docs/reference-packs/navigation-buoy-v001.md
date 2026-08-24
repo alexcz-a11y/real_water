@@ -32,17 +32,17 @@ rather than repeated per prompt, so every generation in this pack carried it.
 
 ## Approved views
 
-| File | View | sha256 (first 16) |
-|---|---|---|
-| `nav-buoy-anchor-3q-v001.png` | Identity anchor, three-quarter | `4f9e9dbe8a9309dc` |
-| `nav-buoy-elev-front-v001.png` | Front elevation | `a9567abd0525e0d8` |
-| `nav-buoy-elev-port-v001.png` | Port side elevation | `9b966bbd104d40b4` |
-| `nav-buoy-elev-back-v001.png` | Back elevation | `6fa575998426c86c` |
-| `nav-buoy-plan-top-v001.png` | Top view | `529d3a09816a6540` |
-| `nav-buoy-mat-paint-band-v001.png` | Material — white paint meeting the orange band | `b973a1da853da74e` |
-| `nav-buoy-mat-growth-band-v001.png` | Material — the growth band's upper boundary | `8c217e548f228ee7` |
-| `nav-buoy-mat-ring-chain-v001.png` | Material — mooring ring and chain | `6e82abbc561646da` |
-| `nav-buoy-lookdev-wet-v001.png` | Wet look-dev | `c40597cb110b06ba` |
+| File | View | Reve image id | sha256 (first 16) |
+|---|---|---|---|
+| `nav-buoy-anchor-3q-v001.png` | Identity anchor, three-quarter | `172dc1f7-b80d-4566-87ab-b191f8132a92` | `4f9e9dbe8a9309dc` |
+| `nav-buoy-elev-front-v001.png` | Front elevation | `c7072a67-acea-4cc4-8481-497b38d4cb4d` | `a9567abd0525e0d8` |
+| `nav-buoy-elev-port-v001.png` | Port side elevation | `4aa56d5d-741a-4c68-93a3-236578a6450e` | `9b966bbd104d40b4` |
+| `nav-buoy-elev-back-v001.png` | Back elevation | `bb7c8855-ae6e-4a31-ae9b-dacf3fbdea32` | `6fa575998426c86c` |
+| `nav-buoy-plan-top-v001.png` | Top view | `a6e857bc-508a-4c55-ba22-1298b319b5f7` | `529d3a09816a6540` |
+| `nav-buoy-mat-paint-band-v001.png` | Material — white paint meeting the orange band | `6033ce18-d2df-4d03-90ed-22afd4d060cf` | `b973a1da853da74e` |
+| `nav-buoy-mat-growth-band-v001.png` | Material — the growth band's upper boundary | `25c359fc-faed-4e30-8a51-a4e9ae64eb7e` | `8c217e548f228ee7` |
+| `nav-buoy-mat-ring-chain-v001.png` | Material — mooring ring and chain | `7164be15-aad0-4016-bb3a-39eeba083749` | `6e82abbc561646da` |
+| `nav-buoy-lookdev-wet-v001.png` | Wet look-dev | `770ece00-8a6a-4b1d-8e1f-127ba8771aef` | `c40597cb110b06ba` |
 
 Only the five geometric views are Ingredients of `@nav-buoy`. The three material studies and the wet
 look-dev stay out of it, per Bible §6.
