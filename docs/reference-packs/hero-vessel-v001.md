@@ -134,11 +134,13 @@ Terms §2.3 attaches a licence that runs the other way, and its scope depends on
 > training its artificial intelligence models. If you are using a Paid Account, you may opt-out of
 > the use of Your Content for model training by selecting the opt-out option on your Account page.
 
-### Two facts this record cannot settle
+### Facts this record cannot settle
 
 1. ~~The account tier of the generating account is not recorded here.~~ **Settled 2026-08-24: the
-   generating account (`jackson.neo2230@gmail.com`) is on the Reve **Free plan**, read from
-   `https://app.reve.com/account`.** Terms §2.3 therefore applies in full to these nine views: they
+   generating account was on the Reve **Free plan** at the time of this pack, read from the account
+   page.** The account's own identity is deliberately not recorded: §2.3 turns on the *tier*, and the
+   conclusion below is identical for any Free account, so an identifier here would carry no
+   information and a permanent cost. Terms §2.3 therefore applies in full to these nine views: they
    "may be made available ... to and/or searchable by other users, including on Reve's Inspiration
    page", and a "perpetual license to Reve **and other users** to reproduce, distribute, create
    derivative works of and publicly display such Output" has been granted. Ownership is retained
@@ -151,7 +153,8 @@ Terms §2.3 attaches a licence that runs the other way, and its scope depends on
    Services". Whether an agent operating the published UI falls inside that phrase is not settled
    by the text, and §1.4 addresses agents acting on a user's behalf without resolving it either way.
 
-Both are recorded as open facts, not as findings.
+Item 1 is closed; item 2 remains an open fact, not a finding. The heading carries no count, so
+closing the rest will not date it again.
 
 ### Owner's determination
 
