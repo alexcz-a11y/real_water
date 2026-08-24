@@ -85,3 +85,71 @@ undecided, because an undecided part drifts differently in every later view.
   from the Reframe extension rather than from any observed view.
 - The material studies show a cleat and a winch in more detail than any geometric view does; treat
   their part shapes as indicative and their materials as authoritative.
+
+## Generating service and output terms
+
+Retrieved 2026-08-24 from `https://app.reve.com/terms` (redirected from `https://reve.com/terms`)
+and `https://app.reve.com/usage`. The Terms of Service carry **LAST UPDATED: 10/28/25**; the Usage
+Policy carries **LAST UPDATED: 9/15/25**. An archived earlier version is published at
+`/terms/archive/20250915.html`, so the version in force is identifiable after the fact.
+
+Quotations below are verbatim. They are recorded, not interpreted — the compatibility judgement
+against ADR-0008 belongs to the project owner and is recorded separately at the end of this section.
+
+### Ownership of output — Terms §2.2
+
+> To the extent permitted by applicable law and subject to the license you grant to Reve (and, in
+> some cases, other users) in Section 2.3 below, you (a) retain any ownership rights you may have
+> in your Input, and (b) own the rights to any Output you create using the Services.
+
+> Reve hereby assigns to you all right, title, and interest held by Reve, if any, in and to Output
+> you create, subject to the license you grant to Reve in Section 2.3 below.
+
+> Reve does not represent or warrant that Outputs are protectible by intellectual property rights
+> under applicable law or free from any third-party intellectual property rights.
+
+### Commercial use
+
+The Terms and the Usage Policy contain **no clause restricting commercial use of Output**. The
+nearest restriction is Terms §1.3(c), which is narrower than commercial use in general:
+
+> use Output to develop models that compete with Reve
+
+### Redistribution — Terms §1.3(a) and §2.3
+
+Terms §1.3(a) prohibits redistributing **the Services**, not Output:
+
+> license, sublicense, sell, rent, lease, transfer, assign, reproduce or distribute, any of the
+> Services
+
+Terms §2.3 attaches a licence that runs the other way, and its scope depends on account tier:
+
+> Output that you create using a Free Account may be made available (but Reve has no obligation)
+> to and/or searchable by other users, including on Reve's Inspiration page, and Free Account users
+> (or Paid Account users who choose to share Content with other users through Reve's Services)
+> hereby grant a perpetual license to Reve and other users to reproduce, distribute, create
+> derivative works of and publicly display such Output for this purpose.
+
+> You agree that Reve may use Your Content to improve and promote the Services, including by
+> training its artificial intelligence models. If you are using a Paid Account, you may opt-out of
+> the use of Your Content for model training by selecting the opt-out option on your Account page.
+
+### Two facts this record cannot settle
+
+1. **The account tier of the generating account is not recorded here.** §2.3 turns on it: on a Free
+   Account the nine approved views carry a perpetual licence to Reve *and to other users* to
+   reproduce, distribute, create derivative works of, and publicly display them. Ownership is
+   retained either way; what differs is what else was granted alongside it.
+2. **The nine files were downloaded by an agent driving the site's own download control.** Terms
+   §1.3(b) prohibits "automatically or programmatically extract or scrape data or Outputs from the
+   Services". Whether an agent operating the published UI falls inside that phrase is not settled
+   by the text, and §1.4 addresses agents acting on a user's behalf without resolving it either way.
+
+Both are recorded as open facts, not as findings.
+
+### Owner's determination
+
+On 2026-08-24 the project owner determined that copyright in the Output belongs to them, that
+commercial use is licensed, and that the Output may be redistributed, and stated that they will not
+put it to commercial use. Recorded as the owner's decision; the quotations above are the material
+it was taken on.
