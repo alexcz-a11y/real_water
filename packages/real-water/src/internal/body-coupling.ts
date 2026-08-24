@@ -29,6 +29,10 @@ import type {
 } from "./local-interaction.js";
 import { MAX_ATTACHED_BODIES } from "../capabilities.js";
 import { RealWaterRuntimeError } from "../errors.js";
+import {
+  createBodyInteractionSourceIdentityRegistry,
+  type BodyInteractionSourceIdentityReservation,
+} from "../interaction-source-identity.js";
 
 const GRAVITY_METRES_PER_SECOND_SQUARED = 9.81;
 
@@ -64,6 +68,8 @@ interface AttachmentRecord {
   lastWaterLoad: BodyWaterLoad | null;
   lastWakeReceipt: BodyWakeUpdateReceipt | null;
   readonly queryPointCount: number;
+  sourceIdentityReservation:
+    BodyInteractionSourceIdentityReservation | undefined;
   readonly slot: number;
 }
 
@@ -81,6 +87,7 @@ export function createBodyCoupling(
     { length: MAX_ATTACHED_BODIES },
     (_, index) => MAX_ATTACHED_BODIES - index - 1,
   );
+  const sourceIdentityRegistry = createBodyInteractionSourceIdentityRegistry();
   let nextAttachmentId = 0;
   let interactionAnchorOwner: number | undefined;
 
@@ -140,20 +147,54 @@ export function createBodyCoupling(
         (socket): socket is BodyEffectSocket =>
           socket.kind !== "interaction-anchor",
       );
-      const wakeSources = effectSockets.map(
-        (socket): MutableBodyWakeSource => ({
-          socketId: socket.id,
-          kind: socket.kind,
-          x: 0,
-          y: 0,
-          z: 0,
-          directionX: 0,
-          directionZ: 1,
-          radius: socket.radius,
-          amplitude: 0,
-          priority: socket.priority,
-        }),
-      );
+      let sourceIdentityReservation:
+        BodyInteractionSourceIdentityReservation | undefined;
+      let wakeSources: MutableBodyWakeSource[];
+      try {
+        if (effectSockets.length > 0) {
+          const interactionSourceId = accepted.interactionSourceId;
+          if (interactionSourceId === undefined) {
+            throw new Error(
+              "Validated Body effect sockets are missing their interaction source identity.",
+            );
+          }
+          sourceIdentityReservation = sourceIdentityRegistry.reserve(
+            interactionSourceId,
+            effectSockets.map(({ id }) => id),
+          );
+        }
+        const stableSourceIds = new Map(
+          sourceIdentityReservation?.sources.map((source) => [
+            source.socketId,
+            source.stableSourceId,
+          ]) ?? [],
+        );
+        wakeSources = effectSockets.map((socket): MutableBodyWakeSource => {
+          const stableSourceId = stableSourceIds.get(socket.id);
+          if (stableSourceId === undefined) {
+            throw new Error(
+              "A Body effect socket is missing its reserved stable source identity.",
+            );
+          }
+          return {
+            socketId: socket.id,
+            stableSourceId,
+            kind: socket.kind,
+            x: 0,
+            y: 0,
+            z: 0,
+            directionX: 0,
+            directionZ: 1,
+            radius: socket.radius,
+            amplitude: 0,
+            priority: socket.priority,
+          };
+        });
+      } catch (cause) {
+        sourceIdentityReservation?.release();
+        freeSlots.push(slot);
+        throw cause;
+      }
       const activeWakeSources: MutableBodyWakeSource[] = [];
       const record: AttachmentRecord = {
         attached: true,
@@ -163,6 +204,7 @@ export function createBodyCoupling(
         lastWaterLoad: null,
         lastWakeReceipt: null,
         queryPointCount: samples.length,
+        sourceIdentityReservation,
         slot,
       };
       let lastRouteState:
@@ -262,6 +304,8 @@ export function createBodyCoupling(
           interactionAnchorOwner = undefined;
         }
         interaction.localInteraction.removeBodyWakes(attachmentId);
+        record.sourceIdentityReservation?.release();
+        record.sourceIdentityReservation = undefined;
         freeSlots.push(slot);
         throw cause;
       }
@@ -295,6 +339,8 @@ export function createBodyCoupling(
             interactionAnchorOwner = undefined;
           }
           interaction.localInteraction.removeBodyWakes(attachmentId);
+          record.sourceIdentityReservation?.release();
+          record.sourceIdentityReservation = undefined;
           interaction.synchronize();
           freeSlots.push(record.slot);
           try {
@@ -316,6 +362,8 @@ export function createBodyCoupling(
       for (const record of [...active]) {
         record.attached = false;
         active.delete(record);
+        record.sourceIdentityReservation?.release();
+        record.sourceIdentityReservation = undefined;
         freeSlots.push(record.slot);
         try {
           record.binding?.dispose();

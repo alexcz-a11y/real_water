@@ -100,6 +100,7 @@ import {
 const WORKGROUP_SIZE = 64;
 type FloatNode = Node<"float">;
 type IVec2Node = Node<"ivec2">;
+type UVec2Node = Node<"uvec2">;
 type Vec4Node = Node<"vec4">;
 type FloatUniform = UniformNode<"float", number>;
 type IntUniform = UniformNode<"int", number>;
@@ -183,6 +184,20 @@ export interface UnifiedFoamField {
    */
   sampleSources(hostXNode: FloatNode, hostZNode: FloatNode): Vec4Node;
   /**
+   * Samples the current anchor-local interaction correction as signed
+   * height/slopeX/slopeZ/velocityY. The backing field is current-state only;
+   * no source-history or timing resource crosses this seam.
+   */
+  sampleLocalSurface(
+    hostXNode: FloatNode,
+    hostZNode: FloatNode,
+  ): Readonly<{
+    readonly height: FloatNode;
+    readonly slopeX: FloatNode;
+    readonly slopeZ: FloatNode;
+    readonly velocityY: FloatNode;
+  }>;
+  /**
    * Samples the same logical field on a canonical anchor-local diagnostic UV,
    * independent of camera projection, depth, and temporal jitter.
    */
@@ -230,6 +245,10 @@ export function createUnifiedFoamField(
     resolution,
     "Real Water unified foam local B (staging)",
   );
+  const localSurfaceTexture = createLocalFoamTexture(
+    resolution,
+    "Real Water anchor-local current surface correction",
+  );
   const interactionGeometryValues = Array.from(
     { length: MAX_ACTIVE_DISTURBANCES },
     () => new Vector4(),
@@ -247,6 +266,7 @@ export function createUnifiedFoamField(
     stagingTexture,
     localFinalTexture,
     localStagingTexture,
+    localSurfaceTexture,
     uniforms,
     resolution,
     tileSizeMetres,
@@ -355,6 +375,29 @@ export function createUnifiedFoamField(
         uvYNode.sub(0.5).mul(LOCAL_FOAM_DIAMETER_METRES),
       ),
     );
+  const localSurfaceSample = (hostXNode: FloatNode, hostZNode: FloatNode) => {
+    const relativeX = hostXNode.sub(uniforms.localSampleAnchorHostX);
+    const relativeZ = hostZNode.sub(uniforms.localSampleAnchorHostZ);
+    const localUv = vec2(relativeX, relativeZ)
+      .div(LOCAL_FOAM_DIAMETER_METRES)
+      .add(0.5);
+    const inside = step(float(0), localUv.x)
+      .mul(step(localUv.x, float(1)))
+      .mul(step(float(0), localUv.y))
+      .mul(step(localUv.y, float(1)));
+    // Caustics invoke this sampler inside a receiver-eligibility branch. An
+    // explicit level avoids implicit derivatives in non-uniform control flow;
+    // the single-level field has no mip chain in any case.
+    const correction = texture(localSurfaceTexture, localUv)
+      .level(float(0))
+      .mul(inside);
+    return Object.freeze({
+      height: correction.x,
+      slopeX: correction.y,
+      slopeZ: correction.z,
+      velocityY: correction.w,
+    });
+  };
 
   const runtimeStateSink: RuntimeStateSink = Object.freeze({
     synchronize(
@@ -399,6 +442,7 @@ export function createUnifiedFoamField(
     localSourceHistoryTexture: localFinalTexture,
     sampleStages: stageSample,
     sampleSources: sourceSample,
+    sampleLocalSurface: localSurfaceSample,
     sampleSourcesAtFieldUv: sourceFieldUvSample,
     runtimeStateSink,
     synchronize(
@@ -595,6 +639,7 @@ export function createUnifiedFoamField(
         renderer.initTexture(stagingTexture);
         renderer.initTexture(localFinalTexture);
         renderer.initTexture(localStagingTexture);
+        renderer.initTexture(localSurfaceTexture);
         writeSnapshotUniforms(uniforms, liveSnapshot, tileSizeMetres);
         const currentState = foamStateAtTick(
           foamPlan,
@@ -665,6 +710,7 @@ export function createUnifiedFoamField(
       stagingTexture.dispose();
       localFinalTexture.dispose();
       localStagingTexture.dispose();
+      localSurfaceTexture.dispose();
       pendingResetSnapshot = undefined;
       lastObservedSnapshot = undefined;
       synchronizedSnapshot = undefined;
@@ -892,6 +938,7 @@ function createUnifiedFoamKernels(
   stagingTexture: StorageTexture,
   localFinalTexture: StorageTexture,
   localStagingTexture: StorageTexture,
+  localSurfaceTexture: StorageTexture,
   uniforms: UnifiedFoamComputeUniforms,
   resolution: number,
   tileSizeMetres: number,
@@ -1101,10 +1148,12 @@ function createUnifiedFoamKernels(
       pow(2, float(-fixedStepSeconds).div(halfLifeSeconds)),
     );
     const history = diffused.mul(decayWeight).clamp(0, 1);
-    const generated = createLocalGenerationNode(
+    const generated = createLocalGenerationAndSurfaceNode(
       texel.localX,
       texel.localZ,
       uniforms,
+      localSurfaceTexture,
+      texel.coordinate,
     );
     const wake = saturatingUnionNode(history.x, generated.x);
     const impact = saturatingUnionNode(history.y, generated.y);
@@ -1133,14 +1182,20 @@ function saturatingUnionNode(left: FloatNode, right: FloatNode): FloatNode {
     .clamp(0, 1);
 }
 
-function createLocalGenerationNode(
+function createLocalGenerationAndSurfaceNode(
   localX: FloatNode,
   localZ: FloatNode,
   uniforms: UnifiedFoamComputeUniforms,
+  localSurfaceTexture: StorageTexture,
+  coordinate: UVec2Node,
 ) {
   return Fn(() => {
     const wake = float(0).toVar();
     const impact = float(0).toVar();
+    // This is the texture form of local-interaction.ts's analytic correction.
+    // Foam and surface output deliberately share the descriptor windows and
+    // phases below so the two GPU representations cannot drift independently.
+    const surfaceCorrection = vec4(0).toVar();
     Loop(
       {
         start: 0,
@@ -1171,12 +1226,56 @@ function createLocalGenerationNode(
           const radialWindow = float(1).sub(
             radialT.mul(radialT).mul(float(3).sub(radialT.mul(2))),
           );
-          const ringPhase = normalizedRadius.sub(progress.mul(2)).mul(Math.PI);
-          const ringEnergy = abs(cos(ringPhase));
+          const radialWindowDerivative = radialT
+            .mul(float(1).sub(radialT))
+            .mul(-6);
+          const radialPhase = normalizedRadius
+            .sub(progress.mul(2))
+            .mul(Math.PI);
+          const radialCosine = cos(radialPhase);
+          const radialSine = sin(radialPhase);
+          const ringEnergy = abs(radialCosine);
           const radialActive = step(0, age)
             .mul(float(1).sub(step(RADIAL_IMPACT_LIFETIME_SECONDS, age)))
             .mul(float(1).sub(step(1, normalizedRadius)))
             .mul(radialKind);
+          const radialHeight = descriptor.w
+            .mul(decay)
+            .mul(radialCosine)
+            .mul(radialWindow)
+            .mul(radialActive);
+          const radialDerivativeRadius = descriptor.w
+            .mul(decay)
+            .mul(
+              radialSine
+                .mul(-Math.PI)
+                .mul(radialWindow)
+                .add(radialCosine.mul(radialWindowDerivative)),
+            )
+            .div(radius)
+            .mul(radialActive);
+          const inverseDistance = float(1).div(distance.max(1e-5));
+          const radialVelocity = descriptor.w
+            .mul(radialWindow)
+            .mul(
+              remaining
+                .mul(-2 / RADIAL_IMPACT_LIFETIME_SECONDS)
+                .mul(radialCosine)
+                .add(
+                  decay
+                    .mul((2 * Math.PI) / RADIAL_IMPACT_LIFETIME_SECONDS)
+                    .mul(radialSine),
+                ),
+            )
+            .mul(radialActive);
+          surfaceCorrection.x.addAssign(radialHeight);
+          surfaceCorrection.y.addAssign(
+            radialDerivativeRadius.mul(dx).mul(inverseDistance),
+          );
+          surfaceCorrection.z.addAssign(
+            radialDerivativeRadius.mul(dz).mul(inverseDistance),
+          );
+          surfaceCorrection.w.addAssign(radialVelocity);
           const radialGeneration = amplitude
             .mul(0.65)
             .mul(decay)
@@ -1214,6 +1313,14 @@ function createLocalGenerationNode(
           const lateralWindow = float(1).sub(
             lateralT.mul(lateralT).mul(float(3).sub(lateralT.mul(2))),
           );
+          const longitudinalDerivative = alongT
+            .mul(float(1).sub(alongT))
+            .mul(-6)
+            .div(wakeLength);
+          const lateralDerivative = lateralT
+            .mul(float(1).sub(lateralT))
+            .mul(-6)
+            .div(wakeWidth);
           const persistent = float(1).sub(
             step(PERSISTENT_BODY_WAKE_START_TIME_SECONDS + 1, timing.x),
           );
@@ -1227,6 +1334,11 @@ function createLocalGenerationNode(
             .mul(float(1).sub(step(1, abs(lateral).div(wakeWidth))))
             .mul(directionalKind);
           const directionalDecay = mix(decay, float(1), persistent);
+          const directionalDecayDerivative = mix(
+            remaining.mul(-2 / RADIAL_IMPACT_LIFETIME_SECONDS),
+            float(0),
+            persistent,
+          );
           const spatialRadians = mix(
             float(DIRECTIONAL_WAKE_SPATIAL_RADIANS),
             float(PROPELLER_WASH_SPATIAL_RADIANS),
@@ -1237,15 +1349,67 @@ function createLocalGenerationNode(
             float(PROPELLER_WASH_TEMPORAL_RADIANS_PER_SECOND),
             propellerKind,
           );
+          const spatialFrequency = spatialRadians.div(radius);
           const wakePhase = along
-            .mul(spatialRadians.div(radius))
+            .mul(spatialFrequency)
             .sub(uniforms.timeSeconds.mul(temporalFrequency));
-          const wakeEnergy = abs(cos(wakePhase));
+          const directionalCosine = cos(wakePhase);
+          const directionalSine = sin(wakePhase);
+          const wakeEnergy = abs(directionalCosine);
           const heightScale = mix(
             float(DIRECTIONAL_WAKE_HEIGHT_SCALE),
             float(PROPELLER_WASH_HEIGHT_SCALE),
             propellerKind,
           );
+          const scaledAmplitude = descriptor.w.mul(heightScale);
+          const directionalHeight = scaledAmplitude
+            .mul(directionalDecay)
+            .mul(directionalCosine)
+            .mul(longitudinalWindow)
+            .mul(lateralWindow)
+            .mul(directionalActive);
+          const derivativeAlong = scaledAmplitude
+            .mul(directionalDecay)
+            .mul(lateralWindow)
+            .mul(
+              longitudinalDerivative
+                .mul(directionalCosine)
+                .sub(
+                  longitudinalWindow.mul(directionalSine).mul(spatialFrequency),
+                ),
+            )
+            .mul(directionalActive);
+          const lateralSign = step(0, lateral).mul(2).sub(1);
+          const derivativeLateral = scaledAmplitude
+            .mul(directionalDecay)
+            .mul(directionalCosine)
+            .mul(longitudinalWindow)
+            .mul(lateralDerivative)
+            .mul(lateralSign)
+            .mul(directionalActive);
+          const directionalVelocity = scaledAmplitude
+            .mul(longitudinalWindow)
+            .mul(lateralWindow)
+            .mul(
+              directionalDecayDerivative
+                .mul(directionalCosine)
+                .add(
+                  directionalDecay.mul(temporalFrequency).mul(directionalSine),
+                ),
+            )
+            .mul(directionalActive);
+          surfaceCorrection.x.addAssign(directionalHeight);
+          surfaceCorrection.y.addAssign(
+            derivativeAlong
+              .mul(directionX)
+              .sub(derivativeLateral.mul(directionZ)),
+          );
+          surfaceCorrection.z.addAssign(
+            derivativeAlong
+              .mul(directionZ)
+              .add(derivativeLateral.mul(directionX)),
+          );
+          surfaceCorrection.w.addAssign(directionalVelocity);
           const wakeGeneration = amplitude
             .mul(heightScale)
             .mul(directionalDecay)
@@ -1258,6 +1422,44 @@ function createLocalGenerationNode(
         });
       },
     );
+    const anchorDistance = length(vec2(localX, localZ));
+    const fadeStart =
+      INTERACTION_FIELD_RADIUS_METRES - INTERACTION_FIELD_EDGE_FADE_METRES;
+    const fadeT = anchorDistance
+      .sub(fadeStart)
+      .div(INTERACTION_FIELD_EDGE_FADE_METRES)
+      .clamp(0, 1);
+    const fieldFade = float(1).sub(
+      fadeT.mul(fadeT).mul(float(3).sub(fadeT.mul(2))),
+    );
+    const fieldFadeDerivative = fadeT
+      .mul(float(1).sub(fadeT))
+      .mul(-6 / INTERACTION_FIELD_EDGE_FADE_METRES);
+    const inverseAnchorDistance = float(1).div(anchorDistance.max(1e-5));
+    textureStore(
+      localSurfaceTexture,
+      coordinate,
+      vec4(
+        surfaceCorrection.x.mul(fieldFade),
+        surfaceCorrection.y
+          .mul(fieldFade)
+          .add(
+            surfaceCorrection.x
+              .mul(fieldFadeDerivative)
+              .mul(localX)
+              .mul(inverseAnchorDistance),
+          ),
+        surfaceCorrection.z
+          .mul(fieldFade)
+          .add(
+            surfaceCorrection.x
+              .mul(fieldFadeDerivative)
+              .mul(localZ)
+              .mul(inverseAnchorDistance),
+          ),
+        surfaceCorrection.w.mul(fieldFade),
+      ),
+    ).toWriteOnly();
     return vec2(wake, impact);
   })();
 }

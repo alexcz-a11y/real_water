@@ -26,6 +26,8 @@ import {
 
 export const REFERENCE_PROXY_VESSEL_NAME = "Reference proxy vessel" as const;
 export const REFERENCE_PROXY_VESSEL_FIXED_TICK_HZ = 60 as const;
+/** Stable identity authored by the Reference proxy-vessel domain. */
+export const REFERENCE_PROXY_VESSEL_INTERACTION_SOURCE_ID = 1 as const;
 
 const FIXED_STEP_SECONDS = 1 / REFERENCE_PROXY_VESSEL_FIXED_TICK_HZ;
 const VESSEL_MASS_KILOGRAMS = 8_500;
@@ -173,6 +175,7 @@ export interface ReferenceProxyVessel {
 
 export interface ReferenceProxyVesselOptions {
   readonly attachmentSockets?: NonNullable<BodyAttachmentOptions["sockets"]>;
+  readonly interactionSourceId?: number;
 }
 
 export function createReferenceProxyVessel(
@@ -182,6 +185,8 @@ export function createReferenceProxyVessel(
   const attachmentSockets = Object.freeze([
     ...(options.attachmentSockets ?? REFERENCE_PROXY_VESSEL_SOCKETS),
   ]);
+  const interactionSourceId =
+    options.interactionSourceId ?? REFERENCE_PROXY_VESSEL_INTERACTION_SOURCE_ID;
   const root = new Group();
   root.name = REFERENCE_PROXY_VESSEL_NAME;
 
@@ -311,6 +316,7 @@ export function createReferenceProxyVessel(
         physics,
         shape: REFERENCE_PROXY_VESSEL_INTERACTION_SHAPE,
         sockets: attachmentSockets,
+        interactionSourceId,
       });
       return attachment;
     },

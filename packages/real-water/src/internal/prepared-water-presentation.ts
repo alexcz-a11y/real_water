@@ -15,6 +15,7 @@ import {
   type Scene,
 } from "three/webgpu";
 import {
+  float,
   mrt,
   normalView,
   output,
@@ -39,6 +40,10 @@ import {
   type DiagnosticsSecondaryParticleOverdrawCapture,
   type DiagnosticsSecondaryParticleReceipt,
   type DiagnosticsSecondaryParticles,
+  type DiagnosticsLensWetnessCapture,
+  type DiagnosticsUnderwaterBubblesCapture,
+  type DiagnosticsUnderwaterCausticsCapture,
+  type DiagnosticsUnderwaterParticlesCapture,
   type DiagnosticsUnderwaterVolumeCapture,
   type DiagnosticsWhitecapStageCapture,
   type HostDiagnosticsPresentRequest,
@@ -52,6 +57,7 @@ import type {
 import type { OpenWaterRuntimeSnapshot } from "../runtime.js";
 import type { HostEnvironmentAdapter } from "../environment.js";
 import type {
+  QualityProfilePostTraaComposition,
   QualityProfileSecondaryParticles,
   QualityProfileUnderwaterVolume,
 } from "../quality-profile.js";
@@ -97,17 +103,25 @@ import type {
 import { createUnderwaterVolumeRendering } from "./underwater-volume-rendering.js";
 import {
   createPostTraaComposition,
+  type PostTraaCompositionPlan,
   type PreparedPostTraaComposition,
 } from "../post-traa-composition.js";
+import { createSecondaryParticlePostTraaStageRegistration } from "./secondary-particle-post-traa-stage.js";
 import {
-  createSecondaryParticlePostTraaStageRegistration,
-  SECONDARY_PARTICLE_POST_TRAA_PLAN,
-} from "./secondary-particle-post-traa-stage.js";
+  createLensWetnessPostTraaStageRegistration,
+  type LensWetnessPostTraaStageRegistration,
+} from "./lens-wetness-post-traa-stage.js";
 import type {
   SecondaryParticleConsumerReceipt,
   SecondaryParticlePool,
 } from "../secondary-particle-pool.js";
+import { createSecondaryParticleContributionQuantizer } from "../secondary-particle-pool.js";
 import type { SecondarySprayParticles } from "./secondary-spray-particles.js";
+import type { PreparedUnderwaterSurfaceSampler } from "./underwater-caustics-rendering.js";
+import {
+  createUnderwaterSecondaryParticles,
+  type UnderwaterSecondaryParticles,
+} from "./underwater-secondary-particles.js";
 
 export const PREWARM_HISTORY_EPOCH = 1;
 export const HIDDEN_STABILIZATION_FRAME_COUNT = 8;
@@ -143,6 +157,8 @@ export interface PreparedWaterPresentationResources {
   readonly traaResolvedTarget: RenderTarget;
   readonly finalColorTarget: RenderTarget;
   readonly secondaryParticleDiagnosticsTarget: RenderTarget;
+  readonly lensWetness: LensWetnessPostTraaStageRegistration;
+  readonly lensWetnessDiagnosticsTarget: RenderTarget;
   readonly scenePass: ReturnType<typeof pass>;
   readonly ssr: CurrentFrameSsrStack;
   readonly underwater: ReturnType<typeof createUnderwaterVolumeRendering>;
@@ -150,6 +166,13 @@ export interface PreparedWaterPresentationResources {
   readonly underwaterVolumeTarget: RenderTarget;
   readonly underwaterDiagnosticsPipeline: RenderPipeline;
   readonly underwaterDiagnosticsTarget: RenderTarget;
+  readonly underwaterCausticsDiagnosticsPipeline: RenderPipeline;
+  readonly underwaterCausticsDiagnosticsTarget: RenderTarget;
+  readonly underwaterParticles: UnderwaterSecondaryParticles;
+  readonly underwaterSuspendedParticleTarget: RenderTarget;
+  readonly underwaterBubbleTarget: RenderTarget;
+  readonly underwaterTracerCompositePipeline: RenderPipeline;
+  readonly underwaterTracerCompositeTarget: RenderTarget;
   readonly foamField: UnifiedFoamField;
   readonly secondaryParticlePool: SecondaryParticlePool;
   readonly secondaryParticlePolicy: QualityProfileSecondaryParticles;
@@ -183,8 +206,11 @@ export function createPreparedWaterPresentationResources(
   secondaryParticlePool: SecondaryParticlePool,
   secondaryParticlePolicy: QualityProfileSecondaryParticles,
   secondarySpray: SecondarySprayParticles,
+  postTraaPolicy: QualityProfilePostTraaComposition,
   environment: HostEnvironmentAdapter,
   underwaterPolicy: QualityProfileUnderwaterVolume,
+  surfaceSampler: PreparedUnderwaterSurfaceSampler,
+  initialSnapshot: OpenWaterRuntimeSnapshot,
   initialWaterline: WaterlineFrameState,
 ): {
   readonly resources: PreparedWaterPresentationResources;
@@ -201,8 +227,11 @@ export function createPreparedWaterPresentationResources(
       secondaryParticlePool,
       secondaryParticlePolicy,
       secondarySpray,
+      postTraaPolicy,
       environment,
       underwaterPolicy,
+      surfaceSampler,
+      initialSnapshot,
       initialWaterline,
       partial,
     );
@@ -221,8 +250,11 @@ function constructPreparedWaterPresentationResources(
   secondaryParticlePool: SecondaryParticlePool,
   secondaryParticlePolicy: QualityProfileSecondaryParticles,
   secondarySpray: SecondarySprayParticles,
+  postTraaPolicy: QualityProfilePostTraaComposition,
   environment: HostEnvironmentAdapter,
   underwaterPolicy: QualityProfileUnderwaterVolume,
+  surfaceSampler: PreparedUnderwaterSurfaceSampler,
+  initialSnapshot: OpenWaterRuntimeSnapshot,
   initialWaterline: WaterlineFrameState,
   partial: PartialPreparedWaterPresentationResources,
 ): {
@@ -283,6 +315,19 @@ function constructPreparedWaterPresentationResources(
   opticalDiagnosticsBTexture.type = UnsignedByteType;
   opticalDiagnosticsBTexture.colorSpace = LinearSRGBColorSpace;
   assertCoreScenePassColorByteBudget(scenePass.renderTarget.textures);
+  const underwaterParticles = createUnderwaterSecondaryParticles({
+    sceneDepth: scenePass.getTexture("depth"),
+    contributionReference: Object.freeze({
+      width: drawingBuffer.width,
+      height: drawingBuffer.height,
+      space: "output-drawing-buffer" as const,
+    }),
+    contributionQuantizer: createSecondaryParticleContributionQuantizer({
+      projectedAreaResolution: drawingBuffer,
+      referenceResolution: drawingBuffer,
+    }),
+  });
+  partial.underwaterParticles = underwaterParticles;
   const foamDiagnostics = createUnifiedFoamDiagnostics(
     renderer,
     camera,
@@ -326,10 +371,14 @@ function constructPreparedWaterPresentationResources(
   const underwater = createUnderwaterVolumeRendering(
     ssr.compositeTarget.texture,
     scenePass.getTexture("depth"),
+    viewNormalTexture,
+    opticalFactorsTexture,
     camera,
     environment,
     initialWaterline,
     underwaterPolicy,
+    surfaceSampler,
+    initialSnapshot,
   );
   partial.underwater = underwater;
   const underwaterVolumeTarget = new RenderTarget(
@@ -369,8 +418,72 @@ function constructPreparedWaterPresentationResources(
   );
   partial.underwaterDiagnosticsPipeline = underwaterDiagnosticsPipeline;
   underwaterDiagnosticsPipeline.outputColorTransform = false;
+  const underwaterCausticsDiagnosticsTarget = new RenderTarget(
+    drawingBuffer.width,
+    drawingBuffer.height,
+    {
+      depthBuffer: false,
+      stencilBuffer: false,
+      type: HalfFloatType,
+      format: RGBAFormat,
+    },
+  );
+  partial.underwaterCausticsDiagnosticsTarget =
+    underwaterCausticsDiagnosticsTarget;
+  underwaterCausticsDiagnosticsTarget.texture.name =
+    "Real Water underwater caustics diagnostics";
+  const underwaterCausticsDiagnosticsPipeline = new RenderPipeline(
+    renderer,
+    underwater.causticsDiagnosticsNode,
+  );
+  partial.underwaterCausticsDiagnosticsPipeline =
+    underwaterCausticsDiagnosticsPipeline;
+  underwaterCausticsDiagnosticsPipeline.outputColorTransform = false;
+  const createUnderwaterTracerTarget = (name: string): RenderTarget => {
+    const target = new RenderTarget(drawingBuffer.width, drawingBuffer.height, {
+      depthBuffer: false,
+      stencilBuffer: false,
+      type: HalfFloatType,
+      format: RGBAFormat,
+    });
+    target.texture.name = name;
+    target.texture.colorSpace = LinearSRGBColorSpace;
+    return target;
+  };
+  const underwaterSuspendedParticleTarget = createUnderwaterTracerTarget(
+    "Real Water underwater suspended particles",
+  );
+  partial.underwaterSuspendedParticleTarget = underwaterSuspendedParticleTarget;
+  const underwaterBubbleTarget = createUnderwaterTracerTarget(
+    "Real Water underwater bubbles",
+  );
+  partial.underwaterBubbleTarget = underwaterBubbleTarget;
+  const underwaterTracerCompositeTarget = createUnderwaterTracerTarget(
+    "Real Water underwater tracer composite",
+  );
+  partial.underwaterTracerCompositeTarget = underwaterTracerCompositeTarget;
+  const underwaterBase = texture(underwaterVolumeTarget.texture);
+  const suspendedAccumulation = texture(
+    underwaterSuspendedParticleTarget.texture,
+  );
+  const bubbleAccumulation = texture(underwaterBubbleTarget.texture);
+  const withSuspended = suspendedAccumulation.rgb.add(
+    underwaterBase.rgb.mul(float(1).sub(suspendedAccumulation.a)),
+  );
+  const withBubbles = bubbleAccumulation.rgb.add(
+    withSuspended.mul(float(1).sub(bubbleAccumulation.a)),
+  );
+  const underwaterTracerCompositePipeline = new RenderPipeline(
+    renderer,
+    vec4(withBubbles.clamp(0, 1), underwaterBase.a),
+  );
+  partial.underwaterTracerCompositePipeline = underwaterTracerCompositePipeline;
+  underwaterTracerCompositePipeline.outputColorTransform = false;
   const traaNode = traa(
-    vec4(texture(underwaterVolumeTarget.texture).rgb, texture(outputTexture).a),
+    vec4(
+      texture(underwaterTracerCompositeTarget.texture).rgb,
+      texture(outputTexture).a,
+    ),
     texture(scenePass.getTexture("depth")),
     createResettableVelocityTextureNode(
       texture(motionVectorsTexture),
@@ -404,12 +517,23 @@ function constructPreparedWaterPresentationResources(
         secondarySpray.renderAccumulation(stageRenderer, camera);
       },
     });
+  const lensWetness = createLensWetnessPostTraaStageRegistration({
+    onProbe(): void {
+      counters.probeCount += 1;
+    },
+  });
+  partial.lensWetness = lensWetness;
+  const postTraaPlan: PostTraaCompositionPlan = Object.freeze({
+    mode: postTraaPolicy.mode,
+    resolutionPolicy: postTraaPolicy.resolutionPolicy,
+    stages: postTraaPolicy.stages,
+  });
   const postTraaComposition = createPostTraaComposition({
     renderer,
     source: traaResolvedTarget,
     drawingBuffer,
-    plan: SECONDARY_PARTICLE_POST_TRAA_PLAN,
-    factories: [secondaryParticleStage.factory],
+    plan: postTraaPlan,
+    factories: [secondaryParticleStage.factory, lensWetness.factory],
   });
   partial.postTraaComposition = postTraaComposition;
   const finalColorTarget = postTraaComposition.output;
@@ -418,6 +542,8 @@ function constructPreparedWaterPresentationResources(
     secondaryParticleStage.diagnosticsTarget();
   partial.secondaryParticleDiagnosticsTarget =
     secondaryParticleDiagnosticsTarget;
+  const lensWetnessDiagnosticsTarget = lensWetness.diagnosticsTarget();
+  partial.lensWetnessDiagnosticsTarget = lensWetnessDiagnosticsTarget;
   const currentColorTarget = new RenderTarget(
     drawingBuffer.width,
     drawingBuffer.height,
@@ -431,7 +557,10 @@ function constructPreparedWaterPresentationResources(
   currentColorTarget.texture.name = "Real Water current color";
   const currentColorPipeline = new RenderPipeline(
     renderer,
-    vec4(texture(underwaterVolumeTarget.texture).rgb, texture(outputTexture).a),
+    vec4(
+      texture(underwaterTracerCompositeTarget.texture).rgb,
+      texture(outputTexture).a,
+    ),
   );
   partial.currentColorPipeline = currentColorPipeline;
   const presentationPipeline = new RenderPipeline(
@@ -457,6 +586,8 @@ function constructPreparedWaterPresentationResources(
     traaResolvedTarget,
     finalColorTarget,
     secondaryParticleDiagnosticsTarget,
+    lensWetness,
+    lensWetnessDiagnosticsTarget,
     scenePass,
     ssr,
     underwater,
@@ -464,6 +595,13 @@ function constructPreparedWaterPresentationResources(
     underwaterVolumeTarget,
     underwaterDiagnosticsPipeline,
     underwaterDiagnosticsTarget,
+    underwaterCausticsDiagnosticsPipeline,
+    underwaterCausticsDiagnosticsTarget,
+    underwaterParticles,
+    underwaterSuspendedParticleTarget,
+    underwaterBubbleTarget,
+    underwaterTracerCompositePipeline,
+    underwaterTracerCompositeTarget,
     foamField,
     secondaryParticlePool,
     secondaryParticlePolicy,
@@ -521,7 +659,16 @@ export async function compileAndPrimePreparedWaterPresentation(
   throwIfAborted(signal);
   resources.ssr.ensureGraphPrepared(renderer);
   resources.resetUniform.value = 1;
-  renderTemporalFrame(renderer, scene, camera, resources, true, true, true);
+  renderTemporalFrame(
+    renderer,
+    scene,
+    camera,
+    resources,
+    true,
+    true,
+    true,
+    true,
+  );
   renderHistoryRejection(renderer, resources);
   resources.resetUniform.value = 0;
   renderCurrentColorConversion(renderer, resources);
@@ -551,6 +698,7 @@ export function renderHiddenStabilizationFrames(
         scene,
         camera,
         resources,
+        false,
         false,
         false,
         false,
@@ -585,6 +733,7 @@ export async function renderMainCameraGuard(
     scene,
     camera,
     resources,
+    false,
     false,
     false,
     false,
@@ -647,6 +796,10 @@ export function createPresentationRouteBridge(
       (waterlineCandidate.transitioned ? "waterline-crossing" : null);
     resources.waterline.current = waterlineCandidate.state;
     waterlineOptics.synchronize(waterlineCandidate.state);
+    const lensWetnessCandidate = resources.lensWetness.preview(
+      snapshot,
+      waterlineCandidate.state,
+    );
     const hostState = captureHostState(renderer, scene, camera);
     const outputs: DiagnosticsCapture[] = [];
     let temporalSceneStarted = false;
@@ -670,6 +823,7 @@ export function createPresentationRouteBridge(
         captureWhitecapStages,
         captureFoamSources,
         accepted.outputs.some(isUnderwaterVolumeCaptureName),
+        accepted.outputs.includes("underwater-caustics"),
       );
       if (accepted.outputs.includes("current-color")) {
         renderCurrentColorConversion(renderer, resources);
@@ -733,6 +887,7 @@ export function createPresentationRouteBridge(
           historyEpoch += 1;
         }
       }
+      resources.lensWetness.commit(lensWetnessCandidate);
       presentationId += 1;
       continuity.commit(snapshot);
       waterline.commit(waterlineCandidate);
@@ -842,6 +997,13 @@ export function disposePreparedWaterPresentationResources(
   resources.traaNode.dispose();
   resources.currentColorTarget.dispose();
   resources.traaResolvedTarget.dispose();
+  resources.underwaterCausticsDiagnosticsPipeline.dispose();
+  resources.underwaterCausticsDiagnosticsTarget.dispose();
+  resources.underwaterParticles.dispose();
+  resources.underwaterTracerCompositePipeline.dispose();
+  resources.underwaterTracerCompositeTarget.dispose();
+  resources.underwaterBubbleTarget.dispose();
+  resources.underwaterSuspendedParticleTarget.dispose();
   resources.underwaterDiagnosticsPipeline.dispose();
   resources.underwaterDiagnosticsTarget.dispose();
   resources.underwaterVolumePipeline.dispose();
@@ -866,6 +1028,13 @@ export function disposePartialPreparedWaterPresentationResources(
     () => resources.traaNode?.dispose(),
     () => resources.currentColorTarget?.dispose(),
     () => resources.traaResolvedTarget?.dispose(),
+    () => resources.underwaterCausticsDiagnosticsPipeline?.dispose(),
+    () => resources.underwaterCausticsDiagnosticsTarget?.dispose(),
+    () => resources.underwaterParticles?.dispose(),
+    () => resources.underwaterTracerCompositePipeline?.dispose(),
+    () => resources.underwaterTracerCompositeTarget?.dispose(),
+    () => resources.underwaterBubbleTarget?.dispose(),
+    () => resources.underwaterSuspendedParticleTarget?.dispose(),
     () => resources.underwaterDiagnosticsPipeline?.dispose(),
     () => resources.underwaterDiagnosticsTarget?.dispose(),
     () => resources.underwaterVolumePipeline?.dispose(),
@@ -981,6 +1150,7 @@ function renderPreparedPresentationColor(
   captureWhitecapStages: boolean,
   captureFoamSources: boolean,
   captureUnderwaterDiagnostics: boolean,
+  captureUnderwaterCaustics: boolean,
 ): void {
   renderTemporalFrame(
     renderer,
@@ -990,6 +1160,7 @@ function renderPreparedPresentationColor(
     captureWhitecapStages,
     captureFoamSources,
     captureUnderwaterDiagnostics,
+    captureUnderwaterCaustics,
   );
   resources.postTraaComposition.render();
 }
@@ -1002,6 +1173,7 @@ function renderTemporalFrame(
   captureWhitecapStages: boolean,
   captureFoamSources: boolean,
   captureUnderwaterDiagnostics: boolean,
+  captureUnderwaterCaustics: boolean,
 ): void {
   const actual = readDrawingBufferSize(renderer);
   if (actual.width !== resources.width || actual.height !== resources.height) {
@@ -1058,6 +1230,21 @@ function renderTemporalFrame(
         renderer.setRenderTarget(resources.underwaterDiagnosticsTarget);
         resources.underwaterDiagnosticsPipeline.render();
       }
+      if (captureUnderwaterCaustics) {
+        renderer.setRenderTarget(resources.underwaterCausticsDiagnosticsTarget);
+        resources.underwaterCausticsDiagnosticsPipeline.render();
+      }
+      renderer.setMRT(null);
+      renderer.setRenderTarget(resources.underwaterSuspendedParticleTarget);
+      renderer.setClearColor(0x000000, 0);
+      renderer.clear();
+      resources.underwaterParticles.renderSuspended(renderer, camera);
+      renderer.setRenderTarget(resources.underwaterBubbleTarget);
+      renderer.setClearColor(0x000000, 0);
+      renderer.clear();
+      resources.underwaterParticles.renderBubbles(renderer, camera);
+      renderer.setRenderTarget(resources.underwaterTracerCompositeTarget);
+      resources.underwaterTracerCompositePipeline.render();
       renderer.setRenderTarget(resources.ssr.depthConversionTarget);
       resources.ssr.depthConversionPipeline.render();
       resources.jitterAdapter.clearHostCameraViewOffset(camera);
@@ -1144,6 +1331,26 @@ async function probeNamedOutputRoutes(
     renderer,
     resources,
     resources.underwaterDiagnosticsTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.underwaterCausticsDiagnosticsTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.underwaterSuspendedParticleTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.underwaterBubbleTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.underwaterTracerCompositeTarget,
   );
   await probeCompletedFrame(renderer, resources, resources.ssr.beautyTarget);
   await probeCompletedFrame(
@@ -1441,6 +1648,32 @@ async function readNamedOutput(
     case "underwater-shadow":
       throw new Error(
         "The packed underwater diagnostic route has not been prepared.",
+      );
+    case "underwater-caustics":
+      return readUnderwaterCausticsCapture(renderer, resources);
+    case "underwater-particles":
+      return readT22ScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.underwaterSuspendedParticleTarget,
+        3,
+      );
+    case "underwater-bubbles":
+      return readT22ScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.underwaterBubbleTarget,
+        3,
+      );
+    case "lens-wetness":
+      return readT22ScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.lensWetnessDiagnosticsTarget,
+        0,
       );
     case "secondary-particle-contribution":
     case "secondary-particle-overdraw":
@@ -1749,6 +1982,106 @@ function decodePackedFloat(
   return data instanceof Uint16Array
     ? DataUtils.fromHalfFloat(encoded)
     : encoded;
+}
+
+async function readUnderwaterCausticsCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsUnderwaterCausticsCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.underwaterCausticsDiagnosticsTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array)) {
+    throw new TypeError(
+      "Underwater caustics diagnostics readback did not return Float16 RGBA data.",
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    const value = DataUtils.fromHalfFloat(rgba[pixel * 4] ?? 0);
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new RangeError(
+        "The underwater-caustics capture must contain finite normalized data.",
+      );
+    }
+    data[pixel] = value;
+  }
+  return Object.freeze({
+    name: "underwater-caustics",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["underwater-caustics"].format,
+    data,
+  });
+}
+
+type T22ScalarCapture =
+  | DiagnosticsUnderwaterParticlesCapture
+  | DiagnosticsUnderwaterBubblesCapture
+  | DiagnosticsLensWetnessCapture;
+
+async function readT22ScalarCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+  name: T22ScalarCapture["name"],
+  target: RenderTarget,
+  channel: 0 | 3,
+): Promise<T22ScalarCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    target,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array)) {
+    throw new TypeError(
+      `The ${name} readback did not return Float16 RGBA data.`,
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    const value = DataUtils.fromHalfFloat(rgba[pixel * 4 + channel] ?? 0);
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new RangeError(
+        `The ${name} capture must contain finite normalized data.`,
+      );
+    }
+    data[pixel] = value;
+  }
+  const base = {
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left" as const,
+    data,
+  };
+  switch (name) {
+    case "underwater-particles":
+      return Object.freeze({
+        ...base,
+        name,
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+      });
+    case "underwater-bubbles":
+      return Object.freeze({
+        ...base,
+        name,
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+      });
+    case "lens-wetness":
+      return Object.freeze({
+        ...base,
+        name,
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+      });
+  }
 }
 
 async function readFoamSourceIdentityCapture(

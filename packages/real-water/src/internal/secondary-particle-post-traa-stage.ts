@@ -89,7 +89,7 @@ export function createSecondaryParticlePostTraaStageRegistration(options: {
           },
         );
         partial.output = output;
-        output.texture.name = "Real Water final color";
+        output.texture.name = "Real Water secondary particle composite";
         const base = texture(input.texture);
         const accumulation = texture(accumulationTarget.texture);
         const pipeline = new RenderPipeline(

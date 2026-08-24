@@ -78,6 +78,7 @@ describe("ready local interaction runtime", () => {
       physics: body,
       shape: { kind: "sphere", radius: 0.6 },
       sockets: [createWakeSocket()],
+      interactionSourceId: 1,
     });
     runHostFixedStep?.();
     state = Object.freeze({ ...state, tick: 1, timeSeconds: 1 / 60 });
@@ -132,6 +133,7 @@ describe("ready local interaction runtime", () => {
       physics: body,
       shape: { kind: "sphere", radius: 0.6 },
       sockets: [createWakeSocket()],
+      interactionSourceId: 2,
     });
     runHostFixedStep?.();
 
@@ -176,6 +178,7 @@ describe("ready local interaction runtime", () => {
       physics: body,
       shape: { kind: "sphere", radius: 0.6 },
       sockets: [{ ...createWakeSocket(), priority: 0 }],
+      interactionSourceId: 3,
     });
     runHostFixedStep?.();
     lease.submitDisturbances({
@@ -579,8 +582,8 @@ describe("ready local interaction runtime", () => {
   it("declares the bounded local interaction route before readiness", () => {
     const manifest = createMinimalWaterPrewarmManifest();
 
-    expect(manifest.version).toBe(9);
-    expect(manifest.qualityProfile.version).toBe(12);
+    expect(manifest.version).toBe(10);
+    expect(manifest.qualityProfile.version).toBe(13);
     expect(manifest.qualityProfile.interaction).toEqual({
       anchorCount: 1,
       field: {

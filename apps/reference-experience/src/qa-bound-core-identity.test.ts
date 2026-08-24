@@ -135,7 +135,10 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
     postTraaComposition: {
       width: 320,
       height: 180,
-      stages: [{ id: "secondary-particles", after: "traa" }],
+      stages: [
+        { id: "secondary-particles", after: "traa" },
+        { id: "lens-wetness", after: "secondary-particles" },
+      ],
       accumulationFormat: "rgba16float",
       finalColorFormat: "rgba8unorm-srgb",
     },

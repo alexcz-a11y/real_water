@@ -24,7 +24,10 @@ export type {
   QualityProfilePostTraaComposition,
   QualityProfileSurface,
   QualityProfileTemporal,
+  QualityProfileUnderwaterCaustics,
+  QualityProfileUnderwaterTracers,
   QualityProfileUnderwaterVolume,
+  QualityProfileLensWetness,
 } from "./quality-profile.js";
 
 export {

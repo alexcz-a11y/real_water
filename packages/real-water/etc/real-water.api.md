@@ -73,6 +73,7 @@ export interface BodyAttachment {
 
 // @public
 export interface BodyAttachmentOptions {
+    readonly interactionSourceId?: number;
     // (undocumented)
     readonly physics: BodyPhysicsAdapter;
     // (undocumented)
@@ -1003,7 +1004,7 @@ export type PresetRecoveryReason = "invalid-json" | "unknown-schema" | "invalid-
 export const PREWARM_MANIFEST_SCHEMA: "real-water/prewarm";
 
 // @public
-export const PREWARM_MANIFEST_VERSION: 9;
+export const PREWARM_MANIFEST_VERSION: 10;
 
 // @public
 export interface PrewarmDeclaration {
@@ -1085,7 +1086,7 @@ export type PrimitiveInteractionShape = SphereInteractionShape | BoxInteractionS
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 12;
+export const QUALITY_PROFILE_VERSION: 13;
 
 // @public
 export interface QualityProfile {
@@ -1175,11 +1176,33 @@ export interface QualityProfileInteractionField {
 }
 
 // @public
+export interface QualityProfileLensWetness {
+    // (undocumented)
+    readonly after: "secondary-particles";
+    // (undocumented)
+    readonly diagnosticsFormat: "rgba16float";
+    // (undocumented)
+    readonly mode: "bounded-emergence-decay";
+    // (undocumented)
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly samples: 0;
+    // (undocumented)
+    readonly stageId: "lens-wetness";
+    // (undocumented)
+    readonly trigger: "waterline-emergence-impulse";
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
+}
+
+// @public
 export interface QualityProfilePostTraaComposition {
     // (undocumented)
     readonly accumulationFormat: "rgba16float";
     // (undocumented)
     readonly finalColorFormat: "rgba8unorm-srgb";
+    // (undocumented)
+    readonly lensWetness: QualityProfileLensWetness;
     // (undocumented)
     readonly mode: "ordered-declarative-stages";
     // (undocumented)
@@ -1187,15 +1210,24 @@ export interface QualityProfilePostTraaComposition {
     // (undocumented)
     readonly samples: 0;
     // (undocumented)
-    readonly stages: readonly [QualityProfilePostTraaStage];
+    readonly stages: readonly [
+    QualityProfilePostTraaStage & {
+        readonly id: "secondary-particles";
+        readonly after: "traa";
+    },
+    QualityProfilePostTraaStage & {
+        readonly id: "lens-wetness";
+        readonly after: "secondary-particles";
+    }
+    ];
 }
 
 // @public
 export interface QualityProfilePostTraaStage {
     // (undocumented)
-    readonly after: "traa";
+    readonly after: "traa" | "secondary-particles";
     // (undocumented)
-    readonly id: "secondary-particles";
+    readonly id: "secondary-particles" | "lens-wetness";
 }
 
 // @public
@@ -1415,7 +1447,63 @@ export interface QualityProfileTemporal {
 }
 
 // @public
+export interface QualityProfileUnderwaterCaustics {
+    // (undocumented)
+    readonly composition: "post-ssr-pre-traa";
+    // (undocumented)
+    readonly diagnosticsFormat: "rgba16float";
+    // (undocumented)
+    readonly localSurfaceFieldFormat: "rgba16float";
+    // (undocumented)
+    readonly localSurfaceFieldLayout: "height-slope-x-slope-z-vertical-velocity";
+    // (undocumented)
+    readonly localSurfaceFieldResolutionPolicy: "match-unified-foam-field";
+    // (undocumented)
+    readonly localSurfaceFieldUpdateCadence: "host-fixed-tick";
+    // (undocumented)
+    readonly maxLocalSurfaceSnapshotAgeTicks: 1;
+    // (undocumented)
+    readonly maxReceiverDistanceMetres: 48;
+    // (undocumented)
+    readonly mode: "prepared-surface-visible-receivers";
+    // (undocumented)
+    readonly receiverNormalMinY: 0.05;
+    // (undocumented)
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly samples: 0;
+    // (undocumented)
+    readonly updateCadence: "host-present";
+}
+
+// @public
+export interface QualityProfileUnderwaterTracers {
+    // (undocumented)
+    readonly accumulationFormat: "rgba16float";
+    // (undocumented)
+    readonly bubbleCloudConsumerId: "subsurface-foam-bubble-cloud";
+    // (undocumented)
+    readonly composition: "pre-traa";
+    // (undocumented)
+    readonly depthRoute: "soft-scene-depth";
+    // (undocumented)
+    readonly mode: "shared-pool-depth-aware";
+    // (undocumented)
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly risingBubbleConsumerId: "rising-bubbles";
+    // (undocumented)
+    readonly samples: 0;
+    // (undocumented)
+    readonly suspendedConsumerId: "underwater-suspended-particles";
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
+}
+
+// @public
 export interface QualityProfileUnderwaterVolume {
+    // (undocumented)
+    readonly caustics: QualityProfileUnderwaterCaustics;
     // (undocumented)
     readonly colorFormat: "rgba16float";
     // (undocumented)
@@ -1434,6 +1522,8 @@ export interface QualityProfileUnderwaterVolume {
     readonly shadowRoute: "screen-space-depth-occlusion";
     // (undocumented)
     readonly shaftRoute: "deterministic-epipolar";
+    // (undocumented)
+    readonly tracers: QualityProfileUnderwaterTracers;
     // (undocumented)
     readonly updateCadence: "host-present";
 }
@@ -1611,6 +1701,10 @@ export interface RenderingCapabilitiesPostTraaComposition {
         {
         readonly id: "secondary-particles";
         readonly after: "traa";
+    },
+        {
+        readonly id: "lens-wetness";
+        readonly after: "secondary-particles";
     }
     ];
     // (undocumented)

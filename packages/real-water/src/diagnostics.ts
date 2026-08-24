@@ -27,7 +27,7 @@ export type {
 } from "./presentation.js";
 
 /**
- * The thirty-six named diagnostic outputs. Names and CPU shapes match the QA
+ * The forty named diagnostic outputs. Names and CPU shapes match the QA
  * capture contract. Planar color and target-alpha occupancy are their own
  * prepared target. `planar-confidence` is reserved for a future screen-space
  * mask and is not a current capture. Current-frame SSR hit (stock raw
@@ -63,6 +63,10 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
   "underwater-scattering",
   "underwater-light-shafts",
   "underwater-shadow",
+  "underwater-caustics",
+  "underwater-particles",
+  "underwater-bubbles",
+  "lens-wetness",
   "planar-color",
   "planar-target-alpha",
   "ssr-hit",
@@ -79,7 +83,7 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
 ] as const);
 
 /**
- * One of the thirty-six named diagnostic CPU outputs.
+ * One of the forty named diagnostic CPU outputs.
  *
  * @public
  */
@@ -203,6 +207,26 @@ export const DIAGNOSTICS_CAPTURE_SHAPES = Object.freeze({
   }),
   "underwater-shadow": Object.freeze({
     format: "r32float-underwater-volume" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-caustics": Object.freeze({
+    format: "r32float-underwater-caustics" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-particles": Object.freeze({
+    format: "r32float-underwater-particles" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-bubbles": Object.freeze({
+    format: "r32float-underwater-bubbles" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "lens-wetness": Object.freeze({
+    format: "r32float-lens-wetness" as const,
     elementType: "float32" as const,
     components: 1 as const,
   }),
@@ -563,6 +587,63 @@ export interface DiagnosticsUnderwaterVolumeCapture extends DiagnosticsCaptureBa
 }
 
 /**
+ * Bounded dynamic caustic contribution on visible underwater receivers.
+ * This remains distinct from the prepared underwater-volume channel pack.
+ *
+ * @public
+ */
+export interface DiagnosticsUnderwaterCausticsCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "underwater-caustics";
+  /** Packed normalized scalar caustics format. */
+  readonly format: "r32float-underwater-caustics";
+  /** Tightly packed finite normalized scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Normalized suspended-particle contribution on visible underwater receivers.
+ *
+ * @public
+ */
+export interface DiagnosticsUnderwaterParticlesCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "underwater-particles";
+  /** Packed normalized scalar particle format. */
+  readonly format: "r32float-underwater-particles";
+  /** Tightly packed finite normalized scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Normalized subsurface-foam, bubble-cloud, and rising-bubble contribution.
+ *
+ * @public
+ */
+export interface DiagnosticsUnderwaterBubblesCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "underwater-bubbles";
+  /** Packed normalized scalar bubble format. */
+  readonly format: "r32float-underwater-bubbles";
+  /** Tightly packed finite normalized scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Normalized post-TRAA lens-wetness coverage.
+ *
+ * @public
+ */
+export interface DiagnosticsLensWetnessCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "lens-wetness";
+  /** Packed normalized scalar lens-wetness format. */
+  readonly format: "r32float-lens-wetness";
+  /** Tightly packed finite normalized scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
  * Water-origin roughness read from the view-normal attachment alpha.
  *
  * @public
@@ -721,6 +802,10 @@ export type DiagnosticsCapture =
   | DiagnosticsHistoryRejectionCapture
   | DiagnosticsOpticalScalarCapture
   | DiagnosticsUnderwaterVolumeCapture
+  | DiagnosticsUnderwaterCausticsCapture
+  | DiagnosticsUnderwaterParticlesCapture
+  | DiagnosticsUnderwaterBubblesCapture
+  | DiagnosticsLensWetnessCapture
   | DiagnosticsSecondaryParticleContributionCapture
   | DiagnosticsSecondaryParticleOverdrawCapture;
 
@@ -755,7 +840,7 @@ export interface DiagnosticsWaterlineState {
   readonly submersion: number;
   /** Monotonic revision incremented once per successful classification change. */
   readonly transitionRevision: number;
-  /** One-frame handoff for the future lens-wetness composition route. */
+  /** One-frame handoff for the post-TRAA lens-wetness composition route. */
   readonly lensWetnessImpulse: boolean;
 }
 
@@ -861,13 +946,13 @@ export interface HostDiagnosticsPresentedFrame extends HostPresentedFrame {
   readonly secondaryParticles: DiagnosticsSecondaryParticles;
   /** Named CPU outputs in request order. */
   readonly outputs: readonly DiagnosticsCapture[];
-  /** Material compile count observed for this present. */
+  /** Cumulative material compile count through this present. */
   readonly compileCount: number;
-  /** Probe count observed for this present. */
+  /** Cumulative readiness-probe count through this present. */
   readonly probeCount: number;
-  /** Number of diagnostic readbacks performed for this present. */
+  /** Cumulative diagnostic readback count through this present. */
   readonly diagnosticReadbackCount: number;
-  /** Host scene renders performed for this present. */
+  /** Cumulative Host scene-render count through this present. */
   readonly sceneRenderCount: number;
   /** Drawing-buffer width of the presented frame. */
   readonly width: number;
@@ -890,7 +975,7 @@ export interface HostDiagnosticsRoute {
 }
 
 /**
- * Confirms `value` is one of the thirty-six diagnostic capture names.
+ * Confirms `value` is one of the forty diagnostic capture names.
  *
  * @public
  */
@@ -1096,6 +1181,15 @@ function readDiagnosticsCapture(
   height: number,
 ): DiagnosticsCapture {
   if (
+    isRecord(value) &&
+    isNormalizedEffectCaptureName(value.name) &&
+    !hasExactKeys(value, DIAGNOSTICS_CAPTURE_KEYS)
+  ) {
+    throw new TypeError(
+      `Host diagnostics output ${value.name} must use the exact name, format, width, height, origin, and data keys.`,
+    );
+  }
+  if (
     !isRecord(value) ||
     !hasExactKeys(value, DIAGNOSTICS_CAPTURE_KEYS) ||
     !isDiagnosticsCaptureName(value.name)
@@ -1126,15 +1220,42 @@ function readDiagnosticsCapture(
         `Host diagnostics output ${value.name} must be packed Uint8 data.`,
       );
     }
-  } else if (
-    !(value.data instanceof Float32Array) ||
-    value.data.length !== expectedLength
-  ) {
-    throw new TypeError(
-      `Host diagnostics output ${value.name} must be packed Float32 data.`,
-    );
+  } else {
+    if (
+      !(value.data instanceof Float32Array) ||
+      value.data.length !== expectedLength
+    ) {
+      throw new TypeError(
+        `Host diagnostics output ${value.name} must be packed Float32 data.`,
+      );
+    }
+    if (
+      isNormalizedEffectCaptureName(value.name) &&
+      value.data.some(
+        (sample) => !Number.isFinite(sample) || sample < 0 || sample > 1,
+      )
+    ) {
+      throw new RangeError(
+        `Host diagnostics output ${value.name} must contain finite normalized scalar data.`,
+      );
+    }
   }
   return Object.freeze({ ...value, data: value.data }) as DiagnosticsCapture;
+}
+
+function isNormalizedEffectCaptureName(
+  value: unknown,
+): value is
+  | "underwater-caustics"
+  | "underwater-particles"
+  | "underwater-bubbles"
+  | "lens-wetness" {
+  return (
+    value === "underwater-caustics" ||
+    value === "underwater-particles" ||
+    value === "underwater-bubbles" ||
+    value === "lens-wetness"
+  );
 }
 
 function readDiagnosticsSecondaryParticles(

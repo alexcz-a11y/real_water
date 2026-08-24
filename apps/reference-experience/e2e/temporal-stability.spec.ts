@@ -16,8 +16,8 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV14,
-  type QaPresentationReceiptV14,
+  type QaHarnessV15,
+  type QaPresentationReceiptV15,
 } from "../src/qa-harness.js";
 import {
   createTemporalStressEvidence,
@@ -235,7 +235,7 @@ test("settles presented water motion, then records deterministic nonzero motion 
 
   const result = await page.evaluate(
     async ({ camera, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -399,7 +399,7 @@ function waterMaskedChannelAbsDiffs(
 }
 
 function associationWithoutPresentationId(
-  receipt: QaPresentationReceiptV14,
+  receipt: QaPresentationReceiptV15,
   epochBase = receipt.temporal.historyEpoch,
 ) {
   return {
@@ -440,7 +440,7 @@ test("projects queried heights independently onto nearby motion AOV across a six
 
   const result = await page.evaluate(
     async ({ camera, seed, points }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -621,7 +621,7 @@ test("resets TRAA history on the first present and matches current-color within 
 
   const result = await page.evaluate(
     async ({ camera, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -722,7 +722,7 @@ test("gates TRAA warp residuals on a frozen-simulation fast pan", async ({
       tickCount,
       targetX,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -732,7 +732,7 @@ test("gates TRAA warp residuals on a frozen-simulation fast pan", async ({
       });
       await harness.setCamera(camera, { transition: "continuous" });
       await harness.advanceTicks(tickCount);
-      let lastPrime: QaPresentationReceiptV14 | null = null;
+      let lastPrime: QaPresentationReceiptV15 | null = null;
       for (let prime = 0; prime < primeCount; prime += 1) {
         lastPrime = await harness.present();
       }
@@ -754,7 +754,7 @@ test("gates TRAA warp residuals on a frozen-simulation fast pan", async ({
         readonly historyEpoch: number;
         readonly resetReason: string | null;
         readonly resetFrame: boolean;
-        readonly prewarm: QaPresentationReceiptV14["prewarm"];
+        readonly prewarm: QaPresentationReceiptV15["prewarm"];
         readonly current: string;
         readonly final: string;
         readonly motion: string;
@@ -1012,7 +1012,7 @@ test("gates TRAA high-frequency glints on a moving horizon strafe", async ({
       onLighting,
       offLighting,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1027,7 +1027,7 @@ test("gates TRAA high-frequency glints on a moving horizon strafe", async ({
         });
         await harness.setCamera(camera, { transition: "continuous" });
         await harness.advanceTicks(startTick);
-        let lastPrime: QaPresentationReceiptV14 | null = null;
+        let lastPrime: QaPresentationReceiptV15 | null = null;
         for (let prime = 0; prime < primeCount; prime += 1) {
           lastPrime = await harness.present();
         }
@@ -1052,7 +1052,7 @@ test("gates TRAA high-frequency glints on a moving horizon strafe", async ({
           readonly resetFrame: boolean;
           readonly manifestHash: string;
           readonly compileCount: number;
-          readonly prewarm: QaPresentationReceiptV14["prewarm"];
+          readonly prewarm: QaPresentationReceiptV15["prewarm"];
           readonly current: string;
           readonly final: string;
           readonly motion: string;
@@ -1353,7 +1353,7 @@ test("gates TRAA thin water detail on a jitter-only horizon hold", async ({
       frameCount,
       tickCount,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1364,7 +1364,7 @@ test("gates TRAA thin water detail on a jitter-only horizon hold", async ({
       });
       await harness.setCamera(camera, { transition: "continuous" });
       await harness.advanceTicks(tickCount);
-      let lastPrime: QaPresentationReceiptV14 | null = null;
+      let lastPrime: QaPresentationReceiptV15 | null = null;
       for (let prime = 0; prime < primeCount; prime += 1) {
         lastPrime = await harness.present();
       }
@@ -1388,7 +1388,7 @@ test("gates TRAA thin water detail on a jitter-only horizon hold", async ({
         readonly historyEpoch: number;
         readonly resetReason: string | null;
         readonly resetFrame: boolean;
-        readonly prewarm: QaPresentationReceiptV14["prewarm"];
+        readonly prewarm: QaPresentationReceiptV15["prewarm"];
         readonly current: string;
         readonly final: string;
         readonly motion: string;
@@ -1595,7 +1595,7 @@ test("replays sixteen fixed-tick TRAA frames with an identical jitter sequence a
 
   const result = await page.evaluate(
     async ({ camera, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1606,7 +1606,7 @@ test("replays sixteen fixed-tick TRAA frames with an identical jitter sequence a
         await harness.reset({ seed });
         await harness.setCamera(camera, { transition: "continuous" });
         const frames: Array<{
-          readonly presentation: QaPresentationReceiptV14;
+          readonly presentation: QaPresentationReceiptV15;
           readonly current: string;
           readonly final: string;
           readonly motion: string;
@@ -1737,7 +1737,7 @@ test("camera-cut resets TRAA history once; a continuous pan does not", async ({
 
   const result = await page.evaluate(
     async ({ seed, setup, pan, cut }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1750,14 +1750,14 @@ test("camera-cut resets TRAA history once; a continuous pan does not", async ({
       return { primed, continuous, cut: cutFrame, stable };
 
       async function primePresentedFrames(
-        qa: QaHarnessV14,
+        qa: QaHarnessV15,
         nextSeed: number,
         camera: QaCameraV1,
       ) {
         await qa.reset({ seed: nextSeed });
         await qa.setCamera(camera, { transition: "continuous" });
         await qa.present();
-        let presentation!: QaPresentationReceiptV14;
+        let presentation!: QaPresentationReceiptV15;
         for (let frame = 0; frame < 8; frame += 1) {
           await qa.advanceTicks(1);
           presentation = await qa.present();
@@ -1768,7 +1768,7 @@ test("camera-cut resets TRAA history once; a continuous pan does not", async ({
         };
       }
 
-      async function capturePresentedBuffers(qa: QaHarnessV14) {
+      async function capturePresentedBuffers(qa: QaHarnessV15) {
         const presentation = await qa.present();
         return {
           presentation,
@@ -1776,7 +1776,7 @@ test("camera-cut resets TRAA history once; a continuous pan does not", async ({
         };
       }
 
-      async function readPresentedBuffers(qa: QaHarnessV14) {
+      async function readPresentedBuffers(qa: QaHarnessV15) {
         return {
           current: (await qa.capture("current-color")).data,
           final: (await qa.capture("final-color")).data,
@@ -1830,7 +1830,7 @@ test("origin-shift resets TRAA history once; the same origin does not", async ({
 
   const result = await page.evaluate(
     async ({ seed, camera }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1843,14 +1843,14 @@ test("origin-shift resets TRAA history once; the same origin does not", async ({
       return { primed, same, continuous, shifted, cut, stable };
 
       async function primePresentedFrames(
-        qa: QaHarnessV14,
+        qa: QaHarnessV15,
         nextSeed: number,
         nextCamera: QaCameraV1,
       ) {
         await qa.reset({ seed: nextSeed });
         await qa.setCamera(nextCamera, { transition: "continuous" });
         await qa.present();
-        let presentation!: QaPresentationReceiptV14;
+        let presentation!: QaPresentationReceiptV15;
         for (let frame = 0; frame < 8; frame += 1) {
           await qa.advanceTicks(1);
           presentation = await qa.present();
@@ -1865,7 +1865,7 @@ test("origin-shift resets TRAA history once; the same origin does not", async ({
         };
       }
 
-      async function capturePresentedBuffers(qa: QaHarnessV14) {
+      async function capturePresentedBuffers(qa: QaHarnessV15) {
         const presentation = await qa.present();
         return {
           presentation,
@@ -1913,7 +1913,7 @@ test("sea-state-cut resets TRAA history once; a continuous control change does n
 
   const result = await page.evaluate(
     async ({ seed, camera, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1939,14 +1939,14 @@ test("sea-state-cut resets TRAA history once; a continuous control change does n
       };
 
       async function primePresentedFrames(
-        qa: QaHarnessV14,
+        qa: QaHarnessV15,
         nextSeed: number,
         nextCamera: QaCameraV1,
       ) {
         await qa.reset({ seed: nextSeed });
         await qa.setCamera(nextCamera, { transition: "continuous" });
         await qa.present();
-        let presentation!: QaPresentationReceiptV14;
+        let presentation!: QaPresentationReceiptV15;
         for (let frame = 0; frame < 8; frame += 1) {
           await qa.advanceTicks(1);
           presentation = await qa.present();
@@ -1961,7 +1961,7 @@ test("sea-state-cut resets TRAA history once; a continuous control change does n
         };
       }
 
-      async function capturePresentedBuffers(qa: QaHarnessV14) {
+      async function capturePresentedBuffers(qa: QaHarnessV15) {
         const presentation = await qa.present();
         return {
           presentation,
@@ -2005,7 +2005,7 @@ test("sea-state-cut resets TRAA history once; a continuous control change does n
 });
 
 interface QaResetFrameCaptures {
-  readonly presentation: QaPresentationReceiptV14;
+  readonly presentation: QaPresentationReceiptV15;
   readonly current: string;
   readonly final: string;
   readonly fresnel: string;
@@ -2016,7 +2016,7 @@ interface QaResetFrameCaptures {
 function expectResetEquivalence(
   primed: QaResetFrameCaptures,
   cut: QaResetFrameCaptures,
-  stable: QaPresentationReceiptV14,
+  stable: QaPresentationReceiptV15,
   reason: "camera-cut" | "origin-shift" | "sea-state-cut",
 ): void {
   expect(cut.presentation.temporal).toEqual({

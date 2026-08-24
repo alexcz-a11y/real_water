@@ -105,6 +105,59 @@ function retainedKeys(binding: {
   );
 }
 
+function allocationSnapshot(binding: {
+  readonly retained: {
+    readonly count: Uint32Array;
+    readonly stableKeyHigh: Uint32Array;
+    readonly stableKeyLow: Uint32Array;
+    readonly contributionsQ16: Uint16Array;
+    readonly payloadHandles: Uint32Array;
+    readonly poolSlots: Uint32Array;
+  };
+  readonly receipt: {
+    readonly requested: number;
+    readonly requestedAboveSoftCeiling: number;
+    readonly retained: number;
+    readonly floorRetained: number;
+    readonly residenceRetained: number;
+    readonly globalRetained: number;
+    readonly thinned: number;
+    readonly invisibleOrOccluded: number;
+    readonly reentryCooldown: number;
+    readonly lifecycleReentryForbidden: number;
+    readonly contributionMinimumQ16: number;
+    readonly contributionMaximumQ16: number;
+    readonly dropReasonMask: number;
+  };
+}) {
+  const count = binding.retained.count[0] ?? 0;
+  return {
+    keys: retainedKeys(binding),
+    contributionsQ16: Array.from(
+      binding.retained.contributionsQ16.subarray(0, count),
+    ),
+    payloadHandles: Array.from(
+      binding.retained.payloadHandles.subarray(0, count),
+    ),
+    poolSlots: Array.from(binding.retained.poolSlots.subarray(0, count)),
+    receipt: {
+      requested: binding.receipt.requested,
+      requestedAboveSoftCeiling: binding.receipt.requestedAboveSoftCeiling,
+      retained: binding.receipt.retained,
+      floorRetained: binding.receipt.floorRetained,
+      residenceRetained: binding.receipt.residenceRetained,
+      globalRetained: binding.receipt.globalRetained,
+      thinned: binding.receipt.thinned,
+      invisibleOrOccluded: binding.receipt.invisibleOrOccluded,
+      reentryCooldown: binding.receipt.reentryCooldown,
+      lifecycleReentryForbidden: binding.receipt.lifecycleReentryForbidden,
+      contributionMinimumQ16: binding.receipt.contributionMinimumQ16,
+      contributionMaximumQ16: binding.receipt.contributionMaximumQ16,
+      dropReasonMask: binding.receipt.dropReasonMask,
+    },
+  };
+}
+
 describe("shared secondary-particle pool", () => {
   it("quantizes contribution from one output-drawing-buffer pixel-area ruler", () => {
     const reference = Object.freeze({ width: 2_560, height: 1_440 });
@@ -525,7 +578,7 @@ describe("shared secondary-particle pool", () => {
     expect(() => pool.resolve()).toThrow(/invalid/i);
   });
 
-  it("rejects duplicate stable keys and reuses a resolved same-tick frame", () => {
+  it("rejects duplicate stable keys, reuses an identical allocation tuple, and reopens for a changed revision", () => {
     const pool = createSecondaryParticlePool(plan([consumer("spray", 2)]));
     const spray = pool.consumer("spray");
     pool.beginTick(0, 0);
@@ -534,10 +587,134 @@ describe("shared secondary-particle pool", () => {
     expect(pool.beginTick(0, 0)).toBe("reuse-current-tick");
     expect(pool.current()).toBe(frame);
 
+    expect(pool.beginTick(0, 0, 1)).toBe("accepting-candidates");
+    pool.submit(
+      spray,
+      batch({
+        count: 1,
+        firstKeyLow: 1,
+        contributionQ16: 45_875,
+      }),
+    );
+    const revised = pool.resolve();
+    expect(retainedKeys(spray)).toEqual(["0:1"]);
+    expect(pool.beginTick(0, 0, 1)).toBe("reuse-current-tick");
+    expect(pool.current()).toBe(revised);
+
     pool.beginTick(1, 0);
     const duplicate = batch({ count: 2, contributionQ16: 32_768 });
     duplicate.stableKeyLow[1] = duplicate.stableKeyLow[0] ?? 0;
     expect(() => pool.submit(spray, duplicate)).toThrow(/duplicate.*key/i);
+  });
+
+  it("recomputes same-tick revisions from the first-submit checkpoint", () => {
+    const allocationPlan = plan([consumer("particles", 4)]);
+    const prior = batch({
+      count: 2,
+      firstKeyLow: 10,
+      contributionsQ16: Uint16Array.of(30_000, 40_000),
+    });
+    const allocationA = batch({
+      count: 2,
+      firstKeyLow: 11,
+      contributionsQ16: Uint16Array.of(50_000, 20_000),
+      payloadOffset: 100,
+    });
+    const allocationB = batch({
+      count: 2,
+      firstKeyLow: 10,
+      contributionsQ16: Uint16Array.of(35_000, 45_000),
+      payloadOffset: 200,
+    });
+    allocationB.stableKeyLow[1] = 13;
+
+    const createWithPriorHistory = () => {
+      const pool = createSecondaryParticlePool(allocationPlan);
+      const particles = pool.consumer("particles");
+      pool.beginTick(0, 0);
+      pool.submit(particles, prior);
+      pool.resolve();
+      return { pool, particles };
+    };
+
+    const revised = createWithPriorHistory();
+    revised.pool.beginTick(1, 0, 0);
+    revised.pool.submit(revised.particles, allocationA);
+    revised.pool.resolve();
+    const firstA = allocationSnapshot(revised.particles);
+
+    expect(revised.pool.beginTick(1, 0, 1)).toBe("accepting-candidates");
+    revised.pool.submit(revised.particles, allocationB);
+    revised.pool.resolve();
+    const resultB = allocationSnapshot(revised.particles);
+
+    const freshB = createWithPriorHistory();
+    freshB.pool.beginTick(1, 0, 1);
+    freshB.pool.submit(freshB.particles, allocationB);
+    freshB.pool.resolve();
+    expect(resultB).toEqual(allocationSnapshot(freshB.particles));
+
+    expect(revised.pool.beginTick(1, 0, 0)).toBe("accepting-candidates");
+    revised.pool.submit(revised.particles, allocationA);
+    revised.pool.resolve();
+
+    const freshA = createWithPriorHistory();
+    freshA.pool.beginTick(1, 0, 0);
+    freshA.pool.submit(freshA.particles, allocationA);
+    freshA.pool.resolve();
+    expect(allocationSnapshot(revised.particles)).toEqual(firstA);
+    expect(allocationSnapshot(revised.particles)).toEqual(
+      allocationSnapshot(freshA.particles),
+    );
+  });
+
+  it("rolls back same-tick lifecycle-terminal retirement before recomputing", () => {
+    const pool = createSecondaryParticlePool(
+      plan([
+        consumer(
+          "rising-bubbles",
+          MAX_SECONDARY_PARTICLES + 1,
+          1,
+          MAX_SECONDARY_PARTICLES + 1,
+          "forbidden-until-absent",
+        ),
+      ]),
+    );
+    const rising = pool.consumer("rising-bubbles");
+    const candidates = batch({
+      count: MAX_SECONDARY_PARTICLES + 1,
+      contributionQ16: 50_000,
+    });
+
+    pool.beginTick(0, 0);
+    pool.submit(rising, { ...candidates, count: MAX_SECONDARY_PARTICLES });
+    pool.resolve();
+
+    candidates.contributionsQ16[0] = 100;
+    candidates.contributionsQ16[MAX_SECONDARY_PARTICLES] = 60_000;
+    pool.beginTick(5, 0, 0);
+    pool.submit(rising, candidates);
+    pool.resolve();
+    expect(
+      rising.retained.stableKeyLow
+        .subarray(0, rising.receipt.retained)
+        .includes(0),
+    ).toBe(false);
+
+    candidates.contributionsQ16[0] = 65_535;
+    candidates.contributionsQ16[1] = 100;
+    expect(pool.beginTick(5, 0, 1)).toBe("accepting-candidates");
+    pool.submit(rising, candidates);
+    pool.resolve();
+
+    const retained = rising.retained.stableKeyLow.subarray(
+      0,
+      rising.receipt.retained,
+    );
+    expect(retained.includes(0)).toBe(true);
+    expect(retained.includes(1)).toBe(false);
+    expect(rising.receipt.lifecycleReentryForbidden).toBe(0);
+    expect(rising.receipt.thinned).toBe(1);
   });
 
   it("starts a fresh allocation epoch when the continuity revision changes", () => {
@@ -562,6 +739,7 @@ describe("shared secondary-particle pool", () => {
       participants: [
         {
           consumerId: "spray",
+          candidateInputRevision: () => 0,
           candidateBatch: () => batch({ count: 1, contributionQ16: 32_768 }),
           applyRetained() {},
         },

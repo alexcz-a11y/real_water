@@ -168,6 +168,10 @@ export interface RenderingCapabilitiesPostTraaComposition {
   readonly height: number;
   readonly stages: readonly [
     { readonly id: "secondary-particles"; readonly after: "traa" },
+    {
+      readonly id: "lens-wetness";
+      readonly after: "secondary-particles";
+    },
   ];
   readonly accumulationFormat: "rgba16float";
   readonly finalColorFormat: "rgba8unorm-srgb";
@@ -366,6 +370,7 @@ const SECONDARY_PARTICLE_CONSUMERS = Object.freeze([
 ] as const);
 const POST_TRAA_STAGES = Object.freeze([
   Object.freeze({ id: "secondary-particles", after: "traa" }),
+  Object.freeze({ id: "lens-wetness", after: "secondary-particles" }),
 ] as const);
 
 export function createCoreWebGPUCapabilities(

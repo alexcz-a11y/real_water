@@ -145,6 +145,7 @@ describe("Body Physics Adapter seam", () => {
       physics: createMemoryBodyPhysicsAdapter({ initialState: BODY_AT_REST }),
       shape,
       sockets,
+      interactionSourceId: 1,
     } as never);
     const mutableChild = shape.children[0];
     const mutableSocket = sockets[0];
@@ -375,6 +376,7 @@ describe("Body Physics Adapter seam", () => {
       physics: body,
       shape: { kind: "sphere", radius: 0.6 },
       sockets: createVesselSockets(),
+      interactionSourceId: 2,
     });
 
     runHostFixedStep?.();
@@ -463,6 +465,7 @@ describe("Body Physics Adapter seam", () => {
       physics: body,
       shape: { kind: "sphere", radius: 0.5 },
       sockets: [stationarySocket],
+      interactionSourceId: 3,
     });
 
     runHostFixedStep?.();
@@ -480,6 +483,131 @@ describe("Body Physics Adapter seam", () => {
       activeBodyWakeCount: 0,
       activeDisturbanceCount: 0,
     });
+    await lease.dispose();
+  });
+
+  it("requires canonical Body-domain identities only for effect sockets", async () => {
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        simulation: createStaticHostSimulationAdapter(),
+        environment: createTestEnvironmentAdapter(),
+        presentation: createStaticHostPresentationAdapter(),
+        stepDelayMs: 0,
+      }),
+    }).ready;
+    const physics = createMemoryBodyPhysicsAdapter({
+      initialState: BODY_AT_REST,
+    });
+    const wake = createVesselSockets().find((socket) => socket.kind === "wake");
+    const anchor = createVesselSockets().find(
+      (socket) => socket.kind === "interaction-anchor",
+    );
+    if (wake === undefined || anchor === undefined) {
+      throw new Error(
+        "The Body identity test requires wake and anchor sockets.",
+      );
+    }
+
+    expect(() =>
+      lease.attachBody({
+        physics,
+        shape: { kind: "sphere", radius: 0.5 },
+        sockets: [wake],
+      }),
+    ).toThrow(/require.*interactionSourceId/i);
+    for (const interactionSourceId of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() =>
+        lease.attachBody({
+          physics,
+          shape: { kind: "sphere", radius: 0.5 },
+          sockets: [anchor],
+          interactionSourceId,
+        }),
+      ).toThrow(/non-negative safe integer/i);
+    }
+    expect(() =>
+      lease.attachBody({
+        physics,
+        shape: { kind: "sphere", radius: 0.5 },
+        sockets: [{ ...wake, id: "e\u0301" }],
+        interactionSourceId: 5,
+      }),
+    ).toThrow(/NFC-normalized/i);
+
+    const anchorOnly = lease.attachBody({
+      physics,
+      shape: { kind: "sphere", radius: 0.5 },
+      sockets: [anchor],
+    });
+    expect(anchorOnly.inspect().attached).toBe(true);
+    await lease.dispose();
+  });
+
+  it("reserves active Body source tuples atomically and releases them on every detach path", async () => {
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        simulation: createStaticHostSimulationAdapter(),
+        environment: createTestEnvironmentAdapter(),
+        presentation: createStaticHostPresentationAdapter(),
+        stepDelayMs: 0,
+      }),
+    }).ready;
+    const wake = createVesselSockets().find((socket) => socket.kind === "wake");
+    if (wake === undefined) {
+      throw new Error("The Body identity test requires a wake socket.");
+    }
+    const createMemoryBody = () =>
+      createMemoryBodyPhysicsAdapter({ initialState: BODY_AT_REST });
+    const first = lease.attachBody({
+      physics: createMemoryBody(),
+      shape: { kind: "sphere", radius: 0.5 },
+      sockets: [wake],
+      interactionSourceId: 91,
+    });
+    expect(() =>
+      lease.attachBody({
+        physics: createMemoryBody(),
+        shape: { kind: "sphere", radius: 0.5 },
+        sockets: [wake],
+        interactionSourceId: 91,
+      }),
+    ).toThrow(/already reserves/i);
+
+    first.detach();
+    const reattached = lease.attachBody({
+      physics: createMemoryBody(),
+      shape: { kind: "sphere", radius: 0.5 },
+      sockets: [wake],
+      interactionSourceId: 91,
+    });
+    reattached.detach();
+
+    const bindingFailure = createBodyPhysicsAdapter({
+      snapshot: () => BODY_AT_REST,
+      applyWaterLoad() {},
+      bind() {
+        throw new Error("test bind failure");
+      },
+    });
+    expect(() =>
+      lease.attachBody({
+        physics: bindingFailure,
+        shape: { kind: "sphere", radius: 0.5 },
+        sockets: [wake],
+        interactionSourceId: 92,
+      }),
+    ).toThrow(/test bind failure/i);
+    const afterFailure = lease.attachBody({
+      physics: createMemoryBody(),
+      shape: { kind: "sphere", radius: 0.5 },
+      sockets: [wake],
+      interactionSourceId: 92,
+    });
+    expect(afterFailure.inspect().attached).toBe(true);
     await lease.dispose();
   });
 

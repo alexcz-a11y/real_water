@@ -84,6 +84,10 @@ import {
   type LocalInteractionRenderSnapshot,
 } from "./local-interaction.js";
 import type { UnifiedFoamField } from "./spectral-whitecap-field.js";
+import {
+  bodyInteractionStableSourceId,
+  manualInteractionStableSourceId,
+} from "../interaction-source-identity.js";
 
 const INITIAL_ARTISTIC_CONTROLS: ArtisticControls =
   createWaterPreset("swell").artisticControls;
@@ -172,6 +176,12 @@ export function createSpectralBandRendering(
     .setGroup(renderGroup);
   const previousAnchor = uniform(previousAnchorValue)
     .setName("interactionAnchorPrevious")
+    .setGroup(renderGroup);
+  const surfaceSampleCameraX = uniform(0)
+    .setName("surfaceSampleCameraX")
+    .setGroup(renderGroup);
+  const surfaceSampleCameraZ = uniform(0)
+    .setName("surfaceSampleCameraZ")
     .setGroup(renderGroup);
 
   const createHostSample = () => {
@@ -648,6 +658,32 @@ export function createSpectralBandRendering(
     };
   };
 
+  const sampleCurrentSurface = (hostX: WaveAxis, hostZ: WaveAxis) => {
+    const viewDistance = length(
+      vec2(hostX.sub(surfaceSampleCameraX), hostZ.sub(surfaceSampleCameraZ)),
+    );
+    const slopeFade = slopeFadeNode(viewDistance);
+    const surface = evaluateBlendedSurface(
+      hostX,
+      hostZ,
+      viewDistance,
+      slopeFade,
+      currentWaveField,
+    );
+    // Caustics sample this path at drawing-buffer resolution. Reuse the
+    // fixed-resolution current local-surface field produced by the authoritative
+    // fixed-tick resolve instead of scanning all 128 Disturbances per receiver
+    // pixel. Visible water geometry keeps the exact analytic route below.
+    const localInteraction = foamField.sampleLocalSurface(hostX, hostZ);
+    return {
+      height: surface.height
+        .add(localInteraction.height)
+        .add(currentWaveField.seaLevelMetres),
+      slopeX: surface.slopeX.add(localInteraction.slopeX),
+      slopeZ: surface.slopeZ.add(localInteraction.slopeZ),
+    };
+  };
+
   // Vertex displacement and fragment shading own separate TSL graphs. Sharing
   // ocean-domain sample nodes with color, highlights, or white-detail lets the
   // compiler evaluate the non-periodic mix in fragment and leave camera-relative
@@ -980,15 +1016,13 @@ export function createSpectralBandRendering(
         "updateMatrixWorld" in camera &&
         "matrixWorld" in camera
       ) {
-        snapClipmapToCamera(
-          camera as {
-            updateMatrixWorld(): void;
-            readonly matrixWorld: { readonly elements: ArrayLike<number> };
-          },
-          originX,
-          originZ,
-          innerCellMetres,
-        );
+        const hostCamera = camera as {
+          updateMatrixWorld(): void;
+          readonly matrixWorld: { readonly elements: ArrayLike<number> };
+        };
+        snapClipmapToCamera(hostCamera, originX, originZ, innerCellMetres);
+        surfaceSampleCameraX.value = hostCamera.matrixWorld.elements[12] ?? 0;
+        surfaceSampleCameraZ.value = hostCamera.matrixWorld.elements[14] ?? 0;
       }
       pending = current;
       pendingLocalInteraction = desiredLocalInteraction;
@@ -1044,6 +1078,14 @@ export function createSpectralBandRendering(
     whitecapStagesNode,
     foamSourcesNode,
     foamDensityNode: foamSourcesNode.a,
+    // Package-private receiver sampler. It deliberately closes over the
+    // current prepared wave and local-interaction uniforms instead of exposing
+    // a vertex-bound node or constructing a second wave implementation. Its
+    // Host-camera uniforms avoid accidentally taking distance LOD from a
+    // full-frame post pipeline's camera.
+    surfaceSampler: Object.freeze({
+      sampleSurface: sampleCurrentSurface,
+    }),
     sink,
     stagePrewarmLocalInteractionRoutes(): void {
       desiredLocalInteraction = Object.freeze({
@@ -1052,6 +1094,7 @@ export function createSpectralBandRendering(
         anchorZ: initialSimulationState.originZ,
         impacts: Object.freeze([
           Object.freeze({
+            stableSourceId: manualInteractionStableSourceId(1),
             kind: "radial-impact",
             x: initialSimulationState.originX,
             z: initialSimulationState.originZ,
@@ -1062,6 +1105,7 @@ export function createSpectralBandRendering(
             startTimeSeconds: initialSimulationState.timeSeconds,
           }),
           Object.freeze({
+            stableSourceId: manualInteractionStableSourceId(2),
             kind: "directional-wake",
             x: initialSimulationState.originX,
             z: initialSimulationState.originZ,
@@ -1072,6 +1116,10 @@ export function createSpectralBandRendering(
             startTimeSeconds: initialSimulationState.timeSeconds,
           }),
           Object.freeze({
+            stableSourceId: bodyInteractionStableSourceId(
+              0,
+              "prewarm-propeller",
+            ),
             kind: "propeller-wash",
             x: initialSimulationState.originX + 1,
             z: initialSimulationState.originZ,

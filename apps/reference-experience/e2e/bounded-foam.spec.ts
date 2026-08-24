@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createWaterPreset } from "real-water";
-import type { QaCameraV1, QaHarnessV14 } from "../src/qa-harness.js";
+import type { QaCameraV1, QaHarnessV15 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32 } from "./qa-capture-bytes.js";
 
@@ -56,7 +56,7 @@ test("preserves source-resolved deterministic foam after manual sources expire",
 
   const result = await page.evaluate(
     async ({ camera, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -285,7 +285,7 @@ test("applies continuous foam-control changes at the same tick regardless of pre
 
   const result = await page.evaluate(
     async ({ camera, initialControls, changedControls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -438,7 +438,7 @@ test("keeps bounded foam allocated while overflow evicts the lowest oldest sourc
 
   const result = await page.evaluate(
     async ({ camera, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -606,7 +606,7 @@ test("keeps Body propeller-wash foam independent of presentation cadence", async
 
   const result = await page.evaluate(
     async ({ camera, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
