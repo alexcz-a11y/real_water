@@ -127,7 +127,8 @@ Wear is legible but never derelict.
 
 Presentation: seamless plain light neutral grey background, soft overcast daylight,
 low key-to-fill ratio, no rim light, no dramatic shadow, no lens flare, no depth-of-field
-on the subject. The whole object is visible and uncropped, filling the frame with even margins.
+on the subject. The entire object sits inside the frame with visible empty margin on all four
+sides. Nothing is cropped.
 
 Never: brand names, logos, any rendered text or numerals, crew or people, water, spray, wake,
 sky, environment, added equipment that is not already present on the approved identity anchor.
