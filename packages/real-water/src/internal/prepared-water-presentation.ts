@@ -36,6 +36,7 @@ import {
   type DiagnosticsMotionVectorCapture,
   type DiagnosticsOpticalScalarCapture,
   type DiagnosticsSsrRoughnessCapture,
+  type DiagnosticsStormFrontCapture,
   type DiagnosticsSecondaryParticleConsumer,
   type DiagnosticsSecondaryParticleContributionCapture,
   type DiagnosticsSecondaryParticleOverdrawCapture,
@@ -56,6 +57,7 @@ import type {
   HostPresentedFrame,
 } from "../presentation.js";
 import type { OpenWaterRuntimeSnapshot } from "../runtime.js";
+import type { StormFrontController } from "../storm-front.js";
 import type { HostEnvironmentAdapter } from "../environment.js";
 import type {
   QualityProfilePostTraaComposition,
@@ -112,6 +114,10 @@ import {
   createLensWetnessPostTraaStageRegistration,
   type LensWetnessPostTraaStageRegistration,
 } from "./lens-wetness-post-traa-stage.js";
+import {
+  createStormFrontPostTraaStageRegistration,
+  type StormFrontPostTraaStageRegistration,
+} from "./storm-front-post-traa-stage.js";
 import type {
   SecondaryParticleConsumerReceipt,
   SecondaryParticlePool,
@@ -158,6 +164,9 @@ export interface PreparedWaterPresentationResources {
   readonly traaResolvedTarget: RenderTarget;
   readonly finalColorTarget: RenderTarget;
   readonly secondaryParticleDiagnosticsTarget: RenderTarget;
+  readonly stormFront: StormFrontPostTraaStageRegistration;
+  readonly stormFrontController: StormFrontController;
+  readonly stormFrontDiagnosticsTarget: RenderTarget;
   readonly lensWetness: LensWetnessPostTraaStageRegistration;
   readonly lensWetnessDiagnosticsTarget: RenderTarget;
   readonly scenePass: ReturnType<typeof pass>;
@@ -207,6 +216,7 @@ export function createPreparedWaterPresentationResources(
   secondaryParticlePool: SecondaryParticlePool,
   secondaryParticlePolicy: QualityProfileSecondaryParticles,
   secondarySpray: SecondarySprayParticles,
+  stormFrontController: StormFrontController,
   postTraaPolicy: QualityProfilePostTraaComposition,
   environment: HostEnvironmentAdapter,
   underwaterPolicy: QualityProfileUnderwaterVolume,
@@ -228,6 +238,7 @@ export function createPreparedWaterPresentationResources(
       secondaryParticlePool,
       secondaryParticlePolicy,
       secondarySpray,
+      stormFrontController,
       postTraaPolicy,
       environment,
       underwaterPolicy,
@@ -251,6 +262,7 @@ function constructPreparedWaterPresentationResources(
   secondaryParticlePool: SecondaryParticlePool,
   secondaryParticlePolicy: QualityProfileSecondaryParticles,
   secondarySpray: SecondarySprayParticles,
+  stormFrontController: StormFrontController,
   postTraaPolicy: QualityProfilePostTraaComposition,
   environment: HostEnvironmentAdapter,
   underwaterPolicy: QualityProfileUnderwaterVolume,
@@ -518,6 +530,20 @@ function constructPreparedWaterPresentationResources(
         secondarySpray.renderAccumulation(stageRenderer, camera);
       },
     });
+  const stormFront = createStormFrontPostTraaStageRegistration({
+    onProbe(): void {
+      counters.probeCount += 1;
+    },
+  });
+  const initialStormFrame = stormFrontController.inspect()?.current;
+  if (initialStormFrame === undefined) {
+    throw new Error(
+      "Storm Front must be synchronized before presentation is prepared.",
+    );
+  }
+  stormFront.synchronize(initialStormFrame);
+  partial.stormFront = stormFront;
+  partial.stormFrontController = stormFrontController;
   const lensWetness = createLensWetnessPostTraaStageRegistration({
     onProbe(): void {
       counters.probeCount += 1;
@@ -534,7 +560,11 @@ function constructPreparedWaterPresentationResources(
     source: traaResolvedTarget,
     drawingBuffer,
     plan: postTraaPlan,
-    factories: [secondaryParticleStage.factory, lensWetness.factory],
+    factories: [
+      secondaryParticleStage.factory,
+      stormFront.factory,
+      lensWetness.factory,
+    ],
   });
   partial.postTraaComposition = postTraaComposition;
   const finalColorTarget = postTraaComposition.output;
@@ -543,6 +573,8 @@ function constructPreparedWaterPresentationResources(
     secondaryParticleStage.diagnosticsTarget();
   partial.secondaryParticleDiagnosticsTarget =
     secondaryParticleDiagnosticsTarget;
+  const stormFrontDiagnosticsTarget = stormFront.diagnosticsTarget();
+  partial.stormFrontDiagnosticsTarget = stormFrontDiagnosticsTarget;
   const lensWetnessDiagnosticsTarget = lensWetness.diagnosticsTarget();
   partial.lensWetnessDiagnosticsTarget = lensWetnessDiagnosticsTarget;
   const currentColorTarget = new RenderTarget(
@@ -587,6 +619,9 @@ function constructPreparedWaterPresentationResources(
     traaResolvedTarget,
     finalColorTarget,
     secondaryParticleDiagnosticsTarget,
+    stormFront,
+    stormFrontController,
+    stormFrontDiagnosticsTarget,
     lensWetness,
     lensWetnessDiagnosticsTarget,
     scenePass,
@@ -788,6 +823,13 @@ export function createPresentationRouteBridge(
       );
     }
     const snapshot = inspectRuntime();
+    const stormFrame = resources.stormFrontController.inspect()?.current;
+    if (stormFrame === undefined || stormFrame.tick !== snapshot.tick) {
+      throw new Error(
+        "Storm Front presentation is not synchronized to the ready runtime tick.",
+      );
+    }
+    resources.stormFront.synchronize(stormFrame);
     await resources.foamField.synchronize(renderer, snapshot);
     const snapshotResetReason = continuity.preview(snapshot);
     const waterlineCandidate = waterline.preview(
@@ -1705,6 +1747,38 @@ async function readNamedOutput(
         resources.foamDiagnostics.heroBreakerFoamTarget,
         0,
       );
+    case "storm-rain-ripples":
+      return readNormalizedScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.stormFrontDiagnosticsTarget,
+        0,
+      );
+    case "storm-aerosol":
+      return readNormalizedScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.stormFrontDiagnosticsTarget,
+        1,
+      );
+    case "storm-cloud-shadow":
+      return readNormalizedScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.stormFrontDiagnosticsTarget,
+        2,
+      );
+    case "storm-lightning":
+      return readNormalizedScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.stormFrontDiagnosticsTarget,
+        3,
+      );
     case "planar-color":
       return readPlanarColorCapture(renderer, resources);
     case "planar-target-alpha":
@@ -2050,14 +2124,15 @@ type NormalizedScalarCapture =
   | DiagnosticsUnderwaterParticlesCapture
   | DiagnosticsUnderwaterBubblesCapture
   | DiagnosticsLensWetnessCapture
-  | DiagnosticsHeroBreakerFoamCapture;
+  | DiagnosticsHeroBreakerFoamCapture
+  | DiagnosticsStormFrontCapture;
 
 async function readNormalizedScalarCapture(
   renderer: Renderer,
   resources: PreparedWaterPresentationResources,
   name: NormalizedScalarCapture["name"],
   target: RenderTarget,
-  channel: 0 | 3,
+  channel: 0 | 1 | 2 | 3,
 ): Promise<NormalizedScalarCapture> {
   const raw = await renderer.readRenderTargetPixelsAsync(
     target,
@@ -2108,6 +2183,15 @@ async function readNormalizedScalarCapture(
         format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
       });
     case "hero-breaker-foam":
+      return Object.freeze({
+        ...base,
+        name,
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+      });
+    case "storm-rain-ripples":
+    case "storm-aerosol":
+    case "storm-cloud-shadow":
+    case "storm-lightning":
       return Object.freeze({
         ...base,
         name,

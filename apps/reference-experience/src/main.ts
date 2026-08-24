@@ -10,6 +10,7 @@ import {
 import { WebGPURenderer } from "three/webgpu";
 import {
   createMinimalWaterQualityProfile,
+  createReferenceShowcasePreset,
   createStaticHostPresentationAdapter,
   createStaticHostSimulationAdapter,
   createThreeHostLifecycleAdapter,
@@ -20,7 +21,7 @@ import {
   type RealWaterLease,
   type WebGPUDeviceLoss,
 } from "real-water";
-import type { QaFrameSource, QaHarnessV16 } from "./qa-harness.js";
+import type { QaFrameSource, QaHarnessV17 } from "./qa-harness.js";
 import {
   createQaPlanarReflectionFixture,
   disposeQaPlanarReflectionFixture,
@@ -340,11 +341,16 @@ function createThreeReferenceHostAttempt(
 
   const width = drawingBuffer.width;
   const height = drawingBuffer.height;
+  const referenceShowcase = createReferenceShowcasePreset();
+  const initialShowcaseCamera =
+    qaModule === null ? referenceShowcase.cameraTimeline[0] : undefined;
   const camera = new PerspectiveCamera(50, width / height, 0.1, 4_000);
-  camera.position.set(8, 6, 10);
-  camera.lookAt(0, 0, 0);
+  camera.position.set(...(initialShowcaseCamera?.position ?? [8, 6, 10]));
+  camera.fov = initialShowcaseCamera?.verticalFovDegrees ?? 50;
+  camera.lookAt(...(initialShowcaseCamera?.target ?? [0, 0, 0]));
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
+  let appliedShowcaseCamera = initialShowcaseCamera;
 
   renderer.setPixelRatio(1);
   renderer.setSize(width, height, false);
@@ -361,9 +367,29 @@ function createThreeReferenceHostAttempt(
         }),
   });
   const qaPresentation = qaModule?.createQaHostPresentationController();
+  const environment = createReferenceEnvironmentAdapter();
   let referencePresentation: ReferenceHostPresentationController | undefined;
   const referenceShowcaseSchedule =
-    qaSimulation === undefined ? createReferenceShowcaseSchedule() : undefined;
+    qaSimulation === undefined
+      ? createReferenceShowcaseSchedule({
+          showcase: referenceShowcase,
+          environment,
+          camera: {
+            setCamera(keyframe) {
+              if (appliedShowcaseCamera === keyframe) {
+                return;
+              }
+              camera.position.set(...keyframe.position);
+              camera.fov = keyframe.verticalFovDegrees;
+              camera.lookAt(...keyframe.target);
+              camera.updateProjectionMatrix();
+              camera.updateMatrixWorld(true);
+              appliedShowcaseCamera = keyframe;
+              referencePresentation?.incrementCameraCut();
+            },
+          },
+        })
+      : undefined;
   const referenceSimulation =
     qaSimulation === undefined
       ? createReferenceHostSimulationController({
@@ -405,7 +431,6 @@ function createThreeReferenceHostAttempt(
   if (simulation === undefined) {
     throw new Error("The Reference Host Simulation Controller is unavailable.");
   }
-  const environment = createReferenceEnvironmentAdapter();
   const baseHost = createThreeHostLifecycleAdapter({
     renderer,
     scene,
@@ -627,6 +652,6 @@ function readRevealFrames(
 
 declare global {
   interface Window {
-    __REAL_WATER_QA__?: QaHarnessV16;
+    __REAL_WATER_QA__?: QaHarnessV17;
   }
 }

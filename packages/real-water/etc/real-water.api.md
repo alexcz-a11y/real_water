@@ -312,13 +312,16 @@ export function createReferenceEnvironmentPreset(): EnvironmentPreset;
 export function createReferenceShowcasePreset(): ShowcasePreset;
 
 // @public
-export function createStaticHostEnvironmentAdapter(reflection: HostEnvironmentReflectionResource, state: HostEnvironmentState): HostEnvironmentAdapter;
+export function createStaticHostEnvironmentAdapter(reflection: HostEnvironmentReflectionResource, lighting: HostEnvironmentState, weather?: HostEnvironmentWeatherState, atmosphere?: HostEnvironmentAtmosphereState): HostEnvironmentAdapter;
 
 // @public
 export function createStaticHostPresentationAdapter(): HostPresentationAdapter;
 
 // @public
 export function createStaticHostSimulationAdapter(): HostSimulationAdapter;
+
+// @public
+export function createStormFrontEnvironmentPreset(): EnvironmentPreset;
 
 // @public
 export function createSupportedHostEnvironmentRadianceBytes(): Uint8Array;
@@ -401,7 +404,7 @@ export interface EffectVariantSelectionReceipt {
 export const ENVIRONMENT_PRESET_SCHEMA: "real-water/environment-preset";
 
 // @public
-export const ENVIRONMENT_PRESET_VERSION: 1;
+export const ENVIRONMENT_PRESET_VERSION: 2;
 
 // @public
 export interface EnvironmentPreset extends EnvironmentPresetSnapshot {
@@ -423,6 +426,10 @@ export interface EnvironmentPresetAtmosphere {
     readonly cloudShadowStrength: number;
     // (undocumented)
     readonly horizonHaze: number;
+    // (undocumented)
+    readonly lightningIntensity: number;
+    // (undocumented)
+    readonly stormAerosolIntensity: number;
 }
 
 // @public
@@ -600,9 +607,23 @@ export interface HostEnvironmentAdapter {
     // (undocumented)
     readonly reflection: HostEnvironmentReflectionDescriptor;
     // (undocumented)
-    snapshot(): HostEnvironmentState;
+    snapshot(): HostEnvironmentSnapshot;
     // (undocumented)
     readonly texture: HostTexture | null;
+}
+
+// @public
+export interface HostEnvironmentAtmosphereState {
+    // (undocumented)
+    readonly cloudCoverage: number;
+    // (undocumented)
+    readonly cloudShadowStrength: number;
+    // (undocumented)
+    readonly horizonHaze: number;
+    // (undocumented)
+    readonly lightningIntensity: number;
+    // (undocumented)
+    readonly stormAerosolIntensity: number;
 }
 
 // @public
@@ -636,6 +657,16 @@ export interface HostEnvironmentReflectionResource extends HostEnvironmentReflec
 export type HostEnvironmentReflectionType = "equirect";
 
 // @public
+export interface HostEnvironmentSnapshot {
+    // (undocumented)
+    readonly atmosphere: HostEnvironmentAtmosphereState;
+    // (undocumented)
+    readonly lighting: HostEnvironmentState;
+    // (undocumented)
+    readonly weather: HostEnvironmentWeatherState;
+}
+
+// @public
 export interface HostEnvironmentState {
     // (undocumented)
     readonly environmentIntensity: number;
@@ -655,6 +686,20 @@ export interface HostEnvironmentState {
     readonly sunDirectionZ: number;
     // (undocumented)
     readonly sunIntensity: number;
+}
+
+// @public
+export interface HostEnvironmentWeatherState {
+    // (undocumented)
+    readonly gustStrength: number;
+    // (undocumented)
+    readonly rainIntensity: number;
+    // (undocumented)
+    readonly windDirectionX: number;
+    // (undocumented)
+    readonly windDirectionZ: number;
+    // (undocumented)
+    readonly windStrength: number;
 }
 
 // @public
@@ -1031,7 +1076,7 @@ export type PresetRecoveryReason = "invalid-json" | "unknown-schema" | "invalid-
 export const PREWARM_MANIFEST_SCHEMA: "real-water/prewarm";
 
 // @public
-export const PREWARM_MANIFEST_VERSION: 11;
+export const PREWARM_MANIFEST_VERSION: 12;
 
 // @public
 export interface PrewarmDeclaration {
@@ -1113,7 +1158,7 @@ export type PrimitiveInteractionShape = SphereInteractionShape | BoxInteractionS
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 14;
+export const QUALITY_PROFILE_VERSION: 15;
 
 // @public
 export interface QualityProfile {
@@ -1133,6 +1178,8 @@ export interface QualityProfile {
     readonly schema: typeof QUALITY_PROFILE_SCHEMA;
     // (undocumented)
     readonly secondaryParticles: QualityProfileSecondaryParticles;
+    // (undocumented)
+    readonly stormFront: QualityProfileStormFront;
     // (undocumented)
     readonly surface: QualityProfileSurface;
     // (undocumented)
@@ -1209,7 +1256,7 @@ export interface QualityProfileInteractionField {
 // @public
 export interface QualityProfileLensWetness {
     // (undocumented)
-    readonly after: "secondary-particles";
+    readonly after: "storm-atmosphere";
     // (undocumented)
     readonly diagnosticsFormat: "rgba16float";
     // (undocumented)
@@ -1247,8 +1294,12 @@ export interface QualityProfilePostTraaComposition {
         readonly after: "traa";
     },
     QualityProfilePostTraaStage & {
-        readonly id: "lens-wetness";
+        readonly id: "storm-atmosphere";
         readonly after: "secondary-particles";
+    },
+    QualityProfilePostTraaStage & {
+        readonly id: "lens-wetness";
+        readonly after: "storm-atmosphere";
     }
     ];
 }
@@ -1256,9 +1307,9 @@ export interface QualityProfilePostTraaComposition {
 // @public
 export interface QualityProfilePostTraaStage {
     // (undocumented)
-    readonly after: "traa" | "secondary-particles";
+    readonly after: "traa" | "secondary-particles" | "storm-atmosphere";
     // (undocumented)
-    readonly id: "secondary-particles" | "lens-wetness";
+    readonly id: "secondary-particles" | "storm-atmosphere" | "lens-wetness";
 }
 
 // @public
@@ -1447,6 +1498,36 @@ export interface QualityProfileSpectralWhitecaps {
     readonly stageLayout: "generation-history-advection-decay";
     // (undocumented)
     readonly tileSizeMetres: 256;
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
+}
+
+// @public
+export interface QualityProfileStormFront {
+    // (undocumented)
+    readonly cloudAndLightning: {
+        readonly illuminationRoute: "coherent-glint-foam-reflection-atmosphere";
+        readonly atmosphereStageId: "storm-atmosphere";
+    };
+    // (undocumented)
+    readonly diagnostics: {
+        readonly resolutionPolicy: "drawing-buffer-exact";
+        readonly format: "rgba16float";
+        readonly samples: 0;
+    };
+    // (undocumented)
+    readonly mode: "prepared-deterministic-route";
+    // (undocumented)
+    readonly rain: {
+        readonly surfaceRoute: "additive-spectral-ripples";
+        readonly secondaryParticleConsumerId: "spray-droplet-mist";
+        readonly maximumCandidateCount: 8_192;
+    };
+    // (undocumented)
+    readonly stormAerosol: {
+        readonly secondaryParticleConsumerId: "spray-droplet-mist";
+        readonly maximumCandidateCount: 8_192;
+    };
     // (undocumented)
     readonly updateCadence: "host-fixed-tick";
 }
@@ -1714,6 +1795,8 @@ export interface RenderingCapabilities {
     // (undocumented)
     readonly secondaryParticles: RenderingCapabilitiesSecondaryParticles;
     // (undocumented)
+    readonly stormFront: RenderingCapabilitiesStormFront;
+    // (undocumented)
     readonly temporal: RenderingCapabilitiesTemporal;
     // (undocumented)
     readonly timestampQuery: boolean;
@@ -1734,8 +1817,12 @@ export interface RenderingCapabilitiesPostTraaComposition {
         readonly after: "traa";
     },
         {
-        readonly id: "lens-wetness";
+        readonly id: "storm-atmosphere";
         readonly after: "secondary-particles";
+    },
+        {
+        readonly id: "lens-wetness";
+        readonly after: "storm-atmosphere";
     }
     ];
     // (undocumented)
@@ -1897,6 +1984,36 @@ export interface RenderingCapabilitiesSecondaryParticles {
 }
 
 // @public
+export interface RenderingCapabilitiesStormFront {
+    // (undocumented)
+    readonly cloudAndLightning: {
+        readonly illuminationRoute: "coherent-glint-foam-reflection-atmosphere";
+        readonly atmosphereStageId: "storm-atmosphere";
+    };
+    // (undocumented)
+    readonly diagnostics: {
+        readonly resolutionPolicy: "drawing-buffer-exact";
+        readonly format: "rgba16float";
+        readonly samples: 0;
+    };
+    // (undocumented)
+    readonly mode: "prepared-deterministic-route";
+    // (undocumented)
+    readonly rain: {
+        readonly surfaceRoute: "additive-spectral-ripples";
+        readonly secondaryParticleConsumerId: "spray-droplet-mist";
+        readonly maximumCandidateCount: 8_192;
+    };
+    // (undocumented)
+    readonly stormAerosol: {
+        readonly secondaryParticleConsumerId: "spray-droplet-mist";
+        readonly maximumCandidateCount: 8_192;
+    };
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
+}
+
+// @public
 export interface RenderingCapabilitiesTemporal {
     // (undocumented)
     readonly dynamicResolution: false;
@@ -1930,7 +2047,7 @@ export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "BODY_CAPACITY_EXCEEDED"
 export const SHOWCASE_PRESET_SCHEMA: "real-water/showcase-preset";
 
 // @public
-export const SHOWCASE_PRESET_VERSION: 1;
+export const SHOWCASE_PRESET_VERSION: 2;
 
 // @public
 export interface ShowcaseCameraKeyframe {
@@ -1977,6 +2094,8 @@ export interface ShowcasePresetAuthoring {
     // (undocumented)
     readonly qualityProfile: QualityProfileIdentity;
     // (undocumented)
+    readonly stormFront: ShowcaseStormFrontSegment;
+    // (undocumented)
     readonly waterPreset: WaterPresetIdentity;
 }
 
@@ -1994,6 +2113,18 @@ export interface ShowcasePresetIdentity {
 
 // @public
 export function showcasePresetIdentity(preset: ShowcasePreset): ShowcasePresetIdentity;
+
+// @public
+export interface ShowcaseStormFrontSegment {
+    // (undocumented)
+    readonly environmentPreset: EnvironmentPresetIdentity;
+    // (undocumented)
+    readonly eventId: string;
+    // (undocumented)
+    readonly heroBreakerEventId: string;
+    // (undocumented)
+    readonly waterPreset: WaterPresetIdentity;
+}
 
 // @public
 export type ShowcaseVector3 = readonly [number, number, number];

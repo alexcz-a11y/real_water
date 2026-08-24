@@ -2,9 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { createWaterPreset } from "real-water";
 import type {
   QaCameraV1,
-  QaCaptureV16,
-  QaHarnessV16,
-  QaPresentationReceiptV16,
+  QaCaptureV17,
+  QaHarnessV17,
+  QaPresentationReceiptV17,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
@@ -34,19 +34,19 @@ const CAMERA = Object.freeze({
 const CONTROLS = createWaterPreset("swell").artisticControls;
 
 type PresentationIdentity = Pick<
-  QaPresentationReceiptV16,
+  QaPresentationReceiptV17,
   "tick" | "manifestHash" | "compileCount" | "probeCount" | "secondaryParticles"
 >;
 
 interface HeroFrame {
   readonly presentation: PresentationIdentity;
-  readonly finalColor: QaCaptureV16;
-  readonly depth: QaCaptureV16;
-  readonly normal: QaCaptureV16;
-  readonly heroFoam: QaCaptureV16;
-  readonly secondaryContribution: QaCaptureV16;
-  readonly secondaryOverdraw: QaCaptureV16;
-  readonly query: Awaited<ReturnType<QaHarnessV16["queryGameplay"]>>;
+  readonly finalColor: QaCaptureV17;
+  readonly depth: QaCaptureV17;
+  readonly normal: QaCaptureV17;
+  readonly heroFoam: QaCaptureV17;
+  readonly secondaryContribution: QaCaptureV17;
+  readonly secondaryOverdraw: QaCaptureV17;
+  readonly query: Awaited<ReturnType<QaHarnessV17["queryGameplay"]>>;
 }
 
 test.describe.configure({ mode: "serial" });
@@ -70,7 +70,7 @@ test("renders and byte-replays one bounded art-directed Hero Breaker", async ({
 
   const result = await page.evaluate(
     async ({ activeAgeTicks, camera, controls, hero, seed, startTick }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -89,7 +89,7 @@ test("renders and byte-replays one bounded art-directed Hero Breaker", async ({
         priorities: Uint8Array.of(hero.priority),
       });
       const presentationIdentity = (
-        presentation: QaPresentationReceiptV16,
+        presentation: QaPresentationReceiptV17,
       ): PresentationIdentity => ({
         tick: presentation.tick,
         manifestHash: presentation.manifestHash,
@@ -407,8 +407,8 @@ function expectIsolatedHeroSpray(
 }
 
 function measureSignedDepthSupport(
-  active: QaCaptureV16,
-  control: QaCaptureV16,
+  active: QaCaptureV17,
+  control: QaCaptureV17,
   width: number,
   height: number,
 ): Readonly<{

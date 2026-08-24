@@ -110,6 +110,28 @@ const CORE_READY_REFLECTION = Object.freeze({
     }),
   }),
 });
+const CORE_READY_STORM_FRONT = Object.freeze({
+  mode: "prepared-deterministic-route" as const,
+  updateCadence: "host-fixed-tick" as const,
+  rain: Object.freeze({
+    surfaceRoute: "additive-spectral-ripples" as const,
+    secondaryParticleConsumerId: "spray-droplet-mist" as const,
+    maximumCandidateCount: 8_192 as const,
+  }),
+  stormAerosol: Object.freeze({
+    secondaryParticleConsumerId: "spray-droplet-mist" as const,
+    maximumCandidateCount: 8_192 as const,
+  }),
+  cloudAndLightning: Object.freeze({
+    illuminationRoute: "coherent-glint-foam-reflection-atmosphere" as const,
+    atmosphereStageId: "storm-atmosphere" as const,
+  }),
+  diagnostics: Object.freeze({
+    resolutionPolicy: "drawing-buffer-exact" as const,
+    format: "rgba16float" as const,
+    samples: 0 as const,
+  }),
+});
 
 function mockDrawingBufferSize() {
   return vi.fn((target: { width: number; height: number }) => {
@@ -368,12 +390,14 @@ describe("createThreeHostLifecycleAdapter", () => {
           updateCadence: "host-fixed-tick",
           renderPhaseKnowledge: "none",
         },
+        stormFront: CORE_READY_STORM_FRONT,
         postTraaComposition: {
           width: 320,
           height: 180,
           stages: [
             { id: "secondary-particles", after: "traa" },
-            { id: "lens-wetness", after: "secondary-particles" },
+            { id: "storm-atmosphere", after: "secondary-particles" },
+            { id: "lens-wetness", after: "storm-atmosphere" },
           ],
           accumulationFormat: "rgba16float",
           finalColorFormat: "rgba8unorm-srgb",
@@ -392,8 +416,8 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(
       renderer.compileAsync.mock.calls.some((call) => call[1] !== camera),
     ).toBe(true);
-    expect(renderer.render).toHaveBeenCalledTimes(214);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(53);
+    expect(renderer.render).toHaveBeenCalledTimes(234);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(57);
     const readbackTargets = renderer.readRenderTargetPixelsAsync.mock.calls.map(
       (call) =>
         call[0] as { texture?: { name?: string }; textures?: unknown[] },
@@ -404,15 +428,21 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(readbackTargets[1]?.texture?.name).toBe(
       "Real Water secondary particle accumulation",
     );
-    expect(readbackTargets[2]?.texture?.name).toBe("Real Water final color");
+    expect(readbackTargets[2]?.texture?.name).toBe(
+      "Real Water Storm Front atmosphere color",
+    );
     expect(readbackTargets[3]?.texture?.name).toBe(
+      "Real Water Storm Front atmosphere diagnostics",
+    );
+    expect(readbackTargets[4]?.texture?.name).toBe("Real Water final color");
+    expect(readbackTargets[5]?.texture?.name).toBe(
       "Real Water lens-wetness diagnostics",
     );
-    expect(readbackTargets[4]?.texture?.name).toBe("Real Water current color");
-    expect(readbackTargets[5]?.texture?.name).toBe(
+    expect(readbackTargets[6]?.texture?.name).toBe("Real Water current color");
+    expect(readbackTargets[7]?.texture?.name).toBe(
       "Real Water history rejection",
     );
-    expect(readbackTargets[6]?.texture?.name).toBe(
+    expect(readbackTargets[8]?.texture?.name).toBe(
       "Real Water inverse linear depth",
     );
     expect(readbackTargets.map((target) => target.texture?.name)).toContain(
@@ -513,7 +543,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     );
     expect(queryResults.foam[0]).toBe(geometryBefore.foam);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(53);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(57);
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -986,7 +1016,7 @@ describe("createThreeHostLifecycleAdapter", () => {
 
     lighting.sunIntensity = 0;
     lighting.environmentIntensity = 0.25;
-    expect(environment.snapshot()).toMatchObject({
+    expect(environment.snapshot().lighting).toMatchObject({
       sunIntensity: 0,
       environmentIntensity: 0.25,
     });
@@ -1095,7 +1125,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     });
     expect(scene.children).toHaveLength(0);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(26);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(28);
     expect(renderer.dispose).not.toHaveBeenCalled();
   });
 
@@ -1474,8 +1504,8 @@ describe("createThreeHostLifecycleAdapter", () => {
 
     expect(lease).not.toHaveProperty("present");
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(53);
-    expect(renderer.render).toHaveBeenCalledTimes(214);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(57);
+    expect(renderer.render).toHaveBeenCalledTimes(234);
     expect(presentation.route).toBeDefined();
     const renderTargetsAtReady = renderer.setRenderTarget.mock.calls.length;
 
@@ -1499,9 +1529,13 @@ describe("createThreeHostLifecycleAdapter", () => {
       "Real Water secondary particle accumulation",
       traaResolvedIndex + 1,
     );
+    const stormAtmosphereIndex = readyFrameTargetNames.indexOf(
+      "Real Water Storm Front atmosphere color",
+      secondaryAccumulationIndex + 1,
+    );
     const finalColorIndex = readyFrameTargetNames.indexOf(
       "Real Water final color",
-      secondaryAccumulationIndex + 1,
+      stormAtmosphereIndex + 1,
     );
     const presentationIndex = readyFrameTargetNames.indexOf(
       "canvas",
@@ -1509,7 +1543,8 @@ describe("createThreeHostLifecycleAdapter", () => {
     );
     expect(traaResolvedIndex).toBeGreaterThanOrEqual(0);
     expect(secondaryAccumulationIndex).toBeGreaterThan(traaResolvedIndex);
-    expect(finalColorIndex).toBeGreaterThan(secondaryAccumulationIndex);
+    expect(stormAtmosphereIndex).toBeGreaterThan(secondaryAccumulationIndex);
+    expect(finalColorIndex).toBeGreaterThan(stormAtmosphereIndex);
     expect(presentationIndex).toBeGreaterThan(finalColorIndex);
     expect(readyFrameTargetNames).not.toContain(
       "Real Water underwater volume diagnostics",
@@ -1538,7 +1573,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(second.temporal.historyEpoch).toBe(1);
     expect(second.temporal.resetReason).toBeNull();
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(53);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(57);
 
     simulation.assign({ tick: 8, timeSeconds: 8 / 60, paused: false });
     const continuousTick = readHostPresentedFrame(await presentation.present());
@@ -1649,7 +1684,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(queuedFirst.presentationId + 1).toBe(queuedSecond.presentationId);
 
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(53);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(57);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
     expect(scene.children).toHaveLength(1);
@@ -2191,8 +2226,8 @@ describe("createThreeHostLifecycleAdapter", () => {
         outputs: [...DIAGNOSTICS_CAPTURE_NAMES],
       }),
     );
-    expect(all.outputs).toHaveLength(41);
-    expect(all.diagnosticReadbackCount).toBe(40);
+    expect(all.outputs).toHaveLength(45);
+    expect(all.diagnosticReadbackCount).toBe(44);
     expect(all.sceneRenderCount).toBe(resetFrame.sceneRenderCount + 3);
     expect(
       all.outputs.find(({ name }) => name === "underwater-caustics"),
@@ -2231,6 +2266,18 @@ describe("createThreeHostLifecycleAdapter", () => {
       format: "r32float-hero-breaker-foam",
       data: expect.any(Float32Array),
     });
+    for (const name of [
+      "storm-rain-ripples",
+      "storm-aerosol",
+      "storm-cloud-shadow",
+      "storm-lightning",
+    ] as const) {
+      expect(all.outputs.find((output) => output.name === name)).toMatchObject({
+        name,
+        format: "r32float-storm-front",
+        data: expect.any(Float32Array),
+      });
+    }
     expect(
       renderer.setRenderTarget.mock.calls
         .slice(renderTargetsBeforeAllCaptures)
@@ -2270,6 +2317,19 @@ describe("createThreeHostLifecycleAdapter", () => {
           ),
         ),
     ).toContain("Real Water Hero Breaker foam identity");
+    expect(
+      renderer.setRenderTarget.mock.calls
+        .slice(renderTargetsBeforeAllCaptures)
+        .map((call) =>
+          String(
+            (
+              call[0] as {
+                readonly texture?: { readonly name?: string };
+              } | null
+            )?.texture?.name ?? "canvas",
+          ),
+        ),
+    ).toContain("Real Water Storm Front atmosphere diagnostics");
 
     let cumulativeReadbacks = all.diagnosticReadbackCount;
     for (const [name, format, targetName] of [
@@ -2292,6 +2352,26 @@ describe("createThreeHostLifecycleAdapter", () => {
         "hero-breaker-foam",
         "r32float-hero-breaker-foam",
         "Real Water Hero Breaker foam identity",
+      ],
+      [
+        "storm-rain-ripples",
+        "r32float-storm-front",
+        "Real Water Storm Front atmosphere diagnostics",
+      ],
+      [
+        "storm-aerosol",
+        "r32float-storm-front",
+        "Real Water Storm Front atmosphere diagnostics",
+      ],
+      [
+        "storm-cloud-shadow",
+        "r32float-storm-front",
+        "Real Water Storm Front atmosphere diagnostics",
+      ],
+      [
+        "storm-lightning",
+        "r32float-storm-front",
+        "Real Water Storm Front atmosphere diagnostics",
       ],
     ] as const) {
       const readbacksBefore =
@@ -3700,6 +3780,7 @@ function mockPresentationReadback(
     name.includes("underwater suspended particles") ||
     name.includes("underwater bubbles") ||
     name.includes("lens-wetness diagnostics") ||
+    name.includes("Storm Front atmosphere diagnostics") ||
     name.includes("Hero Breaker foam identity")
   ) {
     return new Uint16Array(pixels * 4);

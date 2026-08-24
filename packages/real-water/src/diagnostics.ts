@@ -27,7 +27,7 @@ export type {
 } from "./presentation.js";
 
 /**
- * The forty-one named diagnostic outputs. Names and CPU shapes match the QA
+ * The forty-five named diagnostic outputs. Names and CPU shapes match the QA
  * capture contract. Planar color and target-alpha occupancy are their own
  * prepared target. `planar-confidence` is reserved for a future screen-space
  * mask and is not a current capture. Current-frame SSR hit (stock raw
@@ -81,10 +81,14 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
   "secondary-particle-contribution",
   "secondary-particle-overdraw",
   "hero-breaker-foam",
+  "storm-rain-ripples",
+  "storm-aerosol",
+  "storm-cloud-shadow",
+  "storm-lightning",
 ] as const);
 
 /**
- * One of the forty-one named diagnostic CPU outputs.
+ * One of the forty-five named diagnostic CPU outputs.
  *
  * @public
  */
@@ -298,6 +302,26 @@ export const DIAGNOSTICS_CAPTURE_SHAPES = Object.freeze({
   }),
   "hero-breaker-foam": Object.freeze({
     format: "r32float-hero-breaker-foam" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "storm-rain-ripples": Object.freeze({
+    format: "r32float-storm-front" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "storm-aerosol": Object.freeze({
+    format: "r32float-storm-front" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "storm-cloud-shadow": Object.freeze({
+    format: "r32float-storm-front" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "storm-lightning": Object.freeze({
+    format: "r32float-storm-front" as const,
     elementType: "float32" as const,
     components: 1 as const,
   }),
@@ -799,6 +823,25 @@ export interface DiagnosticsHeroBreakerFoamCapture extends DiagnosticsCaptureBas
 }
 
 /**
+ * Output-resolution normalized scalar contribution from one Storm Front
+ * effect route.
+ *
+ * @public
+ */
+export interface DiagnosticsStormFrontCapture extends DiagnosticsCaptureBase {
+  /** Storm Front capture name. */
+  readonly name:
+    | "storm-rain-ripples"
+    | "storm-aerosol"
+    | "storm-cloud-shadow"
+    | "storm-lightning";
+  /** Packed normalized scalar Storm Front format. */
+  readonly format: "r32float-storm-front";
+  /** Tightly packed finite normalized scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
  * Frozen CPU DTO for one named diagnostic output. No GPU object types.
  *
  * @public
@@ -829,7 +872,8 @@ export type DiagnosticsCapture =
   | DiagnosticsLensWetnessCapture
   | DiagnosticsSecondaryParticleContributionCapture
   | DiagnosticsSecondaryParticleOverdrawCapture
-  | DiagnosticsHeroBreakerFoamCapture;
+  | DiagnosticsHeroBreakerFoamCapture
+  | DiagnosticsStormFrontCapture;
 
 /**
  * Diagnostics present request. The exact key is `outputs`. Named outputs must
@@ -997,7 +1041,7 @@ export interface HostDiagnosticsRoute {
 }
 
 /**
- * Confirms `value` is one of the forty-one diagnostic capture names.
+ * Confirms `value` is one of the forty-five diagnostic capture names.
  *
  * @public
  */
@@ -1272,13 +1316,21 @@ function isNormalizedEffectCaptureName(
   | "underwater-particles"
   | "underwater-bubbles"
   | "lens-wetness"
-  | "hero-breaker-foam" {
+  | "hero-breaker-foam"
+  | "storm-rain-ripples"
+  | "storm-aerosol"
+  | "storm-cloud-shadow"
+  | "storm-lightning" {
   return (
     value === "underwater-caustics" ||
     value === "underwater-particles" ||
     value === "underwater-bubbles" ||
     value === "lens-wetness" ||
-    value === "hero-breaker-foam"
+    value === "hero-breaker-foam" ||
+    value === "storm-rain-ripples" ||
+    value === "storm-aerosol" ||
+    value === "storm-cloud-shadow" ||
+    value === "storm-lightning"
   );
 }
 

@@ -5,7 +5,7 @@
 ```ts
 
 // @public
-export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "whitecap-generation", "whitecap-history", "whitecap-advection", "whitecap-decay", "foam-source-identity", "waterline", "history-rejection", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "underwater-transmittance", "underwater-scattering", "underwater-light-shafts", "underwater-shadow", "underwater-caustics", "underwater-particles", "underwater-bubbles", "lens-wetness", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color", "secondary-particle-contribution", "secondary-particle-overdraw", "hero-breaker-foam"];
+export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "whitecap-generation", "whitecap-history", "whitecap-advection", "whitecap-decay", "foam-source-identity", "waterline", "history-rejection", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "underwater-transmittance", "underwater-scattering", "underwater-light-shafts", "underwater-shadow", "underwater-caustics", "underwater-particles", "underwater-bubbles", "lens-wetness", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color", "secondary-particle-contribution", "secondary-particle-overdraw", "hero-breaker-foam", "storm-rain-ripples", "storm-aerosol", "storm-cloud-shadow", "storm-lightning"];
 
 // @public
 export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
@@ -214,10 +214,30 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
         elementType: "float32";
         components: 1;
     }>;
+    "storm-rain-ripples": Readonly<{
+        format: "r32float-storm-front";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "storm-aerosol": Readonly<{
+        format: "r32float-storm-front";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "storm-cloud-shadow": Readonly<{
+        format: "r32float-storm-front";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "storm-lightning": Readonly<{
+        format: "r32float-storm-front";
+        elementType: "float32";
+        components: 1;
+    }>;
 }>;
 
 // @public
-export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsWhitecapStageCapture | DiagnosticsFoamSourceIdentityCapture | DiagnosticsWaterlineCapture | DiagnosticsHistoryRejectionCapture | DiagnosticsOpticalScalarCapture | DiagnosticsUnderwaterVolumeCapture | DiagnosticsUnderwaterCausticsCapture | DiagnosticsUnderwaterParticlesCapture | DiagnosticsUnderwaterBubblesCapture | DiagnosticsLensWetnessCapture | DiagnosticsSecondaryParticleContributionCapture | DiagnosticsSecondaryParticleOverdrawCapture | DiagnosticsHeroBreakerFoamCapture;
+export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsWhitecapStageCapture | DiagnosticsFoamSourceIdentityCapture | DiagnosticsWaterlineCapture | DiagnosticsHistoryRejectionCapture | DiagnosticsOpticalScalarCapture | DiagnosticsUnderwaterVolumeCapture | DiagnosticsUnderwaterCausticsCapture | DiagnosticsUnderwaterParticlesCapture | DiagnosticsUnderwaterBubblesCapture | DiagnosticsLensWetnessCapture | DiagnosticsSecondaryParticleContributionCapture | DiagnosticsSecondaryParticleOverdrawCapture | DiagnosticsHeroBreakerFoamCapture | DiagnosticsStormFrontCapture;
 
 // @public
 export interface DiagnosticsCaptureBase {
@@ -409,6 +429,13 @@ export interface DiagnosticsSsrRoughnessCapture extends DiagnosticsCaptureBase {
     readonly data: Float32Array;
     readonly format: "r32float-ssr-roughness";
     readonly name: "ssr-roughness";
+}
+
+// @public
+export interface DiagnosticsStormFrontCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-storm-front";
+    readonly name: "storm-rain-ripples" | "storm-aerosol" | "storm-cloud-shadow" | "storm-lightning";
 }
 
 // @public

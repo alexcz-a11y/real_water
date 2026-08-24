@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { ArtisticControls, HostEnvironmentState } from "real-water";
-import type { QaCameraV1, QaHarnessV16 } from "../src/qa-harness.js";
+import type { QaCameraV1, QaHarnessV17 } from "../src/qa-harness.js";
 import { REFERENCE_ENVIRONMENT_LIGHTING } from "../src/reference-optical-inputs.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import {
@@ -82,7 +82,7 @@ test("applies replayable hot haze by scene depth without re-preparing", async ({
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ camera, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -256,7 +256,7 @@ test("art-directs turbidity, shafts, color, and exposure as continuous hot contr
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ camera, controls, shaftEnvironment, angledEnvironment, dark }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -481,7 +481,7 @@ test("uses the same Environment Adapter above and below while ignoring scene lig
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ camera, controls, lit, dark }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

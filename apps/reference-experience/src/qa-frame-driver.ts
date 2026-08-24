@@ -69,11 +69,15 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
     "water-secondary-particle-accumulation-target",
   "secondary-particle-overdraw": "water-secondary-particle-accumulation-target",
   "hero-breaker-foam": "water-hero-breaker-foam-diagnostics-target",
+  "storm-rain-ripples": "water-storm-diagnostics-target",
+  "storm-aerosol": "water-storm-diagnostics-target",
+  "storm-cloud-shadow": "water-storm-diagnostics-target",
+  "storm-lightning": "water-storm-diagnostics-target",
 } as const);
 
 export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
   schema: "real-water/qa-frame-prewarm" as const,
-  version: 15 as const,
+  version: 16 as const,
   id: "reference-qa-frame" as const,
   captures: Object.freeze([
     Object.freeze({
@@ -240,6 +244,22 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
       name: "hero-breaker-foam" as const,
       preparedFormat: "r32float-hero-breaker-foam" as const,
     }),
+    Object.freeze({
+      name: "storm-rain-ripples" as const,
+      preparedFormat: "rgba16float-storm-front-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "storm-aerosol" as const,
+      preparedFormat: "rgba16float-storm-front-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "storm-cloud-shadow" as const,
+      preparedFormat: "rgba16float-storm-front-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "storm-lightning" as const,
+      preparedFormat: "rgba16float-storm-front-diagnostics" as const,
+    }),
   ]),
   coreDeclarations: QA_TO_CORE_DECLARATION_IDS,
 });
@@ -361,6 +381,16 @@ export interface QaFrameDriverHeroBreakerFoamCapture extends QaFrameDriverCaptur
   readonly data: Float32Array;
 }
 
+export interface QaFrameDriverStormFrontCapture extends QaFrameDriverCaptureBase {
+  readonly name:
+    | "storm-rain-ripples"
+    | "storm-aerosol"
+    | "storm-cloud-shadow"
+    | "storm-lightning";
+  readonly format: "r32float-storm-front";
+  readonly data: Float32Array;
+}
+
 export interface QaFrameDriverUnderwaterCausticsCapture extends QaFrameDriverCaptureBase {
   readonly name: "underwater-caustics";
   readonly format: "r32float-underwater-caustics";
@@ -452,7 +482,8 @@ export type QaFrameDriverCapture =
   | QaFrameDriverUnderwaterParticlesCapture
   | QaFrameDriverUnderwaterBubblesCapture
   | QaFrameDriverLensWetnessCapture
-  | QaFrameDriverHeroBreakerFoamCapture;
+  | QaFrameDriverHeroBreakerFoamCapture
+  | QaFrameDriverStormFrontCapture;
 
 export interface QaFrameDriverStateReceipt {
   readonly seed: number;

@@ -27,7 +27,14 @@ import type {
   ThreeHostScene,
 } from "../three-host.js";
 import type { HostEnvironmentAdapter } from "../environment.js";
-import { assertHostEnvironmentMatchesManifest } from "../environment.js";
+import {
+  assertHostEnvironmentMatchesManifest,
+  readHostEnvironmentSnapshot,
+} from "../environment.js";
+import {
+  createStormFrontController,
+  type StormFrontController,
+} from "../storm-front.js";
 import {
   readHostSimulationState,
   type HostSimulationAdapter,
@@ -106,6 +113,7 @@ interface PreparedResources {
   readonly foamField: UnifiedFoamField;
   readonly secondaryParticlePool: SecondaryParticlePool;
   readonly secondaryParticleAllocationRoute: SecondaryParticleAllocationRoute;
+  readonly stormFront: StormFrontController;
   readonly spectralBand: ReturnType<typeof createSpectralBandRendering>;
   readonly opticalPath: ReturnType<typeof createWaterOpticsRendering>;
   readonly waterline: ReturnType<typeof createWaterlineStateController>;
@@ -191,6 +199,11 @@ export async function prepareMinimalWaterPlane(
       options.simulation,
       options.presentation,
     );
+    const stormFront = createStormFrontController(() =>
+      readHostEnvironmentSnapshot(options.environment),
+    );
+    stormFront.synchronize(preparationSnapshot);
+    partial.stormFront = stormFront;
     const secondaryParticlePolicy =
       options.request.manifest.qualityProfile.secondaryParticles;
     const secondaryParticlePool = createSecondaryParticlePool({
@@ -229,6 +242,7 @@ export async function prepareMinimalWaterPlane(
         projectedAreaResolution: declaredDrawingBuffer,
         referenceResolution: declaredDrawingBuffer,
       }),
+      stormFront,
     });
     partial.secondarySpray = secondarySpray;
     const waterTexture = createWaterTexture();
@@ -262,6 +276,7 @@ export async function prepareMinimalWaterPlane(
       options.presentation,
       innerCellMetres,
       foamField,
+      stormFront,
     );
     partial.spectralBand = spectralBand;
 
@@ -275,6 +290,7 @@ export async function prepareMinimalWaterPlane(
       secondaryParticlePool,
       secondaryParticlePolicy,
       secondarySpray,
+      stormFront,
       options.request.manifest.qualityProfile.postTraaComposition,
       options.environment,
       options.request.manifest.qualityProfile.underwater,
@@ -308,6 +324,7 @@ export async function prepareMinimalWaterPlane(
     const opticalPath = createWaterOpticsRendering(
       spectralBand,
       options.environment,
+      stormFront,
       waterTexture,
       {
         texture: createdPresentation.resources.planar.target.texture,
@@ -405,17 +422,21 @@ export async function prepareMinimalWaterPlane(
       "heroBreakerSprayRoute",
       "heroBreakerFoamDiagnosticsTarget",
       "heroBreakerFoamDiagnosticsRoute",
+      "stormFrontState",
       "bodySocketEmissionRoute",
       "spectralBandSwell",
       "spectralBandWind",
       "spectralBandChop",
       "spectralBandRipple",
+      "stormRainRippleRoute",
       "whitecapStageTarget",
       "whitecapStageRoute",
       "foamSourceIdentityTarget",
       "foamSourceIdentityRoute",
       "material",
       "opticalRoute",
+      "stormCloudShadowRoute",
+      "stormLightningRoute",
       "waterlineState",
       "undersideOpticalRoute",
       "waterlineHistoryResetRoute",
@@ -469,6 +490,12 @@ export async function prepareMinimalWaterPlane(
       "secondaryParticleStageRoute",
       "secondaryParticleCompositeRoute",
       "secondaryParticleDiagnosticsRoute",
+      "stormRainSprayRoute",
+      "stormAerosolRoute",
+      "stormAtmosphereTarget",
+      "stormAtmosphereStageRoute",
+      "stormDiagnosticsTarget",
+      "stormDiagnosticsRoute",
       "lensWetnessDiagnosticsTarget",
       "lensWetnessStageRoute",
       "lensWetnessDiagnosticsRoute",
@@ -520,6 +547,7 @@ export async function prepareMinimalWaterPlane(
       "foamSourceIdentityProbe",
       "secondaryParticleProbe",
       "lensWetnessProbe",
+      "stormProbe",
       "heroBreakerFoamProbe",
       "completionProbe",
     ]);
@@ -547,6 +575,7 @@ export async function prepareMinimalWaterPlane(
         foamField,
         secondaryParticlePool,
         secondaryParticleAllocationRoute,
+        stormFront,
         spectralBand,
         opticalPath,
         waterline,

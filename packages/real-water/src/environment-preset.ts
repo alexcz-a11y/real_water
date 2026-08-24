@@ -58,7 +58,15 @@ const ATMOSPHERE_KEYS = [
   "cloudCoverage",
   "cloudShadowStrength",
   "horizonHaze",
+  "stormAerosolIntensity",
+  "lightningIntensity",
 ] as const;
+const LEGACY_ATMOSPHERE_KEYS = [
+  "cloudCoverage",
+  "cloudShadowStrength",
+  "horizonHaze",
+] as const;
+const LEGACY_ENVIRONMENT_PRESET_VERSION = 1 as const;
 
 /**
  * The discriminator for Environment Presets.
@@ -73,7 +81,7 @@ export const ENVIRONMENT_PRESET_SCHEMA =
  *
  * @public
  */
-export const ENVIRONMENT_PRESET_VERSION = 1 as const;
+export const ENVIRONMENT_PRESET_VERSION = 2 as const;
 
 /**
  * Plain-data weather authored alongside Host lighting.
@@ -97,6 +105,8 @@ export interface EnvironmentPresetAtmosphere {
   readonly cloudCoverage: number;
   readonly cloudShadowStrength: number;
   readonly horizonHaze: number;
+  readonly stormAerosolIntensity: number;
+  readonly lightningIntensity: number;
 }
 
 /**
@@ -167,6 +177,45 @@ export function createReferenceEnvironmentPreset(): EnvironmentPreset {
       cloudCoverage: 0.15,
       cloudShadowStrength: 0.1,
       horizonHaze: 0.25,
+      stormAerosolIntensity: 0,
+      lightningIntensity: 0,
+    },
+  });
+}
+
+/**
+ * Returns the built-in Storm Front Environment look. Lightning starts at zero
+ * because the deterministic Showcase timeline authors the transient pulse.
+ *
+ * @public
+ */
+export function createStormFrontEnvironmentPreset(): EnvironmentPreset {
+  return createAuthoredEnvironmentPreset("storm-front", {
+    lighting: {
+      sunDirectionX: 0.24,
+      sunDirectionY: 0.72,
+      sunDirectionZ: 0.65,
+      sunColorR: 0.76,
+      sunColorG: 0.84,
+      sunColorB: 1,
+      sunIntensity: 0.55,
+      environmentIntensity: 0.62,
+      sunAngularRadiusRadians: SUPPORTED_HOST_SUN_ANGULAR_RADIUS_RADIANS,
+    },
+    reflection: { ...SUPPORTED_HOST_ENVIRONMENT_REFLECTION },
+    weather: {
+      windDirectionX: 0.92,
+      windDirectionZ: 0.39,
+      windStrength: 1.25,
+      gustStrength: 0.85,
+      rainIntensity: 0.9,
+    },
+    atmosphere: {
+      cloudCoverage: 0.9,
+      cloudShadowStrength: 0.75,
+      horizonHaze: 0.65,
+      stormAerosolIntensity: 0.8,
+      lightningIntensity: 0,
     },
   });
 }
@@ -238,13 +287,66 @@ export function normalizeEnvironmentPreset(
 export function migrateEnvironmentPreset(
   candidate: unknown,
 ): EnvironmentPreset {
+  if (!isRecord(candidate)) {
+    throw new TypeError("The Environment Preset version cannot be migrated.");
+  }
+  if (candidate.version === ENVIRONMENT_PRESET_VERSION) {
+    return normalizeEnvironmentPreset(
+      candidate as unknown as EnvironmentPreset,
+    );
+  }
+  if (candidate.version === LEGACY_ENVIRONMENT_PRESET_VERSION) {
+    return migrateVersionOneEnvironmentPreset(candidate);
+  }
+  throw new TypeError("The Environment Preset version cannot be migrated.");
+}
+
+function migrateVersionOneEnvironmentPreset(
+  candidate: Record<string, unknown>,
+): EnvironmentPreset {
   if (
-    !isRecord(candidate) ||
-    candidate.version !== ENVIRONMENT_PRESET_VERSION
+    !hasExactKeys(candidate, ENVIRONMENT_PRESET_KEYS) ||
+    candidate.schema !== ENVIRONMENT_PRESET_SCHEMA ||
+    typeof candidate.id !== "string" ||
+    typeof candidate.presetHash !== "string" ||
+    !SHA_256_PATTERN.test(candidate.presetHash) ||
+    !isRecord(candidate.lighting) ||
+    !hasExactKeys(candidate.lighting, LIGHTING_KEYS) ||
+    !isRecord(candidate.reflection) ||
+    !hasExactKeys(candidate.reflection, REFLECTION_KEYS) ||
+    !isRecord(candidate.weather) ||
+    !hasExactKeys(candidate.weather, WEATHER_KEYS) ||
+    !isRecord(candidate.atmosphere) ||
+    !hasExactKeys(candidate.atmosphere, LEGACY_ATMOSPHERE_KEYS)
   ) {
     throw new TypeError("The Environment Preset version cannot be migrated.");
   }
-  return normalizeEnvironmentPreset(candidate as unknown as EnvironmentPreset);
+  const legacyWithoutHash = {
+    schema: ENVIRONMENT_PRESET_SCHEMA,
+    version: LEGACY_ENVIRONMENT_PRESET_VERSION,
+    id: candidate.id,
+    lighting: candidate.lighting,
+    reflection: candidate.reflection,
+    weather: candidate.weather,
+    atmosphere: candidate.atmosphere,
+  };
+  if (
+    candidate.presetHash !== sha256Identifier(JSON.stringify(legacyWithoutHash))
+  ) {
+    throw new TypeError("The Environment Preset content hash does not match.");
+  }
+  return createAuthoredEnvironmentPreset(candidate.id, {
+    lighting: candidate.lighting,
+    reflection: candidate.reflection,
+    weather: candidate.weather,
+    atmosphere: {
+      cloudCoverage: candidate.atmosphere.cloudCoverage,
+      cloudShadowStrength: candidate.atmosphere.cloudShadowStrength,
+      horizonHaze: candidate.atmosphere.horizonHaze,
+      stormAerosolIntensity: 0,
+      lightningIntensity: 0,
+    },
+  } as unknown as EnvironmentPresetSnapshot);
 }
 
 /**
@@ -352,6 +454,18 @@ function readEnvironmentPresetSnapshot(
     "cloudShadowStrength",
   );
   assertFiniteRange(candidate.atmosphere.horizonHaze, 0, 1, "horizonHaze");
+  assertFiniteRange(
+    candidate.atmosphere.stormAerosolIntensity,
+    0,
+    1,
+    "stormAerosolIntensity",
+  );
+  assertFiniteRange(
+    candidate.atmosphere.lightningIntensity,
+    0,
+    1,
+    "lightningIntensity",
+  );
 
   return {
     lighting: {
@@ -385,6 +499,8 @@ function readEnvironmentPresetSnapshot(
       cloudCoverage: candidate.atmosphere.cloudCoverage,
       cloudShadowStrength: candidate.atmosphere.cloudShadowStrength,
       horizonHaze: candidate.atmosphere.horizonHaze,
+      stormAerosolIntensity: candidate.atmosphere.stormAerosolIntensity,
+      lightningIntensity: candidate.atmosphere.lightningIntensity,
     },
   };
 }

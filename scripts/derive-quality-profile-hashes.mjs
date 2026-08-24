@@ -42,6 +42,7 @@ const CANONICAL_QUALITY_PROFILE_FIELDS = Object.freeze([
   "whitecaps",
   "secondaryParticles",
   "underwater",
+  "stormFront",
   "postTraaComposition",
 ]);
 
@@ -154,6 +155,33 @@ const CANONICAL_LENS_WETNESS_FIELDS = Object.freeze([
   "updateCadence",
 ]);
 
+const CANONICAL_STORM_FRONT_FIELDS = Object.freeze([
+  "mode",
+  "updateCadence",
+  "rain",
+  "stormAerosol",
+  "cloudAndLightning",
+  "diagnostics",
+]);
+const CANONICAL_STORM_FRONT_RAIN_FIELDS = Object.freeze([
+  "surfaceRoute",
+  "secondaryParticleConsumerId",
+  "maximumCandidateCount",
+]);
+const CANONICAL_STORM_FRONT_AEROSOL_FIELDS = Object.freeze([
+  "secondaryParticleConsumerId",
+  "maximumCandidateCount",
+]);
+const CANONICAL_STORM_FRONT_CLOUD_LIGHTNING_FIELDS = Object.freeze([
+  "illuminationRoute",
+  "atmosphereStageId",
+]);
+const CANONICAL_STORM_FRONT_DIAGNOSTICS_FIELDS = Object.freeze([
+  "resolutionPolicy",
+  "format",
+  "samples",
+]);
+
 const CANONICAL_UNDERWATER_FIELDS = Object.freeze([
   "mode",
   "composition",
@@ -235,7 +263,11 @@ function checkKeys(label, present, expected) {
 }
 
 function canonicalJson(label, profile, variant) {
-  const absentKeys = variant?.absentKeys ?? [];
+  // Every migrated profile predates T19. Keep that historical absence in one
+  // explicit rule so adding the current Storm Front field cannot silently
+  // rewrite any earlier canonical payload.
+  const absentKeys =
+    variant === undefined ? [] : [...variant.absentKeys, "stormFront"];
   const fields = CANONICAL_QUALITY_PROFILE_FIELDS.filter(
     (field) => !absentKeys.includes(field),
   );
@@ -250,7 +282,9 @@ function canonicalJson(label, profile, variant) {
         ? []
         : [
             ...variant.absentInteractionFieldKeys,
-            ...PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+            ...(variant.completeHeroBreaker === true
+              ? []
+              : PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS),
           ];
     checkKeys(
       `${label} interaction field`,
@@ -331,6 +365,33 @@ function canonicalJson(label, profile, variant) {
         CANONICAL_UNDERWATER_TRACER_FIELDS,
       );
     }
+  }
+  if (profile.stormFront !== undefined) {
+    checkKeys(
+      `${label} Storm Front`,
+      Object.keys(profile.stormFront),
+      CANONICAL_STORM_FRONT_FIELDS,
+    );
+    checkKeys(
+      `${label} Storm Front rain`,
+      Object.keys(profile.stormFront.rain),
+      CANONICAL_STORM_FRONT_RAIN_FIELDS,
+    );
+    checkKeys(
+      `${label} Storm Front aerosol`,
+      Object.keys(profile.stormFront.stormAerosol),
+      CANONICAL_STORM_FRONT_AEROSOL_FIELDS,
+    );
+    checkKeys(
+      `${label} Storm Front cloud and lightning`,
+      Object.keys(profile.stormFront.cloudAndLightning),
+      CANONICAL_STORM_FRONT_CLOUD_LIGHTNING_FIELDS,
+    );
+    checkKeys(
+      `${label} Storm Front diagnostics`,
+      Object.keys(profile.stormFront.diagnostics),
+      CANONICAL_STORM_FRONT_DIAGNOSTICS_FIELDS,
+    );
   }
   return JSON.stringify(
     Object.fromEntries(fields.map((field) => [field, profile[field]])),
@@ -586,6 +647,21 @@ const COMMITTED_LEGACY_VARIANTS = [
         "sha256:e21f2d7c73e0efec73e8e01b21bfcd52ba7d059c5fb857bc73fee3d11bc89148",
     },
   },
+  {
+    label: "14 (complete T22 and Hero Breaker, no Storm Front)",
+    version: 14,
+    absentKeys: [],
+    absentInteractionFieldKeys: [],
+    ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    completeT22: true,
+    completeHeroBreaker: true,
+    hashes: {
+      "minimal":
+        "sha256:9fb629031064c5718584b77355748965e9cfafe11cba7e3f4675eedf715cd684",
+      "minimal-high-detail":
+        "sha256:9780385fa033a0aeb2ad9de04ad04d6d5635398377da6b4000541044120f650b",
+    },
+  },
 ];
 
 function omitKeys(record, omitted) {
@@ -595,13 +671,17 @@ function omitKeys(record, omitted) {
 }
 
 function legacyProfile(profile, variant) {
-  const reduced = omitKeys(profile, variant.absentKeys);
+  // All committed migration rungs predate T19, including version 14. Omit the
+  // new current field before reconstructing any historical payload.
+  const reduced = omitKeys(profile, [...variant.absentKeys, "stormFront"]);
   if (reduced.interaction !== undefined) {
     reduced.interaction = {
       ...reduced.interaction,
       field: omitKeys(reduced.interaction.field, [
         ...variant.absentInteractionFieldKeys,
-        ...PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+        ...(variant.completeHeroBreaker === true
+          ? []
+          : PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS),
       ]),
     };
   }
@@ -638,6 +718,21 @@ function legacyProfile(profile, variant) {
     reduced.postTraaComposition = {
       ...omitKeys(reduced.postTraaComposition, ["lensWetness"]),
       stages: reduced.postTraaComposition.stages.slice(0, 1),
+    };
+  } else if (reduced.postTraaComposition !== undefined) {
+    reduced.postTraaComposition = {
+      ...reduced.postTraaComposition,
+      stages: reduced.postTraaComposition.stages
+        .filter(({ id }) => id !== "storm-atmosphere")
+        .map((stage) =>
+          stage.id === "lens-wetness"
+            ? { ...stage, after: "secondary-particles" }
+            : stage,
+        ),
+      lensWetness: {
+        ...reduced.postTraaComposition.lensWetness,
+        after: "secondary-particles",
+      },
     };
   }
   return {
@@ -711,9 +806,9 @@ for (const variant of COMMITTED_LEGACY_VARIANTS) {
 // public fields in declared order, with manifestHash itself excluded.
 const COMMITTED_MANIFEST_HASHES = {
   "minimal":
-    "sha256:74c7ca468b9beb17d68bc734c54b0bba132e53dcf0b96279af886da78b2b2d08",
+    "sha256:ebc29af6641e0ac95aa021f1409bdc89bf29c0b53ccefb000fb654bbc6e3866f",
   "minimal-high-detail":
-    "sha256:5099e4e6a30c40c5aaa37dd8277afc4d9a639a9102261053eebcd9554b30ab56",
+    "sha256:df7eba04a2968102132ca0468cb0ff6f258a8ea515ff7dafec3be1e931dad290",
 };
 
 function canonicalManifestJson(manifest) {

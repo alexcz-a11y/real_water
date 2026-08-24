@@ -42,6 +42,18 @@ function createScheduler() {
 }
 
 describe("Reference Host Presentation Controller", () => {
+  it("publishes every authored Showcase camera cut revision", () => {
+    const controller = createReferenceHostPresentationController({
+      scheduleFrame: vi.fn(() => 1),
+      cancelFrame: vi.fn(),
+    });
+
+    expect(controller.snapshot()).toEqual({ cameraCutRevision: 0 });
+    expect(controller.incrementCameraCut()).toBe(1);
+    expect(controller.incrementCameraCut()).toBe(2);
+    expect(controller.snapshot()).toEqual({ cameraCutRevision: 2 });
+  });
+
   it("stores the bound route without scheduling and presents at 30 FPS timestamps", async () => {
     const { callbacks, scheduleFrame, cancelFrame } = createScheduler();
     let presentationId = 0;

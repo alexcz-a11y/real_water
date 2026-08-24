@@ -10,6 +10,7 @@ export const REFERENCE_PRESENTATION_INTERVAL_MS = 1000 / 30;
 
 export interface ReferenceHostPresentationController extends HostPresentationAdapter {
   start(): void;
+  incrementCameraCut(): number;
 }
 
 export interface ReferenceHostPresentationControllerOptions {
@@ -34,7 +35,7 @@ export function createReferenceHostPresentationController(
 ): ReferenceHostPresentationController {
   const scheduleFrame = options.scheduleFrame ?? requestAnimationFrame;
   const cancelFrame = options.cancelFrame ?? cancelAnimationFrame;
-  const cameraCutRevision = 0;
+  let cameraCutRevision = 0;
   let nextGeneration = 0;
   let current: PresentationBindingRecord | undefined;
 
@@ -134,6 +135,10 @@ export function createReferenceHostPresentationController(
       }
       record.started = true;
       record.scheduled = scheduleFrame((time) => onFrame(time, record));
+    },
+    incrementCameraCut(): number {
+      cameraCutRevision += 1;
+      return cameraCutRevision;
     },
   });
 }

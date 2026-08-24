@@ -16,6 +16,7 @@ import {
   ENVIRONMENT_PRESET_SCHEMA,
   ENVIRONMENT_PRESET_VERSION,
   createReferenceEnvironmentPreset,
+  createStormFrontEnvironmentPreset,
   environmentPresetIdentity,
 } from "../src/environment-preset.js";
 import {
@@ -41,6 +42,14 @@ function createAuthoring(): ShowcasePresetAuthoring {
     qualityProfile: qualityProfileIdentity(
       createMinimalWaterQualityProfile("minimal-high-detail"),
     ),
+    stormFront: {
+      eventId: "weather-front",
+      heroBreakerEventId: "storm-front-hero-breaker",
+      waterPreset: waterPresetIdentity(createWaterPreset("storm")),
+      environmentPreset: environmentPresetIdentity(
+        createStormFrontEnvironmentPreset(),
+      ),
+    },
     cameraTimeline: [
       {
         tick: 0,
@@ -49,7 +58,7 @@ function createAuthoring(): ShowcasePresetAuthoring {
         verticalFovDegrees: 50,
       },
       {
-        tick: 90,
+        tick: 120,
         position: [-12, 5, 18],
         target: [2, 0, -4],
         verticalFovDegrees: 44,
@@ -63,7 +72,8 @@ function createAuthoring(): ShowcasePresetAuthoring {
     ],
     eventTimeline: [
       { tick: 30, id: "bow-impact" },
-      { tick: 120, id: "hero-breaker" },
+      { tick: 120, id: "weather-front" },
+      { tick: 120, id: "storm-front-hero-breaker" },
     ],
   };
 }
@@ -79,6 +89,7 @@ function expectedContentHash(preset: ShowcasePreset): string {
         waterPreset: preset.waterPreset,
         environmentPreset: preset.environmentPreset,
         qualityProfile: preset.qualityProfile,
+        stormFront: preset.stormFront,
         cameraTimeline: preset.cameraTimeline,
         eventTimeline: preset.eventTimeline,
       }),
@@ -90,10 +101,10 @@ describe("Showcase Presets", () => {
   it("authors a content-addressed deterministic presentation recipe", () => {
     const preset = createAuthoredShowcasePreset(createAuthoring());
 
-    expect(SHOWCASE_PRESET_VERSION).toBe(1);
+    expect(SHOWCASE_PRESET_VERSION).toBe(2);
     expect(preset).toMatchObject({
       schema: SHOWCASE_PRESET_SCHEMA,
-      version: 1,
+      version: 2,
       id: "storm-orbit",
       durationTicks: 180,
       waterPreset: {
@@ -111,12 +122,29 @@ describe("Showcase Presets", () => {
         version: QUALITY_PROFILE_VERSION,
         id: "minimal-high-detail",
       },
+      stormFront: {
+        eventId: "weather-front",
+        heroBreakerEventId: "storm-front-hero-breaker",
+        waterPreset: {
+          schema: WATER_PRESET_SCHEMA,
+          version: WATER_PRESET_VERSION,
+          id: "storm",
+        },
+        environmentPreset: {
+          schema: ENVIRONMENT_PRESET_SCHEMA,
+          version: ENVIRONMENT_PRESET_VERSION,
+          id: "storm-front",
+        },
+      },
     });
     expect(preset.presetHash).toBe(expectedContentHash(preset));
     expect(Object.isFrozen(preset)).toBe(true);
     expect(Object.isFrozen(preset.waterPreset)).toBe(true);
     expect(Object.isFrozen(preset.environmentPreset)).toBe(true);
     expect(Object.isFrozen(preset.qualityProfile)).toBe(true);
+    expect(Object.isFrozen(preset.stormFront)).toBe(true);
+    expect(Object.isFrozen(preset.stormFront.waterPreset)).toBe(true);
+    expect(Object.isFrozen(preset.stormFront.environmentPreset)).toBe(true);
     expect(Object.isFrozen(preset.cameraTimeline)).toBe(true);
     expect(Object.isFrozen(preset.cameraTimeline[0])).toBe(true);
     expect(Object.isFrozen(preset.cameraTimeline[0]?.position)).toBe(true);
@@ -142,13 +170,25 @@ describe("Showcase Presets", () => {
     expect(first.qualityProfile).toEqual(
       qualityProfileIdentity(createMinimalWaterQualityProfile()),
     );
+    expect(first.stormFront).toEqual({
+      eventId: "weather-front",
+      heroBreakerEventId: "storm-front-hero-breaker",
+      waterPreset: waterPresetIdentity(createWaterPreset("storm")),
+      environmentPreset: environmentPresetIdentity(
+        createStormFrontEnvironmentPreset(),
+      ),
+    });
     expect(first.cameraTimeline[0]?.tick).toBe(0);
     expect(first.cameraTimeline.at(-1)?.tick).toBe(first.durationTicks);
     expect(first.eventTimeline.map(({ id }) => id)).toEqual([
       "showcase-start",
       "hero-breaker",
       "weather-front",
+      "storm-front-hero-breaker",
     ]);
+    expect(first.presetHash).toBe(
+      "sha256:63d7b154b4f3803c27507794f7a8d3cfb1d9e85442bc37e2d3eaf0d4c10a8d55",
+    );
     expect(first.presetHash).toBe(expectedContentHash(first));
   });
 
@@ -173,6 +213,45 @@ describe("Showcase Presets", () => {
     expect(Object.isFrozen(normalized)).toBe(true);
     expect(Object.isFrozen(migrated)).toBe(true);
     expect(Object.isFrozen(identity)).toBe(true);
+  });
+
+  it("migrates the complete committed version-one Reference recipe", () => {
+    const current = createReferenceShowcasePreset();
+    const legacyContent = {
+      schema: SHOWCASE_PRESET_SCHEMA,
+      version: 1,
+      id: current.id,
+      durationTicks: current.durationTicks,
+      waterPreset: current.waterPreset,
+      environmentPreset: {
+        schema: ENVIRONMENT_PRESET_SCHEMA,
+        version: 1,
+        id: "reference",
+        presetHash:
+          "sha256:944a777311b8e46b986d3b4f6798595adcc99e3b5a7d49adf25cfa69c42bdc24",
+      },
+      qualityProfile: {
+        schema: QUALITY_PROFILE_SCHEMA,
+        version: 14,
+        id: "minimal",
+        profileHash:
+          "sha256:9fb629031064c5718584b77355748965e9cfafe11cba7e3f4675eedf715cd684",
+      },
+      cameraTimeline: current.cameraTimeline,
+      eventTimeline: current.eventTimeline.filter(
+        ({ id }) => id !== "storm-front-hero-breaker",
+      ),
+    };
+    const legacy = {
+      ...legacyContent,
+      presetHash: `sha256:${createHash("sha256")
+        .update(JSON.stringify(legacyContent))
+        .digest("hex")}`,
+    };
+    expect(legacy.presetHash).toBe(
+      "sha256:aa473df87dd254e533abe7202210991197323d15be68198dd34b33ab8eb5ffd0",
+    );
+    expect(migrateShowcasePreset(legacy)).toEqual(current);
   });
 
   it.each([
@@ -208,8 +287,15 @@ describe("Showcase Presets", () => {
       }),
     ],
     [
+      "an unknown Storm Front field",
+      (preset: ShowcasePreset) => ({
+        ...preset,
+        stormFront: { ...preset.stormFront, lightningPeriodTicks: 600 },
+      }),
+    ],
+    [
       "a future schema version",
-      (preset: ShowcasePreset) => ({ ...preset, version: 2 }),
+      (preset: ShowcasePreset) => ({ ...preset, version: 3 }),
     ],
     [
       "a mismatched identity schema",
@@ -356,6 +442,17 @@ describe("Showcase Presets", () => {
           input.eventTimeline[0],
           { ...input.eventTimeline[1], id: input.eventTimeline[0]?.id },
         ],
+      }),
+    ],
+    [
+      "a Storm Front Hero event at another tick",
+      (input: ShowcasePresetAuthoring) => ({
+        ...input,
+        eventTimeline: input.eventTimeline.map((event) =>
+          event.id === input.stormFront.heroBreakerEventId
+            ? { ...event, tick: 121 }
+            : event,
+        ),
       }),
     ],
   ])("rejects %s", (_name, mutate) => {

@@ -8,11 +8,11 @@ one Host-driven proxy vessel, and the prewarm, reveal, reprepare, and recovery
 path.
 
 Ticket #34 adds a pure four-schema preset codec plus a Reference Experience
-local authoring library. Known Water and Quality history migrates explicitly;
-invalid, unknown, and future JSON remains available byte-for-byte for recovery.
-Copy and rename operate on local record metadata rather than semantic preset
-identities, and every explicit Quality Profile application re-enters the Loading
-Experience before a fresh readiness run.
+local authoring library. Known Water, Environment, Quality, and Showcase history
+migrates explicitly; invalid, unknown, and future JSON remains available
+byte-for-byte for recovery. Copy and rename operate on local record metadata
+rather than semantic preset identities, and every explicit Quality Profile
+application re-enters the Loading Experience before a fresh readiness run.
 
 Issue #23 adds the first complete Gameplay Coupling tracer:
 
@@ -90,6 +90,32 @@ general fluid solve:
   once per loop, while the existing QA Disturbance seam can trigger the same
   public batch directly.
 
+Issue #30 composes the complete deterministic Storm Front route from those
+prepared systems:
+
+- one atomic Host Environment snapshot carries hot lighting, weather, and
+  atmosphere scalars; the built-in Storm Front Environment Preset adds rain,
+  cloud shadow, horizon haze, and aerosol while the Showcase authors bounded
+  fixed-tick lightning transients;
+- rain contributes a small current/previous surface correction to the existing
+  spectral ocean and adds near-camera candidates to the existing
+  `spray-droplet-mist` consumer, without replacing base ocean motion or creating
+  another allocator;
+- storm aerosol is a second stable source partition in that same shared pool;
+  Hero spray and all three underwater consumers continue to resolve in the one
+  global Q16 allocation transaction;
+- one coherent Storm frame modulates glints, foam illumination, planar and
+  environment reflection, and the drawing-buffer-exact atmosphere stage;
+- the declared post-TRAA order is now TRAA, shared secondary particles, Storm
+  atmosphere, lens wetness, then presentation;
+- four normalized captures unpack one RGBA16F target into rain-ripple, aerosol,
+  cloud-shadow, and lightning evidence; Showcase Preset v2 hashes the Storm
+  Water/Environment identities, both Hero events, and the camera timeline;
+  `weather-front` at fixed tick 3,600 now applies the Storm looks and triggers
+  the second Hero Breaker on the pinned Storm camera once per loop; the first
+  Showcase camera is applied before prewarm so the main-camera guard and first
+  visible frame share the same view.
+
 Issue #20 shades that domain with a Host-owned basic optical path:
 
 - Fresnel, Host environment reflection, depth-aware refraction, absorption,
@@ -122,12 +148,12 @@ Issue #18 extended the coherent spectral runtime and deterministic QA
 foundation:
 
 - an accessible Loading Experience appears before preparation begins;
-- the canonical minimal-water Prewarm Manifest declares exactly one hundred
-  twenty-nine work units: a texture, Host equirect environment radiance,
-  viewport scene color, viewport scene depth, 6-attachment MRT, camera-relative
-  clipmap, four spectral bands, two fixed RGBA16F spectral-stage fields and two
-  fixed anchor-local RGBA16F source-history fields, a current anchor-local
-  RGBA16F height/slope/velocity field for bounded caustic sampling,
+- the canonical minimal-water Prewarm Manifest declares exactly 140 work units:
+  a texture, Host equirect environment radiance, viewport scene color, viewport
+  scene depth, 6-attachment MRT, camera-relative clipmap, four spectral bands,
+  two fixed RGBA16F spectral-stage fields and two fixed anchor-local RGBA16F
+  source-history fields, a current anchor-local RGBA16F height/slope/velocity
+  field for bounded caustic sampling,
   reset/generate/history/advect/diffuse/decay routes, a packed output-resolution
   whitecap stage target and probe, a double-sided TSL NodeMaterial, a stable
   camera-medium waterline state, a shared waterline history reset, a
@@ -151,21 +177,24 @@ foundation:
   render-stage-neutral 131,072-slot secondary-particle pool and four-consumer
   allocation route, ordered output-resolution post-TRAA
   resolved/accumulation/intermediate targets plus spray and a bounded
-  emergence-driven lens-wetness final stage with independent diagnostics and
-  completion probes, current-color conversion, forty-one named diagnostics
-  output routes, eight hidden temporal stabilization frames, named-output
-  completion probes, and main-camera guard frame, plus the local interaction
-  field, its fixed current/previous uniform buffers, and the hidden-executed
-  radial-impact, directional-wake, Hero Breaker, and Body socket emission
-  routes, plus bounded local-foam reproject/resolve and source-identity
-  target/probe routes, plus the bounded 128-tick foam-state timeline and the
-  seven Hero state, deformation, foam, shared-consumer spray,
-  diagnostics-target, diagnostics-route, and probe work declarations. Version 8
-  binds the physical drawing buffer into that work plan; Version 9 adds the
-  shared secondary-particle allocation and ordered post-TRAA synthesis route;
-  Version 10 adds the complete bounded underwater caustic/tracer and
-  lens-wetness routes; Version 11 adds the bounded art-directed Hero Breaker
-  route; a viewport change creates a new manifest and lease;
+  Storm-atmosphere intermediate stage, and an emergence-driven lens-wetness
+  final stage with independent diagnostics and completion probes, current-color
+  conversion, forty-five named diagnostics output routes, eight hidden temporal
+  stabilization frames, named-output completion probes, and main-camera guard
+  frame, plus the local interaction field, its fixed current/previous uniform
+  buffers, and the hidden-executed radial-impact, directional-wake, Hero
+  Breaker, and Body socket emission routes, plus bounded local-foam
+  reproject/resolve and source-identity target/probe routes, plus the bounded
+  128-tick foam-state timeline and the seven Hero state, deformation, foam,
+  shared-consumer spray, diagnostics-target, diagnostics-route, and probe work
+  declarations, plus eleven Storm state, rain, aerosol, cloud, lightning,
+  atmosphere, diagnostics, and probe declarations. Version 8 binds the physical
+  drawing buffer into that work plan; Version 9 adds the shared
+  secondary-particle allocation and ordered post-TRAA synthesis route; Version
+  10 adds the complete bounded underwater caustic/tracer and lens-wetness
+  routes; Version 11 adds the bounded art-directed Hero Breaker route; Version
+  12 adds the complete prepared Storm Front route; a viewport change creates a
+  new manifest and lease;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
   restores their state after preparation, and never disposes them;
 - progress advances monotonically only when declared manifest work completes;
@@ -210,7 +239,7 @@ foundation:
   wall-clock sleeps or animation-frame polling;
 - the Reference Experience keeps the canvas hidden through preparation and
   reveals it on the next refresh after readiness;
-- immutable version-14 `minimal` and `minimal-high-detail` Quality Profiles pin
+- immutable version-15 `minimal` and `minimal-high-detail` Quality Profiles pin
   the Native temporal policy (TRAA at render scale 1; TAAU, dynamic resolution,
   frame generation, and MSAA samples off) and the implemented reflection layer
   (Host-adapter environment, drawing-buffer-exact planar, current-frame SSR, and

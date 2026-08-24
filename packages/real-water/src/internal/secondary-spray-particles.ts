@@ -12,6 +12,7 @@ import {
 } from "three/webgpu";
 import { instancedDynamicBufferAttribute, vec4 } from "three/tsl";
 import type { OpenWaterRuntimeSnapshot, RuntimeStateSink } from "../runtime.js";
+import type { StormFrontController } from "../storm-front.js";
 import { createSecondaryParticleStableKeyWriter } from "../secondary-particle-key.js";
 import { createSecondaryParticleOutputFrustumVisibility } from "../secondary-particle-visibility.js";
 import type { LocalInteractionRenderSnapshot } from "./local-interaction.js";
@@ -51,6 +52,7 @@ interface SecondarySprayRenderStorage {
 export interface SecondarySprayParticlesOptions {
   readonly contributionReference: SecondaryParticleContributionReference;
   readonly contributionQuantizer: SecondaryParticleContributionQuantizer;
+  readonly stormFront: StormFrontController;
 }
 
 export interface SecondarySprayParticlesInspection {
@@ -67,6 +69,7 @@ export interface SecondarySprayParticles {
     snapshot: OpenWaterRuntimeSnapshot,
     interaction: LocalInteractionRenderSnapshot,
   ): void;
+  candidateInputRevision(): number;
   candidateBatch(
     snapshot: OpenWaterRuntimeSnapshot,
     interaction: LocalInteractionRenderSnapshot,
@@ -88,7 +91,10 @@ export function createSecondarySprayAllocationParticipant(
   const participant: SecondaryParticleAllocationParticipant = {
     consumerId: SECONDARY_SPRAY_PARTICLE_CONSUMER_ID,
     candidateInputRevision() {
-      return cameraInputRevision();
+      return combineInputRevisions(
+        cameraInputRevision(),
+        secondarySpray.candidateInputRevision(),
+      );
     },
     candidateBatch(
       snapshot: OpenWaterRuntimeSnapshot,
@@ -242,6 +248,15 @@ export function createSecondarySprayParticles(
     consumerPlan,
     runtimeStateSink,
     synchronize,
+    candidateInputRevision(): number {
+      const frame = options.stormFront.inspect()?.current;
+      if (frame === undefined) {
+        throw new Error(
+          "Storm Front must be synchronized before secondary spray allocation.",
+        );
+      }
+      return frame.inputRevision;
+    },
     candidateBatch(
       snapshot: OpenWaterRuntimeSnapshot,
       interaction: LocalInteractionRenderSnapshot,
@@ -251,6 +266,7 @@ export function createSecondarySprayParticles(
       candidateCount = writeSecondarySprayCandidates(
         snapshot,
         interaction,
+        requireStormFrontFrame(options.stormFront),
         camera,
         desiredGeneralCandidateCount(snapshot, interaction),
         candidateWriter,
@@ -322,6 +338,20 @@ export function createSecondarySprayParticles(
       material.dispose();
     },
   });
+}
+
+function requireStormFrontFrame(stormFront: StormFrontController) {
+  const frame = stormFront.inspect()?.current;
+  if (frame === undefined) {
+    throw new Error(
+      "Storm Front must be synchronized before secondary spray candidates are written.",
+    );
+  }
+  return frame;
+}
+
+function combineInputRevisions(camera: number, stormFront: number): number {
+  return (Math.imul(camera >>> 0, 0x0100_0193) ^ (stormFront >>> 0)) >>> 0;
 }
 
 function desiredGeneralCandidateCount(

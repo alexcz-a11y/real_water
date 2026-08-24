@@ -158,6 +158,34 @@ export interface RenderingCapabilitiesSecondaryParticles {
 }
 
 /**
+ * Prepared deterministic Storm Front route proven by a ready lease.
+ *
+ * @public
+ */
+export interface RenderingCapabilitiesStormFront {
+  readonly mode: "prepared-deterministic-route";
+  readonly updateCadence: "host-fixed-tick";
+  readonly rain: {
+    readonly surfaceRoute: "additive-spectral-ripples";
+    readonly secondaryParticleConsumerId: "spray-droplet-mist";
+    readonly maximumCandidateCount: 8_192;
+  };
+  readonly stormAerosol: {
+    readonly secondaryParticleConsumerId: "spray-droplet-mist";
+    readonly maximumCandidateCount: 8_192;
+  };
+  readonly cloudAndLightning: {
+    readonly illuminationRoute: "coherent-glint-foam-reflection-atmosphere";
+    readonly atmosphereStageId: "storm-atmosphere";
+  };
+  readonly diagnostics: {
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    readonly format: "rgba16float";
+    readonly samples: 0;
+  };
+}
+
+/**
  * Prepared ordered drawing-buffer-exact stages after TRAA and before Host
  * presentation.
  *
@@ -169,8 +197,12 @@ export interface RenderingCapabilitiesPostTraaComposition {
   readonly stages: readonly [
     { readonly id: "secondary-particles"; readonly after: "traa" },
     {
-      readonly id: "lens-wetness";
+      readonly id: "storm-atmosphere";
       readonly after: "secondary-particles";
+    },
+    {
+      readonly id: "lens-wetness";
+      readonly after: "storm-atmosphere";
     },
   ];
   readonly accumulationFormat: "rgba16float";
@@ -188,6 +220,7 @@ export interface RenderingCapabilities {
   readonly temporal: RenderingCapabilitiesTemporal;
   readonly reflection: RenderingCapabilitiesReflection;
   readonly secondaryParticles: RenderingCapabilitiesSecondaryParticles;
+  readonly stormFront: RenderingCapabilitiesStormFront;
   readonly postTraaComposition: RenderingCapabilitiesPostTraaComposition;
 }
 
@@ -383,8 +416,33 @@ const SECONDARY_PARTICLE_CONSUMERS = Object.freeze([
 ] as const);
 const POST_TRAA_STAGES = Object.freeze([
   Object.freeze({ id: "secondary-particles", after: "traa" }),
-  Object.freeze({ id: "lens-wetness", after: "secondary-particles" }),
+  Object.freeze({ id: "storm-atmosphere", after: "secondary-particles" }),
+  Object.freeze({ id: "lens-wetness", after: "storm-atmosphere" }),
 ] as const);
+const STORM_FRONT_CAPABILITIES: RenderingCapabilitiesStormFront = Object.freeze(
+  {
+    mode: "prepared-deterministic-route",
+    updateCadence: "host-fixed-tick",
+    rain: Object.freeze({
+      surfaceRoute: "additive-spectral-ripples",
+      secondaryParticleConsumerId: "spray-droplet-mist",
+      maximumCandidateCount: 8_192,
+    }),
+    stormAerosol: Object.freeze({
+      secondaryParticleConsumerId: "spray-droplet-mist",
+      maximumCandidateCount: 8_192,
+    }),
+    cloudAndLightning: Object.freeze({
+      illuminationRoute: "coherent-glint-foam-reflection-atmosphere",
+      atmosphereStageId: "storm-atmosphere",
+    }),
+    diagnostics: Object.freeze({
+      resolutionPolicy: "drawing-buffer-exact",
+      format: "rgba16float",
+      samples: 0,
+    }),
+  },
+);
 
 export function createCoreWebGPUCapabilities(
   timestampQuery: boolean,
@@ -484,6 +542,7 @@ export function createCoreWebGPUCapabilities(
         updateCadence: "host-fixed-tick" as const,
         renderPhaseKnowledge: "none" as const,
       }),
+      stormFront: STORM_FRONT_CAPABILITIES,
       postTraaComposition: Object.freeze({
         width: drawingBuffer.width,
         height: drawingBuffer.height,

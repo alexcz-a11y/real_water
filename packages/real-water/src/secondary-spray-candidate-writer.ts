@@ -1,5 +1,6 @@
 import type { PerspectiveCamera } from "three/webgpu";
 import type { OpenWaterRuntimeSnapshot } from "./runtime.js";
+import type { StormFrontFrame } from "./storm-front.js";
 import type {
   SecondaryParticleStableKeyBuffers,
   SecondaryParticleStableKeyWriter,
@@ -17,6 +18,10 @@ import {
 
 const FIXED_TICKS_PER_SECOND = 60;
 const GLOBAL_SPRAY_SOURCE = 0x6c8e_9cf5;
+export const SECONDARY_RAIN_SPRAY_STABLE_SOURCE_ID = 0x4f2a_7c19;
+export const SECONDARY_STORM_AEROSOL_STABLE_SOURCE_ID = 0xb613_58e7;
+export const MAX_SECONDARY_RAIN_SPRAY_CANDIDATES = 8_192;
+export const MAX_SECONDARY_STORM_AEROSOL_CANDIDATES = 8_192;
 export const MAX_SECONDARY_SPRAY_CANDIDATES_PER_HERO_BREAKER = 4_096;
 
 export interface SecondarySprayCandidateStorage {
@@ -66,6 +71,7 @@ export interface SecondarySprayInteractionSnapshot {
 export function writeSecondarySprayCandidates(
   snapshot: OpenWaterRuntimeSnapshot,
   interaction: SecondarySprayInteractionSnapshot,
+  stormFront: StormFrontFrame,
   camera: PerspectiveCamera,
   count: number,
   writer: SecondarySprayCandidateWriter,
@@ -124,15 +130,27 @@ export function writeSecondarySprayCandidates(
       );
     }
   }
+  const requestedRainCandidateCount = weatherCandidateCount(
+    stormFront.rainSprayStrength,
+    MAX_SECONDARY_RAIN_SPRAY_CANDIDATES,
+  );
+  const requestedAerosolCandidateCount = weatherCandidateCount(
+    stormFront.stormAerosolStrength,
+    MAX_SECONDARY_STORM_AEROSOL_CANDIDATES,
+  );
+  const requestedFixedPartitionCount =
+    requestedHeroCandidateCount +
+    requestedRainCandidateCount +
+    requestedAerosolCandidateCount;
   const storageCapacity = candidateStorageCapacity(writer.storage);
-  if (requestedHeroCandidateCount > storageCapacity) {
+  if (requestedFixedPartitionCount > storageCapacity) {
     throw new Error(
-      "Secondary spray Hero Breaker partitions exceed prepared candidate capacity.",
+      "Secondary spray weather and Hero Breaker partitions exceed prepared candidate capacity.",
     );
   }
   const generalCandidateCount = Math.min(
     count,
-    storageCapacity - requestedHeroCandidateCount,
+    storageCapacity - requestedFixedPartitionCount,
   );
   const focalCount = Math.min(
     writer.minimumRetainedSlots,
@@ -143,6 +161,22 @@ export function writeSecondarySprayCandidates(
   const cameraX = cameraWorld[12] ?? 0;
   const cameraY = cameraWorld[13] ?? 0;
   const cameraZ = cameraWorld[14] ?? 0;
+  const cameraRightX = cameraWorld[0] ?? 1;
+  const cameraRightZ = cameraWorld[2] ?? 0;
+  const rawCameraForwardX = -(cameraWorld[8] ?? 0);
+  const rawCameraForwardZ = -(cameraWorld[10] ?? 1);
+  const horizontalForwardLength = Math.hypot(
+    rawCameraForwardX,
+    rawCameraForwardZ,
+  );
+  const cameraForwardX =
+    horizontalForwardLength > 0
+      ? rawCameraForwardX / horizontalForwardLength
+      : 0;
+  const cameraForwardZ =
+    horizontalForwardLength > 0
+      ? rawCameraForwardZ / horizontalForwardLength
+      : -1;
   const pixelsPerRadian =
     writer.contributionReference.height /
     (2 * Math.tan((camera.fov * Math.PI) / 360));
@@ -262,6 +296,190 @@ export function writeSecondarySprayCandidates(
   }
 
   let ordinal = generalCandidateCount;
+  for (
+    let sourceLocalOrdinal = 0;
+    sourceLocalOrdinal < requestedRainCandidateCount;
+    sourceLocalOrdinal += 1
+  ) {
+    const particleLifetimeTicks =
+      8 +
+      (mix32(sourceLocalOrdinal ^ SECONDARY_RAIN_SPRAY_STABLE_SOURCE_ID) % 9);
+    const spawnPhase =
+      mix32(sourceLocalOrdinal + SECONDARY_RAIN_SPRAY_STABLE_SOURCE_ID) %
+      particleLifetimeTicks;
+    const ageTicks = positiveModulo(
+      stormFront.tick - spawnPhase,
+      particleLifetimeTicks,
+    );
+    const spawnEpochTick = stormFront.tick - ageTicks;
+    writer.stableKeyWriter.writeAt(
+      storage.stableKeys,
+      ordinal,
+      stormFront.seed,
+      SECONDARY_RAIN_SPRAY_STABLE_SOURCE_ID,
+      spawnEpochTick,
+      sourceLocalOrdinal,
+    );
+    const keyHigh = storage.stableKeys.high[ordinal] ?? 0;
+    const keyLow = storage.stableKeys.low[ordinal] ?? 0;
+    storage.payloadHandles[ordinal] = ordinal;
+
+    const randomA = unitFloat(mix32(keyLow ^ 0x9e37_79b9));
+    const randomB = unitFloat(mix32(keyHigh ^ 0x27d4_eb2d));
+    const randomC = unitFloat(mix32(keyLow ^ keyHigh ^ 0x1656_67b1));
+    const forwardDistance = 4 + randomB * 18;
+    const lateralDistance = (randomA * 2 - 1) * (1.2 + forwardDistance * 0.25);
+    const windOffset =
+      (randomC - 0.5) *
+      (ageTicks / FIXED_TICKS_PER_SECOND) *
+      (0.5 + stormFront.spatialPhase);
+    const x =
+      cameraX +
+      cameraForwardX * forwardDistance +
+      cameraRightX * (lateralDistance + windOffset);
+    const z =
+      cameraZ +
+      cameraForwardZ * forwardDistance +
+      cameraRightZ * (lateralDistance + windOffset);
+    const y = snapshot.seaLevelMetres + 0.04 + randomC * 0.72;
+    const positionOffset = ordinal * 3;
+    storage.positions[positionOffset] = x;
+    storage.positions[positionOffset + 1] = y;
+    storage.positions[positionOffset + 2] = z;
+
+    const cameraDistance = Math.max(
+      0.25,
+      Math.hypot(x - cameraX, y - cameraY, z - cameraZ),
+    );
+    const worldRadius = 0.018 + randomC * 0.045;
+    const diameterPixels = Math.max(
+      0.5,
+      Math.min(24, (worldRadius * 2 * pixelsPerRadian) / cameraDistance),
+    );
+    storage.sizes[ordinal] = diameterPixels;
+    const projectedAreaPixels =
+      Math.PI * diameterPixels * diameterPixels * 0.25;
+    const normalizedAge = ageTicks / particleLifetimeTicks;
+    const opacity =
+      clampUnit(stormFront.rainSprayStrength) *
+      (0.32 + randomA * 0.5) *
+      (0.45 + Math.sin(normalizedAge * Math.PI) * 0.55);
+    const contrast = 0.48 + randomB * 0.38;
+    // Weather shares the post-TRAA consumer's output-frustum visibility.
+    const depthVisibility = writer.visibility.evaluate(
+      camera,
+      x,
+      y,
+      z,
+      diameterPixels * 0.5,
+    );
+    storage.contributionsQ16[ordinal] = writer.quantizeContribution(
+      projectedAreaPixels,
+      opacity,
+      contrast,
+      depthVisibility,
+    );
+    const radiance = opacity * (0.58 + randomC * 0.18);
+    const colorOffset = ordinal * 4;
+    storage.colors[colorOffset] = radiance * 0.72;
+    storage.colors[colorOffset + 1] = radiance * 0.84;
+    storage.colors[colorOffset + 2] = radiance;
+    storage.colors[colorOffset + 3] = opacity;
+    ordinal += 1;
+  }
+
+  for (
+    let sourceLocalOrdinal = 0;
+    sourceLocalOrdinal < requestedAerosolCandidateCount;
+    sourceLocalOrdinal += 1
+  ) {
+    const particleLifetimeTicks =
+      90 +
+      (mix32(sourceLocalOrdinal ^ SECONDARY_STORM_AEROSOL_STABLE_SOURCE_ID) %
+        91);
+    const spawnPhase =
+      mix32(sourceLocalOrdinal + SECONDARY_STORM_AEROSOL_STABLE_SOURCE_ID) %
+      particleLifetimeTicks;
+    const ageTicks = positiveModulo(
+      stormFront.tick - spawnPhase,
+      particleLifetimeTicks,
+    );
+    const spawnEpochTick = stormFront.tick - ageTicks;
+    writer.stableKeyWriter.writeAt(
+      storage.stableKeys,
+      ordinal,
+      stormFront.seed,
+      SECONDARY_STORM_AEROSOL_STABLE_SOURCE_ID,
+      spawnEpochTick,
+      sourceLocalOrdinal,
+    );
+    const keyHigh = storage.stableKeys.high[ordinal] ?? 0;
+    const keyLow = storage.stableKeys.low[ordinal] ?? 0;
+    storage.payloadHandles[ordinal] = ordinal;
+
+    const randomA = unitFloat(mix32(keyLow ^ 0x94d0_49bb));
+    const randomB = unitFloat(mix32(keyHigh ^ 0xed5a_d4bb));
+    const randomC = unitFloat(mix32(keyLow ^ keyHigh ^ 0x3184_8bab));
+    const forwardDistance = 8 + randomB * 28;
+    const lateralDistance = (randomA * 2 - 1) * (3 + forwardDistance * 0.4);
+    const drift =
+      (ageTicks / FIXED_TICKS_PER_SECOND) *
+      (0.08 + stormFront.spatialPhase * 0.16);
+    const x =
+      cameraX +
+      cameraForwardX * (forwardDistance + drift) +
+      cameraRightX * lateralDistance;
+    const z =
+      cameraZ +
+      cameraForwardZ * (forwardDistance + drift) +
+      cameraRightZ * lateralDistance;
+    const y = snapshot.seaLevelMetres + 0.55 + randomC * 5.2;
+    const positionOffset = ordinal * 3;
+    storage.positions[positionOffset] = x;
+    storage.positions[positionOffset + 1] = y;
+    storage.positions[positionOffset + 2] = z;
+
+    const cameraDistance = Math.max(
+      0.25,
+      Math.hypot(x - cameraX, y - cameraY, z - cameraZ),
+    );
+    const worldRadius = 0.42 + randomC * 1.18;
+    const diameterPixels = Math.max(
+      1,
+      Math.min(96, (worldRadius * 2 * pixelsPerRadian) / cameraDistance),
+    );
+    storage.sizes[ordinal] = diameterPixels;
+    const projectedAreaPixels =
+      Math.PI * diameterPixels * diameterPixels * 0.25;
+    const normalizedAge = ageTicks / particleLifetimeTicks;
+    const opacity =
+      clampUnit(stormFront.stormAerosolStrength) *
+      (0.014 + randomA * 0.045) *
+      (0.65 + Math.sin(normalizedAge * Math.PI) * 0.35);
+    const contrast = 0.12 + randomB * 0.2;
+    // Aerosol uses the same output-frustum visibility and Q16 pressure ruler.
+    const depthVisibility = writer.visibility.evaluate(
+      camera,
+      x,
+      y,
+      z,
+      diameterPixels * 0.5,
+    );
+    storage.contributionsQ16[ordinal] = writer.quantizeContribution(
+      projectedAreaPixels,
+      opacity,
+      contrast,
+      depthVisibility,
+    );
+    const radiance = opacity * (0.34 + randomC * 0.12);
+    const colorOffset = ordinal * 4;
+    storage.colors[colorOffset] = radiance * 0.62;
+    storage.colors[colorOffset + 1] = radiance * 0.72;
+    storage.colors[colorOffset + 2] = radiance * 0.82;
+    storage.colors[colorOffset + 3] = opacity;
+    ordinal += 1;
+  }
+
   for (let heroIndex = 0; heroIndex < heroImpactCount; heroIndex += 1) {
     const sourceIndex = writer.heroImpactSourceOrder[heroIndex];
     const hero = sourceIndex === undefined ? undefined : impacts[sourceIndex];
@@ -420,6 +638,11 @@ function heroBreakerCandidateCount(sprayAmount: number): number {
   return amount === 0
     ? 0
     : Math.ceil(amount * MAX_SECONDARY_SPRAY_CANDIDATES_PER_HERO_BREAKER);
+}
+
+function weatherCandidateCount(strength: number, maximum: number): number {
+  const amount = clampUnit(strength);
+  return amount === 0 ? 0 : Math.ceil(amount * maximum);
 }
 
 function candidateStorageCapacity(

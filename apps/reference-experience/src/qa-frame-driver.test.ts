@@ -137,12 +137,35 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
       updateCadence: "host-fixed-tick",
       renderPhaseKnowledge: "none",
     },
+    stormFront: {
+      mode: "prepared-deterministic-route",
+      updateCadence: "host-fixed-tick",
+      rain: {
+        surfaceRoute: "additive-spectral-ripples",
+        secondaryParticleConsumerId: "spray-droplet-mist",
+        maximumCandidateCount: 8_192,
+      },
+      stormAerosol: {
+        secondaryParticleConsumerId: "spray-droplet-mist",
+        maximumCandidateCount: 8_192,
+      },
+      cloudAndLightning: {
+        illuminationRoute: "coherent-glint-foam-reflection-atmosphere",
+        atmosphereStageId: "storm-atmosphere",
+      },
+      diagnostics: {
+        resolutionPolicy: "drawing-buffer-exact",
+        format: "rgba16float",
+        samples: 0,
+      },
+    },
     postTraaComposition: {
       width: 320,
       height: 180,
       stages: [
         { id: "secondary-particles", after: "traa" },
-        { id: "lens-wetness", after: "secondary-particles" },
+        { id: "storm-atmosphere", after: "secondary-particles" },
+        { id: "lens-wetness", after: "storm-atmosphere" },
       ],
       accumulationFormat: "rgba16float",
       finalColorFormat: "rgba8unorm-srgb",
@@ -420,6 +443,21 @@ function createCapture(
       data: new Float32Array(width * height),
     };
   }
+  if (
+    name === "storm-rain-ripples" ||
+    name === "storm-aerosol" ||
+    name === "storm-cloud-shadow" ||
+    name === "storm-lightning"
+  ) {
+    return {
+      name,
+      format: "r32float-storm-front",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
   return {
     name,
     format: "r32float-optical",
@@ -625,9 +663,9 @@ function coreFrame(
 }
 
 describe("QA frame driver Core association", () => {
-  it("publishes a v15 capture-contract mapped to actual Core declaration IDs", () => {
-    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(15);
-    expect(QA_FRAME_PREWARM_MANIFEST.captures).toHaveLength(41);
+  it("publishes a v16 capture-contract mapped to actual Core declaration IDs", () => {
+    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(16);
+    expect(QA_FRAME_PREWARM_MANIFEST.captures).toHaveLength(45);
     expect(QA_FRAME_PREWARM_MANIFEST.coreDeclarations).toEqual(
       QA_TO_CORE_DECLARATION_IDS,
     );
@@ -661,6 +699,18 @@ describe("QA frame driver Core association", () => {
     expect(QA_TO_CORE_DECLARATION_IDS["lens-wetness"]).toBe(
       "water-lens-wetness-diagnostics-target",
     );
+    expect(QA_TO_CORE_DECLARATION_IDS["storm-rain-ripples"]).toBe(
+      "water-storm-diagnostics-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["storm-aerosol"]).toBe(
+      "water-storm-diagnostics-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["storm-cloud-shadow"]).toBe(
+      "water-storm-diagnostics-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["storm-lightning"]).toBe(
+      "water-storm-diagnostics-target",
+    );
     expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(23, 27)).toEqual([
       {
         name: "underwater-caustics",
@@ -693,10 +743,24 @@ describe("QA frame driver Core association", () => {
         preparedFormat: "rgba8unorm-history-rejection",
       },
     ]);
-    expect(QA_FRAME_PREWARM_MANIFEST.captures.at(-1)).toEqual({
-      name: "hero-breaker-foam",
-      preparedFormat: "r32float-hero-breaker-foam",
-    });
+    expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(-4)).toEqual([
+      {
+        name: "storm-rain-ripples",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+      {
+        name: "storm-aerosol",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+      {
+        name: "storm-cloud-shadow",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+      {
+        name: "storm-lightning",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+    ]);
     expect(JSON.stringify(QA_FRAME_PREWARM_MANIFEST)).not.toMatch(
       /qa-(?:final|current|inverse|view|motion|optical|stock|traa|single|eight|named|main|transform)-/,
     );
@@ -746,9 +810,10 @@ describe("QA frame driver Core association", () => {
       "water-ssr-history-beauty-target",
       "water-secondary-particle-accumulation-target",
       "water-hero-breaker-foam-diagnostics-target",
+      "water-storm-diagnostics-target",
     ]);
-    expect(receipt.progress.completedWork).toBe(24);
-    expect(receipt.progress.totalWork).toBe(24);
+    expect(receipt.progress.completedWork).toBe(25);
+    expect(receipt.progress.totalWork).toBe(25);
   });
 
   it("rejects a Core manifest that is missing a mapped declaration", () => {

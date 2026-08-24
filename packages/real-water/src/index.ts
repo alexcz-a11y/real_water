@@ -18,6 +18,7 @@ export type {
   QualityProfileReflectionSsr,
   QualityProfileReflectionSsrHistory,
   QualityProfileSpectralWhitecaps,
+  QualityProfileStormFront,
   QualityProfileSecondaryParticleConsumer,
   QualityProfileSecondaryParticles,
   QualityProfilePostTraaStage,
@@ -55,6 +56,7 @@ export type {
   RenderingCapabilitiesReflectionSsrBlur,
   RenderingCapabilitiesReflectionSsrHistory,
   RenderingCapabilitiesSecondaryParticles,
+  RenderingCapabilitiesStormFront,
   RenderingCapabilitiesPostTraaComposition,
   RenderingCapabilitiesTemporal,
 } from "./capabilities.js";
@@ -171,11 +173,14 @@ export {
 } from "./environment.js";
 export type {
   HostEnvironmentAdapter,
+  HostEnvironmentAtmosphereState,
   HostEnvironmentColorSpace,
   HostEnvironmentReflectionDescriptor,
   HostEnvironmentReflectionResource,
   HostEnvironmentReflectionType,
+  HostEnvironmentSnapshot,
   HostEnvironmentState,
+  HostEnvironmentWeatherState,
   HostTexture,
 } from "./environment.js";
 
@@ -199,6 +204,7 @@ export {
   ENVIRONMENT_PRESET_VERSION,
   createAuthoredEnvironmentPreset,
   createReferenceEnvironmentPreset,
+  createStormFrontEnvironmentPreset,
   environmentPresetIdentity,
   migrateEnvironmentPreset,
   normalizeEnvironmentPreset,
@@ -226,6 +232,7 @@ export type {
   ShowcasePreset,
   ShowcasePresetAuthoring,
   ShowcasePresetIdentity,
+  ShowcaseStormFrontSegment,
   ShowcaseVector3,
 } from "./showcase-preset.js";
 

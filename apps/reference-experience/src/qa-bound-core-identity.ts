@@ -12,9 +12,11 @@ import {
   type PrewarmEffectVariant,
   type PrewarmManifest,
   type QualityProfile,
+  type QualityProfileStormFront,
   type QualityProfileTemporal,
   type RealWaterCapabilities,
   type RenderingCapabilitiesTemporal,
+  type RenderingCapabilitiesStormFront,
 } from "real-water";
 
 export interface QaBoundCoreQualityProfileIdentity {
@@ -92,6 +94,7 @@ const RENDERING_CAPABILITY_KEYS = [
   "temporal",
   "reflection",
   "secondaryParticles",
+  "stormFront",
   "postTraaComposition",
 ] as const;
 const REFLECTION_CAPABILITY_KEYS = ["environment", "planar", "ssr"] as const;
@@ -175,6 +178,32 @@ const POST_TRAA_CAPABILITY_KEYS = [
   "finalColorFormat",
 ] as const;
 const POST_TRAA_STAGE_KEYS = ["id", "after"] as const;
+const STORM_FRONT_CAPABILITY_KEYS = [
+  "mode",
+  "updateCadence",
+  "rain",
+  "stormAerosol",
+  "cloudAndLightning",
+  "diagnostics",
+] as const;
+const STORM_FRONT_RAIN_KEYS = [
+  "surfaceRoute",
+  "secondaryParticleConsumerId",
+  "maximumCandidateCount",
+] as const;
+const STORM_FRONT_AEROSOL_KEYS = [
+  "secondaryParticleConsumerId",
+  "maximumCandidateCount",
+] as const;
+const STORM_FRONT_ILLUMINATION_KEYS = [
+  "illuminationRoute",
+  "atmosphereStageId",
+] as const;
+const STORM_FRONT_DIAGNOSTICS_KEYS = [
+  "resolutionPolicy",
+  "format",
+  "samples",
+] as const;
 const GAMEPLAY_CAPABILITY_KEYS = [
   "maxAttachedBodies",
   "maxQueryPointsPerTick",
@@ -272,6 +301,7 @@ export function readReadyCapabilities(
     | "temporal"
     | "reflection"
     | "secondaryParticles"
+    | "stormFront"
     | "postTraaComposition"
   >,
   drawingBuffer: PrewarmDrawingBuffer,
@@ -362,6 +392,10 @@ export function readReadyCapabilities(
     profile.secondaryParticles,
     drawingBuffer,
   );
+  const stormFront = readCapabilitiesStormFront(
+    value.rendering.stormFront,
+    profile.stormFront,
+  );
   const postTraaComposition = readCapabilitiesPostTraaComposition(
     value.rendering.postTraaComposition,
     profile.postTraaComposition,
@@ -375,6 +409,7 @@ export function readReadyCapabilities(
         temporal,
         reflection,
         secondaryParticles,
+        stormFront,
         postTraaComposition,
       },
       gameplay: {
@@ -1012,6 +1047,49 @@ function readCapabilitiesSecondaryParticles(
   return deepFreeze(
     deepClone(value),
   ) as unknown as RealWaterCapabilities["rendering"]["secondaryParticles"];
+}
+
+function readCapabilitiesStormFront(
+  value: unknown,
+  policy: QualityProfileStormFront,
+): RenderingCapabilitiesStormFront {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, STORM_FRONT_CAPABILITY_KEYS) ||
+    !isRecord(value.rain) ||
+    !hasExactKeys(value.rain, STORM_FRONT_RAIN_KEYS) ||
+    !isRecord(value.stormAerosol) ||
+    !hasExactKeys(value.stormAerosol, STORM_FRONT_AEROSOL_KEYS) ||
+    !isRecord(value.cloudAndLightning) ||
+    !hasExactKeys(value.cloudAndLightning, STORM_FRONT_ILLUMINATION_KEYS) ||
+    !isRecord(value.diagnostics) ||
+    !hasExactKeys(value.diagnostics, STORM_FRONT_DIAGNOSTICS_KEYS) ||
+    value.mode !== policy.mode ||
+    value.updateCadence !== policy.updateCadence ||
+    value.rain.surfaceRoute !== policy.rain.surfaceRoute ||
+    value.rain.secondaryParticleConsumerId !==
+      policy.rain.secondaryParticleConsumerId ||
+    value.rain.maximumCandidateCount !== policy.rain.maximumCandidateCount ||
+    value.stormAerosol.secondaryParticleConsumerId !==
+      policy.stormAerosol.secondaryParticleConsumerId ||
+    value.stormAerosol.maximumCandidateCount !==
+      policy.stormAerosol.maximumCandidateCount ||
+    value.cloudAndLightning.illuminationRoute !==
+      policy.cloudAndLightning.illuminationRoute ||
+    value.cloudAndLightning.atmosphereStageId !==
+      policy.cloudAndLightning.atmosphereStageId ||
+    value.diagnostics.resolutionPolicy !==
+      policy.diagnostics.resolutionPolicy ||
+    value.diagnostics.format !== policy.diagnostics.format ||
+    value.diagnostics.samples !== policy.diagnostics.samples
+  ) {
+    throw new Error(
+      "Ready capabilities.rendering.stormFront disagrees with the prepared Quality Profile.",
+    );
+  }
+  return deepFreeze(
+    deepClone(value as unknown as RenderingCapabilitiesStormFront),
+  );
 }
 
 function readCapabilitiesPostTraaComposition(
