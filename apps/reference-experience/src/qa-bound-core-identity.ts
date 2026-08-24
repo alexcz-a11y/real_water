@@ -4,6 +4,7 @@ import {
   MAX_ATTACHED_BODIES,
   MAX_ACTIVE_DISTURBANCES,
   MAX_GAMEPLAY_QUERY_POINTS,
+  MAX_SECONDARY_PARTICLES,
   type HostEnvironmentReflectionDescriptor,
   type PrewarmDeclaration,
   type PrewarmDrawingBuffer,
@@ -89,6 +90,8 @@ const RENDERING_CAPABILITY_KEYS = [
   "timestampQuery",
   "temporal",
   "reflection",
+  "secondaryParticles",
+  "postTraaComposition",
 ] as const;
 const REFLECTION_CAPABILITY_KEYS = ["environment", "planar", "ssr"] as const;
 const REFLECTION_SSR_KEYS = [
@@ -134,6 +137,43 @@ const REFLECTION_PLANAR_KEYS = [
   "format",
   "samples",
 ] as const;
+const SECONDARY_PARTICLE_CAPABILITY_KEYS = [
+  "capacity",
+  "maximumCandidateCount",
+  "contributionReference",
+  "hysteresis",
+  "consumers",
+  "selection",
+  "updateCadence",
+  "renderPhaseKnowledge",
+] as const;
+const SECONDARY_PARTICLE_REFERENCE_KEYS = [
+  "width",
+  "height",
+  "space",
+  "screenAreaDivisor",
+  "quantization",
+] as const;
+const SECONDARY_PARTICLE_HYSTERESIS_KEYS = [
+  "retainedContributionBonusQ16",
+  "minimumResidenceTicks",
+  "reentryCooldownTicks",
+] as const;
+const SECONDARY_PARTICLE_CONSUMER_KEYS = [
+  "consumerId",
+  "maximumRequestCount",
+  "softRequestCeiling",
+  "minimumRetainedSlots",
+  "pressureReentryPolicy",
+] as const;
+const POST_TRAA_CAPABILITY_KEYS = [
+  "width",
+  "height",
+  "stages",
+  "accumulationFormat",
+  "finalColorFormat",
+] as const;
+const POST_TRAA_STAGE_KEYS = ["id", "after"] as const;
 const GAMEPLAY_CAPABILITY_KEYS = [
   "maxAttachedBodies",
   "maxQueryPointsPerTick",
@@ -224,7 +264,14 @@ export function createQaBoundCoreManifestIdentity(
 
 export function readReadyCapabilities(
   value: unknown,
-  profile: Pick<QualityProfile, "bodyCoupling" | "temporal" | "reflection">,
+  profile: Pick<
+    QualityProfile,
+    | "bodyCoupling"
+    | "temporal"
+    | "reflection"
+    | "secondaryParticles"
+    | "postTraaComposition"
+  >,
   drawingBuffer: PrewarmDrawingBuffer,
 ): RealWaterCapabilities {
   if (!isRecord(value) || !hasExactKeys(value, CAPABILITIES_KEYS)) {
@@ -302,6 +349,16 @@ export function readReadyCapabilities(
     profile.reflection,
     drawingBuffer,
   );
+  const secondaryParticles = readCapabilitiesSecondaryParticles(
+    value.rendering.secondaryParticles,
+    profile.secondaryParticles,
+    drawingBuffer,
+  );
+  const postTraaComposition = readCapabilitiesPostTraaComposition(
+    value.rendering.postTraaComposition,
+    profile.postTraaComposition,
+    drawingBuffer,
+  );
   return deepFreeze(
     deepClone({
       rendering: {
@@ -309,6 +366,8 @@ export function readReadyCapabilities(
         timestampQuery: value.rendering.timestampQuery,
         temporal,
         reflection,
+        secondaryParticles,
+        postTraaComposition,
       },
       gameplay: {
         maxAttachedBodies: MAX_ATTACHED_BODIES,
@@ -882,6 +941,104 @@ function readCapabilitiesSsrHistory(
     ],
     updateCadence: "host-present",
   };
+}
+
+function readCapabilitiesSecondaryParticles(
+  value: unknown,
+  policy: QualityProfile["secondaryParticles"],
+  drawingBuffer: PrewarmDrawingBuffer,
+): RealWaterCapabilities["rendering"]["secondaryParticles"] {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, SECONDARY_PARTICLE_CAPABILITY_KEYS) ||
+    value.capacity !== MAX_SECONDARY_PARTICLES ||
+    value.maximumCandidateCount !== policy.maximumCandidateCount ||
+    value.selection !== policy.selection ||
+    value.updateCadence !== policy.updateCadence ||
+    value.renderPhaseKnowledge !== policy.renderPhaseKnowledge ||
+    !isRecord(value.contributionReference) ||
+    !hasExactKeys(
+      value.contributionReference,
+      SECONDARY_PARTICLE_REFERENCE_KEYS,
+    ) ||
+    value.contributionReference.width !== drawingBuffer.width ||
+    value.contributionReference.height !== drawingBuffer.height ||
+    value.contributionReference.space !== "output-drawing-buffer" ||
+    value.contributionReference.screenAreaDivisor !==
+      policy.contribution.screenAreaDivisor ||
+    value.contributionReference.quantization !==
+      policy.contribution.quantization ||
+    !isRecord(value.hysteresis) ||
+    !hasExactKeys(value.hysteresis, SECONDARY_PARTICLE_HYSTERESIS_KEYS) ||
+    value.hysteresis.retainedContributionBonusQ16 !==
+      policy.hysteresis.retainedContributionBonusQ16 ||
+    value.hysteresis.minimumResidenceTicks !==
+      policy.hysteresis.minimumResidenceTicks ||
+    value.hysteresis.reentryCooldownTicks !==
+      policy.hysteresis.reentryCooldownTicks ||
+    !Array.isArray(value.consumers) ||
+    value.consumers.length !== policy.consumers.length
+  ) {
+    throw new Error(
+      "Ready capabilities.rendering.secondaryParticles disagrees with the prepared Quality Profile and output ruler.",
+    );
+  }
+  for (const [index, consumer] of policy.consumers.entries()) {
+    const candidate = value.consumers[index];
+    if (
+      !isRecord(candidate) ||
+      !hasExactKeys(candidate, SECONDARY_PARTICLE_CONSUMER_KEYS) ||
+      candidate.consumerId !== consumer.consumerId ||
+      candidate.maximumRequestCount !== consumer.maximumRequestCount ||
+      candidate.softRequestCeiling !== consumer.softRequestCeiling ||
+      candidate.minimumRetainedSlots !== consumer.minimumRetainedSlots ||
+      candidate.pressureReentryPolicy !== consumer.pressureReentryPolicy
+    ) {
+      throw new Error(
+        "Ready secondary-particle consumer capabilities disagree with the prepared Quality Profile.",
+      );
+    }
+  }
+  return deepFreeze(
+    deepClone(value),
+  ) as unknown as RealWaterCapabilities["rendering"]["secondaryParticles"];
+}
+
+function readCapabilitiesPostTraaComposition(
+  value: unknown,
+  policy: QualityProfile["postTraaComposition"],
+  drawingBuffer: PrewarmDrawingBuffer,
+): RealWaterCapabilities["rendering"]["postTraaComposition"] {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, POST_TRAA_CAPABILITY_KEYS) ||
+    value.width !== drawingBuffer.width ||
+    value.height !== drawingBuffer.height ||
+    value.accumulationFormat !== policy.accumulationFormat ||
+    value.finalColorFormat !== policy.finalColorFormat ||
+    !Array.isArray(value.stages) ||
+    value.stages.length !== policy.stages.length
+  ) {
+    throw new Error(
+      "Ready capabilities.rendering.postTraaComposition disagrees with the prepared Quality Profile.",
+    );
+  }
+  for (const [index, stage] of policy.stages.entries()) {
+    const candidate = value.stages[index];
+    if (
+      !isRecord(candidate) ||
+      !hasExactKeys(candidate, POST_TRAA_STAGE_KEYS) ||
+      candidate.id !== stage.id ||
+      candidate.after !== stage.after
+    ) {
+      throw new Error(
+        "Ready post-TRAA stage capabilities disagree with the prepared order.",
+      );
+    }
+  }
+  return deepFreeze(
+    deepClone(value),
+  ) as unknown as RealWaterCapabilities["rendering"]["postTraaComposition"];
 }
 
 function readCapabilitiesTemporal(

@@ -1,11 +1,11 @@
 # real-water
 
 This alpha package exposes versioned minimal-water Quality Profiles, their
-canonical ninety-four-unit Prewarm Manifests, versioned Calm, Swell, and Storm
-Water Presets, Environment Presets, deterministic Showcase Presets, and a pure
-JSON import/export and migration codec. It also exposes the Startup and ready
-Runtime Interfaces, normalized Core WebGPU and Gameplay Query capabilities,
-structured errors, and Memory and Three r185 Host Adapters.
+canonical one-hundred-three-unit Prewarm Manifests, versioned Calm, Swell, and
+Storm Water Presets, Environment Presets, deterministic Showcase Presets, and a
+pure JSON import/export and migration codec. It also exposes the Startup and
+ready Runtime Interfaces, normalized Core WebGPU and Gameplay Query
+capabilities, structured errors, and Memory and Three r185 Host Adapters.
 
 `importPresetJson(...)` recognizes all four schema discriminators, validates
 current data, and migrates only exact historical Water and Quality snapshots.
@@ -43,26 +43,30 @@ scene-pass output RGB, and ssr-composite-color from the compose-target RGB.
 Stock roughness blur is current-frame spatial only. Dedicated TemporalReproject
 history RGB and inverse accumulated frame-count weight are capturable from the
 resolved texture. TRAA and SSR, including SSR history, update on each Host
-present. The Core main scene render remains one 6-attachment 32-byte MRT pass,
-plus one auxiliary planar scene render when facing. Current-frame SSR, history,
-and compose are fullscreen passes after that single main scene and before TRAA.
-Before readiness it also renders a no-allocation TRAA and SSR-history reset
-frame, eight full temporal hidden stabilization frames, performs completion
-readbacks of every named diagnostics output route and the main-camera guard
-frame, then blits the probed final color through a transform-free presentation
-pipeline. Progress advances only as manifest work completes. Optional
-`real-water/diagnostics` reads CPU DTOs from the same bound Core frame; QA does
-not own a second scene or TRAA. The Host must supply a perspective camera. The
-Reference Experience reveals the prepared canvas on the next refresh. The Host
-retains ownership of environment radiance and finite sun. The prepared radiance
-fingerprint is the Host verification credential: the SHA-256 of the canonical
-8x4 RGBA8 sRGB pixels. Identity, size, format, type, and color space are
-structural and must agree with the borrowed Three texture. Texture bytes,
-sampler, and identity stay unchanged and alive through the lease; Core does not
-dispose the Host texture or read back its pixels. Scene-behind-water color and
-depth are sampled from the Host viewport after opaque geometry. Real Water never
-reads `scene.environment` or guesses sky or weather. The water material is an
-unlit public NodeMaterial whose color and MRT come from the same optical path.
+present. A render-stage-neutral 131,072-slot secondary-particle pool arbitrates
+four predeclared consumers before their pre- or post-TRAA render phases; the
+spray, droplet, and mist consumer renders through an ordered output-resolution
+post-TRAA accumulation/composite stage. The Core main scene render remains one
+6-attachment 32-byte MRT pass, plus one auxiliary planar scene render when
+facing. Current-frame SSR, history, and compose are fullscreen passes after that
+single main scene and before TRAA. Before readiness it also renders a
+no-allocation TRAA and SSR-history reset frame, eight full temporal hidden
+stabilization frames, performs completion readbacks of every named diagnostics
+output route and the main-camera guard frame, then blits the probed final color
+through a transform-free presentation pipeline. Progress advances only as
+manifest work completes. Optional `real-water/diagnostics` reads CPU DTOs from
+the same bound Core frame; QA does not own a second scene or TRAA. The Host must
+supply a perspective camera. The Reference Experience reveals the prepared
+canvas on the next refresh. The Host retains ownership of environment radiance
+and finite sun. The prepared radiance fingerprint is the Host verification
+credential: the SHA-256 of the canonical 8x4 RGBA8 sRGB pixels. Identity, size,
+format, type, and color space are structural and must agree with the borrowed
+Three texture. Texture bytes, sampler, and identity stay unchanged and alive
+through the lease; Core does not dispose the Host texture or read back its
+pixels. Scene-behind-water color and depth are sampled from the Host viewport
+after opaque geometry. Real Water never reads `scene.environment` or guesses sky
+or weather. The water material is an unlit public NodeMaterial whose color and
+MRT come from the same optical path.
 
 Each Prewarm Manifest is version 7 and binds an immutable drawing buffer. The
 factory hashes that complete work plan synchronously. Memory Host tests may omit

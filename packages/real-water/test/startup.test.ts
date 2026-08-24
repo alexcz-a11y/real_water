@@ -123,6 +123,67 @@ const TEST_GAMEPLAY_CAPABILITIES = Object.freeze({
     ] as const),
   }),
 });
+const TEST_SECONDARY_PARTICLE_CAPABILITIES = Object.freeze({
+  capacity: 131_072 as const,
+  maximumCandidateCount: 147_456 as const,
+  contributionReference: Object.freeze({
+    width: 320,
+    height: 180,
+    space: "output-drawing-buffer" as const,
+    screenAreaDivisor: 3_600 as const,
+    quantization: "q16-unorm-round-nearest" as const,
+  }),
+  hysteresis: Object.freeze({
+    retainedContributionBonusQ16: 4_096 as const,
+    minimumResidenceTicks: 4 as const,
+    reentryCooldownTicks: 4 as const,
+  }),
+  consumers: Object.freeze([
+    Object.freeze({
+      consumerId: "spray-droplet-mist" as const,
+      maximumRequestCount: 65_536 as const,
+      softRequestCeiling: 32_768 as const,
+      minimumRetainedSlots: 2_048 as const,
+      pressureReentryPolicy: "after-shared-cooldown" as const,
+    }),
+    Object.freeze({
+      consumerId: "underwater-suspended-particles" as const,
+      maximumRequestCount: 49_152 as const,
+      softRequestCeiling: 24_576 as const,
+      minimumRetainedSlots: 2_048 as const,
+      pressureReentryPolicy: "after-shared-cooldown" as const,
+    }),
+    Object.freeze({
+      consumerId: "subsurface-foam-bubble-cloud" as const,
+      maximumRequestCount: 24_576 as const,
+      softRequestCeiling: 12_288 as const,
+      minimumRetainedSlots: 1_024 as const,
+      pressureReentryPolicy: "after-shared-cooldown" as const,
+    }),
+    Object.freeze({
+      consumerId: "rising-bubbles" as const,
+      maximumRequestCount: 8_192 as const,
+      softRequestCeiling: 4_096 as const,
+      minimumRetainedSlots: 256 as const,
+      pressureReentryPolicy: "forbidden-until-absent" as const,
+    }),
+  ] as const),
+  selection: "q16-global-contribution-radix" as const,
+  updateCadence: "host-fixed-tick" as const,
+  renderPhaseKnowledge: "none" as const,
+});
+const TEST_POST_TRAA_CAPABILITIES = Object.freeze({
+  width: 320,
+  height: 180,
+  stages: Object.freeze([
+    Object.freeze({
+      id: "secondary-particles" as const,
+      after: "traa" as const,
+    }),
+  ] as const),
+  accumulationFormat: "rgba16float" as const,
+  finalColorFormat: "rgba8unorm-srgb" as const,
+});
 const TEST_CAPABILITIES = Object.freeze({
   gameplay: TEST_GAMEPLAY_CAPABILITIES,
   rendering: Object.freeze({
@@ -130,6 +191,8 @@ const TEST_CAPABILITIES = Object.freeze({
     timestampQuery: false,
     temporal: TEST_TEMPORAL_CAPABILITIES,
     reflection: TEST_REFLECTION_CAPABILITIES,
+    secondaryParticles: TEST_SECONDARY_PARTICLE_CAPABILITIES,
+    postTraaComposition: TEST_POST_TRAA_CAPABILITIES,
   }),
 });
 const NEVER_INVALIDATED = new Promise<never>(() => {});
@@ -170,6 +233,8 @@ describe("prepareRealWater", () => {
         timestampQuery: true,
         temporal: TEST_TEMPORAL_CAPABILITIES,
         reflection: TEST_REFLECTION_CAPABILITIES,
+        secondaryParticles: TEST_SECONDARY_PARTICLE_CAPABILITIES,
+        postTraaComposition: TEST_POST_TRAA_CAPABILITIES,
       },
     });
     expect(Object.isFrozen(lease.capabilities)).toBe(true);
@@ -762,12 +827,12 @@ describe("prepareRealWater", () => {
     );
     expect(lease.manifest).toEqual({
       schema: "real-water/prewarm",
-      version: 8,
+      version: 9,
       id: manifest.id,
       manifestHash: manifest.manifestHash,
       qualityProfile: {
         schema: "real-water/quality-profile",
-        version: 11,
+        version: 12,
         id: "minimal",
         profileHash: manifest.qualityProfile.profileHash,
       },
@@ -785,6 +850,10 @@ describe("prepareRealWater", () => {
         {
           effectId: "underwater-volume",
           variantId: "depth-aware",
+        },
+        {
+          effectId: "secondary-particles",
+          variantId: "bounded-post-traa",
         },
       ],
     });
@@ -965,7 +1034,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 94,
+        totalWork: 103,
       },
     });
   });
@@ -1633,7 +1702,7 @@ describe("prepareRealWater", () => {
 
     expect(Object.isFrozen(manifest)).toBe(true);
     expect(Object.isFrozen(manifest.drawingBuffer)).toBe(true);
-    expect(manifest.version).toBe(8);
+    expect(manifest.version).toBe(9);
     expect(manifest.drawingBuffer).toEqual({ width: 320, height: 180 });
     expect(Object.isFrozen(manifest.declarations)).toBe(true);
     expect(Object.isFrozen(first)).toBe(true);
@@ -1727,6 +1796,15 @@ describe("prepareRealWater", () => {
       "water-stock-traa-history",
       "water-traa-resolve-jitter",
       "water-traa-reset-route",
+      "water-secondary-particle-pool",
+      "water-secondary-particle-allocation-route",
+      "water-post-traa-composition-plan",
+      "water-traa-resolved-target",
+      "water-secondary-particle-accumulation-target",
+      "water-secondary-particle-stage-route",
+      "water-secondary-particle-composite-route",
+      "water-secondary-particle-diagnostics-route",
+      "water-secondary-particle-probe",
       "water-current-color-conversion",
       "water-named-output-routes",
       "water-hidden-stabilization",

@@ -11,6 +11,7 @@ import {
   type QualityProfile,
 } from "../src/quality-profile.js";
 import { SUPPORTED_HOST_ENVIRONMENT_REFLECTION } from "../src/environment.js";
+import { createCoreWebGPUCapabilities } from "../src/capabilities.js";
 import {
   PREWARM_MANIFEST_VERSION,
   SUPPORTED_EFFECT_VARIANTS,
@@ -123,9 +124,9 @@ const BODY_COUPLING = Object.freeze({
   socketRoute: "stable-slot-upsert" as const,
 });
 const MINIMAL_PROFILE_HASH =
-  "sha256:6f6ccb6262b8b3239dcfbcfc80dd3322ca75408260ea947cdd5892a16a8ef908";
+  "sha256:a9ea5e4aaf2d703f7e2ad85fb8e89afd9289c0ad9ae2a157f0d4f67044d74539";
 const HIGH_DETAIL_PROFILE_HASH =
-  "sha256:e1e1c7af79374e668a1f82c4b5c742d42e5009f5162389d8f3dc0ead9978d5a9";
+  "sha256:6498d05bd7491015c457d6183b90654c1df14e81352c1da13e8de34d6f9285a4";
 // The shape this branch committed as version 7: interaction and whitecaps, no
 // waterline, no Body coupling.
 const LEGACY_V7_PROFILES = Object.freeze({
@@ -377,6 +378,74 @@ const NATIVE_UNDERWATER = Object.freeze({
   shaftRoute: "deterministic-epipolar" as const,
   updateCadence: "host-present" as const,
 });
+const NATIVE_SECONDARY_PARTICLES = Object.freeze({
+  mode: "shared-global-contribution-pool" as const,
+  capacity: 131_072 as const,
+  maximumCandidateCount: 147_456 as const,
+  selection: "q16-global-contribution-radix" as const,
+  contribution: Object.freeze({
+    projectedAreaReference: "manifest-output-drawing-buffer" as const,
+    screenAreaDivisor: 3_600 as const,
+    formula: "saturating-pixel-energy" as const,
+    quantization: "q16-unorm-round-nearest" as const,
+  }),
+  hysteresis: Object.freeze({
+    mode: "incumbent-bonus-residence-cooldown" as const,
+    retainedContributionBonusQ16: 4_096 as const,
+    minimumResidenceTicks: 4 as const,
+    reentryCooldownTicks: 4 as const,
+  }),
+  consumers: Object.freeze([
+    Object.freeze({
+      consumerId: "spray-droplet-mist" as const,
+      maximumRequestCount: 65_536 as const,
+      softRequestCeiling: 32_768 as const,
+      minimumRetainedSlots: 2_048 as const,
+      contributionReference: "manifest-output-drawing-buffer" as const,
+      pressureReentryPolicy: "after-shared-cooldown" as const,
+    }),
+    Object.freeze({
+      consumerId: "underwater-suspended-particles" as const,
+      maximumRequestCount: 49_152 as const,
+      softRequestCeiling: 24_576 as const,
+      minimumRetainedSlots: 2_048 as const,
+      contributionReference: "manifest-output-drawing-buffer" as const,
+      pressureReentryPolicy: "after-shared-cooldown" as const,
+    }),
+    Object.freeze({
+      consumerId: "subsurface-foam-bubble-cloud" as const,
+      maximumRequestCount: 24_576 as const,
+      softRequestCeiling: 12_288 as const,
+      minimumRetainedSlots: 1_024 as const,
+      contributionReference: "manifest-output-drawing-buffer" as const,
+      pressureReentryPolicy: "after-shared-cooldown" as const,
+    }),
+    Object.freeze({
+      consumerId: "rising-bubbles" as const,
+      maximumRequestCount: 8_192 as const,
+      softRequestCeiling: 4_096 as const,
+      minimumRetainedSlots: 256 as const,
+      contributionReference: "manifest-output-drawing-buffer" as const,
+      pressureReentryPolicy: "forbidden-until-absent" as const,
+    }),
+  ] as const),
+  updateCadence: "host-fixed-tick" as const,
+  payloadOwnership: "consumer" as const,
+  renderPhaseKnowledge: "none" as const,
+});
+const NATIVE_POST_TRAA_COMPOSITION = Object.freeze({
+  mode: "ordered-declarative-stages" as const,
+  resolutionPolicy: "drawing-buffer-exact" as const,
+  accumulationFormat: "rgba16float" as const,
+  finalColorFormat: "rgba8unorm-srgb" as const,
+  samples: 0 as const,
+  stages: Object.freeze([
+    Object.freeze({
+      id: "secondary-particles" as const,
+      after: "traa" as const,
+    }),
+  ] as const),
+});
 const NATIVE_WHITECAPS = Object.freeze({
   ...LEGACY_SPECTRAL_WHITECAPS,
   mode: "unified-source-ping-pong" as const,
@@ -424,12 +493,28 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
     "sha256:48a08329f1097cf2c968d3623b945b709e44165c4cfeca9f4bb32b3462e3070e",
   "water-traa-resolve-jitter":
     "sha256:ba8bdc48d2842afd8f4f620e5296fce9bde9055047e4de7d593eec83dce25733",
+  "water-secondary-particle-allocation-route":
+    "sha256:5eb0ddd03a38ddad2925ef38280e21fe9f240f07a0875a9f2067c0b2bea80a71",
+  "water-post-traa-composition-plan":
+    "sha256:610e1049899cd8b0b2f76fc9e5d6f75d2d2ace774a8edc1ab433aa445e482f6b",
+  "water-traa-resolved-target":
+    "sha256:97f0c10a22209f0f6644438d126fa062aa296245e7d18429cc4a42e58730fb09",
+  "water-secondary-particle-accumulation-target":
+    "sha256:e21721a0f3dd09ddcdcd1546022ede326713f190253d2f24ae2ef3f8c34aa053",
+  "water-secondary-particle-stage-route":
+    "sha256:2e01c9f15616e821e3be2f3347c8bff7cff47435ed46086d38492279bb2b5b81",
+  "water-secondary-particle-composite-route":
+    "sha256:08a743eec5984c4cb5c462c290739b90aeff23abc6c67ffea8d4d44c48caa39c",
+  "water-secondary-particle-diagnostics-route":
+    "sha256:3b379f85cfe563c2a0dccf32deb4f5eebe4c42b1f034851efda2bd678f874bfa",
+  "water-secondary-particle-probe":
+    "sha256:9b6e9d13d14f58796b2d250b2193587fc5c73d7e4e007a2b2d45fe668737540b",
   "water-render-route":
     "sha256:f7f44a7ddf3041a2cda3654fb87e9181f0ca87730eb64017725c664995bafb91",
   "water-current-color-conversion":
     "sha256:750febf150f950dd006fc0a7df54e7e5faa9aace9e026c452f1b9aa0f639a0c8",
   "water-named-output-routes":
-    "sha256:6a4a626dc1b6a2f7fa185eedfdbc53f031399f390168f589ed8cf0ab87ddd03b",
+    "sha256:2b420394f0212d9692366db0e5cceac67945038c92eec4bbcd4c0e5de41a3ea5",
   "water-ssr-raw-target":
     "sha256:5229f76bc28be7b7aa032fadcb3adabfada2202dde29a88f499d16fac9ba659f",
   "water-ssr-blur-target":
@@ -493,7 +578,7 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-planar-reflection-probe":
     "sha256:f203f71435dfe40d3d14d3b19b853fd13f8338aba138c1eee29400570074311e",
   "water-completion-probe":
-    "sha256:11ae558fe8ebdeba4eb10a198b002aab59c0c7b4f7b510f97a69cba647f6c4fd",
+    "sha256:7ed559729bcd40570d350782e7be5f984d56c72e8ad8d3226aac7346fdec54c3",
   "water-main-camera-guard":
     "sha256:e59db4a839b5f36edfaec493a1f334f44ba6bae5a5046a758c0ceb69ea143841",
   "water-whitecap-stage-target":
@@ -521,6 +606,14 @@ const DRAWING_BUFFER_BOUND_IDS = [
   "water-current-color-target",
   "water-stock-traa-history",
   "water-traa-resolve-jitter",
+  "water-secondary-particle-allocation-route",
+  "water-post-traa-composition-plan",
+  "water-traa-resolved-target",
+  "water-secondary-particle-accumulation-target",
+  "water-secondary-particle-stage-route",
+  "water-secondary-particle-composite-route",
+  "water-secondary-particle-diagnostics-route",
+  "water-secondary-particle-probe",
   "water-render-route",
   "water-current-color-conversion",
   "water-named-output-routes",
@@ -578,7 +671,9 @@ function canonicalQualityProfileHashInput(profile: QualityProfile) {
     temporal: profile.temporal,
     reflection: profile.reflection,
     whitecaps: profile.whitecaps,
+    secondaryParticles: profile.secondaryParticles,
     underwater: profile.underwater,
+    postTraaComposition: profile.postTraaComposition,
   };
 }
 
@@ -705,6 +800,15 @@ const CORE_PREWARM_DECLARATION_IDS = [
   "water-stock-traa-history",
   "water-traa-resolve-jitter",
   "water-traa-reset-route",
+  "water-secondary-particle-pool",
+  "water-secondary-particle-allocation-route",
+  "water-post-traa-composition-plan",
+  "water-traa-resolved-target",
+  "water-secondary-particle-accumulation-target",
+  "water-secondary-particle-stage-route",
+  "water-secondary-particle-composite-route",
+  "water-secondary-particle-diagnostics-route",
+  "water-secondary-particle-probe",
   "water-current-color-conversion",
   "water-named-output-routes",
   "water-hidden-stabilization",
@@ -716,7 +820,7 @@ describe("Quality Profiles", () => {
   it("pins the depth-aware underwater volume outside hot Artistic Controls", () => {
     const profile = createMinimalWaterQualityProfile();
 
-    expect(QUALITY_PROFILE_VERSION).toBe(11);
+    expect(QUALITY_PROFILE_VERSION).toBe(12);
     expect(profile.underwater).toEqual(NATIVE_UNDERWATER);
     expect(Object.isFrozen(profile.underwater)).toBe(true);
     expect(profile.underwater).not.toHaveProperty("haze");
@@ -764,10 +868,10 @@ describe("Quality Profiles", () => {
     const minimal = createMinimalWaterQualityProfile();
     const highDetail = createMinimalWaterQualityProfile("minimal-high-detail");
 
-    expect(QUALITY_PROFILE_VERSION).toBe(11);
+    expect(QUALITY_PROFILE_VERSION).toBe(12);
     expect(minimal).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 11,
+      version: 12,
       id: "minimal",
       profileHash: MINIMAL_PROFILE_HASH,
       surface: {
@@ -781,11 +885,13 @@ describe("Quality Profiles", () => {
       temporal: NATIVE_TEMPORAL,
       reflection: NATIVE_REFLECTION,
       whitecaps: NATIVE_WHITECAPS,
+      secondaryParticles: NATIVE_SECONDARY_PARTICLES,
       underwater: NATIVE_UNDERWATER,
+      postTraaComposition: NATIVE_POST_TRAA_COMPOSITION,
     });
     expect(highDetail).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 11,
+      version: 12,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
       surface: {
@@ -802,7 +908,9 @@ describe("Quality Profiles", () => {
         ...NATIVE_WHITECAPS,
         fieldResolution: 256,
       },
+      secondaryParticles: NATIVE_SECONDARY_PARTICLES,
       underwater: NATIVE_UNDERWATER,
+      postTraaComposition: NATIVE_POST_TRAA_COMPOSITION,
     });
     expect(createMinimalWaterQualityProfile()).toEqual(minimal);
     expect(minimal.profileHash).toBe(
@@ -827,6 +935,13 @@ describe("Quality Profiles", () => {
     expect(Object.isFrozen(minimal.reflection.ssr)).toBe(true);
     expect(minimal.reflection.ssr.history).toEqual(NATIVE_SSR_HISTORY);
     expect(Object.isFrozen(minimal.reflection.ssr.history)).toBe(true);
+    expect(Object.isFrozen(minimal.secondaryParticles)).toBe(true);
+    expect(Object.isFrozen(minimal.secondaryParticles.consumers)).toBe(true);
+    expect(
+      minimal.secondaryParticles.consumers.every((consumer) =>
+        Object.isFrozen(consumer),
+      ),
+    ).toBe(true);
     expect(Object.isFrozen(minimal.underwater)).toBe(true);
     expect(minimal.reflection.ssr.mode).toBe("current-frame");
     expect(Object.isFrozen(highDetail)).toBe(true);
@@ -837,6 +952,30 @@ describe("Quality Profiles", () => {
     expect(() => {
       (minimal.temporal as { msaaSamples: number }).msaaSamples = 4;
     }).toThrow(TypeError);
+  });
+
+  it("predeclares every shared secondary-particle consumer in capabilities", () => {
+    const secondaryParticles = createCoreWebGPUCapabilities(true, {
+      width: 2_560,
+      height: 1_440,
+    }).rendering.secondaryParticles;
+
+    expect(secondaryParticles.maximumCandidateCount).toBe(147_456);
+    expect(secondaryParticles.consumers).toEqual(
+      NATIVE_SECONDARY_PARTICLES.consumers.map((consumer) => ({
+        consumerId: consumer.consumerId,
+        maximumRequestCount: consumer.maximumRequestCount,
+        softRequestCeiling: consumer.softRequestCeiling,
+        minimumRetainedSlots: consumer.minimumRetainedSlots,
+        pressureReentryPolicy: consumer.pressureReentryPolicy,
+      })),
+    );
+    expect(Object.isFrozen(secondaryParticles.consumers)).toBe(true);
+    expect(
+      secondaryParticles.consumers.every((consumer) =>
+        Object.isFrozen(consumer),
+      ),
+    ).toBe(true);
   });
 
   it("normalizes a supported profile into immutable structural evidence", () => {
@@ -851,7 +990,7 @@ describe("Quality Profiles", () => {
     expect(normalized).not.toBe(candidate);
     expect(identity).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 11,
+      version: 12,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
     });
@@ -861,6 +1000,17 @@ describe("Quality Profiles", () => {
     expect(Object.isFrozen(geometry)).toBe(true);
     expect(Object.isFrozen(normalized.temporal)).toBe(true);
     expect(normalized.temporal).toEqual(NATIVE_TEMPORAL);
+  });
+
+  it("rejects per-consumer pressure reentry policy drift", () => {
+    const candidate = structuredClone(createMinimalWaterQualityProfile());
+    (
+      candidate.secondaryParticles.consumers[0] as {
+        pressureReentryPolicy: string;
+      }
+    ).pressureReentryPolicy = "forbidden-until-absent";
+
+    expect(() => normalizeQualityProfile(candidate)).toThrow(TypeError);
   });
 
   it("migrates the current Quality Profile through strict normalization", () => {
@@ -1329,7 +1479,7 @@ describe("Quality Profiles", () => {
       "unknown version 4",
       { ...createMinimalWaterQualityProfile(), version: 4 },
     ],
-    ["future version", { ...createMinimalWaterQualityProfile(), version: 12 }],
+    ["future version", { ...createMinimalWaterQualityProfile(), version: 13 }],
     [
       "version 1 hash tampering",
       {
@@ -1804,7 +1954,7 @@ describe("Quality Profile manifests", () => {
       manifest.declarations.map(({ id, kind }) => [id, kind]),
     );
 
-    expect(PREWARM_MANIFEST_VERSION).toBe(8);
+    expect(PREWARM_MANIFEST_VERSION).toBe(9);
     expect(manifest.effectVariants).toContainEqual({
       effectId: "underwater-volume",
       variantId: "depth-aware",
@@ -1918,7 +2068,7 @@ describe("Quality Profile manifests", () => {
     const profile = createMinimalWaterQualityProfile();
     const manifest = createMinimalWaterPrewarmManifest(profile);
 
-    expect(QUALITY_PROFILE_VERSION).toBe(11);
+    expect(QUALITY_PROFILE_VERSION).toBe(12);
     expect(profile.reflection.ssr.history.resetDomains).toEqual([
       "simulation-reset",
       "camera-cut",
@@ -1958,8 +2108,8 @@ describe("Quality Profile manifests", () => {
     );
     const highDetail = createMinimalWaterPrewarmManifest(highDetailProfile);
 
-    expect(PREWARM_MANIFEST_VERSION).toBe(8);
-    expect(minimal.version).toBe(8);
+    expect(PREWARM_MANIFEST_VERSION).toBe(9);
+    expect(minimal.version).toBe(9);
     expect(minimal.drawingBuffer).toEqual(MEMORY_PREWARM_DRAWING_BUFFER);
     expect(Object.isFrozen(minimal.drawingBuffer)).toBe(true);
     expect(minimal.manifestHash).toBe(
@@ -1976,14 +2126,21 @@ describe("Quality Profile manifests", () => {
       { effectId: "minimal-water-surface", variantId: "basic" },
       { effectId: "unified-foam", variantId: "source-resolved-persistent" },
       { effectId: "underwater-volume", variantId: "depth-aware" },
+      { effectId: "secondary-particles", variantId: "bounded-post-traa" },
     ]);
     expect(minimal.effectVariants).toEqual(SUPPORTED_EFFECT_VARIANTS);
     expect(minimal.qualityProfile.temporal).toEqual(NATIVE_TEMPORAL);
     expect(minimal.qualityProfile.reflection).toEqual(NATIVE_REFLECTION);
-    expect(minimal.qualityProfile.version).toBe(11);
+    expect(minimal.qualityProfile.version).toBe(12);
 
     expect(minimal.qualityProfile.whitecaps).toEqual(NATIVE_WHITECAPS);
+    expect(minimal.qualityProfile.secondaryParticles).toEqual(
+      NATIVE_SECONDARY_PARTICLES,
+    );
     expect(minimal.qualityProfile.underwater).toEqual(NATIVE_UNDERWATER);
+    expect(minimal.qualityProfile.postTraaComposition).toEqual(
+      NATIVE_POST_TRAA_COMPOSITION,
+    );
     expect(minimal.declarations.map(({ id }) => id)).toEqual([
       ...CORE_PREWARM_DECLARATION_IDS,
     ]);
@@ -1992,14 +2149,14 @@ describe("Quality Profile manifests", () => {
         (declaration) => declaration.id === "water-named-output-routes",
       )?.label,
     ).toBe(
-      "Thirty-four named diagnostics output routes including canonical anchor-local unified foam source identity",
+      "Thirty-six named diagnostics output routes including unified foam identity plus secondary-particle contribution and overdraw",
     );
     expect(
       minimal.declarations.find(
         (declaration) => declaration.id === "water-completion-probe",
       )?.label,
     ).toBe(
-      "GPU completion probe of all thirty-four named output routes including underwater volume and canonical anchor-local unified foam source identity",
+      "GPU completion probe of all thirty-six named output routes including underwater volume, unified foam identity, and secondary-particle contribution/overdraw",
     );
     expect(
       Object.fromEntries(
@@ -2123,7 +2280,7 @@ describe("Quality Profile manifests", () => {
     );
     expect(manifestIdentity(highDetail)).toEqual({
       schema: "real-water/prewarm",
-      version: 8,
+      version: 9,
       id: "reference-minimal-water",
       manifestHash: highDetail.manifestHash,
       qualityProfile: qualityProfileIdentity(highDetailProfile),
@@ -2136,6 +2293,7 @@ describe("Quality Profile manifests", () => {
           variantId: "source-resolved-persistent",
         },
         { effectId: "underwater-volume", variantId: "depth-aware" },
+        { effectId: "secondary-particles", variantId: "bounded-post-traa" },
       ],
     });
     expect(Object.isFrozen(minimal.drawingBuffer)).toBe(true);

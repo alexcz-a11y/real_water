@@ -314,6 +314,62 @@ describe("createThreeHostLifecycleAdapter", () => {
         timestampQuery: true,
         temporal: CORE_READY_TEMPORAL,
         reflection: CORE_READY_REFLECTION,
+        secondaryParticles: {
+          capacity: 131_072,
+          maximumCandidateCount: 147_456,
+          contributionReference: {
+            width: 320,
+            height: 180,
+            space: "output-drawing-buffer",
+            screenAreaDivisor: 3_600,
+            quantization: "q16-unorm-round-nearest",
+          },
+          hysteresis: {
+            retainedContributionBonusQ16: 4_096,
+            minimumResidenceTicks: 4,
+            reentryCooldownTicks: 4,
+          },
+          consumers: [
+            {
+              consumerId: "spray-droplet-mist",
+              maximumRequestCount: 65_536,
+              softRequestCeiling: 32_768,
+              minimumRetainedSlots: 2_048,
+              pressureReentryPolicy: "after-shared-cooldown",
+            },
+            {
+              consumerId: "underwater-suspended-particles",
+              maximumRequestCount: 49_152,
+              softRequestCeiling: 24_576,
+              minimumRetainedSlots: 2_048,
+              pressureReentryPolicy: "after-shared-cooldown",
+            },
+            {
+              consumerId: "subsurface-foam-bubble-cloud",
+              maximumRequestCount: 24_576,
+              softRequestCeiling: 12_288,
+              minimumRetainedSlots: 1_024,
+              pressureReentryPolicy: "after-shared-cooldown",
+            },
+            {
+              consumerId: "rising-bubbles",
+              maximumRequestCount: 8_192,
+              softRequestCeiling: 4_096,
+              minimumRetainedSlots: 256,
+              pressureReentryPolicy: "forbidden-until-absent",
+            },
+          ],
+          selection: "q16-global-contribution-radix",
+          updateCadence: "host-fixed-tick",
+          renderPhaseKnowledge: "none",
+        },
+        postTraaComposition: {
+          width: 320,
+          height: 180,
+          stages: [{ id: "secondary-particles", after: "traa" }],
+          accumulationFormat: "rgba16float",
+          finalColorFormat: "rgba8unorm-srgb",
+        },
       },
     });
     expect(Object.isFrozen(lease.capabilities.rendering.temporal)).toBe(true);
@@ -328,21 +384,24 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(
       renderer.compileAsync.mock.calls.some((call) => call[1] !== camera),
     ).toBe(true);
-    expect(renderer.render).toHaveBeenCalledTimes(142);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(37);
+    expect(renderer.render).toHaveBeenCalledTimes(162);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(39);
     const readbackTargets = renderer.readRenderTargetPixelsAsync.mock.calls.map(
       (call) =>
         call[0] as { texture?: { name?: string }; textures?: unknown[] },
     );
     expect(readbackTargets[0]?.texture?.name).toBe("Real Water final color");
-    expect(readbackTargets[1]?.texture?.name).toBe("Real Water current color");
-    expect(readbackTargets[2]?.texture?.name).toBe(
+    expect(readbackTargets[1]?.texture?.name).toBe(
+      "Real Water secondary particle accumulation",
+    );
+    expect(readbackTargets[2]?.texture?.name).toBe("Real Water current color");
+    expect(readbackTargets[3]?.texture?.name).toBe(
       "Real Water history rejection",
     );
-    expect(readbackTargets[3]?.texture?.name).toBe(
+    expect(readbackTargets[4]?.texture?.name).toBe(
       "Real Water inverse linear depth",
     );
-    expect(readbackTargets[36]?.texture?.name).toBe("Real Water final color");
+    expect(readbackTargets[38]?.texture?.name).toBe("Real Water final color");
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -435,7 +494,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     );
     expect(queryResults.foam[0]).toBe(geometryBefore.foam);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(37);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(39);
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -1017,7 +1076,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     });
     expect(scene.children).toHaveLength(0);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(18);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(19);
     expect(renderer.dispose).not.toHaveBeenCalled();
   });
 
@@ -1396,8 +1455,8 @@ describe("createThreeHostLifecycleAdapter", () => {
 
     expect(lease).not.toHaveProperty("present");
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(37);
-    expect(renderer.render).toHaveBeenCalledTimes(142);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(39);
+    expect(renderer.render).toHaveBeenCalledTimes(162);
     expect(presentation.route).toBeDefined();
     const renderTargetsAtReady = renderer.setRenderTarget.mock.calls.length;
 
@@ -1414,6 +1473,25 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(readyFrameTargetNames).toContain(
       "Real Water underwater volume color",
     );
+    const traaResolvedIndex = readyFrameTargetNames.indexOf(
+      "Real Water TRAA resolved color",
+    );
+    const secondaryAccumulationIndex = readyFrameTargetNames.indexOf(
+      "Real Water secondary particle accumulation",
+      traaResolvedIndex + 1,
+    );
+    const finalColorIndex = readyFrameTargetNames.indexOf(
+      "Real Water final color",
+      secondaryAccumulationIndex + 1,
+    );
+    const presentationIndex = readyFrameTargetNames.indexOf(
+      "canvas",
+      finalColorIndex + 1,
+    );
+    expect(traaResolvedIndex).toBeGreaterThanOrEqual(0);
+    expect(secondaryAccumulationIndex).toBeGreaterThan(traaResolvedIndex);
+    expect(finalColorIndex).toBeGreaterThan(secondaryAccumulationIndex);
+    expect(presentationIndex).toBeGreaterThan(finalColorIndex);
     expect(readyFrameTargetNames).not.toContain(
       "Real Water underwater volume diagnostics",
     );
@@ -1438,7 +1516,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(second.temporal.historyEpoch).toBe(1);
     expect(second.temporal.resetReason).toBeNull();
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(37);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(39);
 
     simulation.assign({ tick: 8, timeSeconds: 8 / 60, paused: false });
     const continuousTick = readHostPresentedFrame(await presentation.present());
@@ -1549,7 +1627,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(queuedFirst.presentationId + 1).toBe(queuedSecond.presentationId);
 
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(37);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(39);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
     expect(scene.children).toHaveLength(1);
@@ -1960,6 +2038,12 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(empty.probeCount).toBe(probeAtReady);
     expect(empty.compileCount).toBe(compileAtReady);
     expect(empty.sceneRenderCount).toBeGreaterThan(0);
+    const sprayReceipt = empty.secondaryParticles.consumers.find(
+      ({ consumerId }) => consumerId === "spray-droplet-mist",
+    );
+    expect(sprayReceipt?.requested).toBeGreaterThan(0);
+    expect(sprayReceipt?.retained).toBeGreaterThan(0);
+    expect(sprayReceipt?.contributionMaximumQ16).toBeGreaterThan(0);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(compileAtReady);
     expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(
       probeAtReady,
@@ -2026,8 +2110,8 @@ describe("createThreeHostLifecycleAdapter", () => {
         outputs: [...DIAGNOSTICS_CAPTURE_NAMES],
       }),
     );
-    expect(all.outputs).toHaveLength(34);
-    expect(all.diagnosticReadbackCount).toBe(32);
+    expect(all.outputs).toHaveLength(36);
+    expect(all.diagnosticReadbackCount).toBe(33);
     expect(all.sceneRenderCount).toBe(resetFrame.sceneRenderCount + 1);
     expect(
       renderer.setRenderTarget.mock.calls
@@ -3420,6 +3504,9 @@ function mockPresentationReadback(
     return data;
   }
   if (name.includes("underwater volume diagnostics")) {
+    return new Uint16Array(pixels * 4);
+  }
+  if (name.includes("secondary particle accumulation")) {
     return new Uint16Array(pixels * 4);
   }
   if (name.includes("diagnostics")) {

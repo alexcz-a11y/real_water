@@ -40,7 +40,9 @@ const CANONICAL_QUALITY_PROFILE_FIELDS = Object.freeze([
   "temporal",
   "reflection",
   "whitecaps",
+  "secondaryParticles",
   "underwater",
+  "postTraaComposition",
 ]);
 
 const CANONICAL_INTERACTION_FIELD_KEYS = Object.freeze([
@@ -83,6 +85,48 @@ const LEGACY_SPECTRAL_WHITECAP_FIELDS = Object.freeze([
   "captureResolutionPolicy",
   "captureFormat",
   "resetDomains",
+]);
+
+const CANONICAL_SECONDARY_PARTICLE_FIELDS = Object.freeze([
+  "mode",
+  "capacity",
+  "maximumCandidateCount",
+  "selection",
+  "contribution",
+  "hysteresis",
+  "consumers",
+  "updateCadence",
+  "payloadOwnership",
+  "renderPhaseKnowledge",
+]);
+const CANONICAL_SECONDARY_PARTICLE_CONTRIBUTION_FIELDS = Object.freeze([
+  "projectedAreaReference",
+  "screenAreaDivisor",
+  "formula",
+  "quantization",
+]);
+const CANONICAL_SECONDARY_PARTICLE_HYSTERESIS_FIELDS = Object.freeze([
+  "mode",
+  "retainedContributionBonusQ16",
+  "minimumResidenceTicks",
+  "reentryCooldownTicks",
+]);
+const CANONICAL_SECONDARY_PARTICLE_CONSUMER_FIELDS = Object.freeze([
+  "consumerId",
+  "maximumRequestCount",
+  "softRequestCeiling",
+  "minimumRetainedSlots",
+  "contributionReference",
+  "pressureReentryPolicy",
+]);
+
+const CANONICAL_POST_TRAA_FIELDS = Object.freeze([
+  "mode",
+  "resolutionPolicy",
+  "accumulationFormat",
+  "finalColorFormat",
+  "samples",
+  "stages",
 ]);
 
 let failures = 0;
@@ -138,6 +182,37 @@ function canonicalJson(label, profile, variant) {
         : CANONICAL_WHITECAP_FIELDS,
     );
   }
+  if (profile.secondaryParticles !== undefined) {
+    checkKeys(
+      `${label} secondary particles`,
+      Object.keys(profile.secondaryParticles),
+      CANONICAL_SECONDARY_PARTICLE_FIELDS,
+    );
+    checkKeys(
+      `${label} secondary-particle contribution`,
+      Object.keys(profile.secondaryParticles.contribution),
+      CANONICAL_SECONDARY_PARTICLE_CONTRIBUTION_FIELDS,
+    );
+    checkKeys(
+      `${label} secondary-particle hysteresis`,
+      Object.keys(profile.secondaryParticles.hysteresis),
+      CANONICAL_SECONDARY_PARTICLE_HYSTERESIS_FIELDS,
+    );
+    profile.secondaryParticles.consumers.forEach((consumer, index) => {
+      checkKeys(
+        `${label} secondary-particle consumer ${index}`,
+        Object.keys(consumer),
+        CANONICAL_SECONDARY_PARTICLE_CONSUMER_FIELDS,
+      );
+    });
+  }
+  if (profile.postTraaComposition !== undefined) {
+    checkKeys(
+      `${label} post-TRAA composition`,
+      Object.keys(profile.postTraaComposition),
+      CANONICAL_POST_TRAA_FIELDS,
+    );
+  }
   return JSON.stringify(
     Object.fromEntries(fields.map((field) => [field, profile[field]])),
   );
@@ -176,7 +251,13 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "6 (interaction)",
     version: 6,
-    absentKeys: ["bodyCoupling", "whitecaps", "underwater"],
+    absentKeys: [
+      "bodyCoupling",
+      "whitecaps",
+      "secondaryParticles",
+      "underwater",
+      "postTraaComposition",
+    ],
     absentInteractionFieldKeys: ["directionalWakeRoute"],
     ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
     hashes: {
@@ -189,7 +270,13 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "6 (whitecaps)",
     version: 6,
-    absentKeys: ["interaction", "bodyCoupling", "underwater"],
+    absentKeys: [
+      "interaction",
+      "bodyCoupling",
+      "secondaryParticles",
+      "underwater",
+      "postTraaComposition",
+    ],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
     legacySpectralWhitecaps: true,
@@ -203,7 +290,14 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "6 (waterline)",
     version: 6,
-    absentKeys: ["interaction", "bodyCoupling", "whitecaps", "underwater"],
+    absentKeys: [
+      "interaction",
+      "bodyCoupling",
+      "whitecaps",
+      "secondaryParticles",
+      "underwater",
+      "postTraaComposition",
+    ],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
     hashes: {
@@ -216,7 +310,12 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "7 (whitecaps)",
     version: 7,
-    absentKeys: ["bodyCoupling", "underwater"],
+    absentKeys: [
+      "bodyCoupling",
+      "secondaryParticles",
+      "underwater",
+      "postTraaComposition",
+    ],
     absentInteractionFieldKeys: ["directionalWakeRoute"],
     ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
     legacySpectralWhitecaps: true,
@@ -230,7 +329,12 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "7 (body coupling)",
     version: 7,
-    absentKeys: ["whitecaps", "underwater"],
+    absentKeys: [
+      "whitecaps",
+      "secondaryParticles",
+      "underwater",
+      "postTraaComposition",
+    ],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
     hashes: {
@@ -243,7 +347,12 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "8",
     version: 8,
-    absentKeys: ["bodyCoupling", "underwater"],
+    absentKeys: [
+      "bodyCoupling",
+      "secondaryParticles",
+      "underwater",
+      "postTraaComposition",
+    ],
     absentInteractionFieldKeys: ["directionalWakeRoute"],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
     legacySpectralWhitecaps: true,
@@ -257,7 +366,7 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "9 (body coupling)",
     version: 9,
-    absentKeys: ["underwater"],
+    absentKeys: ["secondaryParticles", "underwater", "postTraaComposition"],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
     legacySpectralWhitecaps: true,
@@ -271,7 +380,7 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "9 (underwater)",
     version: 9,
-    absentKeys: ["bodyCoupling"],
+    absentKeys: ["bodyCoupling", "secondaryParticles", "postTraaComposition"],
     absentInteractionFieldKeys: ["directionalWakeRoute"],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
     legacySpectralWhitecaps: true,
@@ -290,7 +399,7 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "10 (underwater, spectral whitecaps)",
     version: 10,
-    absentKeys: [],
+    absentKeys: ["secondaryParticles", "postTraaComposition"],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
     legacySpectralWhitecaps: true,
@@ -304,7 +413,7 @@ const COMMITTED_LEGACY_VARIANTS = [
   {
     label: "10 (unified foam, no underwater)",
     version: 10,
-    absentKeys: ["underwater"],
+    absentKeys: ["secondaryParticles", "underwater", "postTraaComposition"],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
     hashes: {
@@ -312,6 +421,19 @@ const COMMITTED_LEGACY_VARIANTS = [
         "sha256:47475f80673e8e4c942b567715e0e3d36dedf0d6d1320e83825dc866fefacd93",
       "minimal-high-detail":
         "sha256:a8ce0bc38f028341be0567b0e467355f1b0bc74d4abe3f2043c59e28a2dbc239",
+    },
+  },
+  {
+    label: "11 (merged foam and underwater)",
+    version: 11,
+    absentKeys: ["secondaryParticles", "postTraaComposition"],
+    absentInteractionFieldKeys: [],
+    ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    hashes: {
+      "minimal":
+        "sha256:6f6ccb6262b8b3239dcfbcfc80dd3322ca75408260ea947cdd5892a16a8ef908",
+      "minimal-high-detail":
+        "sha256:e1e1c7af79374e668a1f82c4b5c742d42e5009f5162389d8f3dc0ead9978d5a9",
     },
   },
 ];
@@ -418,9 +540,9 @@ for (const variant of COMMITTED_LEGACY_VARIANTS) {
 // public fields in declared order, with manifestHash itself excluded.
 const COMMITTED_MANIFEST_HASHES = {
   "minimal":
-    "sha256:5a3fcb168199ce3b8101364ac9e7a74888de44734557784da26d286e9f6c76e7",
+    "sha256:0675c9a0f7b99bcdcceb508446e889f059a8542847328266715c2f7e73661ef2",
   "minimal-high-detail":
-    "sha256:bc29f47e4a2db94ce464a62b128922ea6e8f7b036393848b1f9710512568a6e1",
+    "sha256:f9b2adc6daf8834d2867a24c1d062084a432f3e8169ff937a612e925021e7f1a",
 };
 
 function canonicalManifestJson(manifest) {

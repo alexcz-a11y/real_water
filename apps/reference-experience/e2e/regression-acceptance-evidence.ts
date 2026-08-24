@@ -1703,11 +1703,11 @@ function readQaPrewarmV11(
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.coreDeclarations)
   ) {
     throw new Error(
-      "Regression acceptance requires the exact QA v12 34-name capture mapping.",
+      "Regression acceptance requires the exact QA v13 36-name capture mapping.",
     );
   }
-  if (QA_FRAME_PREWARM_MANIFEST.captures.length !== 34) {
-    throw new Error("QA v12 capture contract must name exactly 34 outputs.");
+  if (QA_FRAME_PREWARM_MANIFEST.captures.length !== 36) {
+    throw new Error("QA v13 capture contract must name exactly 36 outputs.");
   }
   const core = readQaBoundCoreManifestIdentity(value.core);
   if (core.manifestHash !== coreIdentity.manifestHash) {

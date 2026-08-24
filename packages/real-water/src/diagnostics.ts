@@ -27,7 +27,7 @@ export type {
 } from "./presentation.js";
 
 /**
- * The thirty-four named diagnostic outputs. Names and CPU shapes match the QA
+ * The thirty-six named diagnostic outputs. Names and CPU shapes match the QA
  * capture contract. Planar color and target-alpha occupancy are their own
  * prepared target. `planar-confidence` is reserved for a future screen-space
  * mask and is not a current capture. Current-frame SSR hit (stock raw
@@ -74,10 +74,12 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
   "ssr-history-color",
   "ssr-history-frame-weight",
   "ssr-history-input-color",
+  "secondary-particle-contribution",
+  "secondary-particle-overdraw",
 ] as const);
 
 /**
- * One of the thirty-four named diagnostic CPU outputs.
+ * One of the thirty-six named diagnostic CPU outputs.
  *
  * @public
  */
@@ -259,9 +261,27 @@ export const DIAGNOSTICS_CAPTURE_SHAPES = Object.freeze({
     elementType: "float32" as const,
     components: 3 as const,
   }),
+  "secondary-particle-contribution": Object.freeze({
+    format: "r32float-secondary-particle-contribution" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "secondary-particle-overdraw": Object.freeze({
+    format: "r32float-secondary-particle-overdraw" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
 });
 
 const CAPTURE_NAME_SET = new Set<string>(DIAGNOSTICS_CAPTURE_NAMES);
+const DIAGNOSTICS_CAPTURE_KEYS = [
+  "name",
+  "format",
+  "width",
+  "height",
+  "origin",
+  "data",
+] as const;
 const HOST_DIAGNOSTICS_PRESENT_REQUEST_KEYS = ["outputs"] as const;
 const HOST_DIAGNOSTICS_PRESENTED_FRAME_KEYS = [
   "presentationId",
@@ -276,6 +296,7 @@ const HOST_DIAGNOSTICS_PRESENTED_FRAME_KEYS = [
   "seaStateCutRevision",
   "temporal",
   "waterline",
+  "secondaryParticles",
   "outputs",
   "compileCount",
   "probeCount",
@@ -297,6 +318,42 @@ const DIAGNOSTICS_WATERLINE_CLASSIFICATIONS = [
   "above",
   "crossing",
   "below",
+] as const;
+const SECONDARY_PARTICLE_DROP_REASON_KEYS = [
+  "invisibleOrOccluded",
+  "globalContributionPressure",
+  "reentryCooldown",
+  "lifecycleReentryForbidden",
+] as const;
+const SECONDARY_PARTICLE_RECEIPT_KEYS = [
+  "requested",
+  "retained",
+  "thinned",
+  "invisibleOrOccluded",
+  "reentryCooldown",
+  "lifecycleReentryForbidden",
+  "retainedByFloor",
+  "retainedByGlobalCompetition",
+  "retainedIncumbents",
+  "requestedAboveSoftCeiling",
+  "overSubscribed",
+  "contributionMinimumQ16",
+  "contributionMaximumQ16",
+  "dropReasons",
+] as const;
+const SECONDARY_PARTICLE_CONSUMER_KEYS = [
+  "consumerId",
+  "maximumRequestCount",
+  "minimumRetainedSlots",
+  "softRequestCeiling",
+  "pressureReentryPolicy",
+  ...SECONDARY_PARTICLE_RECEIPT_KEYS,
+] as const;
+const SECONDARY_PARTICLES_KEYS = [
+  "capacity",
+  "maximumCandidateCount",
+  ...SECONDARY_PARTICLE_RECEIPT_KEYS,
+  "consumers",
 ] as const;
 
 /**
@@ -611,6 +668,35 @@ export interface DiagnosticsSsrHistoryInputColorCapture extends DiagnosticsCaptu
 }
 
 /**
+ * Output-resolution scalar contribution submitted to the shared secondary-
+ * particle allocator.
+ *
+ * @public
+ */
+export interface DiagnosticsSecondaryParticleContributionCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "secondary-particle-contribution";
+  /** Packed scalar contribution format. */
+  readonly format: "r32float-secondary-particle-contribution";
+  /** Tightly packed scalar contribution samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Output-resolution secondary-particle overdraw estimate.
+ *
+ * @public
+ */
+export interface DiagnosticsSecondaryParticleOverdrawCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "secondary-particle-overdraw";
+  /** Packed scalar overdraw format. */
+  readonly format: "r32float-secondary-particle-overdraw";
+  /** Tightly packed scalar overdraw samples. */
+  readonly data: Float32Array;
+}
+
+/**
  * Frozen CPU DTO for one named diagnostic output. No GPU object types.
  *
  * @public
@@ -634,7 +720,9 @@ export type DiagnosticsCapture =
   | DiagnosticsWaterlineCapture
   | DiagnosticsHistoryRejectionCapture
   | DiagnosticsOpticalScalarCapture
-  | DiagnosticsUnderwaterVolumeCapture;
+  | DiagnosticsUnderwaterVolumeCapture
+  | DiagnosticsSecondaryParticleContributionCapture
+  | DiagnosticsSecondaryParticleOverdrawCapture;
 
 /**
  * Diagnostics present request. The exact key is `outputs`. Named outputs must
@@ -672,6 +760,95 @@ export interface DiagnosticsWaterlineState {
 }
 
 /**
+ * Named secondary-particle discard counts. Counts, rather than a bitmask or
+ * strings, keep the diagnostics receipt allocation-free and inspectable.
+ *
+ * @public
+ */
+export interface DiagnosticsSecondaryParticleDropReasons {
+  /** Candidates with no visible output contribution. */
+  readonly invisibleOrOccluded: number;
+  /** Visible candidates removed by global contribution pressure. */
+  readonly globalContributionPressure: number;
+  /** Visible candidates rejected during their reentry cooldown. */
+  readonly reentryCooldown: number;
+  /** Visible candidates whose current lifecycle cannot reenter after pressure removal. */
+  readonly lifecycleReentryForbidden: number;
+}
+
+/**
+ * Shared retained/drop accounting emitted by both global and per-consumer
+ * secondary-particle receipts.
+ *
+ * @public
+ */
+export interface DiagnosticsSecondaryParticleReceipt {
+  /** Candidates submitted for this allocation epoch. */
+  readonly requested: number;
+  /** Candidates retained after global arbitration. */
+  readonly retained: number;
+  /** Visible candidates removed by global contribution pressure. */
+  readonly thinned: number;
+  /** Candidates with zero visible output contribution. */
+  readonly invisibleOrOccluded: number;
+  /** Candidates rejected during their reentry cooldown. */
+  readonly reentryCooldown: number;
+  /** Candidates whose current lifecycle cannot reenter after pressure removal. */
+  readonly lifecycleReentryForbidden: number;
+  /** Retained candidates protected by the consumer survival floor. */
+  readonly retainedByFloor: number;
+  /** Retained candidates selected by global contribution competition. */
+  readonly retainedByGlobalCompetition: number;
+  /** Retained incumbents protected by minimum residence. */
+  readonly retainedIncumbents: number;
+  /** Requests above declared consumer soft ceilings. */
+  readonly requestedAboveSoftCeiling: number;
+  /** Whether this receipt observed an oversubscribed request. */
+  readonly overSubscribed: boolean;
+  /** Lowest submitted visible contribution, or null when none was visible. */
+  readonly contributionMinimumQ16: number | null;
+  /** Highest submitted visible contribution, or null when none was visible. */
+  readonly contributionMaximumQ16: number | null;
+  /** Named discard counts for this receipt. */
+  readonly dropReasons: DiagnosticsSecondaryParticleDropReasons;
+}
+
+/**
+ * Frozen planning declaration and receipt for one secondary-particle
+ * consumer. Future consumers use their own stable string identifier.
+ *
+ * @public
+ */
+export interface DiagnosticsSecondaryParticleConsumer extends DiagnosticsSecondaryParticleReceipt {
+  /** Stable consumer identifier. */
+  readonly consumerId: string;
+  /** Construction-time maximum candidate request. */
+  readonly maximumRequestCount: number;
+  /** Construction-time survival floor. */
+  readonly minimumRetainedSlots: number;
+  /** Construction-time request level above which pressure is expected. */
+  readonly softRequestCeiling: number;
+  /** Whether pressure removal permits this stable key to reenter later. */
+  readonly pressureReentryPolicy:
+    "after-shared-cooldown" | "forbidden-until-absent";
+}
+
+/**
+ * Frozen, exact diagnostics receipt for the render-phase-neutral shared
+ * secondary-particle allocator.
+ *
+ * @public
+ */
+export interface DiagnosticsSecondaryParticles extends DiagnosticsSecondaryParticleReceipt {
+  /** Fixed global capacity mandated by the prepared route. */
+  readonly capacity: 131_072;
+  /** Total construction-time candidate capacity across consumers. */
+  readonly maximumCandidateCount: number;
+  /** Per-consumer planning declarations and allocation receipts. */
+  readonly consumers: readonly DiagnosticsSecondaryParticleConsumer[];
+}
+
+/**
  * One diagnostics present: the root receipt plus named CPU outputs and
  * truthful readiness counters.
  *
@@ -680,6 +857,8 @@ export interface DiagnosticsWaterlineState {
 export interface HostDiagnosticsPresentedFrame extends HostPresentedFrame {
   /** Stable waterline state associated with this presented frame. */
   readonly waterline: DiagnosticsWaterlineState;
+  /** Shared secondary-particle allocation receipt. */
+  readonly secondaryParticles: DiagnosticsSecondaryParticles;
   /** Named CPU outputs in request order. */
   readonly outputs: readonly DiagnosticsCapture[];
   /** Material compile count observed for this present. */
@@ -711,7 +890,7 @@ export interface HostDiagnosticsRoute {
 }
 
 /**
- * Confirms `value` is one of the thirty-four diagnostic capture names.
+ * Confirms `value` is one of the thirty-six diagnostic capture names.
  *
  * @public
  */
@@ -826,9 +1005,13 @@ export function readHostDiagnosticsPresentedFrame(
     readDiagnosticsCapture(output, receipt.presentationId, width, height),
   );
   const waterline = readDiagnosticsWaterlineState(frame.waterline);
+  const secondaryParticles = readDiagnosticsSecondaryParticles(
+    frame.secondaryParticles,
+  );
   return Object.freeze({
     ...receipt,
     waterline,
+    secondaryParticles,
     outputs: Object.freeze(outputs),
     compileCount: readNonNegativeSafeInteger(
       frame.compileCount,
@@ -912,7 +1095,11 @@ function readDiagnosticsCapture(
   width: number,
   height: number,
 ): DiagnosticsCapture {
-  if (!isRecord(value) || !isDiagnosticsCaptureName(value.name)) {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, DIAGNOSTICS_CAPTURE_KEYS) ||
+    !isDiagnosticsCaptureName(value.name)
+  ) {
     throw new TypeError("Host diagnostics output must use a supported name.");
   }
   if (value.origin !== "top-left") {
@@ -948,6 +1135,381 @@ function readDiagnosticsCapture(
     );
   }
   return Object.freeze({ ...value, data: value.data }) as DiagnosticsCapture;
+}
+
+function readDiagnosticsSecondaryParticles(
+  value: DiagnosticsSecondaryParticles,
+): DiagnosticsSecondaryParticles {
+  if (!isRecord(value) || !hasExactKeys(value, SECONDARY_PARTICLES_KEYS)) {
+    throw new TypeError(
+      "Host diagnostics secondaryParticles must use the exact receipt contract.",
+    );
+  }
+  if (value.capacity !== 131_072) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles capacity must be 131072.",
+    );
+  }
+  const maximumCandidateCount = readNonNegativeSafeInteger(
+    value.maximumCandidateCount,
+    "Host diagnostics secondaryParticles maximumCandidateCount",
+  );
+  if (!Array.isArray(value.consumers)) {
+    throw new TypeError(
+      "Host diagnostics secondaryParticles consumers must be an array.",
+    );
+  }
+  const consumers = value.consumers.map((consumer) =>
+    readDiagnosticsSecondaryParticleConsumer(consumer),
+  );
+  const consumerIds = new Set(consumers.map((consumer) => consumer.consumerId));
+  if (consumerIds.size !== consumers.length) {
+    throw new TypeError(
+      "Host diagnostics secondaryParticles consumerId values must be unique.",
+    );
+  }
+  const receipt = readDiagnosticsSecondaryParticleReceipt(
+    value,
+    "Host diagnostics secondaryParticles",
+  );
+  if (receipt.requested > maximumCandidateCount) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles requested cannot exceed maximumCandidateCount.",
+    );
+  }
+  if (receipt.retained > value.capacity) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles retained cannot exceed capacity.",
+    );
+  }
+  if (receipt.overSubscribed !== receipt.thinned > 0) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles overSubscribed must reflect global contribution pressure.",
+    );
+  }
+  assertSecondaryParticleConsumerTotals(receipt, consumers);
+  const declaredMaximum = consumers.reduce(
+    (total, consumer) => total + consumer.maximumRequestCount,
+    0,
+  );
+  if (
+    !Number.isSafeInteger(declaredMaximum) ||
+    declaredMaximum !== maximumCandidateCount
+  ) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles maximumCandidateCount must equal the declared consumer maxima.",
+    );
+  }
+  return Object.freeze({
+    capacity: 131_072,
+    maximumCandidateCount,
+    ...receipt,
+    consumers: Object.freeze(consumers),
+  });
+}
+
+function readDiagnosticsSecondaryParticleConsumer(
+  value: DiagnosticsSecondaryParticleConsumer,
+): DiagnosticsSecondaryParticleConsumer {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, SECONDARY_PARTICLE_CONSUMER_KEYS)
+  ) {
+    throw new TypeError(
+      "Host diagnostics secondary-particle consumer must use the exact receipt contract.",
+    );
+  }
+  if (
+    typeof value.consumerId !== "string" ||
+    value.consumerId.length === 0 ||
+    value.consumerId !== value.consumerId.trim() ||
+    value.consumerId !== value.consumerId.normalize("NFC")
+  ) {
+    throw new TypeError(
+      "Host diagnostics secondary-particle consumerId must be a canonical non-empty string.",
+    );
+  }
+  const maximumRequestCount = readNonNegativeSafeInteger(
+    value.maximumRequestCount,
+    `Host diagnostics secondary-particle consumer ${value.consumerId} maximumRequestCount`,
+  );
+  const minimumRetainedSlots = readNonNegativeSafeInteger(
+    value.minimumRetainedSlots,
+    `Host diagnostics secondary-particle consumer ${value.consumerId} minimumRetainedSlots`,
+  );
+  const softRequestCeiling = readNonNegativeSafeInteger(
+    value.softRequestCeiling,
+    `Host diagnostics secondary-particle consumer ${value.consumerId} softRequestCeiling`,
+  );
+  if (
+    minimumRetainedSlots > maximumRequestCount ||
+    softRequestCeiling > maximumRequestCount
+  ) {
+    throw new RangeError(
+      "Host diagnostics secondary-particle consumer plan counts cannot exceed maximumRequestCount.",
+    );
+  }
+  if (
+    value.pressureReentryPolicy !== "after-shared-cooldown" &&
+    value.pressureReentryPolicy !== "forbidden-until-absent"
+  ) {
+    throw new TypeError(
+      "Host diagnostics secondary-particle consumer pressureReentryPolicy must be after-shared-cooldown or forbidden-until-absent.",
+    );
+  }
+  const receipt = readDiagnosticsSecondaryParticleReceipt(
+    value,
+    `Host diagnostics secondary-particle consumer ${value.consumerId}`,
+  );
+  if (receipt.requested > maximumRequestCount) {
+    throw new RangeError(
+      "Host diagnostics secondary-particle consumer requested cannot exceed maximumRequestCount.",
+    );
+  }
+  if (
+    receipt.requestedAboveSoftCeiling !==
+    Math.max(0, receipt.requested - softRequestCeiling)
+  ) {
+    throw new RangeError(
+      "Host diagnostics secondary-particle consumer requestedAboveSoftCeiling must reflect its plan.",
+    );
+  }
+  if (receipt.overSubscribed !== receipt.requested > softRequestCeiling) {
+    throw new RangeError(
+      "Host diagnostics secondary-particle consumer overSubscribed must reflect its softRequestCeiling.",
+    );
+  }
+  return Object.freeze({
+    consumerId: value.consumerId,
+    maximumRequestCount,
+    minimumRetainedSlots,
+    softRequestCeiling,
+    pressureReentryPolicy: value.pressureReentryPolicy,
+    ...receipt,
+  });
+}
+
+function readDiagnosticsSecondaryParticleReceipt(
+  value: DiagnosticsSecondaryParticleReceipt,
+  label: string,
+): DiagnosticsSecondaryParticleReceipt {
+  const requested = readNonNegativeSafeInteger(
+    value.requested,
+    `${label} requested`,
+  );
+  const retained = readNonNegativeSafeInteger(
+    value.retained,
+    `${label} retained`,
+  );
+  const thinned = readNonNegativeSafeInteger(value.thinned, `${label} thinned`);
+  const invisibleOrOccluded = readNonNegativeSafeInteger(
+    value.invisibleOrOccluded,
+    `${label} invisibleOrOccluded`,
+  );
+  const reentryCooldown = readNonNegativeSafeInteger(
+    value.reentryCooldown,
+    `${label} reentryCooldown`,
+  );
+  const lifecycleReentryForbidden = readNonNegativeSafeInteger(
+    value.lifecycleReentryForbidden,
+    `${label} lifecycleReentryForbidden`,
+  );
+  const retainedByFloor = readNonNegativeSafeInteger(
+    value.retainedByFloor,
+    `${label} retainedByFloor`,
+  );
+  const retainedByGlobalCompetition = readNonNegativeSafeInteger(
+    value.retainedByGlobalCompetition,
+    `${label} retainedByGlobalCompetition`,
+  );
+  const retainedIncumbents = readNonNegativeSafeInteger(
+    value.retainedIncumbents,
+    `${label} retainedIncumbents`,
+  );
+  const requestedAboveSoftCeiling = readNonNegativeSafeInteger(
+    value.requestedAboveSoftCeiling,
+    `${label} requestedAboveSoftCeiling`,
+  );
+  if (typeof value.overSubscribed !== "boolean") {
+    throw new TypeError(`${label} overSubscribed must be boolean.`);
+  }
+  if (
+    requested !==
+    retained +
+      thinned +
+      invisibleOrOccluded +
+      reentryCooldown +
+      lifecycleReentryForbidden
+  ) {
+    throw new RangeError(
+      `${label} requested must equal retained + thinned + invisibleOrOccluded + reentryCooldown + lifecycleReentryForbidden.`,
+    );
+  }
+  if (
+    retained !==
+    retainedByFloor + retainedByGlobalCompetition + retainedIncumbents
+  ) {
+    throw new RangeError(
+      `${label} retained must equal retainedByFloor + retainedByGlobalCompetition + retainedIncumbents.`,
+    );
+  }
+  const contributionMinimumQ16 = readNullableQ16(
+    value.contributionMinimumQ16,
+    `${label} contributionMinimumQ16`,
+  );
+  const contributionMaximumQ16 = readNullableQ16(
+    value.contributionMaximumQ16,
+    `${label} contributionMaximumQ16`,
+  );
+  if (
+    (contributionMinimumQ16 === null) !== (contributionMaximumQ16 === null) ||
+    (contributionMinimumQ16 !== null &&
+      contributionMaximumQ16 !== null &&
+      contributionMinimumQ16 > contributionMaximumQ16)
+  ) {
+    throw new RangeError(
+      `${label} contribution Q16 range must be an ordered pair or both null.`,
+    );
+  }
+  const visibleCount =
+    retained + thinned + reentryCooldown + lifecycleReentryForbidden;
+  if ((visibleCount === 0) !== (contributionMinimumQ16 === null)) {
+    throw new RangeError(
+      `${label} contribution Q16 range must be null exactly when no visible candidates were submitted.`,
+    );
+  }
+  const dropReasons = readDiagnosticsSecondaryParticleDropReasons(
+    value.dropReasons,
+    label,
+  );
+  if (
+    dropReasons.invisibleOrOccluded !== invisibleOrOccluded ||
+    dropReasons.globalContributionPressure !== thinned ||
+    dropReasons.reentryCooldown !== reentryCooldown ||
+    dropReasons.lifecycleReentryForbidden !== lifecycleReentryForbidden
+  ) {
+    throw new RangeError(
+      `${label} named dropReasons must match the corresponding receipt counts.`,
+    );
+  }
+  return Object.freeze({
+    requested,
+    retained,
+    thinned,
+    invisibleOrOccluded,
+    reentryCooldown,
+    lifecycleReentryForbidden,
+    retainedByFloor,
+    retainedByGlobalCompetition,
+    retainedIncumbents,
+    requestedAboveSoftCeiling,
+    overSubscribed: value.overSubscribed,
+    contributionMinimumQ16,
+    contributionMaximumQ16,
+    dropReasons,
+  });
+}
+
+function readDiagnosticsSecondaryParticleDropReasons(
+  value: DiagnosticsSecondaryParticleDropReasons,
+  label: string,
+): DiagnosticsSecondaryParticleDropReasons {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, SECONDARY_PARTICLE_DROP_REASON_KEYS)
+  ) {
+    throw new TypeError(`${label} dropReasons must use the exact contract.`);
+  }
+  return Object.freeze({
+    invisibleOrOccluded: readNonNegativeSafeInteger(
+      value.invisibleOrOccluded,
+      `${label} dropReasons invisibleOrOccluded`,
+    ),
+    globalContributionPressure: readNonNegativeSafeInteger(
+      value.globalContributionPressure,
+      `${label} dropReasons globalContributionPressure`,
+    ),
+    reentryCooldown: readNonNegativeSafeInteger(
+      value.reentryCooldown,
+      `${label} dropReasons reentryCooldown`,
+    ),
+    lifecycleReentryForbidden: readNonNegativeSafeInteger(
+      value.lifecycleReentryForbidden,
+      `${label} dropReasons lifecycleReentryForbidden`,
+    ),
+  });
+}
+
+function assertSecondaryParticleConsumerTotals(
+  receipt: DiagnosticsSecondaryParticleReceipt,
+  consumers: readonly DiagnosticsSecondaryParticleConsumer[],
+): void {
+  const total = (field: keyof DiagnosticsSecondaryParticleReceipt): number =>
+    consumers.reduce((sum, consumer) => {
+      const value = consumer[field];
+      return sum + (typeof value === "number" ? value : 0);
+    }, 0);
+  for (const field of [
+    "requested",
+    "retained",
+    "thinned",
+    "invisibleOrOccluded",
+    "reentryCooldown",
+    "lifecycleReentryForbidden",
+    "retainedByFloor",
+    "retainedByGlobalCompetition",
+    "retainedIncumbents",
+    "requestedAboveSoftCeiling",
+  ] as const) {
+    if (receipt[field] !== total(field)) {
+      throw new RangeError(
+        `Host diagnostics secondaryParticles ${field} must equal the consumer total.`,
+      );
+    }
+  }
+  const ranges = consumers.filter(
+    (consumer) => consumer.contributionMinimumQ16 !== null,
+  );
+  const expectedMinimum =
+    ranges.length === 0
+      ? null
+      : Math.min(
+          ...ranges.map((consumer) => consumer.contributionMinimumQ16 ?? 0),
+        );
+  const expectedMaximum =
+    ranges.length === 0
+      ? null
+      : Math.max(
+          ...ranges.map((consumer) => consumer.contributionMaximumQ16 ?? 0),
+        );
+  if (
+    receipt.contributionMinimumQ16 !== expectedMinimum ||
+    receipt.contributionMaximumQ16 !== expectedMaximum
+  ) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles contribution Q16 range must span the consumer ranges.",
+    );
+  }
+  if (
+    receipt.dropReasons.invisibleOrOccluded !== total("invisibleOrOccluded") ||
+    receipt.dropReasons.globalContributionPressure !== total("thinned") ||
+    receipt.dropReasons.reentryCooldown !== total("reentryCooldown") ||
+    receipt.dropReasons.lifecycleReentryForbidden !==
+      total("lifecycleReentryForbidden")
+  ) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles dropReasons must equal the consumer totals.",
+    );
+  }
+}
+
+function readNullableQ16(value: unknown, label: string): number | null {
+  if (value === null) return null;
+  const accepted = readNonNegativeSafeInteger(value, label);
+  if (accepted > 65_535) {
+    throw new RangeError(`${label} must be inside [0, 65535] or null.`);
+  }
+  return accepted;
 }
 
 function readNonNegativeSafeInteger(value: unknown, label: string): number {

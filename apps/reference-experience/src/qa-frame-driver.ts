@@ -12,6 +12,7 @@ import {
 export type { QaBoundCoreManifestIdentity } from "./qa-bound-core-identity.js";
 import {
   readHostDiagnosticsPresentedFrame,
+  type DiagnosticsSecondaryParticles,
   type DiagnosticsWaterlineState,
   type HostDiagnosticsPresentedFrame,
   type HostDiagnosticsRoute,
@@ -60,11 +61,14 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
   "ssr-history-color": "water-ssr-history-resolved-capture-target",
   "ssr-history-frame-weight": "water-ssr-history-resolved-capture-target",
   "ssr-history-input-color": "water-ssr-history-beauty-target",
+  "secondary-particle-contribution":
+    "water-secondary-particle-accumulation-target",
+  "secondary-particle-overdraw": "water-secondary-particle-accumulation-target",
 } as const);
 
 export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
   schema: "real-water/qa-frame-prewarm" as const,
-  version: 12 as const,
+  version: 13 as const,
   id: "reference-qa-frame" as const,
   captures: Object.freeze([
     Object.freeze({
@@ -203,6 +207,14 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
       name: "ssr-history-input-color" as const,
       preparedFormat: "rgba16float-ssr-history-beauty" as const,
     }),
+    Object.freeze({
+      name: "secondary-particle-contribution" as const,
+      preparedFormat: "rgba16float-secondary-particle-accumulation" as const,
+    }),
+    Object.freeze({
+      name: "secondary-particle-overdraw" as const,
+      preparedFormat: "rgba16float-secondary-particle-accumulation" as const,
+    }),
   ]),
   coreDeclarations: QA_TO_CORE_DECLARATION_IDS,
 });
@@ -309,6 +321,15 @@ export interface QaFrameDriverUnderwaterVolumeCapture extends QaFrameDriverCaptu
   readonly data: Float32Array;
 }
 
+export interface QaFrameDriverSecondaryParticleCapture extends QaFrameDriverCaptureBase {
+  readonly name:
+    "secondary-particle-contribution" | "secondary-particle-overdraw";
+  readonly format:
+    | "r32float-secondary-particle-contribution"
+    | "r32float-secondary-particle-overdraw";
+  readonly data: Float32Array;
+}
+
 export interface QaFrameDriverSsrColorCapture extends QaFrameDriverCaptureBase {
   readonly name: "ssr-color";
   readonly format: "rgb32float-linear-ssr";
@@ -370,7 +391,8 @@ export type QaFrameDriverCapture =
   | QaFrameDriverWaterlineCapture
   | QaFrameDriverHistoryRejectionCapture
   | QaFrameDriverOpticalScalarCapture
-  | QaFrameDriverUnderwaterVolumeCapture;
+  | QaFrameDriverUnderwaterVolumeCapture
+  | QaFrameDriverSecondaryParticleCapture;
 
 export interface QaFrameDriverStateReceipt {
   readonly seed: number;
@@ -424,6 +446,7 @@ export interface QaFrameDriverPresentedFrame extends QaFrameDriverStateReceipt {
   readonly prewarm: QaFramePrewarmReceipt;
   readonly captures: readonly QaFrameDriverCapture[];
   readonly waterline: DiagnosticsWaterlineState;
+  readonly secondaryParticles: DiagnosticsSecondaryParticles;
   readonly temporal: QaTemporalReceipt;
 }
 
@@ -648,6 +671,7 @@ function toQaPresentedFrame(
       ...frame.outputs,
     ]) as readonly QaFrameDriverCapture[],
     waterline: frame.waterline,
+    secondaryParticles: frame.secondaryParticles,
     temporal: Object.freeze({
       historyEpoch: frame.temporal.historyEpoch,
       resetReason: mapQaTemporalResetReason(frame.temporal.resetReason),

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createWaterPreset } from "real-water";
-import type { QaCameraV1, QaHarnessV13 } from "../src/qa-harness.js";
+import type { QaCameraV1, QaHarnessV14 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32 } from "./qa-capture-bytes.js";
 
@@ -123,7 +123,7 @@ test("captures TemporalReproject resolved history RGB and inverse frame weight f
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ cameraPose, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -199,7 +199,7 @@ test("accumulates inverse frame weight on a static hit and stays bounded", async
 }) => {
   await openQaStage(page);
   const weights = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -288,7 +288,7 @@ test("keeps a black current hit instead of residual bright history", async ({
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ cameraPose, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -344,7 +344,7 @@ test("rejects offscreen history ghosts: confidence 0 composite equals base", asy
 }) => {
   await openQaStage(page);
   const result = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -373,7 +373,7 @@ test("rejects history residual after fixture disappear, continuous move, and res
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ hitCamera, movedCamera, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -538,7 +538,7 @@ test("camera-cut resets SSR history once and the next present is stable", async 
 }) => {
   await openQaStage(page);
   const result = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -599,7 +599,7 @@ test("updates history RGB on the same JS task after a current-color change", asy
 }) => {
   await openQaStage(page);
   const result = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -629,7 +629,7 @@ test("simulation, origin, and sea-state resets each reseed SSR history once", as
 }) => {
   await openQaStage(page);
   const result = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV13 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV14 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }

@@ -5,7 +5,7 @@
 ```ts
 
 // @public
-export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "whitecap-generation", "whitecap-history", "whitecap-advection", "whitecap-decay", "foam-source-identity", "waterline", "history-rejection", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "underwater-transmittance", "underwater-scattering", "underwater-light-shafts", "underwater-shadow", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color"];
+export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "whitecap-generation", "whitecap-history", "whitecap-advection", "whitecap-decay", "foam-source-identity", "waterline", "history-rejection", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "underwater-transmittance", "underwater-scattering", "underwater-light-shafts", "underwater-shadow", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color", "secondary-particle-contribution", "secondary-particle-overdraw"];
 
 // @public
 export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
@@ -179,10 +179,20 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
         elementType: "float32";
         components: 3;
     }>;
+    "secondary-particle-contribution": Readonly<{
+        format: "r32float-secondary-particle-contribution";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "secondary-particle-overdraw": Readonly<{
+        format: "r32float-secondary-particle-overdraw";
+        elementType: "float32";
+        components: 1;
+    }>;
 }>;
 
 // @public
-export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsWhitecapStageCapture | DiagnosticsFoamSourceIdentityCapture | DiagnosticsWaterlineCapture | DiagnosticsHistoryRejectionCapture | DiagnosticsOpticalScalarCapture | DiagnosticsUnderwaterVolumeCapture;
+export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsWhitecapStageCapture | DiagnosticsFoamSourceIdentityCapture | DiagnosticsWaterlineCapture | DiagnosticsHistoryRejectionCapture | DiagnosticsOpticalScalarCapture | DiagnosticsUnderwaterVolumeCapture | DiagnosticsSecondaryParticleContributionCapture | DiagnosticsSecondaryParticleOverdrawCapture;
 
 // @public
 export interface DiagnosticsCaptureBase {
@@ -262,6 +272,62 @@ export interface DiagnosticsReflectionBaseColorCapture extends DiagnosticsCaptur
     readonly data: Float32Array;
     readonly format: "rgb32float-linear-reflection-base";
     readonly name: "reflection-base-color";
+}
+
+// @public
+export interface DiagnosticsSecondaryParticleConsumer extends DiagnosticsSecondaryParticleReceipt {
+    readonly consumerId: string;
+    readonly maximumRequestCount: number;
+    readonly minimumRetainedSlots: number;
+    readonly pressureReentryPolicy: "after-shared-cooldown" | "forbidden-until-absent";
+    readonly softRequestCeiling: number;
+}
+
+// @public
+export interface DiagnosticsSecondaryParticleContributionCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-secondary-particle-contribution";
+    readonly name: "secondary-particle-contribution";
+}
+
+// @public
+export interface DiagnosticsSecondaryParticleDropReasons {
+    readonly globalContributionPressure: number;
+    readonly invisibleOrOccluded: number;
+    readonly lifecycleReentryForbidden: number;
+    readonly reentryCooldown: number;
+}
+
+// @public
+export interface DiagnosticsSecondaryParticleOverdrawCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-secondary-particle-overdraw";
+    readonly name: "secondary-particle-overdraw";
+}
+
+// @public
+export interface DiagnosticsSecondaryParticleReceipt {
+    readonly contributionMaximumQ16: number | null;
+    readonly contributionMinimumQ16: number | null;
+    readonly dropReasons: DiagnosticsSecondaryParticleDropReasons;
+    readonly invisibleOrOccluded: number;
+    readonly lifecycleReentryForbidden: number;
+    readonly overSubscribed: boolean;
+    readonly reentryCooldown: number;
+    readonly requested: number;
+    readonly requestedAboveSoftCeiling: number;
+    readonly retained: number;
+    readonly retainedByFloor: number;
+    readonly retainedByGlobalCompetition: number;
+    readonly retainedIncumbents: number;
+    readonly thinned: number;
+}
+
+// @public
+export interface DiagnosticsSecondaryParticles extends DiagnosticsSecondaryParticleReceipt {
+    readonly capacity: 131_072;
+    readonly consumers: readonly DiagnosticsSecondaryParticleConsumer[];
+    readonly maximumCandidateCount: number;
 }
 
 // @public
@@ -346,6 +412,7 @@ export interface HostDiagnosticsPresentedFrame extends HostPresentedFrame {
     readonly outputs: readonly DiagnosticsCapture[];
     readonly probeCount: number;
     readonly sceneRenderCount: number;
+    readonly secondaryParticles: DiagnosticsSecondaryParticles;
     readonly waterline: DiagnosticsWaterlineState;
     readonly width: number;
 }
