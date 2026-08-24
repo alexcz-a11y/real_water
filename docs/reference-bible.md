@@ -172,8 +172,13 @@ Their semantics are fixed by the proxy vessel and are not renegotiated by the vi
 
 ### Navigation buoy — 2.4 m
 
-Fixed: floating navigation buoy; matte white body with a safety orange band; graphite fittings;
-visible mooring hardware; no light or radar reflector beyond what the anchor shows.
+Fixed: floating navigation buoy; spherical matte white float body on a tapered neck, with a single
+safety orange band around its widest point; graphite fittings, including a lifting eye on the neck;
+a graphite navigation lantern in a protective cage at the very top.
+
+The approved anchor introduced the lantern, which the specification had not named. It is kept: a
+navigation buoy without a light is not one. Fixed here so that the eight derivative views inherit it
+rather than each inventing their own.
 
 Three parts the buoy's function requires and no floating view can show. Fixed in advance under §11
 so that generation does not get to invent them:
