@@ -436,7 +436,7 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.clipmap,
     kind: "resource",
-    label: "Camera-relative Open Water clipmap",
+    label: "Camera-relative Open Water clipmap (128x128 segments)",
     fingerprint:
       "sha256:61fcb210b4d47847c615ceaec5c83d943ab09fbd993708771ba19d63cf8189e9",
   },
@@ -527,21 +527,22 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapResetRoute,
     kind: "conditional-route",
     label:
-      "Spectral whitecap A/B deterministic reset (seed, simulation reset, rewind, sea-state cut)",
+      "Spectral whitecap A/B 128x128 deterministic reset (seed, simulation reset, rewind, sea-state cut)",
     fingerprint:
       "sha256:0873837843076c0623008daa1287245383edbec389643e5cbebe16641b6f8d98",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapGenerationRoute,
     kind: "conditional-route",
-    label: "Steep spectral crest generation (A to B, host fixed tick)",
+    label: "Steep spectral crest generation (128x128 A to B, host fixed tick)",
     fingerprint:
       "sha256:97a3c3c72e722e2fb9af00dd1ded5af1b68dc5bb1f692aac84111fec17766461",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapHistory,
     kind: "effect-state",
-    label: "Previous fixed-tick whitecap decay carried as bounded history",
+    label:
+      "Previous fixed-tick 128x128 whitecap decay carried as bounded history",
     fingerprint:
       "sha256:fed268c92da5f225f3ca5be2daa9e66dbea47d2f951a1051b5548c118b1dcfe3",
   },
@@ -549,14 +550,14 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapAdvectionRoute,
     kind: "conditional-route",
     label:
-      "World-domain semi-Lagrangian whitecap advection (manual bilinear B to A)",
+      "World-domain semi-Lagrangian whitecap advection (128x128 manual bilinear B to A)",
     fingerprint:
       "sha256:50d3908c21fd1dd73226fd30491b9518ae22c096aa44f00b658f990a17566235",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapDiffusionRoute,
     kind: "conditional-route",
-    label: "Three-tap cross-crest whitecap diffusion (A to B)",
+    label: "Three-tap cross-crest whitecap diffusion (128x128 A to B)",
     fingerprint:
       "sha256:d502167e1c04ddf8a6b39a7fcc6f356a340c40be88ec94131ca4bc3eb3057cfd",
   },
@@ -564,7 +565,7 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapDecayRoute,
     kind: "conditional-route",
     label:
-      "Persistent whitecap decay and fresh-generation composition (B to A)",
+      "Persistent whitecap decay and fresh-generation composition (128x128 B to A)",
     fingerprint:
       "sha256:5bff6f48ddcfecf86f604b3b021004cc886855fdccb23e643e89697187b11199",
   },
