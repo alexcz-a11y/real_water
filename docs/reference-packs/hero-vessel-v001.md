@@ -145,6 +145,15 @@ Terms §2.3 attaches a licence that runs the other way, and its scope depends on
    Services". Whether an agent operating the published UI falls inside that phrase is not settled
    by the text, and §1.4 addresses agents acting on a user's behalf without resolving it either way.
 
+   Searched again on 2026-08-24 across the Reve help centre, whose "Download & share your content"
+   article (`help.reve.com/hc/en-us/articles/46802994402836`) is the only published guidance on
+   saving Output. It says: "Select any image and click the download button to save it to your
+   device, then share it anywhere you'd like." That settles **what may be done with a downloaded
+   file** — the documented path endorses saving and onward sharing, which is what this pack does.
+   It says nothing about **who or what may press the button**, which is the half §1.3(b) turns on.
+   The published text does not resolve it; the question stays open rather than being closed by an
+   absence of prohibition.
+
 Both are recorded as open facts, not as findings.
 
 ### Owner's determination
