@@ -18,6 +18,21 @@ import {
   createTestEnvironmentReflection,
 } from "./test-host-environment.js";
 
+const TEST_WEATHER = {
+  windDirectionX: 0.8,
+  windDirectionZ: 0.6,
+  windStrength: 1.2,
+  gustStrength: 0.6,
+  rainIntensity: 0.9,
+};
+const TEST_ATMOSPHERE = {
+  cloudCoverage: 0.8,
+  cloudShadowStrength: 0.75,
+  horizonHaze: 0.4,
+  stormAerosolIntensity: 0.7,
+  lightningIntensity: 0.5,
+};
+
 describe("Host Environment Adapter", () => {
   it("keeps environment implementation helpers off the public Interface", async () => {
     const publicApi = await import("../src/index.js");
@@ -45,11 +60,13 @@ describe("Host Environment Adapter", () => {
     expect(createSupportedHostEnvironmentRadianceBytes()).not.toBe(bytes);
   });
 
-  it("publishes a borrowed reflection descriptor and hot lighting scalars", () => {
+  it("publishes a borrowed reflection descriptor and one hot Environment snapshot", () => {
     const reflection = createTestEnvironmentReflection();
     const adapter = createStaticHostEnvironmentAdapter(
       reflection,
       TEST_ENVIRONMENT_STATE,
+      TEST_WEATHER,
+      TEST_ATMOSPHERE,
     );
 
     expect(adapter.reflection).toEqual({
@@ -62,30 +79,47 @@ describe("Host Environment Adapter", () => {
       colorSpace: "srgb",
     });
     expect(adapter.texture).toBeNull();
-    expect(adapter.snapshot()).toEqual(TEST_ENVIRONMENT_STATE);
+    expect(adapter.snapshot()).toEqual({
+      lighting: TEST_ENVIRONMENT_STATE,
+      weather: TEST_WEATHER,
+      atmosphere: TEST_ATMOSPHERE,
+    });
     expect(Object.isFrozen(adapter)).toBe(true);
     expect(Object.isFrozen(adapter.reflection)).toBe(true);
     expect(Object.isFrozen(adapter.snapshot())).toBe(true);
+    expect(Object.isFrozen(adapter.snapshot().lighting)).toBe(true);
+    expect(Object.isFrozen(adapter.snapshot().weather)).toBe(true);
+    expect(Object.isFrozen(adapter.snapshot().atmosphere)).toBe(true);
   });
 
   it("re-reads mutable Host environment scalars without replacing the adapter", () => {
     const lighting = { ...TEST_ENVIRONMENT_STATE };
+    const weather = { ...TEST_WEATHER };
+    const atmosphere = { ...TEST_ATMOSPHERE };
     const adapter = createStaticHostEnvironmentAdapter(
       createTestEnvironmentReflection(),
       lighting,
+      weather,
+      atmosphere,
     );
 
     lighting.sunIntensity = 0.2;
     lighting.environmentIntensity = 0.35;
     lighting.sunDirectionX = -1;
     lighting.sunAngularRadiusRadians = 0.2;
+    weather.rainIntensity = 0.25;
+    atmosphere.lightningIntensity = 0;
 
     expect(adapter.snapshot()).toEqual({
-      ...TEST_ENVIRONMENT_STATE,
-      sunIntensity: 0.2,
-      environmentIntensity: 0.35,
-      sunDirectionX: -1,
-      sunAngularRadiusRadians: 0.2,
+      lighting: {
+        ...TEST_ENVIRONMENT_STATE,
+        sunIntensity: 0.2,
+        environmentIntensity: 0.35,
+        sunDirectionX: -1,
+        sunAngularRadiusRadians: 0.2,
+      },
+      weather: { ...TEST_WEATHER, rainIntensity: 0.25 },
+      atmosphere: { ...TEST_ATMOSPHERE, lightningIntensity: 0 },
     });
     expect(Object.isFrozen(adapter.snapshot())).toBe(true);
   });
@@ -247,7 +281,11 @@ describe("Host Environment Adapter", () => {
         colorSpace: "srgb" as const,
       },
       texture: null,
-      snapshot: () => TEST_ENVIRONMENT_STATE,
+      snapshot: () => ({
+        lighting: TEST_ENVIRONMENT_STATE,
+        weather: TEST_WEATHER,
+        atmosphere: TEST_ATMOSPHERE,
+      }),
     };
 
     await expect(

@@ -32,7 +32,7 @@ import type {
   PreparedPostTraaStage,
 } from "../post-traa-composition.js";
 import type { OpenWaterRuntimeSnapshot } from "../runtime.js";
-import { SECONDARY_PARTICLE_POST_TRAA_STAGE_ID } from "./secondary-particle-post-traa-stage.js";
+import { STORM_FRONT_POST_TRAA_STAGE_ID } from "./storm-front-post-traa-stage.js";
 import type { WaterlineFrameState } from "./waterline-state.js";
 
 export const LENS_WETNESS_POST_TRAA_STAGE_ID = "lens-wetness" as const;
@@ -40,7 +40,7 @@ export const LENS_WETNESS_POST_TRAA_STAGE_ID = "lens-wetness" as const;
 export const LENS_WETNESS_POST_TRAA_STAGE_DECLARATION: PostTraaStageDeclaration =
   Object.freeze({
     id: LENS_WETNESS_POST_TRAA_STAGE_ID,
-    after: SECONDARY_PARTICLE_POST_TRAA_STAGE_ID,
+    after: STORM_FRONT_POST_TRAA_STAGE_ID,
   });
 
 export {

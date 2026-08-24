@@ -67,6 +67,19 @@ import {
 import { snapClipmapToCamera } from "./camera-relative-clipmap.js";
 import { createWaterPreset } from "../water-preset.js";
 import {
+  STORM_FRONT_RAIN_HEIGHT_AMPLITUDE_METRES,
+  STORM_FRONT_RAIN_PRIMARY_WEIGHT,
+  STORM_FRONT_RAIN_PRIMARY_X,
+  STORM_FRONT_RAIN_PRIMARY_Z,
+  STORM_FRONT_RAIN_SECONDARY_PHASE_SCALE,
+  STORM_FRONT_RAIN_SECONDARY_WEIGHT,
+  STORM_FRONT_RAIN_SECONDARY_X,
+  STORM_FRONT_RAIN_SECONDARY_Z,
+  STORM_FRONT_RAIN_TEMPORAL_RADIANS_PER_TICK,
+  type StormFrontController,
+  type StormFrontFramePair,
+} from "../storm-front.js";
+import {
   DIRECTIONAL_WAKE_HEIGHT_SCALE,
   DIRECTIONAL_WAKE_LENGTH_RADIUS_MULTIPLIER,
   DIRECTIONAL_WAKE_SPATIAL_RADIANS,
@@ -113,6 +126,7 @@ export function createSpectralBandRendering(
   presentation: HostPresentationAdapter,
   innerCellMetres: number,
   foamField: UnifiedFoamField,
+  stormFront: StormFrontController,
 ) {
   const originX = uniform(0);
   const originZ = uniform(0);
@@ -147,6 +161,31 @@ export function createSpectralBandRendering(
   const previousSeaLevelMetres = uniform(0);
   const previousTimeScale = uniform(1);
   const previousCrestSharpness = uniform(0);
+  const initialStormFront = requireStormFrontFramePair(stormFront);
+  const rainRippleStrength = uniform(
+    initialStormFront.current.rainRippleStrength,
+  )
+    .setName("stormRainRippleStrengthCurrent")
+    .setGroup(renderGroup);
+  const previousRainRippleStrength = uniform(
+    initialStormFront.previous.rainRippleStrength,
+  )
+    .setName("stormRainRippleStrengthPrevious")
+    .setGroup(renderGroup);
+  const rainSpatialPhase = uniform(initialStormFront.current.spatialPhase)
+    .setName("stormRainSpatialPhaseCurrent")
+    .setGroup(renderGroup);
+  const previousRainSpatialPhase = uniform(
+    initialStormFront.previous.spatialPhase,
+  )
+    .setName("stormRainSpatialPhasePrevious")
+    .setGroup(renderGroup);
+  const rainTick = uniform(initialStormFront.current.tick)
+    .setName("stormRainTickCurrent")
+    .setGroup(renderGroup);
+  const previousRainTick = uniform(initialStormFront.previous.tick)
+    .setName("stormRainTickPrevious")
+    .setGroup(renderGroup);
   const previousBlendOriginPhaseA = uniform(0);
   const previousBlendOriginPhaseB = uniform(0);
   const createImpactVectors = () =>
@@ -990,6 +1029,52 @@ export function createSpectralBandRendering(
     };
   };
 
+  const evaluateRainSurface = (
+    hostX: WaveAxis,
+    hostZ: WaveAxis,
+    strength: WaveAxis,
+    spatialPhase: WaveAxis,
+    tick: WaveAxis,
+  ) => {
+    const amplitude = strength.mul(STORM_FRONT_RAIN_HEIGHT_AMPLITUDE_METRES);
+    const phase = spatialPhase
+      .mul(Math.PI * 2)
+      .add(tick.mul(STORM_FRONT_RAIN_TEMPORAL_RADIANS_PER_TICK));
+    const argumentA = hostX
+      .mul(STORM_FRONT_RAIN_PRIMARY_X)
+      .add(hostZ.mul(STORM_FRONT_RAIN_PRIMARY_Z))
+      .add(phase);
+    const argumentB = hostX
+      .mul(STORM_FRONT_RAIN_SECONDARY_X)
+      .add(hostZ.mul(STORM_FRONT_RAIN_SECONDARY_Z))
+      .sub(phase.mul(STORM_FRONT_RAIN_SECONDARY_PHASE_SCALE));
+    return {
+      height: amplitude.mul(
+        sin(argumentA)
+          .mul(STORM_FRONT_RAIN_PRIMARY_WEIGHT)
+          .add(sin(argumentB).mul(STORM_FRONT_RAIN_SECONDARY_WEIGHT)),
+      ),
+      slopeX: amplitude.mul(
+        cos(argumentA)
+          .mul(STORM_FRONT_RAIN_PRIMARY_WEIGHT * STORM_FRONT_RAIN_PRIMARY_X)
+          .add(
+            cos(argumentB).mul(
+              STORM_FRONT_RAIN_SECONDARY_WEIGHT * STORM_FRONT_RAIN_SECONDARY_X,
+            ),
+          ),
+      ),
+      slopeZ: amplitude.mul(
+        cos(argumentA)
+          .mul(STORM_FRONT_RAIN_PRIMARY_WEIGHT * STORM_FRONT_RAIN_PRIMARY_Z)
+          .add(
+            cos(argumentB).mul(
+              STORM_FRONT_RAIN_SECONDARY_WEIGHT * STORM_FRONT_RAIN_SECONDARY_Z,
+            ),
+          ),
+      ),
+    };
+  };
+
   const sampleCurrentSurface = (hostX: WaveAxis, hostZ: WaveAxis) => {
     const viewDistance = length(
       vec2(hostX.sub(surfaceSampleCameraX), hostZ.sub(surfaceSampleCameraZ)),
@@ -1002,6 +1087,13 @@ export function createSpectralBandRendering(
       slopeFade,
       currentWaveField,
     );
+    const rain = evaluateRainSurface(
+      hostX,
+      hostZ,
+      rainRippleStrength,
+      rainSpatialPhase,
+      rainTick,
+    );
     // Caustics sample this path at drawing-buffer resolution. Reuse the
     // fixed-resolution current local-surface field produced by the authoritative
     // fixed-tick resolve instead of scanning all 128 Disturbances per receiver
@@ -1009,10 +1101,11 @@ export function createSpectralBandRendering(
     const localInteraction = foamField.sampleLocalSurface(hostX, hostZ);
     return {
       height: surface.height
+        .add(rain.height)
         .add(localInteraction.height)
         .add(currentWaveField.seaLevelMetres),
-      slopeX: surface.slopeX.add(localInteraction.slopeX),
-      slopeZ: surface.slopeZ.add(localInteraction.slopeZ),
+      slopeX: surface.slopeX.add(rain.slopeX).add(localInteraction.slopeX),
+      slopeZ: surface.slopeZ.add(rain.slopeZ).add(localInteraction.slopeZ),
     };
   };
 
@@ -1060,7 +1153,15 @@ export function createSpectralBandRendering(
     currentHeroBreakerGeometry,
     currentHeroBreakerTiming,
   );
+  const vertexRain = evaluateRainSurface(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    rainRippleStrength,
+    rainSpatialPhase,
+    rainTick,
+  );
   const vertexHeight = vertexSurface.height
+    .add(vertexRain.height)
     .add(vertexLocalInteraction.x)
     .add(vertexHeroBreaker.x)
     .add(currentWaveField.seaLevelMetres)
@@ -1099,7 +1200,15 @@ export function createSpectralBandRendering(
     previousHeroBreakerGeometry,
     previousHeroBreakerTiming,
   );
+  const previousVertexRain = evaluateRainSurface(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    previousRainRippleStrength,
+    previousRainSpatialPhase,
+    previousRainTick,
+  );
   const previousVertexHeight = previousVertexSurface.height
+    .add(previousVertexRain.height)
     .add(previousVertexLocalInteraction.x)
     .add(previousVertexHeroBreaker.x)
     .add(previousWaveField.seaLevelMetres)
@@ -1136,10 +1245,19 @@ export function createSpectralBandRendering(
     currentHeroBreakerGeometry,
     currentHeroBreakerTiming,
   );
+  const fragmentRain = evaluateRainSurface(
+    fragmentSample.hostX,
+    fragmentSample.hostZ,
+    rainRippleStrength,
+    rainSpatialPhase,
+    rainTick,
+  );
   const fragmentSlopeX = fragmentSurface.slopeX
+    .add(fragmentRain.slopeX)
     .add(fragmentLocalInteraction.y)
     .add(fragmentHeroBreaker.y);
   const fragmentSlopeZ = fragmentSurface.slopeZ
+    .add(fragmentRain.slopeZ)
     .add(fragmentLocalInteraction.z)
     .add(fragmentHeroBreaker.z);
 
@@ -1406,8 +1524,16 @@ export function createSpectralBandRendering(
       };
       const resetHistory = shouldResetWaveHistory(current);
       const previous = resetHistory ? current : committed;
+      const stormFrames = requireStormFrontFramePair(stormFront);
       writeWaveField(currentWaveField, current, true);
       writeWaveField(previousWaveField, previous ?? current, false);
+      rainRippleStrength.value = stormFrames.current.rainRippleStrength;
+      previousRainRippleStrength.value =
+        stormFrames.previous.rainRippleStrength;
+      rainSpatialPhase.value = stormFrames.current.spatialPhase;
+      previousRainSpatialPhase.value = stormFrames.previous.spatialPhase;
+      rainTick.value = stormFrames.current.tick;
+      previousRainTick.value = stormFrames.previous.tick;
       const previousLocalInteraction =
         resetHistory || committedLocalInteraction === null
           ? desiredLocalInteraction
@@ -1487,12 +1613,14 @@ export function createSpectralBandRendering(
       snapshot: OpenWaterRuntimeSnapshot,
       interaction: LocalInteractionRenderSnapshot,
     ): void {
+      stormFront.synchronize(snapshot);
       desiredControls = snapshot.artisticControls;
       desiredSeaStateCutRevision = snapshot.seaStateCutRevision;
       desiredLocalInteraction = interaction;
       foamField.runtimeStateSink.synchronize(snapshot, interaction);
     },
     observe(snapshot: OpenWaterRuntimeSnapshot): void {
+      stormFront.synchronize(snapshot);
       foamField.runtimeStateSink.observe?.(snapshot);
     },
   });
@@ -1603,6 +1731,18 @@ export function createSpectralBandRendering(
       desiredLocalInteraction = emptyLocalInteraction;
     },
   });
+}
+
+function requireStormFrontFramePair(
+  stormFront: StormFrontController,
+): StormFrontFramePair {
+  const pair = stormFront.inspect();
+  if (pair === null) {
+    throw new Error(
+      "Storm Front must be synchronized before spectral rendering is prepared.",
+    );
+  }
+  return pair;
 }
 
 function localInteractionKindValue(

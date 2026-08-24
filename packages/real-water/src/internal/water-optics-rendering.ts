@@ -34,6 +34,7 @@ import {
 } from "three/tsl";
 import type { HostEnvironmentAdapter } from "../environment.js";
 import { readHostEnvironmentState } from "../environment.js";
+import type { StormFrontController } from "../storm-front.js";
 import type { OpenWaterRuntimeSnapshot, RuntimeStateSink } from "../runtime.js";
 import type { LocalInteractionRenderSnapshot } from "./local-interaction.js";
 import { createWaterPreset } from "../water-preset.js";
@@ -66,6 +67,7 @@ type SpectralBandRendering = ReturnType<typeof createSpectralBandRendering>;
 export function createWaterOpticsRendering(
   spectral: SpectralBandRendering,
   environment: HostEnvironmentAdapter,
+  stormFront: StormFrontController,
   bodyColor: Texture,
   planar: {
     readonly texture: Texture;
@@ -75,6 +77,12 @@ export function createWaterOpticsRendering(
   initialWaterline: WaterlineFrameState,
 ) {
   const initialEnvironment = readHostEnvironmentState(environment);
+  const initialStorm = stormFront.inspect()?.current;
+  if (initialStorm === undefined) {
+    throw new Error(
+      "Storm Front must be synchronized before water optics are prepared.",
+    );
+  }
   const grazingReflection = uniform(
     INITIAL_ARTISTIC_CONTROLS.grazingReflection,
   );
@@ -126,6 +134,17 @@ export function createWaterOpticsRendering(
   )
     .setName("hostSunStrength")
     .setGroup(renderGroup);
+  const stormGlintIllumination = uniform(initialStorm.glintIllumination)
+    .setName("stormGlintIllumination")
+    .setGroup(renderGroup);
+  const stormFoamIllumination = uniform(initialStorm.foamIllumination)
+    .setName("stormFoamIllumination")
+    .setGroup(renderGroup);
+  const stormReflectionIllumination = uniform(
+    initialStorm.reflectionIllumination,
+  )
+    .setName("stormReflectionIllumination")
+    .setGroup(renderGroup);
   const applyHostLighting = (): void => {
     const lighting = readHostEnvironmentState(environment);
     sunDirectionValue.set(
@@ -144,6 +163,13 @@ export function createWaterOpticsRendering(
     sunStrength.value =
       lighting.sunIntensity *
       Math.max(lighting.sunColorR, lighting.sunColorG, lighting.sunColorB);
+    const storm = stormFront.inspect()?.current;
+    if (storm === undefined) {
+      throw new Error("Storm Front state disappeared during water rendering.");
+    }
+    stormGlintIllumination.value = storm.glintIllumination;
+    stormFoamIllumination.value = storm.foamIllumination;
+    stormReflectionIllumination.value = storm.reflectionIllumination;
   };
   sunStrength.onRenderUpdate(() => {
     applyHostLighting();
@@ -197,6 +223,7 @@ export function createWaterOpticsRendering(
   const environmentColor = environmentSample.rgb
     .mul(environmentReflection)
     .mul(environmentIntensity)
+    .mul(stormReflectionIllumination)
     .mul(float(1).sub(foamDensity.mul(0.9)).clamp(0, 1));
   const planarViewProjection = uniform(planar.viewProjection)
     .setName("planarViewProjection")
@@ -234,7 +261,7 @@ export function createWaterOpticsRendering(
     .clamp(0, 1);
   const reflectedRadiance = mix(
     environmentColor,
-    planarSample.rgb,
+    planarSample.rgb.mul(stormReflectionIllumination),
     planarConfidence,
   );
 
@@ -278,7 +305,7 @@ export function createWaterOpticsRendering(
     BEER_LAMBERT_RGB.mul(depthColoring).mul(thicknessNode).negate(),
   ).clamp(0, 1);
   const sunDirection = sunDirectionUniform.normalize();
-  const sunAmount = saturate(sunStrength);
+  const sunAmount = saturate(sunStrength.mul(stormGlintIllumination));
   const phaseCosine = viewDirection.dot(sunDirection).negate().clamp(-1, 1);
   const phaseG = float(HENYEY_GREENSTEIN_G);
   const phaseG2 = phaseG.mul(phaseG);
@@ -333,7 +360,8 @@ export function createWaterOpticsRendering(
   const opticalColor = mix(reflected, crestLift, crestNode.mul(0.35));
   const foamDiffuse = vec3(0.78, 0.86, 0.9)
     .mul(environmentIntensity.mul(0.28).add(sunAmount.mul(0.52)))
-    .add(sunColor.mul(0.08));
+    .add(sunColor.mul(0.08))
+    .mul(stormFoamIllumination);
   const whitewaterColor = mix(
     opticalColor,
     foamDiffuse,

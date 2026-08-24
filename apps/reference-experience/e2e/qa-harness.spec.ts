@@ -10,7 +10,7 @@ import {
 import {
   QA_CAPTURE_VERSION,
   type QaCameraV1,
-  type QaHarnessV16,
+  type QaHarnessV17,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
@@ -61,6 +61,9 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
         updateInteractionAnchor: typeof harness.updateInteractionAnchor,
         submitDisturbances: typeof harness.submitDisturbances,
       },
+      environmentCommands: {
+        updateEnvironment: typeof harness.updateEnvironment,
+      },
       frozen: Object.isFrozen(harness),
     };
   });
@@ -92,13 +95,16 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS,
     ),
   ).toBe(CORE_WEBGPU_MAX_COLOR_ATTACHMENT_BYTES_PER_SAMPLE);
+  // This is the reviewed capture-payload ladder, independent of the Harness
+  // and QA frame-prewarm ladders pinned below.
+  expect(QA_CAPTURE_VERSION).toBe(17);
   expect(contract).toEqual({
     schema: "real-water/qa-harness",
     // The one place the QA Harness version number is pinned to a reviewed
     // value. Everywhere else compares against the exported constant, so this
     // assertion is what makes a bump deliberate instead of self-confirming.
     // eslint-disable-next-line no-restricted-syntax
-    version: 16,
+    version: 17,
     fixedTickHz: 60,
     captureNames: [
       "final-color",
@@ -142,12 +148,16 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "secondary-particle-contribution",
       "secondary-particle-overdraw",
       "hero-breaker-foam",
+      "storm-rain-ripples",
+      "storm-aerosol",
+      "storm-cloud-shadow",
+      "storm-lightning",
     ],
     prewarmSchema: "real-water/qa-frame-prewarm",
     // Pinned for the same reason as `version` above: this contract test is
     // where a QA frame prewarm bump has to be stated, not inferred.
     // eslint-disable-next-line no-restricted-syntax
-    prewarmVersion: 15,
+    prewarmVersion: 16,
     prewarmCoreDeclarations: {
       "final-color": "water-final-color-target",
       "current-color": "water-current-color-target",
@@ -192,6 +202,10 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "secondary-particle-overdraw":
         "water-secondary-particle-accumulation-target",
       "hero-breaker-foam": "water-hero-breaker-foam-diagnostics-target",
+      "storm-rain-ripples": "water-storm-diagnostics-target",
+      "storm-aerosol": "water-storm-diagnostics-target",
+      "storm-cloud-shadow": "water-storm-diagnostics-target",
+      "storm-lightning": "water-storm-diagnostics-target",
     },
     prewarmCaptures: [
       { name: "final-color", preparedFormat: "rgba8unorm-srgb" },
@@ -322,10 +336,29 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
         name: "hero-breaker-foam",
         preparedFormat: "r32float-hero-breaker-foam",
       },
+      {
+        name: "storm-rain-ripples",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+      {
+        name: "storm-aerosol",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+      {
+        name: "storm-cloud-shadow",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+      {
+        name: "storm-lightning",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
     ],
     interactionCommands: {
       updateInteractionAnchor: "function",
       submitDisturbances: "function",
+    },
+    environmentCommands: {
+      updateEnvironment: "function",
     },
     frozen: true,
   });
@@ -345,7 +378,7 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
     const harness = window.__REAL_WATER_QA__ as
-      | (QaHarnessV16 & {
+      | (QaHarnessV17 & {
           updateArtisticControls(
             controls: {
               readonly waveStrength: number;
@@ -480,8 +513,8 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   expect(normalValues[normalIndex + 2]).toBeCloseTo(result.query.normal[1], 1);
   expect(result.after).toEqual(result.before);
   expect(result.presentation.prewarm.progress).toMatchObject({
-    completedWork: 24,
-    totalWork: 24,
+    completedWork: 25,
+    totalWork: 25,
   });
   const encodedRg8ByteLength = result.depth.width * result.depth.height * 4;
   for (const capture of [
@@ -518,7 +551,7 @@ test("presents camera-relative Open Water through the horizon", async ({
   await page.goto("/?qa=1&host=three");
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -574,7 +607,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -649,13 +682,17 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       "secondary-particle-contribution",
       "secondary-particle-overdraw",
       "hero-breaker-foam",
+      "storm-rain-ripples",
+      "storm-aerosol",
+      "storm-cloud-shadow",
+      "storm-lightning",
     ],
     prewarm: {
       width: 320,
       height: 180,
       progress: {
-        completedWork: 24,
-        totalWork: 24,
+        completedWork: 25,
+        totalWork: 25,
       },
     },
   });
@@ -709,9 +746,13 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "secondary-particle-contribution",
     "secondary-particle-overdraw",
     "hero-breaker-foam",
+    "storm-rain-ripples",
+    "storm-aerosol",
+    "storm-cloud-shadow",
+    "storm-lightning",
   ]);
   expect(result.first.captures.map(({ version }) => version)).toEqual(
-    new Array<number>(41).fill(QA_CAPTURE_VERSION),
+    new Array<number>(45).fill(QA_CAPTURE_VERSION),
   );
   expect(result.first.captures.map(({ format }) => format)).toEqual([
     "rgba8unorm-srgb",
@@ -755,6 +796,10 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "r32float-secondary-particle-contribution",
     "r32float-secondary-particle-overdraw",
     "r32float-hero-breaker-foam",
+    "r32float-storm-front",
+    "r32float-storm-front",
+    "r32float-storm-front",
+    "r32float-storm-front",
   ]);
   expect(result.first.captures.every(({ data }) => data.length > 0)).toBe(true);
   expect(
@@ -913,7 +958,7 @@ test("matches the visible WebGPU canvas RGB to the same-frame final-color captur
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }

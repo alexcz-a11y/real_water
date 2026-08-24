@@ -3,10 +3,13 @@ import { createHash } from "node:crypto";
 import { PerspectiveCamera } from "three/webgpu";
 import { createWaterPreset } from "../src/water-preset.js";
 import type { OpenWaterRuntimeSnapshot } from "../src/runtime.js";
+import type { StormFrontFrame } from "../src/storm-front.js";
 import { createSecondaryParticleStableKeyWriter } from "../src/secondary-particle-key.js";
 import { createSecondaryParticleOutputFrustumVisibility } from "../src/secondary-particle-visibility.js";
 import { createSecondaryParticleContributionQuantizer } from "../src/secondary-particle-pool.js";
 import {
+  MAX_SECONDARY_RAIN_SPRAY_CANDIDATES,
+  MAX_SECONDARY_STORM_AEROSOL_CANDIDATES,
   writeSecondarySprayCandidates,
   type SecondarySprayCandidateStorage,
   type SecondarySprayInteractionImpact,
@@ -19,7 +22,7 @@ const reference = Object.freeze({
 });
 
 describe("secondary spray candidate writer", () => {
-  it("preserves the pre-Hero general-source candidate bytes", () => {
+  it("preserves the pre-Storm-Front candidate bytes when weather is off", () => {
     const batch = writeBatch([
       impact(0x1_0000_001d, 2),
       impact(0x1_0000_0011, -1),
@@ -29,6 +32,114 @@ describe("secondary spray candidate writer", () => {
     expect(batchDigest(batch)).toBe(
       "992b75210185521ba3df65a612f3c6b7db39e255616f4d785c805324cf6b6f31",
     );
+  });
+
+  it("bounds both weather partitions inside the existing candidate storage", () => {
+    const weather = stormFrame({
+      rainSprayStrength: 1,
+      stormAerosolStrength: 1,
+    });
+
+    expect(MAX_SECONDARY_RAIN_SPRAY_CANDIDATES).toBe(8_192);
+    expect(MAX_SECONDARY_STORM_AEROSOL_CANDIDATES).toBe(8_192);
+    expect(
+      writeBatch([], {
+        capacity: 65_536,
+        count: 0,
+        stormFront: weather,
+      }).count,
+    ).toBe(16_384);
+
+    const maximumHeroes = Array.from({ length: 8 }, (_, index) =>
+      hero(0x1_0000_0800 + index, index, 1),
+    );
+    expect(
+      writeBatch(maximumHeroes, {
+        capacity: 65_536,
+        count: 65_536,
+        stormFront: weather,
+      }).count,
+    ).toBe(65_536);
+  });
+
+  it("replays rain spray and storm aerosol byte-exactly in the existing consumer", () => {
+    const weather = stormFrame({
+      rainSprayStrength: 1,
+      stormAerosolStrength: 1,
+    });
+    const first = writeBatch([], {
+      capacity: 16_384,
+      count: 0,
+      stormFront: weather,
+    });
+    const replay = writeBatch([], {
+      capacity: 16_384,
+      count: 0,
+      stormFront: weather,
+    });
+
+    expect(replay.high).toEqual(first.high);
+    expect(replay.low).toEqual(first.low);
+    expect(replay.contributions).toEqual(first.contributions);
+    expect(replay.payloads).toEqual(first.payloads);
+    expect(replay.positions).toEqual(first.positions);
+    expect(replay.sizes).toEqual(first.sizes);
+    expect(replay.colors).toEqual(first.colors);
+    expect(first.consumerId).toBe("spray-droplet-mist");
+
+    const rainEnd = MAX_SECONDARY_RAIN_SPRAY_CANDIDATES;
+    expect(
+      first.contributions.subarray(0, rainEnd).some((value) => value > 0),
+    ).toBe(true);
+    expect(
+      first.contributions.subarray(rainEnd).some((value) => value > 0),
+    ).toBe(true);
+    expect(meanHeight(first.positions, 0, rainEnd)).toBeLessThan(1);
+    expect(
+      maximumHorizontalDistance(first.positions, 0, rainEnd, 0, 8),
+    ).toBeLessThan(28);
+    expect(mean(first.sizes, rainEnd, first.count)).toBeGreaterThan(
+      mean(first.sizes, 0, rainEnd),
+    );
+    expect(meanAlpha(first.colors, rainEnd, first.count)).toBeLessThan(
+      meanAlpha(first.colors, 0, rainEnd),
+    );
+  });
+
+  it("keeps the canonical Hero partition after both weather partitions", () => {
+    const source = hero(0x1_0000_0901, 0, 1);
+    const heroOnly = writeBatch([source], {
+      capacity: 4_096,
+      count: 0,
+    });
+    const withWeather = writeBatch([source], {
+      capacity: 20_480,
+      count: 0,
+      stormFront: stormFrame({
+        rainSprayStrength: 1,
+        stormAerosolStrength: 1,
+      }),
+    });
+    const heroOffset =
+      MAX_SECONDARY_RAIN_SPRAY_CANDIDATES +
+      MAX_SECONDARY_STORM_AEROSOL_CANDIDATES;
+
+    expect(withWeather.count).toBe(20_480);
+    expect(withWeather.high.subarray(heroOffset)).toEqual(heroOnly.high);
+    expect(withWeather.low.subarray(heroOffset)).toEqual(heroOnly.low);
+    expect(withWeather.contributions.subarray(heroOffset)).toEqual(
+      heroOnly.contributions,
+    );
+    expect(withWeather.positions.subarray(heroOffset * 3)).toEqual(
+      heroOnly.positions,
+    );
+    expect(withWeather.sizes.subarray(heroOffset)).toEqual(heroOnly.sizes);
+    expect(withWeather.colors.subarray(heroOffset * 4)).toEqual(
+      heroOnly.colors,
+    );
+    expect(
+      withWeather.contributions.subarray(heroOffset).some((value) => value > 0),
+    ).toBe(true);
   });
 
   it("writes byte-exact keys and contributions for every source permutation", () => {
@@ -166,6 +277,7 @@ function writeBatch(
     count?: number;
     tick?: number;
     revision?: number;
+    stormFront?: StormFrontFrame;
   }> = {},
 ) {
   const capacity = options.capacity ?? 128;
@@ -186,6 +298,8 @@ function writeBatch(
   camera.lookAt(0, 0, 0);
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld(true);
+  const stableKeyWriter =
+    createSecondaryParticleStableKeyWriter("spray-droplet-mist");
   const writtenCount = writeSecondarySprayCandidates(
     snapshot(options.tick),
     {
@@ -194,6 +308,7 @@ function writeBatch(
       anchorZ: 0,
       impacts,
     },
+    options.stormFront ?? stormFrame(),
     camera,
     count,
     {
@@ -202,8 +317,7 @@ function writeBatch(
         projectedAreaResolution: reference,
         referenceResolution: reference,
       }),
-      stableKeyWriter:
-        createSecondaryParticleStableKeyWriter("spray-droplet-mist"),
+      stableKeyWriter,
       visibility: createSecondaryParticleOutputFrustumVisibility(reference),
       storage,
       minimumRetainedSlots: 64,
@@ -214,6 +328,7 @@ function writeBatch(
   );
   return {
     count: writtenCount,
+    consumerId: stableKeyWriter.domain.consumerId,
     high: storage.stableKeys.high,
     low: storage.stableKeys.low,
     contributions: storage.contributionsQ16,
@@ -222,6 +337,74 @@ function writeBatch(
     sizes: storage.sizes,
     colors: storage.colors,
   };
+}
+
+function mean(values: Float32Array, start: number, end: number): number {
+  let total = 0;
+  for (let index = start; index < end; index += 1) {
+    total += values[index] ?? 0;
+  }
+  return total / Math.max(1, end - start);
+}
+
+function meanHeight(
+  positions: Float32Array,
+  start: number,
+  end: number,
+): number {
+  let total = 0;
+  for (let index = start; index < end; index += 1) {
+    total += positions[index * 3 + 1] ?? 0;
+  }
+  return total / Math.max(1, end - start);
+}
+
+function meanAlpha(colors: Float32Array, start: number, end: number): number {
+  let total = 0;
+  for (let index = start; index < end; index += 1) {
+    total += colors[index * 4 + 3] ?? 0;
+  }
+  return total / Math.max(1, end - start);
+}
+
+function maximumHorizontalDistance(
+  positions: Float32Array,
+  start: number,
+  end: number,
+  x: number,
+  z: number,
+): number {
+  let maximum = 0;
+  for (let index = start; index < end; index += 1) {
+    const dx = (positions[index * 3] ?? 0) - x;
+    const dz = (positions[index * 3 + 2] ?? 0) - z;
+    maximum = Math.max(maximum, Math.hypot(dx, dz));
+  }
+  return maximum;
+}
+
+function stormFrame(overrides: Partial<StormFrontFrame> = {}): StormFrontFrame {
+  return Object.freeze({
+    seed: 0x1020_3040,
+    tick: 73,
+    inputRevision: 0,
+    spatialPhase: 0,
+    rainRippleStrength: 0,
+    rainSprayStrength: 0,
+    stormAerosolStrength: 0,
+    cloudShadowStrength: 0,
+    lightningStrength: 0,
+    glintIllumination: 1,
+    foamIllumination: 1,
+    reflectionIllumination: 1,
+    atmosphere: Object.freeze({
+      horizonHaze: 0,
+      stormAerosol: 0,
+      cloudShadow: 0,
+      lightning: 0,
+    }),
+    ...overrides,
+  });
 }
 
 function batchDigest(batch: ReturnType<typeof writeBatch>): string {

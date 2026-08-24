@@ -89,7 +89,7 @@ describe("Preset JSON codec", () => {
   });
 
   it("preserves invalid and future JSON byte-for-byte for recovery", () => {
-    const future = ` {\n  "schema": "real-water/environment-preset",\n  "version": 2,\n  "future": true\n} `;
+    const future = ` {\n  "schema": "real-water/environment-preset",\n  "version": 3,\n  "future": true\n} `;
     const invalid = `{"schema": "real-water/water-preset",`;
 
     expect(importPresetJson(future)).toEqual({
@@ -97,7 +97,7 @@ describe("Preset JSON codec", () => {
       reason: "future-version",
       rawJson: future,
       detectedSchema: "real-water/environment-preset",
-      detectedVersion: 2,
+      detectedVersion: 3,
     });
     expect(importPresetJson(invalid)).toEqual({
       status: "recovery",

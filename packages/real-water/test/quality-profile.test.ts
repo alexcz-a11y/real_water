@@ -138,9 +138,21 @@ const BODY_COUPLING = Object.freeze({
   socketRoute: "stable-slot-upsert" as const,
 });
 const MINIMAL_PROFILE_HASH =
-  "sha256:9fb629031064c5718584b77355748965e9cfafe11cba7e3f4675eedf715cd684";
+  "sha256:d50cc4c4bc0d234eded25f194afa7f4ee80620cf817324f34409d2daaa7504e5";
 const HIGH_DETAIL_PROFILE_HASH =
-  "sha256:9780385fa033a0aeb2ad9de04ad04d6d5635398377da6b4000541044120f650b";
+  "sha256:ccc8509117556f87706d9ef8113ece239d5b1de3bd30f392632d9005a49ad987";
+const LEGACY_V14_PROFILES = Object.freeze({
+  "minimal": Object.freeze({
+    profileHash:
+      "sha256:9fb629031064c5718584b77355748965e9cfafe11cba7e3f4675eedf715cd684",
+    segments: 128,
+  }),
+  "minimal-high-detail": Object.freeze({
+    profileHash:
+      "sha256:9780385fa033a0aeb2ad9de04ad04d6d5635398377da6b4000541044120f650b",
+    segments: 256,
+  }),
+} as const);
 const LEGACY_V13_PROFILES = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
@@ -496,7 +508,7 @@ const LEGACY_POST_TRAA_COMPOSITION = Object.freeze({
     }),
   ] as const),
 });
-const NATIVE_POST_TRAA_COMPOSITION = Object.freeze({
+const PRE_STORM_FRONT_POST_TRAA_COMPOSITION = Object.freeze({
   mode: "ordered-declarative-stages" as const,
   resolutionPolicy: "drawing-buffer-exact" as const,
   accumulationFormat: "rgba16float" as const,
@@ -521,6 +533,49 @@ const NATIVE_POST_TRAA_COMPOSITION = Object.freeze({
     samples: 0 as const,
     trigger: "waterline-emergence-impulse" as const,
     updateCadence: "host-fixed-tick" as const,
+  }),
+});
+const NATIVE_POST_TRAA_COMPOSITION = Object.freeze({
+  ...PRE_STORM_FRONT_POST_TRAA_COMPOSITION,
+  stages: Object.freeze([
+    Object.freeze({
+      id: "secondary-particles" as const,
+      after: "traa" as const,
+    }),
+    Object.freeze({
+      id: "storm-atmosphere" as const,
+      after: "secondary-particles" as const,
+    }),
+    Object.freeze({
+      id: "lens-wetness" as const,
+      after: "storm-atmosphere" as const,
+    }),
+  ] as const),
+  lensWetness: Object.freeze({
+    ...PRE_STORM_FRONT_POST_TRAA_COMPOSITION.lensWetness,
+    after: "storm-atmosphere" as const,
+  }),
+});
+const NATIVE_STORM_FRONT = Object.freeze({
+  mode: "prepared-deterministic-route" as const,
+  updateCadence: "host-fixed-tick" as const,
+  rain: Object.freeze({
+    surfaceRoute: "additive-spectral-ripples" as const,
+    secondaryParticleConsumerId: "spray-droplet-mist" as const,
+    maximumCandidateCount: 8_192 as const,
+  }),
+  stormAerosol: Object.freeze({
+    secondaryParticleConsumerId: "spray-droplet-mist" as const,
+    maximumCandidateCount: 8_192 as const,
+  }),
+  cloudAndLightning: Object.freeze({
+    illuminationRoute: "coherent-glint-foam-reflection-atmosphere" as const,
+    atmosphereStageId: "storm-atmosphere" as const,
+  }),
+  diagnostics: Object.freeze({
+    resolutionPolicy: "drawing-buffer-exact" as const,
+    format: "rgba16float" as const,
+    samples: 0 as const,
   }),
 });
 const NATIVE_UNDERWATER = Object.freeze({
@@ -604,7 +659,7 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-secondary-particle-allocation-route":
     "sha256:5eb0ddd03a38ddad2925ef38280e21fe9f240f07a0875a9f2067c0b2bea80a71",
   "water-post-traa-composition-plan":
-    "sha256:811bf0a23d3c91185fcc5efe1478c2850f20c07eef52efdc1c038a699fc90822",
+    "sha256:b113e0281a295f43847976962feb311a99c3d90b8d55d3cfdb56ec8ec6a4b93b",
   "water-traa-resolved-target":
     "sha256:97f0c10a22209f0f6644438d126fa062aa296245e7d18429cc4a42e58730fb09",
   "water-secondary-particle-accumulation-target":
@@ -618,13 +673,13 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-secondary-particle-diagnostics-route":
     "sha256:3b379f85cfe563c2a0dccf32deb4f5eebe4c42b1f034851efda2bd678f874bfa",
   "water-secondary-particle-probe":
-    "sha256:a84045371ce814a6b2899f98b0eac6f93fa43d23014ac1573bcb0f18a9c87548",
+    "sha256:50f14f59e4cec7a4e072abade4c23a427aabfb19d62d1d3c4c76f35ce14e31ce",
   "water-hero-breaker-foam-diagnostics-target":
     "sha256:3e57313110292e7292a28f379183191e87a37c252e3ede01a808393a923046aa",
   "water-lens-wetness-diagnostics-target":
     "sha256:a0bec0c560242b5154b76a55261076c46b6e61e1c0c882c74ec498b84636c4fa",
   "water-lens-wetness-stage-route":
-    "sha256:64975f47b2c5dfc5b406f11524f08bc9fa91c05b7d0ab9972c1f62c90bda4ca1",
+    "sha256:65bc3d679949d16b47a709b24b86a3d6f3efd56a40fbb75778a32a348c0da6b8",
   "water-lens-wetness-diagnostics-route":
     "sha256:a615dbe3b7e5408e41b5e89378665d89c9ffc4731ee27732773dd5bf5af2df15",
   "water-lens-wetness-probe":
@@ -634,7 +689,27 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-current-color-conversion":
     "sha256:750febf150f950dd006fc0a7df54e7e5faa9aace9e026c452f1b9aa0f639a0c8",
   "water-named-output-routes":
-    "sha256:cac4b057b2128af8a3336bafc8381573bed8c406794e1163a8ee30e4ad2a923d",
+    "sha256:1da79fc6a622b709430452bfd4ebf991f816b523a0c3d9555db9f85fbc223818",
+  "water-storm-rain-ripple-route":
+    "sha256:79b6fb7f0bb5320397b518823c5024fd2633847564c33fde0d8e933d94c846e0",
+  "water-storm-rain-spray-route":
+    "sha256:9a6c68bda80805fa995a10d249834c9fbfcdbb87b057c1040ed4aa96d83a01ce",
+  "water-storm-aerosol-route":
+    "sha256:779efcffce9e01100861ecd15c961ca04f49479a22dd05c25c3dc47f147483f6",
+  "water-storm-cloud-shadow-route":
+    "sha256:f9d98f3120f42282cee47757d339c91566c28db8e077c541bead23dcab1aad84",
+  "water-storm-lightning-route":
+    "sha256:7059e3a74a0e06887dd44cfaa99b21cda4134ae6db444096de82471a4fbaeca6",
+  "water-storm-atmosphere-target":
+    "sha256:6eea0ac108673774db2b3bd3e7c9a1a8d8a5ad75d1bf55b15ae44f6227495102",
+  "water-storm-atmosphere-stage-route":
+    "sha256:630c0e5085e5965eb84fea070209b6c737ac155dd13b2715c1e9ccb83ce51fde",
+  "water-storm-diagnostics-target":
+    "sha256:349a060add874f02d14e66a4e10f344c5b9458407f92699d52a0d1efb2b0ba65",
+  "water-storm-diagnostics-route":
+    "sha256:acf8cb2680094af8636032bd9999472b877226df5fafedb0fa1a44f409e878b5",
+  "water-storm-probe":
+    "sha256:66fdc9cef7c1420c5c9475ba943e83cedd0a393d13fd1bffe1a4f6965b7cc6ff",
   "water-ssr-raw-target":
     "sha256:5229f76bc28be7b7aa032fadcb3adabfada2202dde29a88f499d16fac9ba659f",
   "water-ssr-blur-target":
@@ -722,7 +797,7 @@ const DRAWING_BUFFER_BOUND_BASE_FINGERPRINTS = Object.freeze({
   "water-planar-reflection-probe":
     "sha256:f203f71435dfe40d3d14d3b19b853fd13f8338aba138c1eee29400570074311e",
   "water-completion-probe":
-    "sha256:8b7be2e1119ef683210e89c3350cb114f633adc492739f1588fc180e15084903",
+    "sha256:40aa86e9f5a2e952fc96b6ce4a6a56a87caee84bbf2d838c149794e862f35a47",
   "water-main-camera-guard":
     "sha256:e59db4a839b5f36edfaec493a1f334f44ba6bae5a5046a758c0ceb69ea143841",
   "water-whitecap-stage-target":
@@ -760,6 +835,16 @@ const DRAWING_BUFFER_BOUND_IDS = [
   "water-secondary-particle-diagnostics-route",
   "water-secondary-particle-probe",
   "water-hero-breaker-foam-diagnostics-target",
+  "water-storm-rain-ripple-route",
+  "water-storm-rain-spray-route",
+  "water-storm-aerosol-route",
+  "water-storm-cloud-shadow-route",
+  "water-storm-lightning-route",
+  "water-storm-atmosphere-target",
+  "water-storm-atmosphere-stage-route",
+  "water-storm-diagnostics-target",
+  "water-storm-diagnostics-route",
+  "water-storm-probe",
   "water-lens-wetness-diagnostics-target",
   "water-lens-wetness-stage-route",
   "water-lens-wetness-diagnostics-route",
@@ -835,6 +920,7 @@ function canonicalQualityProfileHashInput(profile: QualityProfile) {
     whitecaps: profile.whitecaps,
     secondaryParticles: profile.secondaryParticles,
     underwater: profile.underwater,
+    stormFront: profile.stormFront,
     postTraaComposition: profile.postTraaComposition,
   };
 }
@@ -890,6 +976,17 @@ const CORE_PREWARM_DECLARATION_IDS = [
   "water-hero-breaker-foam-diagnostics-target",
   "water-hero-breaker-foam-diagnostics-route",
   "water-hero-breaker-foam-probe",
+  "water-storm-front-state",
+  "water-storm-rain-ripple-route",
+  "water-storm-rain-spray-route",
+  "water-storm-aerosol-route",
+  "water-storm-cloud-shadow-route",
+  "water-storm-lightning-route",
+  "water-storm-atmosphere-target",
+  "water-storm-atmosphere-stage-route",
+  "water-storm-diagnostics-target",
+  "water-storm-diagnostics-route",
+  "water-storm-probe",
   "water-body-socket-emission-route",
   "water-spectral-band-swell",
   "water-spectral-band-wind",
@@ -1005,10 +1102,35 @@ const CORE_PREWARM_DECLARATION_IDS = [
 ] as const;
 
 describe("Quality Profiles", () => {
+  it("declares one deterministic prepared Storm Front route", () => {
+    const minimal = createMinimalWaterQualityProfile();
+    const highDetail = createMinimalWaterQualityProfile("minimal-high-detail");
+    const capabilities = createCoreWebGPUCapabilities(true, {
+      width: 2_560,
+      height: 1_440,
+    }).rendering;
+
+    expect(minimal.stormFront).toEqual(NATIVE_STORM_FRONT);
+    expect(highDetail.stormFront).toEqual(NATIVE_STORM_FRONT);
+    expect(capabilities.stormFront).toEqual(NATIVE_STORM_FRONT);
+    expect(Object.isFrozen(capabilities.stormFront)).toBe(true);
+    expect(Object.isFrozen(capabilities.stormFront.rain)).toBe(true);
+    expect(Object.isFrozen(capabilities.stormFront.stormAerosol)).toBe(true);
+    expect(Object.isFrozen(capabilities.stormFront.cloudAndLightning)).toBe(
+      true,
+    );
+    expect(Object.isFrozen(capabilities.stormFront.diagnostics)).toBe(true);
+    expect(minimal.postTraaComposition.stages).toEqual([
+      { id: "secondary-particles", after: "traa" },
+      { id: "storm-atmosphere", after: "secondary-particles" },
+      { id: "lens-wetness", after: "storm-atmosphere" },
+    ]);
+  });
+
   it("pins the depth-aware underwater volume outside hot Artistic Controls", () => {
     const profile = createMinimalWaterQualityProfile();
 
-    expect(QUALITY_PROFILE_VERSION).toBe(14);
+    expect(QUALITY_PROFILE_VERSION).toBe(15);
     expect(profile.underwater).toEqual(NATIVE_UNDERWATER);
     expect(Object.isFrozen(profile.underwater)).toBe(true);
     expect(Object.isFrozen(profile.underwater.caustics)).toBe(true);
@@ -1057,10 +1179,10 @@ describe("Quality Profiles", () => {
     const minimal = createMinimalWaterQualityProfile();
     const highDetail = createMinimalWaterQualityProfile("minimal-high-detail");
 
-    expect(QUALITY_PROFILE_VERSION).toBe(14);
+    expect(QUALITY_PROFILE_VERSION).toBe(15);
     expect(minimal).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 14,
+      version: 15,
       id: "minimal",
       profileHash: MINIMAL_PROFILE_HASH,
       surface: {
@@ -1076,11 +1198,12 @@ describe("Quality Profiles", () => {
       whitecaps: NATIVE_WHITECAPS,
       secondaryParticles: NATIVE_SECONDARY_PARTICLES,
       underwater: NATIVE_UNDERWATER,
+      stormFront: NATIVE_STORM_FRONT,
       postTraaComposition: NATIVE_POST_TRAA_COMPOSITION,
     });
     expect(highDetail).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 14,
+      version: 15,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
       surface: {
@@ -1099,6 +1222,7 @@ describe("Quality Profiles", () => {
       },
       secondaryParticles: NATIVE_SECONDARY_PARTICLES,
       underwater: NATIVE_UNDERWATER,
+      stormFront: NATIVE_STORM_FRONT,
       postTraaComposition: NATIVE_POST_TRAA_COMPOSITION,
     });
     expect(createMinimalWaterQualityProfile()).toEqual(minimal);
@@ -1134,12 +1258,18 @@ describe("Quality Profiles", () => {
     expect(Object.isFrozen(minimal.underwater)).toBe(true);
     expect(Object.isFrozen(minimal.underwater.caustics)).toBe(true);
     expect(Object.isFrozen(minimal.underwater.tracers)).toBe(true);
+    expect(Object.isFrozen(minimal.stormFront)).toBe(true);
+    expect(Object.isFrozen(minimal.stormFront.rain)).toBe(true);
+    expect(Object.isFrozen(minimal.stormFront.stormAerosol)).toBe(true);
+    expect(Object.isFrozen(minimal.stormFront.cloudAndLightning)).toBe(true);
+    expect(Object.isFrozen(minimal.stormFront.diagnostics)).toBe(true);
     expect(Object.isFrozen(minimal.postTraaComposition)).toBe(true);
     expect(Object.isFrozen(minimal.postTraaComposition.stages)).toBe(true);
     expect(Object.isFrozen(minimal.postTraaComposition.lensWetness)).toBe(true);
     expect(minimal.postTraaComposition.stages).toEqual([
       { id: "secondary-particles", after: "traa" },
-      { id: "lens-wetness", after: "secondary-particles" },
+      { id: "storm-atmosphere", after: "secondary-particles" },
+      { id: "lens-wetness", after: "storm-atmosphere" },
     ]);
     expect(minimal.reflection.ssr.mode).toBe("current-frame");
     expect(Object.isFrozen(highDetail)).toBe(true);
@@ -1188,7 +1318,7 @@ describe("Quality Profiles", () => {
     expect(normalized).not.toBe(candidate);
     expect(identity).toEqual({
       schema: QUALITY_PROFILE_SCHEMA,
-      version: 14,
+      version: 15,
       id: "minimal-high-detail",
       profileHash: HIGH_DETAIL_PROFILE_HASH,
     });
@@ -1225,6 +1355,48 @@ describe("Quality Profiles", () => {
     expect(Object.isFrozen(migrated)).toBe(true);
   });
 
+  it("migrates only the complete committed version 14 Quality Profiles", () => {
+    for (const id of ["minimal", "minimal-high-detail"] as const) {
+      const legacy = LEGACY_V14_PROFILES[id];
+      const candidate = {
+        schema: QUALITY_PROFILE_SCHEMA,
+        version: 14,
+        id,
+        profileHash: legacy.profileHash,
+        surface: {
+          geometry: {
+            widthSegments: legacy.segments,
+            heightSegments: legacy.segments,
+          },
+        },
+        interaction: LOCAL_INTERACTION,
+        bodyCoupling: BODY_COUPLING,
+        temporal: NATIVE_TEMPORAL,
+        reflection: NATIVE_REFLECTION,
+        whitecaps: {
+          ...NATIVE_WHITECAPS,
+          fieldResolution: legacy.segments,
+        },
+        secondaryParticles: NATIVE_SECONDARY_PARTICLES,
+        underwater: NATIVE_UNDERWATER,
+        postTraaComposition: PRE_STORM_FRONT_POST_TRAA_COMPOSITION,
+      };
+
+      expect(migrateQualityProfile(candidate)).toEqual(
+        createMinimalWaterQualityProfile(id),
+      );
+      expect(() =>
+        migrateQualityProfile({ ...candidate, stormFront: NATIVE_STORM_FRONT }),
+      ).toThrow(TypeError);
+      expect(() =>
+        migrateQualityProfile({
+          ...candidate,
+          postTraaComposition: NATIVE_POST_TRAA_COMPOSITION,
+        }),
+      ).toThrow(TypeError);
+    }
+  });
+
   it("migrates the complete committed version 13 Quality Profiles", () => {
     for (const id of ["minimal", "minimal-high-detail"] as const) {
       const legacy = LEGACY_V13_PROFILES[id];
@@ -1250,7 +1422,7 @@ describe("Quality Profiles", () => {
         },
         secondaryParticles: NATIVE_SECONDARY_PARTICLES,
         underwater: NATIVE_UNDERWATER,
-        postTraaComposition: NATIVE_POST_TRAA_COMPOSITION,
+        postTraaComposition: PRE_STORM_FRONT_POST_TRAA_COMPOSITION,
       };
 
       expect(migrateQualityProfile(candidate)).toEqual(
@@ -1789,7 +1961,7 @@ describe("Quality Profiles", () => {
       "unknown version 4",
       { ...createMinimalWaterQualityProfile(), version: 4 },
     ],
-    ["future version", { ...createMinimalWaterQualityProfile(), version: 15 }],
+    ["future version", { ...createMinimalWaterQualityProfile(), version: 16 }],
     [
       "version 1 hash tampering",
       {
@@ -2035,6 +2207,69 @@ describe("Quality Profiles", () => {
           },
         },
       },
+    ],
+    [
+      "Storm Front rain route drift",
+      {
+        ...createMinimalWaterQualityProfile(),
+        stormFront: {
+          ...NATIVE_STORM_FRONT,
+          rain: {
+            ...NATIVE_STORM_FRONT.rain,
+            surfaceRoute: "replacement-rain-simulation",
+          },
+        },
+      },
+    ],
+    [
+      "Storm Front aerosol candidate capacity drift",
+      {
+        ...createMinimalWaterQualityProfile(),
+        stormFront: {
+          ...NATIVE_STORM_FRONT,
+          stormAerosol: {
+            ...NATIVE_STORM_FRONT.stormAerosol,
+            maximumCandidateCount: 8_191,
+          },
+        },
+      },
+    ],
+    [
+      "Storm Front coherent illumination route drift",
+      {
+        ...createMinimalWaterQualityProfile(),
+        stormFront: {
+          ...NATIVE_STORM_FRONT,
+          cloudAndLightning: {
+            ...NATIVE_STORM_FRONT.cloudAndLightning,
+            illuminationRoute: "atmosphere-only",
+          },
+        },
+      },
+    ],
+    [
+      "unknown Storm Front diagnostics fields",
+      {
+        ...createMinimalWaterQualityProfile(),
+        stormFront: {
+          ...NATIVE_STORM_FRONT,
+          diagnostics: {
+            ...NATIVE_STORM_FRONT.diagnostics,
+            temporalHistory: true,
+          },
+        },
+      },
+    ],
+    [
+      "missing Storm Front route",
+      (() => {
+        const candidate = {
+          ...createMinimalWaterQualityProfile(),
+          stormFront: undefined,
+        };
+        delete (candidate as { stormFront?: unknown }).stormFront;
+        return candidate;
+      })(),
     ],
     [
       "lens-wetness stage order drift",
@@ -2349,7 +2584,7 @@ describe("Quality Profile manifests", () => {
       manifest.declarations.map(({ id, kind }) => [id, kind]),
     );
 
-    expect(PREWARM_MANIFEST_VERSION).toBe(11);
+    expect(PREWARM_MANIFEST_VERSION).toBe(12);
     expect(manifest.effectVariants).toContainEqual({
       effectId: "underwater-volume",
       variantId: "depth-aware",
@@ -2487,7 +2722,7 @@ describe("Quality Profile manifests", () => {
     const profile = createMinimalWaterQualityProfile();
     const manifest = createMinimalWaterPrewarmManifest(profile);
 
-    expect(QUALITY_PROFILE_VERSION).toBe(14);
+    expect(QUALITY_PROFILE_VERSION).toBe(15);
     expect(profile.reflection.ssr.history.resetDomains).toEqual([
       "simulation-reset",
       "camera-cut",
@@ -2527,8 +2762,8 @@ describe("Quality Profile manifests", () => {
     );
     const highDetail = createMinimalWaterPrewarmManifest(highDetailProfile);
 
-    expect(PREWARM_MANIFEST_VERSION).toBe(11);
-    expect(minimal.version).toBe(11);
+    expect(PREWARM_MANIFEST_VERSION).toBe(12);
+    expect(minimal.version).toBe(12);
     expect(minimal.drawingBuffer).toEqual(MEMORY_PREWARM_DRAWING_BUFFER);
     expect(Object.isFrozen(minimal.drawingBuffer)).toBe(true);
     expect(minimal.manifestHash).toBe(
@@ -2566,11 +2801,27 @@ describe("Quality Profile manifests", () => {
         effectId: "hero-breaker",
         variantId: "art-directed-overturning",
       },
+      {
+        effectId: "rain",
+        variantId: "additive-ripples-and-shared-spray",
+      },
+      {
+        effectId: "storm-aerosol",
+        variantId: "shared-spray-post-traa-atmosphere",
+      },
+      {
+        effectId: "cloud-shadow",
+        variantId: "coherent-optical-atmosphere-modulation",
+      },
+      {
+        effectId: "lightning",
+        variantId: "fixed-tick-coherent-transient",
+      },
     ]);
     expect(minimal.effectVariants).toEqual(SUPPORTED_EFFECT_VARIANTS);
     expect(minimal.qualityProfile.temporal).toEqual(NATIVE_TEMPORAL);
     expect(minimal.qualityProfile.reflection).toEqual(NATIVE_REFLECTION);
-    expect(minimal.qualityProfile.version).toBe(14);
+    expect(minimal.qualityProfile.version).toBe(15);
 
     expect(minimal.qualityProfile.whitecaps).toEqual(NATIVE_WHITECAPS);
     expect(minimal.qualityProfile.secondaryParticles).toEqual(
@@ -2588,14 +2839,14 @@ describe("Quality Profile manifests", () => {
         (declaration) => declaration.id === "water-named-output-routes",
       )?.label,
     ).toBe(
-      "Forty-one named diagnostics output routes including unified foam identity, Hero Breaker foam, underwater caustics/particles/bubbles, lens wetness, plus secondary-particle contribution and overdraw",
+      "Forty-five named diagnostics output routes including Storm Front rain/aerosol/cloud-shadow/lightning, unified foam identity, Hero Breaker foam, underwater caustics/particles/bubbles, lens wetness, and secondary-particle contribution/overdraw",
     );
     expect(
       minimal.declarations.find(
         (declaration) => declaration.id === "water-completion-probe",
       )?.label,
     ).toBe(
-      "GPU completion probe of all forty-one named output routes including Hero Breaker foam, underwater volume/tracers, lens wetness, unified foam identity, and secondary-particle contribution/overdraw",
+      "GPU completion probe of all forty-five named output routes including Storm Front rain/aerosol/cloud-shadow/lightning, Hero Breaker foam, underwater volume/tracers, lens wetness, unified foam identity, and secondary-particle contribution/overdraw",
     );
     expect(
       Object.fromEntries(
@@ -2719,7 +2970,7 @@ describe("Quality Profile manifests", () => {
     );
     expect(manifestIdentity(highDetail)).toEqual({
       schema: "real-water/prewarm",
-      version: 11,
+      version: 12,
       id: "reference-minimal-water",
       manifestHash: highDetail.manifestHash,
       qualityProfile: qualityProfileIdentity(highDetailProfile),
@@ -2753,6 +3004,22 @@ describe("Quality Profile manifests", () => {
           effectId: "hero-breaker",
           variantId: "art-directed-overturning",
         },
+        {
+          effectId: "rain",
+          variantId: "additive-ripples-and-shared-spray",
+        },
+        {
+          effectId: "storm-aerosol",
+          variantId: "shared-spray-post-traa-atmosphere",
+        },
+        {
+          effectId: "cloud-shadow",
+          variantId: "coherent-optical-atmosphere-modulation",
+        },
+        {
+          effectId: "lightning",
+          variantId: "fixed-tick-coherent-transient",
+        },
       ],
     });
     expect(Object.isFrozen(minimal.drawingBuffer)).toBe(true);
@@ -2769,6 +3036,10 @@ describe("Quality Profile manifests", () => {
     expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[6])).toBe(true);
     expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[7])).toBe(true);
     expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[8])).toBe(true);
+    expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[9])).toBe(true);
+    expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[10])).toBe(true);
+    expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[11])).toBe(true);
+    expect(Object.isFrozen(SUPPORTED_EFFECT_VARIANTS[12])).toBe(true);
   });
 
   it("binds drawing-buffer-exact fingerprints and hashes to each physical size", () => {

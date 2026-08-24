@@ -1,18 +1,21 @@
 # real-water
 
 This alpha package exposes versioned minimal-water Quality Profiles, their
-canonical one-hundred-twenty-nine-unit Prewarm Manifests, versioned Calm, Swell,
-and Storm Water Presets, Environment Presets, deterministic Showcase Presets,
-and a pure JSON import/export and migration codec. It also exposes the Startup
-and ready Runtime Interfaces, normalized Core WebGPU and Gameplay Query
-capabilities, structured errors, and Memory and Three r185 Host Adapters.
+canonical one-hundred-forty-unit Prewarm Manifests, versioned Calm, Swell, and
+Storm Water Presets, Reference and Storm Front Environment Presets, and
+deterministic Showcase Preset v2 recipes that pin Storm segment identities,
+camera timeline, and both Hero events, plus a pure JSON import/export and
+migration codec. It also exposes the Startup and ready Runtime Interfaces,
+normalized Core WebGPU and Gameplay Query capabilities, structured errors, and
+Memory and Three r185 Host Adapters.
 
 `importPresetJson(...)` recognizes all four schema discriminators, validates
-current data, and migrates only exact historical Water and Quality snapshots.
-Invalid, unknown, unsupported, and future JSON is returned unchanged as a
-recovery result. `exportPresetJson(...)` emits validated current canonical JSON.
-The package performs no persistence; local record identity, display names, and
-browser storage belong to the private Reference Experience.
+current data, and migrates only exact historical Water, Environment, Quality,
+and Showcase snapshots. Invalid, unknown, unsupported, and future JSON is
+returned unchanged as a recovery result. `exportPresetJson(...)` emits validated
+current canonical JSON. The package performs no persistence; local record
+identity, display names, and browser storage belong to the private Reference
+Experience.
 
 The Three Adapter borrows the Host renderer, scene, main camera, and a Host
 Environment Adapter to prepare a TSL NodeMaterial, four coherent spectral wave
@@ -56,8 +59,14 @@ is CPU-known output-frustum coverage, not GPU scene-depth occlusion, so an
 opaque-hidden particle can still retain a slot; using a previous-frame occlusion
 estimate would add one frame of latency and remains a documented future option
 rather than part of this contract. A second ordered post-TRAA stage applies
-emergence-only lens wetness, decays it to exact zero within 180 fixed ticks, and
-preserves at least 78% QA visibility. The Core main scene render remains one
+coherent cloud shadow, horizon haze, storm aerosol, and lightning after shared
+rain/spray accumulation. A third stage applies emergence-only lens wetness,
+decays it to exact zero within 180 fixed ticks, and preserves at least 78% QA
+visibility. Rain adds a bounded current/previous correction to the spectral
+surface while near-camera rain and aerosol remain stable partitions of
+`spray-droplet-mist`; no second pool or ocean solver is created. Four normalized
+Storm captures expose rain ripples, aerosol, cloud shadow, and lightning from
+one RGBA16F diagnostics target. The Core main scene render remains one
 6-attachment 32-byte MRT pass, plus one auxiliary planar scene render when
 facing. Current-frame SSR, history, and compose are fullscreen passes after that
 single main scene and before TRAA. Before readiness it also renders a
@@ -76,7 +85,8 @@ Disturbances per receiver pixel. Independent scalar captures expose caustics,
 suspended particles, bubbles, and lens wetness; QA does not own a second scene
 or TRAA. The Host must supply a perspective camera. The Reference Experience
 reveals the prepared canvas on the next refresh. The Host retains ownership of
-environment radiance and finite sun. The prepared radiance fingerprint is the
+environment radiance and supplies one atomic hot lighting, weather, and
+atmosphere snapshot each fixed tick. The prepared radiance fingerprint is the
 Host verification credential: the SHA-256 of the canonical 8x4 RGBA8 sRGB
 pixels. Identity, size, format, type, and color space are structural and must
 agree with the borrowed Three texture. Texture bytes, sampler, and identity stay
@@ -86,13 +96,13 @@ Host viewport after opaque geometry. Real Water never reads `scene.environment`
 or guesses sky or weather. The water material is an unlit public NodeMaterial
 whose color and MRT come from the same optical path.
 
-Each Prewarm Manifest is version 11 and binds an immutable drawing buffer. The
+Each Prewarm Manifest is version 12 and binds an immutable drawing buffer. The
 factory hashes that complete work plan synchronously. Memory Host tests may omit
 the buffer and receive 320x180; Three Host fails closed if the renderer buffer
 does not match. Changing the physical drawing buffer creates a new manifest and
 requires a full conceal, dispose, prewarm, and reveal.
 
-`minimal` and `minimal-high-detail` are immutable version-14 structural Quality
+`minimal` and `minimal-high-detail` are immutable version-15 structural Quality
 Profiles. Both pin the Native temporal policy and the implemented reflection
 layer: TRAA at render scale 1 with a drawing-buffer-exact resolution policy and
 TAAU, dynamic resolution, frame generation, and MSAA samples off, plus
@@ -106,14 +116,14 @@ Controls, 60 Hz Body socket poses, and manual source lifetimes replay
 identically when presentation is batched at 30 Hz. Amount and persistence remain
 hot Artistic Controls; field resolution, layout, format, cadence, timeline
 capacity, and routes remain structural. Prepared-surface caustic receiver
-bounds, underwater tracer layouts, lens-wetness stage order, and diagnostics
-layouts are structural; presentation coefficients are not. The lease includes
-RG16F motion and stock Three revision 185 only after prewarm succeeds. Changing
-between them produces a different manifest hash and requires a full new
-preparation. A ready lease accepts only effect variants declared by its
-manifest; undeclared requests fail with `EFFECT_NOT_PREWARMED` before the
-runtime revision changes. Playwright Regression acceptance does not constitute
-headed Native certification.
+bounds, underwater tracer layouts, Storm Front source budgets and atmosphere
+stage, lens-wetness stage order, and diagnostics layouts are structural;
+presentation coefficients are not. The lease includes RG16F motion and stock
+Three revision 185 only after prewarm succeeds. Changing between them produces a
+different manifest hash and requires a full new preparation. A ready lease
+accepts only effect variants declared by its manifest; undeclared requests fail
+with `EFFECT_NOT_PREWARMED` before the runtime revision changes. Playwright
+Regression acceptance does not constitute headed Native certification.
 
 Both profiles also pin one 48-metre local interaction field with an 8-metre
 Hermite edge fade, one Interaction Anchor, 128 shared preallocated Disturbance

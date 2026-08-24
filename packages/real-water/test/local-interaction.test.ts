@@ -191,6 +191,11 @@ describe("ready local interaction runtime", () => {
       activeDisturbanceCount: 0,
       activeHeroBreakerCount: 0,
     });
+    expect(lease.submitDisturbances(breaker)).toMatchObject({
+      acceptedDisturbanceIds: [29],
+      droppedDisturbanceIds: [],
+      activeDisturbanceCount: 1,
+    });
     await Promise.all([lease.dispose(), spectralOnly.dispose()]);
   });
 
@@ -760,8 +765,8 @@ describe("ready local interaction runtime", () => {
   it("declares the bounded local interaction route before readiness", () => {
     const manifest = createMinimalWaterPrewarmManifest();
 
-    expect(manifest.version).toBe(11);
-    expect(manifest.qualityProfile.version).toBe(14);
+    expect(manifest.version).toBe(12);
+    expect(manifest.qualityProfile.version).toBe(15);
     expect(manifest.qualityProfile.interaction).toEqual({
       anchorCount: 1,
       field: {

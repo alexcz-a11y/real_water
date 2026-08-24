@@ -4,6 +4,7 @@ import {
   ENVIRONMENT_PRESET_VERSION,
   createAuthoredEnvironmentPreset,
   createReferenceEnvironmentPreset,
+  createStormFrontEnvironmentPreset,
   environmentPresetIdentity,
   migrateEnvironmentPreset,
   normalizeEnvironmentPreset,
@@ -11,6 +12,36 @@ import {
 } from "../src/environment-preset.js";
 
 describe("Environment Presets", () => {
+  it("authors the complete Storm Front Environment look", () => {
+    const preset = createStormFrontEnvironmentPreset();
+
+    expect(ENVIRONMENT_PRESET_VERSION).toBe(2);
+    expect(preset).toMatchObject({
+      id: "storm-front",
+      version: 2,
+      lighting: {
+        sunIntensity: 0.55,
+        environmentIntensity: 0.62,
+      },
+      weather: {
+        windStrength: 1.25,
+        gustStrength: 0.85,
+        rainIntensity: 0.9,
+      },
+      atmosphere: {
+        cloudCoverage: 0.9,
+        cloudShadowStrength: 0.75,
+        horizonHaze: 0.65,
+        stormAerosolIntensity: 0.8,
+        lightningIntensity: 0,
+      },
+    });
+    expect(preset.presetHash).toBe(
+      "sha256:e7f3fc968e067bff606718e85a388bce545a6896a6b037198f5c43cce885db45",
+    );
+    expect(Object.isFrozen(preset.atmosphere)).toBe(true);
+  });
+
   it("creates the versioned Reference Environment snapshot without Host resources", () => {
     const preset = createReferenceEnvironmentPreset();
 
@@ -19,7 +50,7 @@ describe("Environment Presets", () => {
       version: ENVIRONMENT_PRESET_VERSION,
       id: "reference",
       presetHash:
-        "sha256:944a777311b8e46b986d3b4f6798595adcc99e3b5a7d49adf25cfa69c42bdc24",
+        "sha256:ded2112cc607c9d976901fa69b162193402c13d0e8e4d2ad3cd179aa26bd8ad1",
       lighting: {
         sunDirectionX: 0.32,
         sunDirectionY: 0.84,
@@ -52,6 +83,8 @@ describe("Environment Presets", () => {
         cloudCoverage: 0.15,
         cloudShadowStrength: 0.1,
         horizonHaze: 0.25,
+        stormAerosolIntensity: 0,
+        lightningIntensity: 0,
       },
     });
     expect(Object.isFrozen(preset)).toBe(true);
@@ -84,6 +117,8 @@ describe("Environment Presets", () => {
         cloudCoverage: 0.25,
         cloudShadowStrength: 0.3,
         horizonHaze: 0.2,
+        stormAerosolIntensity: 0.1,
+        lightningIntensity: 0,
       },
     };
 
@@ -91,10 +126,10 @@ describe("Environment Presets", () => {
 
     expect(authored).toEqual({
       schema: ENVIRONMENT_PRESET_SCHEMA,
-      version: 1,
+      version: 2,
       id: "blue-noon",
       presetHash:
-        "sha256:0b82c5abc7cc3ed5bd888e2d16d52125d8d0ef64a4df1f333020bc0d2c5a1590",
+        "sha256:6f7a534f4b3a63f3b1b6819a1a40d8ff4f9a2cd71bcba0b56103d585a4d95ba4",
       ...snapshot,
     });
     expect(Object.isFrozen(authored)).toBe(true);
@@ -137,12 +172,12 @@ describe("Environment Presets", () => {
       version: ENVIRONMENT_PRESET_VERSION,
       id: "reference",
       presetHash:
-        "sha256:944a777311b8e46b986d3b4f6798595adcc99e3b5a7d49adf25cfa69c42bdc24",
+        "sha256:ded2112cc607c9d976901fa69b162193402c13d0e8e4d2ad3cd179aa26bd8ad1",
     });
     expect(Object.isFrozen(identity)).toBe(true);
   });
 
-  it("migrates only the current version as a strict no-op", () => {
+  it("migrates the current version and the complete version-one snapshot", () => {
     const current = structuredClone(createReferenceEnvironmentPreset());
 
     const migrated = migrateEnvironmentPreset(current);
@@ -150,7 +185,21 @@ describe("Environment Presets", () => {
     expect(migrated).toEqual(current);
     expect(migrated).not.toBe(current);
     expect(Object.isFrozen(migrated)).toBe(true);
-    for (const version of [0, 2]) {
+    const legacyAtmosphere = {
+      cloudCoverage: current.atmosphere.cloudCoverage,
+      cloudShadowStrength: current.atmosphere.cloudShadowStrength,
+      horizonHaze: current.atmosphere.horizonHaze,
+    };
+    const legacy = {
+      ...current,
+      version: 1,
+      presetHash:
+        "sha256:944a777311b8e46b986d3b4f6798595adcc99e3b5a7d49adf25cfa69c42bdc24",
+      atmosphere: legacyAtmosphere,
+    };
+    expect(migrateEnvironmentPreset(legacy)).toEqual(current);
+
+    for (const version of [0, 3]) {
       expect(() => migrateEnvironmentPreset({ ...current, version })).toThrow(
         "The Environment Preset version cannot be migrated.",
       );

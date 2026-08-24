@@ -183,12 +183,38 @@ const TEST_POST_TRAA_CAPABILITIES = Object.freeze({
       after: "traa" as const,
     }),
     Object.freeze({
-      id: "lens-wetness" as const,
+      id: "storm-atmosphere" as const,
       after: "secondary-particles" as const,
+    }),
+    Object.freeze({
+      id: "lens-wetness" as const,
+      after: "storm-atmosphere" as const,
     }),
   ] as const),
   accumulationFormat: "rgba16float" as const,
   finalColorFormat: "rgba8unorm-srgb" as const,
+});
+const TEST_STORM_FRONT_CAPABILITIES = Object.freeze({
+  mode: "prepared-deterministic-route" as const,
+  updateCadence: "host-fixed-tick" as const,
+  rain: Object.freeze({
+    surfaceRoute: "additive-spectral-ripples" as const,
+    secondaryParticleConsumerId: "spray-droplet-mist" as const,
+    maximumCandidateCount: 8_192 as const,
+  }),
+  stormAerosol: Object.freeze({
+    secondaryParticleConsumerId: "spray-droplet-mist" as const,
+    maximumCandidateCount: 8_192 as const,
+  }),
+  cloudAndLightning: Object.freeze({
+    illuminationRoute: "coherent-glint-foam-reflection-atmosphere" as const,
+    atmosphereStageId: "storm-atmosphere" as const,
+  }),
+  diagnostics: Object.freeze({
+    resolutionPolicy: "drawing-buffer-exact" as const,
+    format: "rgba16float" as const,
+    samples: 0 as const,
+  }),
 });
 const TEST_CAPABILITIES = Object.freeze({
   gameplay: TEST_GAMEPLAY_CAPABILITIES,
@@ -198,6 +224,7 @@ const TEST_CAPABILITIES = Object.freeze({
     temporal: TEST_TEMPORAL_CAPABILITIES,
     reflection: TEST_REFLECTION_CAPABILITIES,
     secondaryParticles: TEST_SECONDARY_PARTICLE_CAPABILITIES,
+    stormFront: TEST_STORM_FRONT_CAPABILITIES,
     postTraaComposition: TEST_POST_TRAA_CAPABILITIES,
   }),
 });
@@ -240,6 +267,7 @@ describe("prepareRealWater", () => {
         temporal: TEST_TEMPORAL_CAPABILITIES,
         reflection: TEST_REFLECTION_CAPABILITIES,
         secondaryParticles: TEST_SECONDARY_PARTICLE_CAPABILITIES,
+        stormFront: TEST_STORM_FRONT_CAPABILITIES,
         postTraaComposition: TEST_POST_TRAA_CAPABILITIES,
       },
     });
@@ -833,12 +861,12 @@ describe("prepareRealWater", () => {
     );
     expect(lease.manifest).toEqual({
       schema: "real-water/prewarm",
-      version: 11,
+      version: 12,
       id: manifest.id,
       manifestHash: manifest.manifestHash,
       qualityProfile: {
         schema: "real-water/quality-profile",
-        version: 14,
+        version: 15,
         id: "minimal",
         profileHash: manifest.qualityProfile.profileHash,
       },
@@ -880,6 +908,22 @@ describe("prepareRealWater", () => {
         {
           effectId: "hero-breaker",
           variantId: "art-directed-overturning",
+        },
+        {
+          effectId: "rain",
+          variantId: "additive-ripples-and-shared-spray",
+        },
+        {
+          effectId: "storm-aerosol",
+          variantId: "shared-spray-post-traa-atmosphere",
+        },
+        {
+          effectId: "cloud-shadow",
+          variantId: "coherent-optical-atmosphere-modulation",
+        },
+        {
+          effectId: "lightning",
+          variantId: "fixed-tick-coherent-transient",
         },
       ],
     });
@@ -1060,7 +1104,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 129,
+        totalWork: 140,
       },
     });
   });
@@ -1728,7 +1772,7 @@ describe("prepareRealWater", () => {
 
     expect(Object.isFrozen(manifest)).toBe(true);
     expect(Object.isFrozen(manifest.drawingBuffer)).toBe(true);
-    expect(manifest.version).toBe(11);
+    expect(manifest.version).toBe(12);
     expect(manifest.drawingBuffer).toEqual({ width: 320, height: 180 });
     expect(Object.isFrozen(manifest.declarations)).toBe(true);
     expect(Object.isFrozen(first)).toBe(true);
@@ -1750,6 +1794,17 @@ describe("prepareRealWater", () => {
       "water-hero-breaker-foam-diagnostics-target",
       "water-hero-breaker-foam-diagnostics-route",
       "water-hero-breaker-foam-probe",
+      "water-storm-front-state",
+      "water-storm-rain-ripple-route",
+      "water-storm-rain-spray-route",
+      "water-storm-aerosol-route",
+      "water-storm-cloud-shadow-route",
+      "water-storm-lightning-route",
+      "water-storm-atmosphere-target",
+      "water-storm-atmosphere-stage-route",
+      "water-storm-diagnostics-target",
+      "water-storm-diagnostics-route",
+      "water-storm-probe",
       "water-body-socket-emission-route",
       "water-spectral-band-swell",
       "water-spectral-band-wind",

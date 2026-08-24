@@ -25,7 +25,7 @@ export const QUALITY_PROFILE_SCHEMA = "real-water/quality-profile" as const;
  *
  * @public
  */
-export const QUALITY_PROFILE_VERSION = 14 as const;
+export const QUALITY_PROFILE_VERSION = 15 as const;
 
 /**
  * Built-in structural configurations for the minimal-water surface.
@@ -346,13 +346,43 @@ export interface QualityProfileSecondaryParticles {
 }
 
 /**
+ * Prepared deterministic Storm Front route. Weather remains explicit Host
+ * environment input; this policy only fixes how the prepared route consumes
+ * it across the ocean, shared particle pool, optics, and atmosphere.
+ *
+ * @public
+ */
+export interface QualityProfileStormFront {
+  readonly mode: "prepared-deterministic-route";
+  readonly updateCadence: "host-fixed-tick";
+  readonly rain: {
+    readonly surfaceRoute: "additive-spectral-ripples";
+    readonly secondaryParticleConsumerId: "spray-droplet-mist";
+    readonly maximumCandidateCount: 8_192;
+  };
+  readonly stormAerosol: {
+    readonly secondaryParticleConsumerId: "spray-droplet-mist";
+    readonly maximumCandidateCount: 8_192;
+  };
+  readonly cloudAndLightning: {
+    readonly illuminationRoute: "coherent-glint-foam-reflection-atmosphere";
+    readonly atmosphereStageId: "storm-atmosphere";
+  };
+  readonly diagnostics: {
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    readonly format: "rgba16float";
+    readonly samples: 0;
+  };
+}
+
+/**
  * One construction-time stage in the ordered post-TRAA composition plan.
  *
  * @public
  */
 export interface QualityProfilePostTraaStage {
-  readonly id: "secondary-particles" | "lens-wetness";
-  readonly after: "traa" | "secondary-particles";
+  readonly id: "secondary-particles" | "storm-atmosphere" | "lens-wetness";
+  readonly after: "traa" | "secondary-particles" | "storm-atmosphere";
 }
 
 /**
@@ -364,7 +394,7 @@ export interface QualityProfilePostTraaStage {
 export interface QualityProfileLensWetness {
   readonly mode: "bounded-emergence-decay";
   readonly stageId: "lens-wetness";
-  readonly after: "secondary-particles";
+  readonly after: "storm-atmosphere";
   readonly resolutionPolicy: "drawing-buffer-exact";
   readonly diagnosticsFormat: "rgba16float";
   readonly samples: 0;
@@ -390,8 +420,12 @@ export interface QualityProfilePostTraaComposition {
       readonly after: "traa";
     },
     QualityProfilePostTraaStage & {
-      readonly id: "lens-wetness";
+      readonly id: "storm-atmosphere";
       readonly after: "secondary-particles";
+    },
+    QualityProfilePostTraaStage & {
+      readonly id: "lens-wetness";
+      readonly after: "storm-atmosphere";
     },
   ];
   readonly lensWetness: QualityProfileLensWetness;
@@ -415,6 +449,7 @@ export interface QualityProfile {
   readonly whitecaps: QualityProfileSpectralWhitecaps;
   readonly secondaryParticles: QualityProfileSecondaryParticles;
   readonly underwater: QualityProfileUnderwaterVolume;
+  readonly stormFront: QualityProfileStormFront;
   readonly postTraaComposition: QualityProfilePostTraaComposition;
 }
 
@@ -494,7 +529,7 @@ export const CURRENT_FRAME_SSR_POLICY: QualityProfileReflectionSsr =
 // Each static hash is the SHA-256 digest of the profile's canonical JSON,
 // excluding profileHash and preserving the public field order:
 // schema, version, id, surface, interaction, bodyCoupling, temporal,
-// reflection, whitecaps, secondaryParticles, underwater,
+// reflection, whitecaps, secondaryParticles, underwater, stormFront,
 // postTraaComposition.
 const NATIVE_TEMPORAL: QualityProfileTemporal = Object.freeze({
   mode: "TRAA",
@@ -615,6 +650,28 @@ const NATIVE_SECONDARY_PARTICLES: QualityProfileSecondaryParticles =
     payloadOwnership: "consumer",
     renderPhaseKnowledge: "none",
   });
+const NATIVE_STORM_FRONT: QualityProfileStormFront = Object.freeze({
+  mode: "prepared-deterministic-route",
+  updateCadence: "host-fixed-tick",
+  rain: Object.freeze({
+    surfaceRoute: "additive-spectral-ripples",
+    secondaryParticleConsumerId: "spray-droplet-mist",
+    maximumCandidateCount: 8_192,
+  }),
+  stormAerosol: Object.freeze({
+    secondaryParticleConsumerId: "spray-droplet-mist",
+    maximumCandidateCount: 8_192,
+  }),
+  cloudAndLightning: Object.freeze({
+    illuminationRoute: "coherent-glint-foam-reflection-atmosphere",
+    atmosphereStageId: "storm-atmosphere",
+  }),
+  diagnostics: Object.freeze({
+    resolutionPolicy: "drawing-buffer-exact",
+    format: "rgba16float",
+    samples: 0,
+  }),
+});
 const NATIVE_POST_TRAA_COMPOSITION: QualityProfilePostTraaComposition =
   Object.freeze({
     mode: "ordered-declarative-stages",
@@ -624,12 +681,16 @@ const NATIVE_POST_TRAA_COMPOSITION: QualityProfilePostTraaComposition =
     samples: 0,
     stages: Object.freeze([
       Object.freeze({ id: "secondary-particles", after: "traa" }),
-      Object.freeze({ id: "lens-wetness", after: "secondary-particles" }),
+      Object.freeze({
+        id: "storm-atmosphere",
+        after: "secondary-particles",
+      }),
+      Object.freeze({ id: "lens-wetness", after: "storm-atmosphere" }),
     ] as const),
     lensWetness: Object.freeze({
       mode: "bounded-emergence-decay",
       stageId: "lens-wetness",
-      after: "secondary-particles",
+      after: "storm-atmosphere",
       resolutionPolicy: "drawing-buffer-exact",
       diagnosticsFormat: "rgba16float",
       samples: 0,
@@ -657,14 +718,14 @@ const SUPPORTED_QUALITY_PROFILES: Readonly<
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:9fb629031064c5718584b77355748965e9cfafe11cba7e3f4675eedf715cd684",
+      "sha256:d50cc4c4bc0d234eded25f194afa7f4ee80620cf817324f34409d2daaa7504e5",
     widthSegments: 128,
     heightSegments: 128,
     whitecapFieldResolution: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:9780385fa033a0aeb2ad9de04ad04d6d5635398377da6b4000541044120f650b",
+      "sha256:ccc8509117556f87706d9ef8113ece239d5b1de3bd30f392632d9005a49ad987",
     widthSegments: 256,
     heightSegments: 256,
     whitecapFieldResolution: 256,
@@ -867,9 +928,36 @@ const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
 // #28's committed pool and post-TRAA shape; version 13 adds the complete T22
 // underwater tracer: bounded caustics, three underwater particle consumers,
 // and lens wetness. Version 14 adds the bounded Hero Breaker interaction and
-// its fourth unified-foam source.
+// its fourth unified-foam source. Version 15 adds the complete Storm Front
+// route and inserts its atmosphere stage between secondary particles and lens
+// wetness.
 // The discarded pre-rebase caustics v12 never entered history and is not a
 // legacy rung.
+const LEGACY_V14_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([] as const),
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      completeT22: true,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:9fb629031064c5718584b77355748965e9cfafe11cba7e3f4675eedf715cd684",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:9780385fa033a0aeb2ad9de04ad04d6d5635398377da6b4000541044120f650b",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
 const LEGACY_V13_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
   Object.freeze([
     Object.freeze({
@@ -1278,6 +1366,7 @@ const QUALITY_PROFILE_KEYS = [
   "whitecaps",
   "secondaryParticles",
   "underwater",
+  "stormFront",
   "postTraaComposition",
 ] as const;
 const SPECTRAL_WHITECAP_KEYS = [
@@ -1394,6 +1483,32 @@ const SECONDARY_PARTICLE_CONSUMER_KEYS = [
   "minimumRetainedSlots",
   "contributionReference",
   "pressureReentryPolicy",
+] as const;
+const STORM_FRONT_KEYS = [
+  "mode",
+  "updateCadence",
+  "rain",
+  "stormAerosol",
+  "cloudAndLightning",
+  "diagnostics",
+] as const;
+const STORM_FRONT_RAIN_KEYS = [
+  "surfaceRoute",
+  "secondaryParticleConsumerId",
+  "maximumCandidateCount",
+] as const;
+const STORM_FRONT_AEROSOL_KEYS = [
+  "secondaryParticleConsumerId",
+  "maximumCandidateCount",
+] as const;
+const STORM_FRONT_CLOUD_LIGHTNING_KEYS = [
+  "illuminationRoute",
+  "atmosphereStageId",
+] as const;
+const STORM_FRONT_DIAGNOSTICS_KEYS = [
+  "resolutionPolicy",
+  "format",
+  "samples",
 ] as const;
 const POST_TRAA_COMPOSITION_KEYS = [
   "mode",
@@ -1584,6 +1699,7 @@ export function createMinimalWaterQualityProfile(
     },
     secondaryParticles: NATIVE_SECONDARY_PARTICLES,
     underwater: NATIVE_UNDERWATER,
+    stormFront: NATIVE_STORM_FRONT,
     postTraaComposition: NATIVE_POST_TRAA_COMPOSITION,
   });
 }
@@ -1689,6 +1805,7 @@ export function normalizeQualityProfile(
       supported.secondaryParticles,
     ) ||
     !isSupportedUnderwaterVolume(value.underwater, supported.underwater) ||
+    !isSupportedStormFront(value.stormFront, supported.stormFront) ||
     !isSupportedPostTraaComposition(
       value.postTraaComposition,
       supported.postTraaComposition,
@@ -1700,6 +1817,42 @@ export function normalizeQualityProfile(
   }
 
   return supported;
+}
+
+function isSupportedStormFront(
+  value: unknown,
+  supported: QualityProfileStormFront,
+): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, STORM_FRONT_KEYS) &&
+    value.mode === supported.mode &&
+    value.updateCadence === supported.updateCadence &&
+    isRecord(value.rain) &&
+    hasExactKeys(value.rain, STORM_FRONT_RAIN_KEYS) &&
+    value.rain.surfaceRoute === supported.rain.surfaceRoute &&
+    value.rain.secondaryParticleConsumerId ===
+      supported.rain.secondaryParticleConsumerId &&
+    value.rain.maximumCandidateCount === supported.rain.maximumCandidateCount &&
+    isRecord(value.stormAerosol) &&
+    hasExactKeys(value.stormAerosol, STORM_FRONT_AEROSOL_KEYS) &&
+    value.stormAerosol.secondaryParticleConsumerId ===
+      supported.stormAerosol.secondaryParticleConsumerId &&
+    value.stormAerosol.maximumCandidateCount ===
+      supported.stormAerosol.maximumCandidateCount &&
+    isRecord(value.cloudAndLightning) &&
+    hasExactKeys(value.cloudAndLightning, STORM_FRONT_CLOUD_LIGHTNING_KEYS) &&
+    value.cloudAndLightning.illuminationRoute ===
+      supported.cloudAndLightning.illuminationRoute &&
+    value.cloudAndLightning.atmosphereStageId ===
+      supported.cloudAndLightning.atmosphereStageId &&
+    isRecord(value.diagnostics) &&
+    hasExactKeys(value.diagnostics, STORM_FRONT_DIAGNOSTICS_KEYS) &&
+    value.diagnostics.resolutionPolicy ===
+      supported.diagnostics.resolutionPolicy &&
+    value.diagnostics.format === supported.diagnostics.format &&
+    value.diagnostics.samples === supported.diagnostics.samples
+  );
 }
 
 function isSupportedSecondaryParticles(
@@ -1821,6 +1974,43 @@ function matchesLegacyPostTraaComposition(value: unknown): boolean {
     value.accumulationFormat === "rgba16float" &&
     value.finalColorFormat === "rgba8unorm-srgb" &&
     value.samples === 0
+  );
+}
+
+function matchesCompleteT22PostTraaComposition(value: unknown): boolean {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, POST_TRAA_COMPOSITION_KEYS) ||
+    !Array.isArray(value.stages) ||
+    value.stages.length !== 2 ||
+    !isRecord(value.lensWetness) ||
+    !hasExactKeys(value.lensWetness, LENS_WETNESS_KEYS)
+  ) {
+    return false;
+  }
+  const [secondaryParticles, lensWetness] = value.stages;
+  return (
+    isRecord(secondaryParticles) &&
+    hasExactKeys(secondaryParticles, POST_TRAA_STAGE_KEYS) &&
+    secondaryParticles.id === "secondary-particles" &&
+    secondaryParticles.after === "traa" &&
+    isRecord(lensWetness) &&
+    hasExactKeys(lensWetness, POST_TRAA_STAGE_KEYS) &&
+    lensWetness.id === "lens-wetness" &&
+    lensWetness.after === "secondary-particles" &&
+    value.mode === "ordered-declarative-stages" &&
+    value.resolutionPolicy === "drawing-buffer-exact" &&
+    value.accumulationFormat === "rgba16float" &&
+    value.finalColorFormat === "rgba8unorm-srgb" &&
+    value.samples === 0 &&
+    value.lensWetness.mode === "bounded-emergence-decay" &&
+    value.lensWetness.stageId === "lens-wetness" &&
+    value.lensWetness.after === "secondary-particles" &&
+    value.lensWetness.resolutionPolicy === "drawing-buffer-exact" &&
+    value.lensWetness.diagnosticsFormat === "rgba16float" &&
+    value.lensWetness.samples === 0 &&
+    value.lensWetness.trigger === "waterline-emergence-impulse" &&
+    value.lensWetness.updateCadence === "host-fixed-tick"
   );
 }
 
@@ -1960,6 +2150,15 @@ export function migrateQualityProfile(candidate: unknown): QualityProfile {
     } catch {
       throw new TypeError("The Quality Profile cannot be migrated.");
     }
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 14 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV14Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
   }
 
   if (
@@ -2229,6 +2428,15 @@ function matchesLegacyV13Profile(
   );
 }
 
+function matchesLegacyV14Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V14_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
 function matchesLegacyV6Profile(
   value: Record<string, unknown>,
   id: MinimalWaterQualityProfileId,
@@ -2256,7 +2464,9 @@ function matchesLegacyVariant(
   return (
     hasExactKeys(
       value,
-      QUALITY_PROFILE_KEYS.filter((key) => !variant.absentKeys.includes(key)),
+      QUALITY_PROFILE_KEYS.filter(
+        (key) => key !== "stormFront" && !variant.absentKeys.includes(key),
+      ),
     ) &&
     value.schema === QUALITY_PROFILE_SCHEMA &&
     matchesLegacySurface(value, variant.profiles[id]) &&
@@ -2291,10 +2501,7 @@ function matchesLegacyVariant(
           ))) &&
     (!carriesPostTraaComposition ||
       (variant.completeT22 === true
-        ? isSupportedPostTraaComposition(
-            value.postTraaComposition,
-            supported.postTraaComposition,
-          )
+        ? matchesCompleteT22PostTraaComposition(value.postTraaComposition)
         : matchesLegacyPostTraaComposition(value.postTraaComposition)))
   );
 }
@@ -2594,6 +2801,15 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
       ...profile.underwater,
       caustics: Object.freeze({ ...profile.underwater.caustics }),
       tracers: Object.freeze({ ...profile.underwater.tracers }),
+    }),
+    stormFront: Object.freeze({
+      ...profile.stormFront,
+      rain: Object.freeze({ ...profile.stormFront.rain }),
+      stormAerosol: Object.freeze({ ...profile.stormFront.stormAerosol }),
+      cloudAndLightning: Object.freeze({
+        ...profile.stormFront.cloudAndLightning,
+      }),
+      diagnostics: Object.freeze({ ...profile.stormFront.diagnostics }),
     }),
     postTraaComposition: Object.freeze({
       ...profile.postTraaComposition,

@@ -21,6 +21,7 @@ import {
   readHostDiagnosticsRoute,
   type DiagnosticsCapture,
   type DiagnosticsSecondaryParticles,
+  type DiagnosticsStormFrontCapture,
 } from "../src/diagnostics.js";
 
 const VALID_MANIFEST_HASH = `sha256:${"cd".repeat(32)}`;
@@ -153,7 +154,7 @@ function createPresentedFrame(): HostPresentedFrame {
 }
 
 describe("real-water/diagnostics", () => {
-  it("publishes the forty-one frozen CPU capture names and shapes only", () => {
+  it("publishes the forty-five frozen CPU capture names and shapes only", () => {
     expect(DIAGNOSTICS_CAPTURE_NAMES).toEqual([
       "final-color",
       "current-color",
@@ -196,6 +197,10 @@ describe("real-water/diagnostics", () => {
       "secondary-particle-contribution",
       "secondary-particle-overdraw",
       "hero-breaker-foam",
+      "storm-rain-ripples",
+      "storm-aerosol",
+      "storm-cloud-shadow",
+      "storm-lightning",
     ]);
     expect(isDiagnosticsCaptureName("ssr-history")).toBe(false);
     expect(isDiagnosticsCaptureName("ssr-history-color")).toBe(true);
@@ -320,6 +325,20 @@ describe("real-water/diagnostics", () => {
       components: 1,
     });
     expect(isDiagnosticsCaptureName("hero-breaker-foam")).toBe(true);
+    for (const name of [
+      "storm-rain-ripples",
+      "storm-aerosol",
+      "storm-cloud-shadow",
+      "storm-lightning",
+    ] as const) {
+      expect(DIAGNOSTICS_CAPTURE_SHAPES[name]).toEqual({
+        format: "r32float-storm-front",
+        elementType: "float32",
+        components: 1,
+      });
+      expect(Object.isFrozen(DIAGNOSTICS_CAPTURE_SHAPES[name])).toBe(true);
+      expect(isDiagnosticsCaptureName(name)).toBe(true);
+    }
     expect(Object.isFrozen(DIAGNOSTICS_CAPTURE_NAMES)).toBe(true);
     expect(Object.isFrozen(DIAGNOSTICS_CAPTURE_SHAPES)).toBe(true);
     expect(DIAGNOSTICS_CAPTURE_SHAPES["final-color"]).toEqual({
@@ -812,6 +831,40 @@ describe("real-water/diagnostics", () => {
 
   it("strictly reads the independent finite normalized effect captures", () => {
     const receipt = createPresentedFrame();
+    const stormFrontCaptures = [
+      {
+        name: "storm-rain-ripples",
+        format: "r32float-storm-front",
+        width: 2,
+        height: 1,
+        origin: "top-left" as const,
+        data: Float32Array.of(0.25, 1),
+      },
+      {
+        name: "storm-aerosol",
+        format: "r32float-storm-front",
+        width: 2,
+        height: 1,
+        origin: "top-left" as const,
+        data: Float32Array.of(0.25, 1),
+      },
+      {
+        name: "storm-cloud-shadow",
+        format: "r32float-storm-front",
+        width: 2,
+        height: 1,
+        origin: "top-left" as const,
+        data: Float32Array.of(0.25, 1),
+      },
+      {
+        name: "storm-lightning",
+        format: "r32float-storm-front",
+        width: 2,
+        height: 1,
+        origin: "top-left" as const,
+        data: Float32Array.of(0.25, 1),
+      },
+    ] as const satisfies readonly DiagnosticsStormFrontCapture[];
     const captures = [
       {
         name: "underwater-caustics",
@@ -853,6 +906,7 @@ describe("real-water/diagnostics", () => {
         origin: "top-left" as const,
         data: Float32Array.of(0.25, 1),
       },
+      ...stormFrontCaptures,
     ] as const satisfies readonly DiagnosticsCapture[];
     for (const capture of captures) {
       const { name, format } = capture;
@@ -870,6 +924,7 @@ describe("real-water/diagnostics", () => {
       };
 
       const accepted = readHostDiagnosticsPresentedFrame(valid);
+      expect(Object.isFrozen(accepted.outputs[0])).toBe(true);
       expect(accepted.outputs[0]).toMatchObject({
         name,
         format,

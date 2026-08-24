@@ -7,10 +7,12 @@ import {
 } from "three";
 import {
   SUPPORTED_HOST_SUN_ANGULAR_RADIUS_RADIANS,
+  createReferenceEnvironmentPreset,
   createStaticHostEnvironmentAdapter,
   createSupportedHostEnvironmentRadianceBytes,
   createSupportedHostEnvironmentReflection,
   type HostEnvironmentAdapter,
+  type HostEnvironmentSnapshot,
   type HostEnvironmentState,
 } from "real-water";
 
@@ -28,24 +30,40 @@ export const REFERENCE_ENVIRONMENT_LIGHTING = Object.freeze({
 
 export interface ReferenceEnvironmentAdapter extends HostEnvironmentAdapter {
   setLighting(state: HostEnvironmentState): void;
+  setEnvironmentState(state: HostEnvironmentSnapshot): void;
 }
 
 export function createReferenceEnvironmentAdapter(): ReferenceEnvironmentAdapter {
   const reflection = createSupportedHostEnvironmentReflection(
     createEnvironmentRadiance(),
   );
-  let lighting: HostEnvironmentState = { ...REFERENCE_ENVIRONMENT_LIGHTING };
+  const reference = createReferenceEnvironmentPreset();
+  let state: HostEnvironmentSnapshot = Object.freeze({
+    lighting: Object.freeze({ ...REFERENCE_ENVIRONMENT_LIGHTING }),
+    weather: Object.freeze({ ...reference.weather }),
+    atmosphere: Object.freeze({ ...reference.atmosphere }),
+  });
+  const validate = (candidate: HostEnvironmentSnapshot) =>
+    createStaticHostEnvironmentAdapter(
+      reflection,
+      candidate.lighting,
+      candidate.weather,
+      candidate.atmosphere,
+    ).snapshot();
   return Object.freeze({
-    reflection: createStaticHostEnvironmentAdapter(reflection, lighting)
-      .reflection,
+    reflection: createStaticHostEnvironmentAdapter(
+      reflection,
+      state.lighting,
+      state.weather,
+      state.atmosphere,
+    ).reflection,
     texture: reflection.texture ?? null,
-    snapshot: () =>
-      createStaticHostEnvironmentAdapter(reflection, lighting).snapshot(),
-    setLighting(state: HostEnvironmentState) {
-      lighting = createStaticHostEnvironmentAdapter(
-        reflection,
-        state,
-      ).snapshot();
+    snapshot: () => state,
+    setLighting(lighting: HostEnvironmentState) {
+      state = validate({ ...state, lighting });
+    },
+    setEnvironmentState(nextState: HostEnvironmentSnapshot) {
+      state = validate(nextState);
     },
   });
 }

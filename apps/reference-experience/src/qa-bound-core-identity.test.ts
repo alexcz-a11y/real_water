@@ -133,12 +133,35 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
       updateCadence: "host-fixed-tick",
       renderPhaseKnowledge: "none",
     },
+    stormFront: {
+      mode: "prepared-deterministic-route",
+      updateCadence: "host-fixed-tick",
+      rain: {
+        surfaceRoute: "additive-spectral-ripples",
+        secondaryParticleConsumerId: "spray-droplet-mist",
+        maximumCandidateCount: 8_192,
+      },
+      stormAerosol: {
+        secondaryParticleConsumerId: "spray-droplet-mist",
+        maximumCandidateCount: 8_192,
+      },
+      cloudAndLightning: {
+        illuminationRoute: "coherent-glint-foam-reflection-atmosphere",
+        atmosphereStageId: "storm-atmosphere",
+      },
+      diagnostics: {
+        resolutionPolicy: "drawing-buffer-exact",
+        format: "rgba16float",
+        samples: 0,
+      },
+    },
     postTraaComposition: {
       width: 320,
       height: 180,
       stages: [
         { id: "secondary-particles", after: "traa" },
-        { id: "lens-wetness", after: "secondary-particles" },
+        { id: "storm-atmosphere", after: "secondary-particles" },
+        { id: "lens-wetness", after: "storm-atmosphere" },
       ],
       accumulationFormat: "rgba16float",
       finalColorFormat: "rgba8unorm-srgb",

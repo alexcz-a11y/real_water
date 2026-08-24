@@ -186,12 +186,35 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
       updateCadence: "host-fixed-tick",
       renderPhaseKnowledge: "none",
     },
+    stormFront: {
+      mode: "prepared-deterministic-route",
+      updateCadence: "host-fixed-tick",
+      rain: {
+        surfaceRoute: "additive-spectral-ripples",
+        secondaryParticleConsumerId: "spray-droplet-mist",
+        maximumCandidateCount: 8_192,
+      },
+      stormAerosol: {
+        secondaryParticleConsumerId: "spray-droplet-mist",
+        maximumCandidateCount: 8_192,
+      },
+      cloudAndLightning: {
+        illuminationRoute: "coherent-glint-foam-reflection-atmosphere",
+        atmosphereStageId: "storm-atmosphere",
+      },
+      diagnostics: {
+        resolutionPolicy: "drawing-buffer-exact",
+        format: "rgba16float",
+        samples: 0,
+      },
+    },
     postTraaComposition: {
       width: 320,
       height: 180,
       stages: [
         { id: "secondary-particles", after: "traa" },
-        { id: "lens-wetness", after: "secondary-particles" },
+        { id: "storm-atmosphere", after: "secondary-particles" },
+        { id: "lens-wetness", after: "storm-atmosphere" },
       ],
       accumulationFormat: "rgba16float",
       finalColorFormat: "rgba8unorm-srgb",
@@ -991,7 +1014,7 @@ describe("Regression acceptance version-3 reader", () => {
     expect(document.qaPrewarmManifest).toMatchObject({
       capabilities: READY_CAPABILITIES,
       manifest: {
-        version: 15,
+        version: 16,
         captures: expect.arrayContaining([
           {
             name: "foam-source-identity",
@@ -1017,6 +1040,22 @@ describe("Regression acceptance version-3 reader", () => {
             name: "hero-breaker-foam",
             preparedFormat: "r32float-hero-breaker-foam",
           },
+          {
+            name: "storm-rain-ripples",
+            preparedFormat: "rgba16float-storm-front-diagnostics",
+          },
+          {
+            name: "storm-aerosol",
+            preparedFormat: "rgba16float-storm-front-diagnostics",
+          },
+          {
+            name: "storm-cloud-shadow",
+            preparedFormat: "rgba16float-storm-front-diagnostics",
+          },
+          {
+            name: "storm-lightning",
+            preparedFormat: "rgba16float-storm-front-diagnostics",
+          },
         ]),
         coreDeclarations: expect.objectContaining({
           "foam-source-identity": "water-foam-source-identity-target",
@@ -1025,10 +1064,14 @@ describe("Regression acceptance version-3 reader", () => {
           "underwater-bubbles": "water-underwater-bubble-target",
           "lens-wetness": "water-lens-wetness-diagnostics-target",
           "hero-breaker-foam": "water-hero-breaker-foam-diagnostics-target",
+          "storm-rain-ripples": "water-storm-diagnostics-target",
+          "storm-aerosol": "water-storm-diagnostics-target",
+          "storm-cloud-shadow": "water-storm-diagnostics-target",
+          "storm-lightning": "water-storm-diagnostics-target",
         }),
       },
     });
-    expect(document.qaPrewarmManifest?.manifest.captures).toHaveLength(41);
+    expect(document.qaPrewarmManifest?.manifest.captures).toHaveLength(45);
   });
 
   it("rejects raw base64 capture payloads and a forged schema", () => {

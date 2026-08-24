@@ -34,7 +34,7 @@ export const PREWARM_MANIFEST_SCHEMA = "real-water/prewarm" as const;
  *
  * @public
  */
-export const PREWARM_MANIFEST_VERSION = 11 as const;
+export const PREWARM_MANIFEST_VERSION = 12 as const;
 
 /**
  * Immutable physical drawing-buffer dimensions bound into a Prewarm Manifest.
@@ -174,6 +174,22 @@ export const SUPPORTED_EFFECT_VARIANTS: readonly PrewarmEffectVariant[] =
       effectId: "hero-breaker",
       variantId: "art-directed-overturning",
     }),
+    Object.freeze({
+      effectId: "rain",
+      variantId: "additive-ripples-and-shared-spray",
+    }),
+    Object.freeze({
+      effectId: "storm-aerosol",
+      variantId: "shared-spray-post-traa-atmosphere",
+    }),
+    Object.freeze({
+      effectId: "cloud-shadow",
+      variantId: "coherent-optical-atmosphere-modulation",
+    }),
+    Object.freeze({
+      effectId: "lightning",
+      variantId: "fixed-tick-coherent-transient",
+    }),
   ]);
 
 export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
@@ -197,6 +213,17 @@ export const MINIMAL_WATER_PREWARM_DECLARATION_IDS = Object.freeze({
     "water-hero-breaker-foam-diagnostics-target",
   heroBreakerFoamDiagnosticsRoute: "water-hero-breaker-foam-diagnostics-route",
   heroBreakerFoamProbe: "water-hero-breaker-foam-probe",
+  stormFrontState: "water-storm-front-state",
+  stormRainRippleRoute: "water-storm-rain-ripple-route",
+  stormRainSprayRoute: "water-storm-rain-spray-route",
+  stormAerosolRoute: "water-storm-aerosol-route",
+  stormCloudShadowRoute: "water-storm-cloud-shadow-route",
+  stormLightningRoute: "water-storm-lightning-route",
+  stormAtmosphereTarget: "water-storm-atmosphere-target",
+  stormAtmosphereStageRoute: "water-storm-atmosphere-stage-route",
+  stormDiagnosticsTarget: "water-storm-diagnostics-target",
+  stormDiagnosticsRoute: "water-storm-diagnostics-route",
+  stormProbe: "water-storm-probe",
   bodySocketEmissionRoute: "water-body-socket-emission-route",
   spectralBandSwell: "water-spectral-band-swell",
   spectralBandWind: "water-spectral-band-wind",
@@ -410,6 +437,16 @@ const DRAWING_BUFFER_BOUND_DECLARATION_IDS: ReadonlySet<string> = new Set([
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.whitecapProbe,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.foamSourceIdentityTarget,
   MINIMAL_WATER_PREWARM_DECLARATION_IDS.heroBreakerFoamDiagnosticsTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormRainRippleRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormRainSprayRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormAerosolRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormCloudShadowRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormLightningRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormAtmosphereTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormAtmosphereStageRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormDiagnosticsTarget,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormDiagnosticsRoute,
+  MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormProbe,
 ]);
 const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
   {
@@ -548,6 +585,105 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     fingerprint:
       // Provenance: #29 minted this reproducible seed from the declaration's exact label bytes.
       "sha256:791a1f852d2d6e5c3c1648490c9a5e7cedada270d85c3e20f8d81f6c02f76566",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormFrontState,
+    kind: "effect-state",
+    label:
+      "Storm Front fixed-tick state (Host Environment lighting/weather/atmosphere snapshot; additive rain ripples; shared rain/aerosol spray partitions; coherent cloud/lightning response)",
+    fingerprint:
+      // Provenance: #30 minted this seed from the declaration's exact UTF-8 label bytes.
+      "sha256:f3a12010c37865d18d49711d8543045f3080faba8974b5708ebf5dd60762e681",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormRainRippleRoute,
+    kind: "conditional-route",
+    label:
+      "Additive rain-ripple surface route (0.012m maximum correction; current/previous spectral surface, normals, motion, and prepared receiver sampling)",
+    fingerprint:
+      // Provenance: #30 minted this seed from the declaration's exact UTF-8 label bytes.
+      "sha256:79b6fb7f0bb5320397b518823c5024fd2633847564c33fde0d8e933d94c846e0",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormRainSprayRoute,
+    kind: "conditional-route",
+    label:
+      "Near-camera rain-spray generation through spray-droplet-mist (up to 8,192 deterministic candidates; output-drawing-buffer Q16 contribution ruler)",
+    fingerprint:
+      // Provenance: #30 minted this seed from the declaration's exact UTF-8 label bytes.
+      "sha256:9a6c68bda80805fa995a10d249834c9fbfcdbb87b057c1040ed4aa96d83a01ce",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormAerosolRoute,
+    kind: "conditional-route",
+    label:
+      "Storm aerosol generation through spray-droplet-mist (up to 8,192 deterministic candidates; output-drawing-buffer Q16 contribution ruler; post-TRAA)",
+    fingerprint:
+      // Provenance: #30 minted this seed from the declaration's exact UTF-8 label bytes.
+      "sha256:779efcffce9e01100861ecd15c961ca04f49479a22dd05c25c3dc47f147483f6",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormCloudShadowRoute,
+    kind: "conditional-route",
+    label:
+      "Cloud-shadow modulation route for glints, foam, planar/environment reflection, and drawing-buffer-exact atmosphere",
+    fingerprint:
+      // Provenance: #30 minted this seed from the declaration's exact UTF-8 label bytes.
+      "sha256:f9d98f3120f42282cee47757d339c91566c28db8e077c541bead23dcab1aad84",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormLightningRoute,
+    kind: "conditional-route",
+    label:
+      "Fixed-tick lightning transient route for glints, foam, planar/environment reflection, and drawing-buffer-exact atmosphere",
+    fingerprint:
+      // Provenance: #30 minted this seed from the declaration's exact UTF-8 label bytes.
+      "sha256:7059e3a74a0e06887dd44cfaa99b21cda4134ae6db444096de82471a4fbaeca6",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormAtmosphereTarget,
+    kind: "resource",
+    label:
+      "Storm atmosphere output (RGBA8, drawing-buffer-exact, post-secondary-particles intermediate)",
+    fingerprint:
+      // Provenance: #30 minted this seed from the declaration's exact UTF-8 label bytes.
+      "sha256:6eea0ac108673774db2b3bd3e7c9a1a8d8a5ad75d1bf55b15ae44f6227495102",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormAtmosphereStageRoute,
+    kind: "conditional-route",
+    label:
+      "Storm atmosphere stage (cloud shadow, horizon haze, aerosol, and lightning; drawing-buffer-exact; after secondary particles)",
+    fingerprint:
+      // Provenance: #30 minted this seed from the declaration's exact UTF-8 label bytes.
+      "sha256:630c0e5085e5965eb84fea070209b6c737ac155dd13b2715c1e9ccb83ce51fde",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormDiagnosticsTarget,
+    kind: "resource",
+    label:
+      "Storm diagnostics (RGBA16F rain-ripple/aerosol/cloud-shadow/lightning channels, drawing-buffer-exact)",
+    fingerprint:
+      // Provenance: #30 minted this seed from the declaration's exact UTF-8 label bytes.
+      "sha256:349a060add874f02d14e66a4e10f344c5b9458407f92699d52a0d1efb2b0ba65",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormDiagnosticsRoute,
+    kind: "conditional-route",
+    label:
+      "On-request Storm Front scalar diagnostics route (four normalized channels from one RGBA16F drawing-buffer-exact target)",
+    fingerprint:
+      // Provenance: #30 minted this seed from the declaration's exact UTF-8 label bytes.
+      "sha256:acf8cb2680094af8636032bd9999472b877226df5fafedb0fa1a44f409e878b5",
+  },
+  {
+    id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.stormProbe,
+    kind: "conditional-route",
+    label:
+      "Completion probe of Storm atmosphere output and RGBA16F diagnostics target",
+    fingerprint:
+      // Provenance: #30 minted this seed from the declaration's exact UTF-8 label bytes.
+      "sha256:66fdc9cef7c1420c5c9475ba943e83cedd0a393d13fd1bffe1a4f6965b7cc6ff",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.bodySocketEmissionRoute,
@@ -1191,9 +1327,9 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.renderRoute,
     kind: "conditional-route",
     label:
-      "Fixed-tick whitecaps plus Hero Breaker deformation/foam and shared particle allocation, waterline-gated planar aux, one jittered main MRT, current-frame SSR, underwater volume/caustics/tracers, stock TRAA, then ordered secondary-particle and lens-wetness composition",
+      "Fixed-tick whitecaps plus Hero Breaker deformation/foam, additive Storm rain ripples, coherent cloud/lightning optics, and shared particle allocation; waterline-gated planar aux; one jittered main MRT; current-frame SSR; underwater volume/caustics/tracers; stock TRAA; then ordered secondary-particle, Storm-atmosphere, and lens-wetness composition",
     fingerprint:
-      // Provenance: this BASE fingerprint's reproducible source was not recorded and cannot be recovered; #28 and #33 changed only the label and did not remint this value.
+      // Provenance: this BASE fingerprint's source was not recorded and cannot be recovered; #28, #33, and #30 changed only the label and retained it.
       "sha256:f7f44a7ddf3041a2cda3654fb87e9181f0ca87730eb64017725c664995bafb91",
   },
   {
@@ -1323,10 +1459,10 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.postTraaCompositionPlan,
     kind: "effect-state",
     label:
-      "Ordered post-TRAA composition plan (drawing-buffer-exact: TRAA -> secondary-particles -> lens-wetness -> presentation)",
+      "Ordered post-TRAA composition plan (drawing-buffer-exact: TRAA -> secondary-particles -> storm-atmosphere -> lens-wetness -> presentation)",
     fingerprint:
-      // Provenance: #33 reminted #28's reproducible value from the exact UTF-8 label bytes above (no trailing newline; quotes excluded) when lens wetness extended the plan.
-      "sha256:811bf0a23d3c91185fcc5efe1478c2850f20c07eef52efdc1c038a699fc90822",
+      // Provenance: #30 reminted the reproducible seed from this declaration's exact expanded label bytes.
+      "sha256:b113e0281a295f43847976962feb311a99c3d90b8d55d3cfdb56ec8ec6a4b93b",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.traaResolvedTarget,
@@ -1383,10 +1519,10 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.secondaryParticleProbe,
     kind: "conditional-route",
     label:
-      "Completion probe of shared secondary-particle allocation canary, accumulation, and intermediate composite",
+      "Completion probe of shared secondary-particle allocation canary, accumulation, and intermediate composite before Storm Front atmosphere",
     fingerprint:
-      // Provenance: #33 reminted #28's reproducible value from the exact UTF-8 label bytes above (no trailing newline; quotes excluded) after lens wetness became the final stage.
-      "sha256:a84045371ce814a6b2899f98b0eac6f93fa43d23014ac1573bcb0f18a9c87548",
+      // Provenance: #30 reminted the reproducible seed from this declaration's exact expanded label bytes.
+      "sha256:50f14f59e4cec7a4e072abade4c23a427aabfb19d62d1d3c4c76f35ce14e31ce",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.lensWetnessDiagnosticsTarget,
@@ -1400,10 +1536,10 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.lensWetnessStageRoute,
     kind: "conditional-route",
     label:
-      "Bounded emergence-driven lens-wetness stage after secondary particles",
+      "Bounded emergence-driven lens-wetness stage after Storm Front atmosphere",
     fingerprint:
-      // Provenance: #33 introduced this value, minted from the exact UTF-8 label bytes above (no trailing newline; quotes excluded).
-      "sha256:64975f47b2c5dfc5b406f11524f08bc9fa91c05b7d0ab9972c1f62c90bda4ca1",
+      // Provenance: #30 reminted the reproducible seed from this declaration's exact expanded label bytes.
+      "sha256:65bc3d679949d16b47a709b24b86a3d6f3efd56a40fbb75778a32a348c0da6b8",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.lensWetnessDiagnosticsRoute,
@@ -1434,36 +1570,36 @@ const MINIMAL_WATER_DECLARATIONS: readonly PrewarmDeclaration[] = [
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.namedOutputRoutes,
     kind: "conditional-route",
     label:
-      "Forty-one named diagnostics output routes including unified foam identity, Hero Breaker foam, underwater caustics/particles/bubbles, lens wetness, plus secondary-particle contribution and overdraw",
+      "Forty-five named diagnostics output routes including Storm Front rain/aerosol/cloud-shadow/lightning, unified foam identity, Hero Breaker foam, underwater caustics/particles/bubbles, lens wetness, and secondary-particle contribution/overdraw",
     fingerprint:
-      // Provenance: #29 reminted #33's reproducible seed from the declaration's expanded exact label bytes.
-      "sha256:cac4b057b2128af8a3336bafc8381573bed8c406794e1163a8ee30e4ad2a923d",
+      // Provenance: #30 reminted the reproducible seed from this declaration's exact expanded label bytes.
+      "sha256:1da79fc6a622b709430452bfd4ebf991f816b523a0c3d9555db9f85fbc223818",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.hiddenStabilization,
     kind: "effect-state",
     label:
-      "Eight hidden underwater-volume/caustics/tracers, TRAA, SSR-history, and ordered particle/lens-wetness stabilization frames",
+      "Eight hidden underwater-volume/caustics/tracers, TRAA, SSR-history, and ordered particle/Storm-atmosphere/lens-wetness stabilization frames",
     fingerprint:
-      // Provenance: this BASE fingerprint's reproducible source was not recorded and cannot be recovered; #28 and #33 changed only the label and did not remint this value.
+      // Provenance: this BASE fingerprint's source was not recorded and cannot be recovered; #28, #33, and #30 changed only the label and retained it.
       "sha256:caf44b79f85f7ef51388340b5a0b802e9f6d1974d25d28e3e3644c9856fcc441",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.completionProbe,
     kind: "conditional-route",
     label:
-      "GPU completion probe of all forty-one named output routes including Hero Breaker foam, underwater volume/tracers, lens wetness, unified foam identity, and secondary-particle contribution/overdraw",
+      "GPU completion probe of all forty-five named output routes including Storm Front rain/aerosol/cloud-shadow/lightning, Hero Breaker foam, underwater volume/tracers, lens wetness, unified foam identity, and secondary-particle contribution/overdraw",
     fingerprint:
-      // Provenance: #29 reminted #33's reproducible seed from the declaration's expanded exact label bytes.
-      "sha256:8b7be2e1119ef683210e89c3350cb114f633adc492739f1588fc180e15084903",
+      // Provenance: #30 reminted the reproducible seed from this declaration's exact expanded label bytes.
+      "sha256:40aa86e9f5a2e952fc96b6ce4a6a56a87caee84bbf2d838c149794e862f35a47",
   },
   {
     id: MINIMAL_WATER_PREWARM_DECLARATION_IDS.mainCameraGuard,
     kind: "conditional-route",
     label:
-      "Main-camera guard frame including underwater volume/caustics/tracers and ordered post-TRAA secondary-particle/lens-wetness composition",
+      "Main-camera guard frame including underwater volume/caustics/tracers and ordered post-TRAA secondary-particle/Storm-atmosphere/lens-wetness composition",
     fingerprint:
-      // Provenance: this BASE fingerprint's reproducible source was not recorded and cannot be recovered; #28 and #33 changed only the label and did not remint this value.
+      // Provenance: this BASE fingerprint's source was not recorded and cannot be recovered; #28, #33, and #30 changed only the label and retained it.
       "sha256:e59db4a839b5f36edfaec493a1f334f44ba6bae5a5046a758c0ceb69ea143841",
   },
 ];

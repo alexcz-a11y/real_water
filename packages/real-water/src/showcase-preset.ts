@@ -3,6 +3,7 @@ import {
   ENVIRONMENT_PRESET_SCHEMA,
   ENVIRONMENT_PRESET_VERSION,
   createReferenceEnvironmentPreset,
+  createStormFrontEnvironmentPreset,
   environmentPresetIdentity,
 } from "./environment-preset.js";
 import { hasExactKeys, isRecord } from "./internal/record-validation.js";
@@ -34,7 +35,7 @@ export const SHOWCASE_PRESET_SCHEMA = "real-water/showcase-preset" as const;
  *
  * @public
  */
-export const SHOWCASE_PRESET_VERSION = 1 as const;
+export const SHOWCASE_PRESET_VERSION = 2 as const;
 
 /**
  * A finite position or target in the Three.js Y-up coordinate contract.
@@ -66,6 +67,19 @@ export interface ShowcaseEventKeyframe {
 }
 
 /**
+ * The preset identities and semantic events that make one deterministic Storm
+ * Front Showcase segment reproducible.
+ *
+ * @public
+ */
+export interface ShowcaseStormFrontSegment {
+  readonly eventId: string;
+  readonly heroBreakerEventId: string;
+  readonly waterPreset: WaterPresetIdentity;
+  readonly environmentPreset: EnvironmentPresetIdentity;
+}
+
+/**
  * Caller-authored content used to create a Showcase Preset. The factory owns
  * schema, version, and hash fields so authors cannot accidentally stale them.
  *
@@ -77,6 +91,7 @@ export interface ShowcasePresetAuthoring {
   readonly waterPreset: WaterPresetIdentity;
   readonly environmentPreset: EnvironmentPresetIdentity;
   readonly qualityProfile: QualityProfileIdentity;
+  readonly stormFront: ShowcaseStormFrontSegment;
   readonly cameraTimeline: readonly ShowcaseCameraKeyframe[];
   readonly eventTimeline: readonly ShowcaseEventKeyframe[];
 }
@@ -114,6 +129,7 @@ const SHOWCASE_PRESET_KEYS = [
   "waterPreset",
   "environmentPreset",
   "qualityProfile",
+  "stormFront",
   "cameraTimeline",
   "eventTimeline",
 ] as const;
@@ -123,9 +139,23 @@ const SHOWCASE_AUTHORING_KEYS = [
   "waterPreset",
   "environmentPreset",
   "qualityProfile",
+  "stormFront",
   "cameraTimeline",
   "eventTimeline",
 ] as const;
+const LEGACY_SHOWCASE_PRESET_KEYS = SHOWCASE_PRESET_KEYS.filter(
+  (key) => key !== "stormFront",
+);
+const LEGACY_SHOWCASE_PRESET_VERSION = 1 as const;
+const LEGACY_ENVIRONMENT_PRESET_VERSION = 1 as const;
+const LEGACY_QUALITY_PROFILE_VERSION = 14 as const;
+type LegacyEnvironmentPresetIdentity = Omit<
+  EnvironmentPresetIdentity,
+  "version"
+> & { readonly version: typeof LEGACY_ENVIRONMENT_PRESET_VERSION };
+type LegacyQualityProfileIdentity = Omit<QualityProfileIdentity, "version"> & {
+  readonly version: typeof LEGACY_QUALITY_PROFILE_VERSION;
+};
 const PRESET_IDENTITY_KEYS = ["schema", "version", "id", "presetHash"] as const;
 const QUALITY_IDENTITY_KEYS = [
   "schema",
@@ -140,6 +170,12 @@ const CAMERA_KEYFRAME_KEYS = [
   "verticalFovDegrees",
 ] as const;
 const EVENT_KEYFRAME_KEYS = ["tick", "id"] as const;
+const STORM_FRONT_KEYS = [
+  "eventId",
+  "heroBreakerEventId",
+  "waterPreset",
+  "environmentPreset",
+] as const;
 const SHA256_IDENTIFIER = /^sha256:[0-9a-f]{64}$/u;
 
 /**
@@ -157,6 +193,14 @@ export function createReferenceShowcasePreset(): ShowcasePreset {
       createReferenceEnvironmentPreset(),
     ),
     qualityProfile: qualityProfileIdentity(createMinimalWaterQualityProfile()),
+    stormFront: {
+      eventId: "weather-front",
+      heroBreakerEventId: "storm-front-hero-breaker",
+      waterPreset: waterPresetIdentity(createWaterPreset("storm")),
+      environmentPreset: environmentPresetIdentity(
+        createStormFrontEnvironmentPreset(),
+      ),
+    },
     cameraTimeline: [
       {
         tick: 0,
@@ -187,6 +231,7 @@ export function createReferenceShowcasePreset(): ShowcasePreset {
       { tick: 0, id: "showcase-start" },
       { tick: 1_800, id: "hero-breaker" },
       { tick: 3_600, id: "weather-front" },
+      { tick: 3_600, id: "storm-front-hero-breaker" },
     ],
   });
 }
@@ -211,6 +256,19 @@ export function createAuthoredShowcasePreset(
   }
 
   const durationTicks = value.durationTicks;
+  const cameraTimeline = normalizeCameraTimeline(
+    value.cameraTimeline,
+    durationTicks,
+  );
+  const eventTimeline = normalizeEventTimeline(
+    value.eventTimeline,
+    durationTicks,
+  );
+  const stormFront = normalizeStormFrontSegment(
+    value.stormFront,
+    cameraTimeline,
+    eventTimeline,
+  );
   const content = {
     schema: SHOWCASE_PRESET_SCHEMA,
     version: SHOWCASE_PRESET_VERSION,
@@ -221,11 +279,9 @@ export function createAuthoredShowcasePreset(
       value.environmentPreset,
     ),
     qualityProfile: normalizeQualityProfileIdentity(value.qualityProfile),
-    cameraTimeline: normalizeCameraTimeline(
-      value.cameraTimeline,
-      durationTicks,
-    ),
-    eventTimeline: normalizeEventTimeline(value.eventTimeline, durationTicks),
+    stormFront,
+    cameraTimeline,
+    eventTimeline,
   };
 
   return Object.freeze({
@@ -237,6 +293,7 @@ export function createAuthoredShowcasePreset(
     waterPreset: content.waterPreset,
     environmentPreset: content.environmentPreset,
     qualityProfile: content.qualityProfile,
+    stormFront: content.stormFront,
     cameraTimeline: content.cameraTimeline,
     eventTimeline: content.eventTimeline,
   });
@@ -270,6 +327,7 @@ export function normalizeShowcasePreset(
       waterPreset: value.waterPreset,
       environmentPreset: value.environmentPreset,
       qualityProfile: value.qualityProfile,
+      stormFront: value.stormFront,
       cameraTimeline: value.cameraTimeline,
       eventTimeline: value.eventTimeline,
     } as ShowcasePresetAuthoring);
@@ -283,14 +341,127 @@ export function normalizeShowcasePreset(
 }
 
 /**
- * Migrates a previously committed Showcase Preset into the current schema.
- * Version 1 is current, so this release deliberately performs only validated
- * normalization and has no speculative historical reshape.
+ * Migrates the complete committed version-one Showcase recipe by upgrading its
+ * referenced Environment and Quality identities and adding the pinned Storm
+ * Front segment. Other legacy/future shapes remain fail-closed.
  *
  * @public
  */
 export function migrateShowcasePreset(candidate: unknown): ShowcasePreset {
-  return normalizeShowcasePreset(candidate as ShowcasePreset);
+  if (isRecord(candidate) && candidate.version === SHOWCASE_PRESET_VERSION) {
+    return normalizeShowcasePreset(candidate as unknown as ShowcasePreset);
+  }
+  if (
+    isRecord(candidate) &&
+    candidate.version === LEGACY_SHOWCASE_PRESET_VERSION
+  ) {
+    return migrateVersionOneShowcasePreset(candidate);
+  }
+  throw invalidPreset();
+}
+
+function migrateVersionOneShowcasePreset(
+  candidate: Record<string, unknown>,
+): ShowcasePreset {
+  if (
+    !hasExactKeys(candidate, LEGACY_SHOWCASE_PRESET_KEYS) ||
+    candidate.schema !== SHOWCASE_PRESET_SCHEMA ||
+    !isStableId(candidate.id) ||
+    !isPositiveSafeInteger(candidate.durationTicks) ||
+    typeof candidate.presetHash !== "string"
+  ) {
+    throw invalidPreset();
+  }
+  const durationTicks = candidate.durationTicks;
+  let waterPreset: WaterPresetIdentity;
+  let environmentPreset: LegacyEnvironmentPresetIdentity;
+  let qualityProfile: LegacyQualityProfileIdentity;
+  let cameraTimeline: readonly ShowcaseCameraKeyframe[];
+  let eventTimeline: readonly ShowcaseEventKeyframe[];
+  try {
+    waterPreset = normalizeWaterPresetIdentity(candidate.waterPreset);
+    environmentPreset = normalizeLegacyEnvironmentPresetIdentity(
+      candidate.environmentPreset,
+    );
+    qualityProfile = normalizeLegacyQualityProfileIdentity(
+      candidate.qualityProfile,
+    );
+    cameraTimeline = normalizeCameraTimeline(
+      candidate.cameraTimeline,
+      durationTicks,
+    );
+    eventTimeline = normalizeEventTimeline(
+      candidate.eventTimeline,
+      durationTicks,
+    );
+  } catch {
+    throw invalidPreset();
+  }
+  const legacyContent = {
+    schema: SHOWCASE_PRESET_SCHEMA,
+    version: LEGACY_SHOWCASE_PRESET_VERSION,
+    id: candidate.id,
+    durationTicks,
+    waterPreset,
+    environmentPreset,
+    qualityProfile,
+    cameraTimeline,
+    eventTimeline,
+  };
+  if (
+    candidate.presetHash !== sha256Identifier(JSON.stringify(legacyContent)) ||
+    environmentPreset.id !== "reference"
+  ) {
+    throw invalidPreset();
+  }
+  const stormEvent = eventTimeline.find(({ id }) => id === "weather-front");
+  if (
+    stormEvent === undefined ||
+    !cameraTimeline.some(({ tick }) => tick === stormEvent.tick)
+  ) {
+    throw invalidPreset();
+  }
+  const heroBreakerEventId = "storm-front-hero-breaker";
+  const existingHero = eventTimeline.find(
+    ({ id }) => id === heroBreakerEventId,
+  );
+  if (existingHero !== undefined && existingHero.tick !== stormEvent.tick) {
+    throw invalidPreset();
+  }
+  const currentEnvironment = environmentPresetIdentity(
+    createReferenceEnvironmentPreset(),
+  );
+  const stormEnvironment = environmentPresetIdentity(
+    createStormFrontEnvironmentPreset(),
+  );
+  const stormWater = waterPresetIdentity(createWaterPreset("storm"));
+  return createAuthoredShowcasePreset({
+    id: candidate.id,
+    durationTicks,
+    waterPreset,
+    environmentPreset: currentEnvironment,
+    qualityProfile: qualityProfileIdentity(
+      createMinimalWaterQualityProfile(qualityProfile.id),
+    ),
+    stormFront: {
+      eventId: stormEvent.id,
+      heroBreakerEventId,
+      waterPreset: stormWater,
+      environmentPreset: stormEnvironment,
+    },
+    cameraTimeline,
+    eventTimeline:
+      existingHero === undefined
+        ? Object.freeze(
+            [
+              ...eventTimeline,
+              { tick: stormEvent.tick, id: heroBreakerEventId },
+            ]
+              .sort((left, right) => left.tick - right.tick)
+              .map((event) => Object.freeze(event)),
+          )
+        : eventTimeline,
+  });
 }
 
 /**
@@ -350,6 +521,27 @@ function normalizeEnvironmentPresetIdentity(
   });
 }
 
+function normalizeLegacyEnvironmentPresetIdentity(
+  value: unknown,
+): LegacyEnvironmentPresetIdentity {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, PRESET_IDENTITY_KEYS) ||
+    value.schema !== ENVIRONMENT_PRESET_SCHEMA ||
+    value.version !== LEGACY_ENVIRONMENT_PRESET_VERSION ||
+    !isStableId(value.id) ||
+    !isSha256Identifier(value.presetHash)
+  ) {
+    throw invalidAuthoring();
+  }
+  return Object.freeze({
+    schema: ENVIRONMENT_PRESET_SCHEMA,
+    version: LEGACY_ENVIRONMENT_PRESET_VERSION,
+    id: value.id,
+    presetHash: value.presetHash,
+  });
+}
+
 function normalizeQualityProfileIdentity(
   value: unknown,
 ): QualityProfileIdentity {
@@ -368,6 +560,61 @@ function normalizeQualityProfileIdentity(
     version: QUALITY_PROFILE_VERSION,
     id: value.id,
     profileHash: value.profileHash,
+  });
+}
+
+function normalizeLegacyQualityProfileIdentity(
+  value: unknown,
+): LegacyQualityProfileIdentity {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, QUALITY_IDENTITY_KEYS) ||
+    value.schema !== QUALITY_PROFILE_SCHEMA ||
+    value.version !== LEGACY_QUALITY_PROFILE_VERSION ||
+    !isQualityProfileId(value.id) ||
+    !isSha256Identifier(value.profileHash)
+  ) {
+    throw invalidAuthoring();
+  }
+  return Object.freeze({
+    schema: QUALITY_PROFILE_SCHEMA,
+    version: LEGACY_QUALITY_PROFILE_VERSION,
+    id: value.id,
+    profileHash: value.profileHash,
+  });
+}
+
+function normalizeStormFrontSegment(
+  value: unknown,
+  cameraTimeline: readonly ShowcaseCameraKeyframe[],
+  eventTimeline: readonly ShowcaseEventKeyframe[],
+): ShowcaseStormFrontSegment {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, STORM_FRONT_KEYS) ||
+    !isStableId(value.eventId) ||
+    !isStableId(value.heroBreakerEventId) ||
+    value.eventId === value.heroBreakerEventId
+  ) {
+    throw invalidAuthoring();
+  }
+  const event = eventTimeline.find(({ id }) => id === value.eventId);
+  const hero = eventTimeline.find(({ id }) => id === value.heroBreakerEventId);
+  if (
+    event === undefined ||
+    hero === undefined ||
+    event.tick !== hero.tick ||
+    !cameraTimeline.some(({ tick }) => tick === event.tick)
+  ) {
+    throw invalidAuthoring();
+  }
+  return Object.freeze({
+    eventId: value.eventId,
+    heroBreakerEventId: value.heroBreakerEventId,
+    waterPreset: normalizeWaterPresetIdentity(value.waterPreset),
+    environmentPreset: normalizeEnvironmentPresetIdentity(
+      value.environmentPreset,
+    ),
   });
 }
 
