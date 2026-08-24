@@ -159,3 +159,8 @@ On 2026-08-24 the project owner determined that copyright in the Output belongs 
 commercial use is licensed, and that the Output may be redistributed, and stated that they will not
 put it to commercial use. Recorded as the owner's decision; the quotations above are the material
 it was taken on.
+
+On 2026-08-24, after reading the Free-plan finding above, the owner decided to continue generating
+the remaining packs on the Free account, knowing that Terms §2.3 grants Reve and other users a
+perpetual licence over the Output and that the training opt-out is unavailable on this tier. The
+decision covers every pack in this series, not this one alone.
