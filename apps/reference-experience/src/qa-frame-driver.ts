@@ -68,11 +68,12 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
   "secondary-particle-contribution":
     "water-secondary-particle-accumulation-target",
   "secondary-particle-overdraw": "water-secondary-particle-accumulation-target",
+  "hero-breaker-foam": "water-hero-breaker-foam-diagnostics-target",
 } as const);
 
 export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
   schema: "real-water/qa-frame-prewarm" as const,
-  version: 14 as const,
+  version: 15 as const,
   id: "reference-qa-frame" as const,
   captures: Object.freeze([
     Object.freeze({
@@ -235,6 +236,10 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
       name: "secondary-particle-overdraw" as const,
       preparedFormat: "rgba16float-secondary-particle-accumulation" as const,
     }),
+    Object.freeze({
+      name: "hero-breaker-foam" as const,
+      preparedFormat: "r32float-hero-breaker-foam" as const,
+    }),
   ]),
   coreDeclarations: QA_TO_CORE_DECLARATION_IDS,
 });
@@ -350,6 +355,12 @@ export interface QaFrameDriverSecondaryParticleCapture extends QaFrameDriverCapt
   readonly data: Float32Array;
 }
 
+export interface QaFrameDriverHeroBreakerFoamCapture extends QaFrameDriverCaptureBase {
+  readonly name: "hero-breaker-foam";
+  readonly format: "r32float-hero-breaker-foam";
+  readonly data: Float32Array;
+}
+
 export interface QaFrameDriverUnderwaterCausticsCapture extends QaFrameDriverCaptureBase {
   readonly name: "underwater-caustics";
   readonly format: "r32float-underwater-caustics";
@@ -440,7 +451,8 @@ export type QaFrameDriverCapture =
   | QaFrameDriverUnderwaterCausticsCapture
   | QaFrameDriverUnderwaterParticlesCapture
   | QaFrameDriverUnderwaterBubblesCapture
-  | QaFrameDriverLensWetnessCapture;
+  | QaFrameDriverLensWetnessCapture
+  | QaFrameDriverHeroBreakerFoamCapture;
 
 export interface QaFrameDriverStateReceipt {
   readonly seed: number;

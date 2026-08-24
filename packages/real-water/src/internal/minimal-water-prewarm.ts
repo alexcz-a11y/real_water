@@ -353,8 +353,20 @@ export async function prepareMinimalWaterPlane(
       "foamLocalAdvectionRoute",
       "foamLocalResolveRoute",
     ]);
-    spectralBand.stagePrewarmLocalInteractionRoutes();
+    const stagedPrewarmInteraction =
+      spectralBand.stagePrewarmLocalInteractionRoutes();
+    const heroBreakerCanarySnapshot =
+      createHeroBreakerCanarySnapshot(preparationSnapshot);
+    spectralBand.sink.synchronize(
+      heroBreakerCanarySnapshot,
+      stagedPrewarmInteraction,
+    );
+    secondaryParticleAllocationRoute.advance(
+      heroBreakerCanarySnapshot,
+      stagedPrewarmInteraction,
+    );
     try {
+      await foamField.synchronize(renderer, heroBreakerCanarySnapshot);
       await compileAndPrimePreparedWaterPresentation(
         renderer,
         scene,
@@ -364,6 +376,17 @@ export async function prepareMinimalWaterPlane(
       );
     } finally {
       spectralBand.clearPrewarmLocalInteractionRoutes();
+      const clearedPrewarmInteraction =
+        createPreparationLocalInteraction(preparationSnapshot);
+      spectralBand.sink.synchronize(
+        preparationSnapshot,
+        clearedPrewarmInteraction,
+      );
+      secondaryParticleAllocationRoute.advance(
+        preparationSnapshot,
+        clearedPrewarmInteraction,
+      );
+      await foamField.synchronize(renderer, preparationSnapshot);
     }
     await completeDeclaredWork(options.request.progress, [
       "texture",
@@ -376,6 +399,12 @@ export async function prepareMinimalWaterPlane(
       "localInteractionBuffers",
       "localInteractionRadialImpactRoute",
       "localInteractionDirectionalWakeRoute",
+      "heroBreakerState",
+      "heroBreakerDeformationRoute",
+      "heroBreakerFoamRoute",
+      "heroBreakerSprayRoute",
+      "heroBreakerFoamDiagnosticsTarget",
+      "heroBreakerFoamDiagnosticsRoute",
       "bodySocketEmissionRoute",
       "spectralBandSwell",
       "spectralBandWind",
@@ -491,6 +520,7 @@ export async function prepareMinimalWaterPlane(
       "foamSourceIdentityProbe",
       "secondaryParticleProbe",
       "lensWetnessProbe",
+      "heroBreakerFoamProbe",
       "completionProbe",
     ]);
 
@@ -708,6 +738,7 @@ function createPreparationFoamSnapshot(
     interactionAnchor: Object.freeze({ x: 0, z: 0 }),
     interactionAnchorRevision: 0,
     activeDisturbanceCount: 0,
+    activeHeroBreakerCount: 0,
     // Prewarm runs before any Host body is attached, so the Body coupling
     // counts #25 added are zero for the same reason the disturbance count is.
     attachedBodyCount: 0,
@@ -723,6 +754,15 @@ function createPreparationLocalInteraction(
     anchorX: snapshot.interactionAnchor.x,
     anchorZ: snapshot.interactionAnchor.z,
     impacts: Object.freeze([]),
+  });
+}
+
+function createHeroBreakerCanarySnapshot(
+  snapshot: OpenWaterRuntimeSnapshot,
+): OpenWaterRuntimeSnapshot {
+  return Object.freeze({
+    ...snapshot,
+    activeHeroBreakerCount: 1,
   });
 }
 

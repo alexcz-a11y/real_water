@@ -287,11 +287,16 @@ describe("createThreeHostLifecycleAdapter", () => {
         maxAttachedBodies: 32,
         maxQueryPointsPerTick: 2_048,
         maxActiveDisturbances: 128,
+        maxActiveHeroBreakers: 8,
         interactionField: {
           radiusMetres: 48,
           edgeFadeMetres: 8,
           maxSnapshotAgeTicks: 1,
-          disturbanceKinds: ["radial-impact", "directional-wake"],
+          disturbanceKinds: [
+            "radial-impact",
+            "directional-wake",
+            "hero-breaker",
+          ],
         },
         bodyInteraction: {
           fixedTickHz: 60,
@@ -387,8 +392,8 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(
       renderer.compileAsync.mock.calls.some((call) => call[1] !== camera),
     ).toBe(true);
-    expect(renderer.render).toHaveBeenCalledTimes(213);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(51);
+    expect(renderer.render).toHaveBeenCalledTimes(214);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(53);
     const readbackTargets = renderer.readRenderTargetPixelsAsync.mock.calls.map(
       (call) =>
         call[0] as { texture?: { name?: string }; textures?: unknown[] },
@@ -410,7 +415,12 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(readbackTargets[6]?.texture?.name).toBe(
       "Real Water inverse linear depth",
     );
-    expect(readbackTargets[50]?.texture?.name).toBe("Real Water final color");
+    expect(readbackTargets.map((target) => target.texture?.name)).toContain(
+      "Real Water Hero Breaker foam identity",
+    );
+    expect(readbackTargets.at(-1)?.texture?.name).toBe(
+      "Real Water final color",
+    );
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -503,7 +513,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     );
     expect(queryResults.foam[0]).toBe(geometryBefore.foam);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(51);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(53);
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -1085,7 +1095,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     });
     expect(scene.children).toHaveLength(0);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(25);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(26);
     expect(renderer.dispose).not.toHaveBeenCalled();
   });
 
@@ -1464,8 +1474,8 @@ describe("createThreeHostLifecycleAdapter", () => {
 
     expect(lease).not.toHaveProperty("present");
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(51);
-    expect(renderer.render).toHaveBeenCalledTimes(213);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(53);
+    expect(renderer.render).toHaveBeenCalledTimes(214);
     expect(presentation.route).toBeDefined();
     const renderTargetsAtReady = renderer.setRenderTarget.mock.calls.length;
 
@@ -1528,7 +1538,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(second.temporal.historyEpoch).toBe(1);
     expect(second.temporal.resetReason).toBeNull();
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(51);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(53);
 
     simulation.assign({ tick: 8, timeSeconds: 8 / 60, paused: false });
     const continuousTick = readHostPresentedFrame(await presentation.present());
@@ -1639,7 +1649,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(queuedFirst.presentationId + 1).toBe(queuedSecond.presentationId);
 
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(51);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(53);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
     expect(scene.children).toHaveLength(1);
@@ -2164,6 +2174,9 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(volumeTargetNames).not.toContain(
       "Real Water underwater caustics diagnostics",
     );
+    expect(volumeTargetNames).not.toContain(
+      "Real Water Hero Breaker foam identity",
+    );
 
     await expect(
       diagnostics.present({
@@ -2178,8 +2191,8 @@ describe("createThreeHostLifecycleAdapter", () => {
         outputs: [...DIAGNOSTICS_CAPTURE_NAMES],
       }),
     );
-    expect(all.outputs).toHaveLength(40);
-    expect(all.diagnosticReadbackCount).toBe(39);
+    expect(all.outputs).toHaveLength(41);
+    expect(all.diagnosticReadbackCount).toBe(40);
     expect(all.sceneRenderCount).toBe(resetFrame.sceneRenderCount + 3);
     expect(
       all.outputs.find(({ name }) => name === "underwater-caustics"),
@@ -2212,6 +2225,13 @@ describe("createThreeHostLifecycleAdapter", () => {
       data: expect.any(Float32Array),
     });
     expect(
+      all.outputs.find(({ name }) => name === "hero-breaker-foam"),
+    ).toMatchObject({
+      name: "hero-breaker-foam",
+      format: "r32float-hero-breaker-foam",
+      data: expect.any(Float32Array),
+    });
+    expect(
       renderer.setRenderTarget.mock.calls
         .slice(renderTargetsBeforeAllCaptures)
         .map((call) =>
@@ -2237,6 +2257,19 @@ describe("createThreeHostLifecycleAdapter", () => {
           ),
         ),
     ).toContain("Real Water underwater caustics diagnostics");
+    expect(
+      renderer.setRenderTarget.mock.calls
+        .slice(renderTargetsBeforeAllCaptures)
+        .map((call) =>
+          String(
+            (
+              call[0] as {
+                readonly texture?: { readonly name?: string };
+              } | null
+            )?.texture?.name ?? "canvas",
+          ),
+        ),
+    ).toContain("Real Water Hero Breaker foam identity");
 
     let cumulativeReadbacks = all.diagnosticReadbackCount;
     for (const [name, format, targetName] of [
@@ -2254,6 +2287,11 @@ describe("createThreeHostLifecycleAdapter", () => {
         "lens-wetness",
         "r32float-lens-wetness",
         "Real Water lens-wetness diagnostics",
+      ],
+      [
+        "hero-breaker-foam",
+        "r32float-hero-breaker-foam",
+        "Real Water Hero Breaker foam identity",
       ],
     ] as const) {
       const readbacksBefore =
@@ -3661,7 +3699,8 @@ function mockPresentationReadback(
     name.includes("underwater caustics diagnostics") ||
     name.includes("underwater suspended particles") ||
     name.includes("underwater bubbles") ||
-    name.includes("lens-wetness diagnostics")
+    name.includes("lens-wetness diagnostics") ||
+    name.includes("Hero Breaker foam identity")
   ) {
     return new Uint16Array(pixels * 4);
   }

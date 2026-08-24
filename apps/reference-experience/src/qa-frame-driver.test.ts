@@ -3,6 +3,7 @@ import {
   createMinimalWaterPrewarmManifest,
   MAX_ATTACHED_BODIES,
   MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
   MAX_GAMEPLAY_QUERY_POINTS,
   type PrewarmManifest,
   type RealWaterCapabilities,
@@ -151,11 +152,12 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
     maxAttachedBodies: MAX_ATTACHED_BODIES,
     maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
     maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+    maxActiveHeroBreakers: MAX_ACTIVE_HERO_BREAKERS,
     interactionField: {
       radiusMetres: 48,
       edgeFadeMetres: 8,
       maxSnapshotAgeTicks: 1,
-      disturbanceKinds: ["radial-impact", "directional-wake"],
+      disturbanceKinds: ["radial-impact", "directional-wake", "hero-breaker"],
     },
     bodyInteraction: {
       fixedTickHz: 60,
@@ -408,6 +410,16 @@ function createCapture(
       data: new Float32Array(width * height),
     };
   }
+  if (name === "hero-breaker-foam") {
+    return {
+      name,
+      format: "r32float-hero-breaker-foam",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
   return {
     name,
     format: "r32float-optical",
@@ -613,9 +625,9 @@ function coreFrame(
 }
 
 describe("QA frame driver Core association", () => {
-  it("publishes a v14 capture-contract mapped to actual Core declaration IDs", () => {
-    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(14);
-    expect(QA_FRAME_PREWARM_MANIFEST.captures).toHaveLength(40);
+  it("publishes a v15 capture-contract mapped to actual Core declaration IDs", () => {
+    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(15);
+    expect(QA_FRAME_PREWARM_MANIFEST.captures).toHaveLength(41);
     expect(QA_FRAME_PREWARM_MANIFEST.coreDeclarations).toEqual(
       QA_TO_CORE_DECLARATION_IDS,
     );
@@ -633,6 +645,9 @@ describe("QA frame driver Core association", () => {
     );
     expect(QA_TO_CORE_DECLARATION_IDS["secondary-particle-overdraw"]).toBe(
       "water-secondary-particle-accumulation-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["hero-breaker-foam"]).toBe(
+      "water-hero-breaker-foam-diagnostics-target",
     );
     expect(QA_TO_CORE_DECLARATION_IDS["underwater-caustics"]).toBe(
       "water-underwater-caustics-diagnostics-target",
@@ -678,6 +693,10 @@ describe("QA frame driver Core association", () => {
         preparedFormat: "rgba8unorm-history-rejection",
       },
     ]);
+    expect(QA_FRAME_PREWARM_MANIFEST.captures.at(-1)).toEqual({
+      name: "hero-breaker-foam",
+      preparedFormat: "r32float-hero-breaker-foam",
+    });
     expect(JSON.stringify(QA_FRAME_PREWARM_MANIFEST)).not.toMatch(
       /qa-(?:final|current|inverse|view|motion|optical|stock|traa|single|eight|named|main|transform)-/,
     );
@@ -726,9 +745,10 @@ describe("QA frame driver Core association", () => {
       "water-ssr-history-resolved-capture-target",
       "water-ssr-history-beauty-target",
       "water-secondary-particle-accumulation-target",
+      "water-hero-breaker-foam-diagnostics-target",
     ]);
-    expect(receipt.progress.completedWork).toBe(23);
-    expect(receipt.progress.totalWork).toBe(23);
+    expect(receipt.progress.completedWork).toBe(24);
+    expect(receipt.progress.totalWork).toBe(24);
   });
 
   it("rejects a Core manifest that is missing a mapped declaration", () => {

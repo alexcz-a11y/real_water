@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createWaterPreset } from "real-water";
-import type { QaCameraV1, QaHarnessV15 } from "../src/qa-harness.js";
+import type { QaCameraV1, QaHarnessV16 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
 
@@ -36,7 +36,7 @@ test("captures deterministic nonzero spectral-whitecap generation at a fixed tic
 
   const result = await page.evaluate(
     async ({ camera, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -107,7 +107,7 @@ test("spectral-whitecap density drives every prepared surface material response"
 
   const result = await page.evaluate(
     async ({ camera, off, on }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -195,7 +195,7 @@ test("captures transported history and lets hot persistence control its decay", 
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ camera, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -308,7 +308,7 @@ test("keeps the world-domain whitecap field stable through continuous camera rot
   };
   const result = await page.evaluate(
     async ({ firstCamera, secondCamera, controls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

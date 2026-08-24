@@ -23,13 +23,19 @@ export interface UnifiedFoamSampler {
   sampleStages(hostX: Node<"float">, hostZ: Node<"float">): Node<"vec4">;
   sampleSources(hostX: Node<"float">, hostZ: Node<"float">): Node<"vec4">;
   sampleSourcesAtFieldUv(uvX: Node<"float">, uvY: Node<"float">): Node<"vec4">;
+  sampleHeroBreakerFoamAtFieldUv(
+    uvX: Node<"float">,
+    uvY: Node<"float">,
+  ): Node<"float">;
 }
 
 export interface UnifiedFoamDiagnostics {
   readonly stageTarget: RenderTarget;
   readonly sourceIdentityTarget: RenderTarget;
+  readonly heroBreakerFoamTarget: RenderTarget;
   renderStages(renderer: Renderer, camera: PerspectiveCamera): void;
   renderSources(renderer: Renderer): void;
+  renderHeroBreakerFoam(renderer: Renderer): void;
   renderAll(renderer: Renderer, camera: PerspectiveCamera): void;
   dispose(): void;
 }
@@ -62,6 +68,16 @@ export function createUnifiedFoamDiagnostics(
     },
   );
   sourceIdentityTarget.texture.name = "Real Water unified foam sources";
+  const heroBreakerFoamTarget = new RenderTarget(
+    drawingBuffer.width,
+    drawingBuffer.height,
+    {
+      depthBuffer: false,
+      stencilBuffer: false,
+      type: HalfFloatType,
+    },
+  );
+  heroBreakerFoamTarget.texture.name = "Real Water Hero Breaker foam identity";
   try {
     const hostProjectionInverse = new Matrix4().copy(
       camera.projectionMatrixInverse,
@@ -93,10 +109,20 @@ export function createUnifiedFoamDiagnostics(
     const packedSources = vec4(
       sampler.sampleSourcesAtFieldUv(screenUV.x, screenUV.y),
     );
+    const heroBreakerFoam = sampler.sampleHeroBreakerFoamAtFieldUv(
+      screenUV.x,
+      screenUV.y,
+    );
+    const packedHeroBreakerFoam = vec4(heroBreakerFoam, 0, 0, 1);
     const stagePipeline = new RenderPipeline(renderer, packedStages);
     stagePipeline.outputColorTransform = false;
     const sourcePipeline = new RenderPipeline(renderer, packedSources);
     sourcePipeline.outputColorTransform = false;
+    const heroBreakerFoamPipeline = new RenderPipeline(
+      renderer,
+      packedHeroBreakerFoam,
+    );
+    heroBreakerFoamPipeline.outputColorTransform = false;
     let disposed = false;
 
     const updateCamera = (nextCamera: PerspectiveCamera): void => {
@@ -123,12 +149,19 @@ export function createUnifiedFoamDiagnostics(
       nextRenderer.setRenderTarget(sourceIdentityTarget);
       sourcePipeline.render();
     };
+    const renderHeroBreakerFoam = (nextRenderer: Renderer): void => {
+      assertActive();
+      nextRenderer.setRenderTarget(heroBreakerFoamTarget);
+      heroBreakerFoamPipeline.render();
+    };
 
     return Object.freeze({
       stageTarget,
       sourceIdentityTarget,
+      heroBreakerFoamTarget,
       renderStages,
       renderSources,
+      renderHeroBreakerFoam,
       renderAll(nextRenderer: Renderer, nextCamera: PerspectiveCamera): void {
         assertActive();
         updateCamera(nextCamera);
@@ -136,6 +169,8 @@ export function createUnifiedFoamDiagnostics(
         stagePipeline.render();
         nextRenderer.setRenderTarget(sourceIdentityTarget);
         sourcePipeline.render();
+        nextRenderer.setRenderTarget(heroBreakerFoamTarget);
+        heroBreakerFoamPipeline.render();
       },
       dispose(): void {
         if (disposed) {
@@ -144,13 +179,16 @@ export function createUnifiedFoamDiagnostics(
         disposed = true;
         stagePipeline.dispose();
         sourcePipeline.dispose();
+        heroBreakerFoamPipeline.dispose();
         stageTarget.dispose();
         sourceIdentityTarget.dispose();
+        heroBreakerFoamTarget.dispose();
       },
     });
   } catch (cause) {
     stageTarget.dispose();
     sourceIdentityTarget.dispose();
+    heroBreakerFoamTarget.dispose();
     throw cause;
   }
 }

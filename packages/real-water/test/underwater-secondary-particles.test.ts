@@ -82,6 +82,7 @@ function snapshot(tick: number): OpenWaterRuntimeSnapshot {
     interactionAnchor: Object.freeze({ x: 0, z: 0 }),
     interactionAnchorRevision: 0,
     activeDisturbanceCount: 0,
+    activeHeroBreakerCount: 0,
     activeBodyWakeCount: 0,
     attachedBodyCount: 0,
   });
@@ -322,6 +323,41 @@ describe("underwater secondary-particle consumers", () => {
 
     first.reset();
     replay.reset();
+  });
+
+  it("ignores Hero Breakers instead of treating them as underwater impacts", () => {
+    const baseline = createParticles();
+    const withHero = createParticles();
+    const view = camera();
+    const state = snapshot(73);
+    const baseImpact = testImpact(1, -1, 12, MANUAL_SOURCE_DOMAIN_OFFSET + 1);
+    const heroImpact: TestImpact = Object.freeze({
+      ...testImpact(0, 0, 60, MANUAL_SOURCE_DOMAIN_OFFSET + 2),
+      kind: "hero-breaker",
+    });
+    const expected = copyBatch(
+      baseline.candidateBatch(
+        SUBSURFACE_BUBBLE_CLOUD_CONSUMER_ID,
+        state,
+        interactionFromImpacts([baseImpact]),
+        view,
+      ),
+    );
+    const actual = copyBatch(
+      withHero.candidateBatch(
+        SUBSURFACE_BUBBLE_CLOUD_CONSUMER_ID,
+        state,
+        interactionFromImpacts([heroImpact, baseImpact]),
+        view,
+      ),
+    );
+
+    expect(actual.count).toBe(expected.count);
+    expectTypedArrayEqual(actual.high, expected.high);
+    expectTypedArrayEqual(actual.low, expected.low);
+    expectTypedArrayEqual(actual.contributions, expected.contributions);
+    baseline.reset();
+    withHero.reset();
   });
 
   it("separates same-position same-tick manual source partitions by domain identity", () => {

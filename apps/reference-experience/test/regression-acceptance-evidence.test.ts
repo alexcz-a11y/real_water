@@ -201,11 +201,12 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
     maxAttachedBodies: MAX_ATTACHED_BODIES,
     maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
     maxActiveDisturbances: 128,
+    maxActiveHeroBreakers: 8,
     interactionField: {
       radiusMetres: 48,
       edgeFadeMetres: 8,
       maxSnapshotAgeTicks: 1,
-      disturbanceKinds: ["radial-impact", "directional-wake"],
+      disturbanceKinds: ["radial-impact", "directional-wake", "hero-breaker"],
     },
     bodyInteraction: {
       fixedTickHz: 60,
@@ -990,7 +991,7 @@ describe("Regression acceptance version-3 reader", () => {
     expect(document.qaPrewarmManifest).toMatchObject({
       capabilities: READY_CAPABILITIES,
       manifest: {
-        version: 14,
+        version: 15,
         captures: expect.arrayContaining([
           {
             name: "foam-source-identity",
@@ -1012,6 +1013,10 @@ describe("Regression acceptance version-3 reader", () => {
             name: "lens-wetness",
             preparedFormat: "rgba16float-lens-wetness-diagnostics",
           },
+          {
+            name: "hero-breaker-foam",
+            preparedFormat: "r32float-hero-breaker-foam",
+          },
         ]),
         coreDeclarations: expect.objectContaining({
           "foam-source-identity": "water-foam-source-identity-target",
@@ -1019,10 +1024,11 @@ describe("Regression acceptance version-3 reader", () => {
           "underwater-particles": "water-underwater-suspended-particle-target",
           "underwater-bubbles": "water-underwater-bubble-target",
           "lens-wetness": "water-lens-wetness-diagnostics-target",
+          "hero-breaker-foam": "water-hero-breaker-foam-diagnostics-target",
         }),
       },
     });
-    expect(document.qaPrewarmManifest?.manifest.captures).toHaveLength(40);
+    expect(document.qaPrewarmManifest?.manifest.captures).toHaveLength(41);
   });
 
   it("rejects raw base64 capture payloads and a forged schema", () => {

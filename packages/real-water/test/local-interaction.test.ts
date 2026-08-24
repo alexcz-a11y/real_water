@@ -52,6 +52,184 @@ describe("ready local interaction runtime", () => {
     await lease.dispose();
   });
 
+  it("enforces the eight-slot Hero Breaker priority capacity", async () => {
+    const state: HostSimulationState = Object.freeze({
+      seed: 29,
+      tick: 20,
+      timeSeconds: 400,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      seaLevelMetres: 0,
+      simulationResetRevision: 0,
+    });
+    const lease = await createInteractionLease(() => state);
+    const ids = Array.from({ length: 8 }, (_, index) => index + 1);
+    expect(
+      lease.submitDisturbances(
+        heroBreakerBatch(
+          ids,
+          ids.map(() => 7),
+        ),
+      ),
+    ).toMatchObject({
+      acceptedDisturbanceIds: ids,
+      droppedDisturbanceIds: [],
+      activeDisturbanceCount: 8,
+    });
+    expect(lease.inspectRuntime()).toMatchObject({
+      activeDisturbanceCount: 8,
+      activeHeroBreakerCount: 8,
+    });
+
+    expect(lease.submitDisturbances(heroBreakerBatch([9], [7]))).toMatchObject({
+      acceptedDisturbanceIds: [],
+      droppedDisturbanceIds: [9],
+      activeDisturbanceCount: 8,
+    });
+    expect(lease.submitDisturbances(heroBreakerBatch([10], [8]))).toMatchObject(
+      {
+        acceptedDisturbanceIds: [10],
+        droppedDisturbanceIds: [1],
+        activeDisturbanceCount: 8,
+      },
+    );
+    expect(lease.inspectRuntime().activeHeroBreakerCount).toBe(8);
+    await lease.dispose();
+  });
+
+  it("shares the global 128 slots between Hero Breakers and other Disturbances", async () => {
+    const state: HostSimulationState = Object.freeze({
+      seed: 29,
+      tick: 20,
+      timeSeconds: 400,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      seaLevelMetres: 0,
+      simulationResetRevision: 0,
+    });
+    const lease = await createInteractionLease(() => state);
+    lease.submitDisturbances(
+      heroBreakerBatch(
+        Array.from({ length: 8 }, (_, index) => index + 1),
+        new Array<number>(8).fill(200),
+      ),
+    );
+    lease.submitDisturbances({
+      kind: "radial-impact",
+      count: 120,
+      ids: Uint32Array.from({ length: 120 }, (_, index) => index + 1_000),
+      positions: new Float32Array(120 * 3),
+      radii: new Float32Array(120).fill(8),
+      amplitudes: new Float32Array(120).fill(1),
+      priorities: new Uint8Array(120).fill(1),
+    });
+    expect(lease.inspectRuntime()).toMatchObject({
+      activeDisturbanceCount: 128,
+      activeHeroBreakerCount: 8,
+    });
+
+    expect(
+      lease.submitDisturbances(radialImpactBatch({ id: 2_000, priority: 2 })),
+    ).toMatchObject({
+      acceptedDisturbanceIds: [2_000],
+      droppedDisturbanceIds: [1_000],
+      activeDisturbanceCount: 128,
+    });
+    expect(
+      lease.submitDisturbances(heroBreakerBatch([9], [200])),
+    ).toMatchObject({
+      acceptedDisturbanceIds: [],
+      droppedDisturbanceIds: [9],
+      activeDisturbanceCount: 128,
+    });
+    expect(lease.inspectRuntime().activeHeroBreakerCount).toBe(8);
+    await lease.dispose();
+  });
+
+  it("uses fixed ticks for Hero Breaker deformation, foam, and lifetime", async () => {
+    let state: HostSimulationState = Object.freeze({
+      seed: 29,
+      tick: 50,
+      timeSeconds: 1_000,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      seaLevelMetres: 0,
+      simulationResetRevision: 0,
+    });
+    const createLease = () => createInteractionLease(() => state);
+    const lease = await createLease();
+    const spectralOnly = await createLease();
+    const breaker = heroBreakerBatch([29], [100], 4);
+    lease.submitDisturbances(breaker);
+
+    state = Object.freeze({ ...state, tick: 52, timeSeconds: 9_000 });
+    const shaped = queryPoint(lease, 0, 0, 0);
+    const baseline = queryPoint(spectralOnly, 0, 0, 0);
+    expect(shaped.heights[0]).not.toBeCloseTo(
+      baseline.heights[0] ?? Number.NaN,
+      5,
+    );
+    expect(shaped.normals[0]).not.toBeCloseTo(
+      baseline.normals[0] ?? Number.NaN,
+      5,
+    );
+    expect(shaped.velocities[1]).not.toBeCloseTo(
+      baseline.velocities[1] ?? Number.NaN,
+      5,
+    );
+    expect(shaped.foam[0]).toBeGreaterThan(baseline.foam[0] ?? 0);
+    expect(lease.inspectRuntime()).toMatchObject({
+      activeDisturbanceCount: 1,
+      activeHeroBreakerCount: 1,
+    });
+
+    state = Object.freeze({ ...state, tick: 54, timeSeconds: 9_000.5 });
+    expect(lease.inspectRuntime()).toMatchObject({
+      activeDisturbanceCount: 0,
+      activeHeroBreakerCount: 0,
+    });
+    await Promise.all([lease.dispose(), spectralOnly.dispose()]);
+  });
+
+  it("clears Hero Breakers on rewind and replays the authored query recipe", async () => {
+    let state: HostSimulationState = Object.freeze({
+      seed: 29,
+      tick: 70,
+      timeSeconds: 700,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      seaLevelMetres: 0,
+      simulationResetRevision: 0,
+    });
+    const lease = await createInteractionLease(() => state);
+    const breaker = heroBreakerBatch([91], [100], 12);
+    lease.submitDisturbances(breaker);
+    state = Object.freeze({ ...state, tick: 72, timeSeconds: 900 });
+    const first = serializeQuery(queryPoint(lease, 1, 0, 0));
+
+    state = Object.freeze({ ...state, tick: 70, timeSeconds: 700 });
+    expect(lease.inspectRuntime()).toMatchObject({
+      activeDisturbanceCount: 0,
+      activeHeroBreakerCount: 0,
+    });
+    const replayReceipt = lease.submitDisturbances(breaker);
+    state = Object.freeze({ ...state, tick: 72, timeSeconds: 900 });
+    const replay = serializeQuery(queryPoint(lease, 1, 0, 0));
+    expect(replayReceipt.acceptedDisturbanceIds).toEqual([91]);
+    expect(replay).toEqual(first);
+
+    state = Object.freeze({ ...state, simulationResetRevision: 1 });
+    expect(lease.inspectRuntime()).toMatchObject({
+      activeDisturbanceCount: 0,
+      activeHeroBreakerCount: 0,
+    });
+    await lease.dispose();
+  });
+
   it("reports the oldest contributing bank when a current impact joins a previous Body wake", async () => {
     let state: HostSimulationState = Object.freeze({
       seed: 25,
@@ -427,7 +605,7 @@ describe("ready local interaction runtime", () => {
       radiusMetres: 48,
       edgeFadeMetres: 8,
       maxSnapshotAgeTicks: 1,
-      disturbanceKinds: ["radial-impact", "directional-wake"],
+      disturbanceKinds: ["radial-impact", "directional-wake", "hero-breaker"],
     });
     expect(Object.isFrozen(lease.capabilities.gameplay.interactionField)).toBe(
       true,
@@ -582,8 +760,8 @@ describe("ready local interaction runtime", () => {
   it("declares the bounded local interaction route before readiness", () => {
     const manifest = createMinimalWaterPrewarmManifest();
 
-    expect(manifest.version).toBe(10);
-    expect(manifest.qualityProfile.version).toBe(13);
+    expect(manifest.version).toBe(11);
+    expect(manifest.qualityProfile.version).toBe(14);
     expect(manifest.qualityProfile.interaction).toEqual({
       anchorCount: 1,
       field: {
@@ -594,6 +772,8 @@ describe("ready local interaction runtime", () => {
         maxSnapshotAgeTicks: 1,
         radialImpactRoute: "analytic-uniform-array",
         directionalWakeRoute: "analytic-uniform-array",
+        maxActiveHeroBreakers: 8,
+        heroBreakerRoute: "art-directed-overturning-uniform-array",
       },
     });
     expect(Object.isFrozen(manifest.qualityProfile.interaction.field)).toBe(
@@ -657,6 +837,30 @@ function directionalWakeBatch(id: number) {
     radii: Float32Array.of(2),
     amplitudes: Float32Array.of(1),
     priorities: Uint8Array.of(128),
+  };
+}
+
+function heroBreakerBatch(
+  ids: readonly number[],
+  priorities: readonly number[],
+  lifetimeTicks = 60,
+) {
+  const directions = new Float32Array(ids.length * 3);
+  for (let index = 0; index < ids.length; index += 1) {
+    directions[index * 3] = 1;
+  }
+  return {
+    kind: "hero-breaker" as const,
+    count: ids.length,
+    ids: Uint32Array.from(ids),
+    positions: new Float32Array(ids.length * 3),
+    directions,
+    radii: new Float32Array(ids.length).fill(8),
+    amplitudes: new Float32Array(ids.length).fill(2),
+    foamAmounts: new Float32Array(ids.length).fill(0.8),
+    sprayAmounts: new Float32Array(ids.length).fill(0.6),
+    lifetimeTicks: new Uint16Array(ids.length).fill(lifetimeTicks),
+    priorities: Uint8Array.from(priorities),
   };
 }
 

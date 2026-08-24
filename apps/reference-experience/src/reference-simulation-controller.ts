@@ -12,6 +12,7 @@ export interface ReferenceHostSimulationController extends HostSimulationAdapter
 
 export interface ReferenceHostSimulationControllerOptions {
   readonly integrateFixedStep?: () => void;
+  readonly afterFixedStep?: (state: HostSimulationState) => void;
 }
 
 export function createReferenceHostSimulationController(
@@ -48,6 +49,7 @@ export function createReferenceHostSimulationController(
       while (targetTick > tick) {
         options.integrateFixedStep?.();
         tick += 1;
+        options.afterFixedStep?.(freezeState(tick));
       }
       return freezeState(tick);
     },

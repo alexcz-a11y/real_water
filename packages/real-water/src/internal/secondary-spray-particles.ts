@@ -26,7 +26,10 @@ import type {
   SecondaryParticleContributionQuantizer,
   SecondaryParticleContributionReference,
 } from "../secondary-particle-pool.js";
-import { MAX_ACTIVE_DISTURBANCES } from "../capabilities.js";
+import {
+  MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
+} from "../capabilities.js";
 import {
   writeSecondarySprayCandidates,
   type SecondarySprayCandidateStorage,
@@ -147,6 +150,7 @@ export function createSecondarySprayParticles(
     minimumRetainedSlots: SECONDARY_SPRAY_MINIMUM_RETAINED_SLOTS,
     impactStableSourceIds: new Float64Array(MAX_ACTIVE_DISTURBANCES),
     impactSourceOrder: new Uint32Array(MAX_ACTIVE_DISTURBANCES),
+    heroImpactSourceOrder: new Uint32Array(MAX_ACTIVE_HERO_BREAKERS),
   });
   const positionAttribute = new InstancedBufferAttribute(
     renderStorage.positions,
@@ -244,12 +248,11 @@ export function createSecondarySprayParticles(
       camera: PerspectiveCamera,
     ): SecondaryParticleCandidateBatch {
       synchronize(snapshot, interaction);
-      candidateCount = desiredCandidateCount(snapshot, interaction);
-      writeSecondarySprayCandidates(
+      candidateCount = writeSecondarySprayCandidates(
         snapshot,
         interaction,
         camera,
-        candidateCount,
+        desiredGeneralCandidateCount(snapshot, interaction),
         candidateWriter,
       );
       return batch;
@@ -321,15 +324,20 @@ export function createSecondarySprayParticles(
   });
 }
 
-function desiredCandidateCount(
+function desiredGeneralCandidateCount(
   snapshot: OpenWaterRuntimeSnapshot,
   interaction: LocalInteractionRenderSnapshot,
 ): number {
   const controls = snapshot.artisticControls;
   const seaEnergy =
     (controls.waveStrength + controls.choppiness + controls.whitecapAmount) / 3;
-  const activeInteractionBoost =
-    Math.min(interaction.impacts.length, 16) * 2_048;
+  let generalInteractionCount = 0;
+  for (const impact of interaction.impacts) {
+    if (impact.kind !== "hero-breaker") {
+      generalInteractionCount += 1;
+    }
+  }
+  const activeInteractionBoost = Math.min(generalInteractionCount, 16) * 2_048;
   return Math.max(
     SECONDARY_SPRAY_MINIMUM_RETAINED_SLOTS,
     Math.min(

@@ -53,6 +53,12 @@ const CANONICAL_INTERACTION_FIELD_KEYS = Object.freeze([
   "maxSnapshotAgeTicks",
   "radialImpactRoute",
   "directionalWakeRoute",
+  "maxActiveHeroBreakers",
+  "heroBreakerRoute",
+]);
+const PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS = Object.freeze([
+  "maxActiveHeroBreakers",
+  "heroBreakerRoute",
 ]);
 
 const CANONICAL_WHITECAP_FIELDS = Object.freeze([
@@ -239,7 +245,13 @@ function canonicalJson(label, profile, variant) {
     fields,
   );
   if (profile.interaction !== undefined) {
-    const absentFieldKeys = variant?.absentInteractionFieldKeys ?? [];
+    const absentFieldKeys =
+      variant === undefined
+        ? []
+        : [
+            ...variant.absentInteractionFieldKeys,
+            ...PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+          ];
     checkKeys(
       `${label} interaction field`,
       Object.keys(profile.interaction.field),
@@ -285,7 +297,7 @@ function canonicalJson(label, profile, variant) {
     checkKeys(
       `${label} post-TRAA composition`,
       Object.keys(profile.postTraaComposition),
-      variant === undefined
+      variant === undefined || variant.completeT22 === true
         ? CANONICAL_POST_TRAA_FIELDS
         : LEGACY_POST_TRAA_FIELDS,
     );
@@ -301,7 +313,7 @@ function canonicalJson(label, profile, variant) {
     checkKeys(
       `${label} underwater`,
       Object.keys(profile.underwater),
-      variant === undefined
+      variant === undefined || variant.completeT22 === true
         ? CANONICAL_UNDERWATER_FIELDS
         : LEGACY_UNDERWATER_FIELDS,
     );
@@ -523,6 +535,7 @@ const COMMITTED_LEGACY_VARIANTS = [
     absentKeys: ["secondaryParticles", "underwater", "postTraaComposition"],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    whitecapSourceLayout: "whitecap-wake-impact-combined",
     hashes: {
       "minimal":
         "sha256:47475f80673e8e4c942b567715e0e3d36dedf0d6d1320e83825dc866fefacd93",
@@ -536,6 +549,7 @@ const COMMITTED_LEGACY_VARIANTS = [
     absentKeys: ["secondaryParticles", "postTraaComposition"],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    whitecapSourceLayout: "whitecap-wake-impact-combined",
     hashes: {
       "minimal":
         "sha256:6f6ccb6262b8b3239dcfbcfc80dd3322ca75408260ea947cdd5892a16a8ef908",
@@ -549,11 +563,27 @@ const COMMITTED_LEGACY_VARIANTS = [
     absentKeys: [],
     absentInteractionFieldKeys: [],
     ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    whitecapSourceLayout: "whitecap-wake-impact-combined",
     hashes: {
       "minimal":
         "sha256:a9ea5e4aaf2d703f7e2ad85fb8e89afd9289c0ad9ae2a157f0d4f67044d74539",
       "minimal-high-detail":
         "sha256:6498d05bd7491015c457d6183b90654c1df14e81352c1da13e8de34d6f9285a4",
+    },
+  },
+  {
+    label: "13 (complete T22, no Hero Breaker)",
+    version: 13,
+    absentKeys: [],
+    absentInteractionFieldKeys: ["maxActiveHeroBreakers", "heroBreakerRoute"],
+    ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+    whitecapSourceLayout: "whitecap-wake-impact-combined",
+    completeT22: true,
+    hashes: {
+      "minimal":
+        "sha256:fe3581f672279216b2fe41dd658b7ae47140a58fb555badf2f1b05477781f663",
+      "minimal-high-detail":
+        "sha256:e21f2d7c73e0efec73e8e01b21bfcd52ba7d059c5fb857bc73fee3d11bc89148",
     },
   },
 ];
@@ -569,10 +599,10 @@ function legacyProfile(profile, variant) {
   if (reduced.interaction !== undefined) {
     reduced.interaction = {
       ...reduced.interaction,
-      field: omitKeys(
-        reduced.interaction.field,
-        variant.absentInteractionFieldKeys,
-      ),
+      field: omitKeys(reduced.interaction.field, [
+        ...variant.absentInteractionFieldKeys,
+        ...PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+      ]),
     };
   }
   if (
@@ -589,10 +619,22 @@ function legacyProfile(profile, variant) {
       mode: "spectral-ping-pong",
     };
   }
-  if (reduced.underwater !== undefined) {
+  if (
+    reduced.whitecaps !== undefined &&
+    variant.whitecapSourceLayout !== undefined
+  ) {
+    reduced.whitecaps = {
+      ...reduced.whitecaps,
+      sourceLayout: variant.whitecapSourceLayout,
+    };
+  }
+  if (reduced.underwater !== undefined && variant.completeT22 !== true) {
     reduced.underwater = omitKeys(reduced.underwater, ["caustics", "tracers"]);
   }
-  if (reduced.postTraaComposition !== undefined) {
+  if (
+    reduced.postTraaComposition !== undefined &&
+    variant.completeT22 !== true
+  ) {
     reduced.postTraaComposition = {
       ...omitKeys(reduced.postTraaComposition, ["lensWetness"]),
       stages: reduced.postTraaComposition.stages.slice(0, 1),
@@ -669,9 +711,9 @@ for (const variant of COMMITTED_LEGACY_VARIANTS) {
 // public fields in declared order, with manifestHash itself excluded.
 const COMMITTED_MANIFEST_HASHES = {
   "minimal":
-    "sha256:e567cfb3a578dc468b763bb5fba2059aab547314fbb8424f6a00915ffb901cb9",
+    "sha256:4316a6c32f54e148df79bae87f634fc24fccd757f9751d54eedfb0c91b3254f1",
   "minimal-high-detail":
-    "sha256:c4bb02b7c8bc0024b2176ef8230183e96819afbf6dcc376d80dc58960b4b4d58",
+    "sha256:e12cf0f9b22796ece5354822e6e577ba01163d80375e93c660767f24e7813ce7",
 };
 
 function canonicalManifestJson(manifest) {

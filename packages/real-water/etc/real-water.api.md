@@ -363,7 +363,7 @@ export interface DirectionalWakeDisturbanceBatch {
 }
 
 // @public
-export type DisturbanceBatch = RadialImpactDisturbanceBatch | DirectionalWakeDisturbanceBatch;
+export type DisturbanceBatch = RadialImpactDisturbanceBatch | DirectionalWakeDisturbanceBatch | HeroBreakerDisturbanceBatch;
 
 // @public
 export interface DisturbanceSubmissionReceipt {
@@ -492,6 +492,8 @@ export interface GameplayCapabilities {
     // (undocumented)
     readonly maxActiveDisturbances: 128;
     // (undocumented)
+    readonly maxActiveHeroBreakers: 8;
+    // (undocumented)
     readonly maxAttachedBodies: 32;
     // (undocumented)
     readonly maxQueryPointsPerTick: 2_048;
@@ -533,7 +535,11 @@ export interface GameplayCapabilitiesBodyInteraction {
 // @public
 export interface GameplayCapabilitiesInteractionField {
     // (undocumented)
-    readonly disturbanceKinds: readonly ["radial-impact", "directional-wake"];
+    readonly disturbanceKinds: readonly [
+    "radial-impact",
+    "directional-wake",
+    "hero-breaker"
+    ];
     // (undocumented)
     readonly edgeFadeMetres: 8;
     // (undocumented)
@@ -567,6 +573,23 @@ export interface GameplayQueryResults {
     readonly ticks: Float64Array;
     // (undocumented)
     readonly velocities: Float32Array;
+}
+
+// @public
+export interface HeroBreakerDisturbanceBatch {
+    readonly amplitudes: Float32Array;
+    // (undocumented)
+    readonly count: number;
+    readonly directions: Float32Array;
+    readonly foamAmounts: Float32Array;
+    readonly ids: Uint32Array;
+    // (undocumented)
+    readonly kind: "hero-breaker";
+    readonly lifetimeTicks: Uint16Array;
+    readonly positions: Float32Array;
+    readonly priorities: Uint8Array;
+    readonly radii: Float32Array;
+    readonly sprayAmounts: Float32Array;
 }
 
 // @public
@@ -818,6 +841,9 @@ export interface LongSuspensionInvalidation {
 export const MAX_ACTIVE_DISTURBANCES: 128;
 
 // @public
+export const MAX_ACTIVE_HERO_BREAKERS: 8;
+
+// @public
 export const MAX_ATTACHED_BODIES: 32;
 
 // @public (undocumented)
@@ -940,6 +966,7 @@ export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
     readonly activeBodyWakeCount: number;
     // (undocumented)
     readonly activeDisturbanceCount: number;
+    readonly activeHeroBreakerCount: number;
     // (undocumented)
     readonly artisticControls: ArtisticControls;
     // (undocumented)
@@ -1004,7 +1031,7 @@ export type PresetRecoveryReason = "invalid-json" | "unknown-schema" | "invalid-
 export const PREWARM_MANIFEST_SCHEMA: "real-water/prewarm";
 
 // @public
-export const PREWARM_MANIFEST_VERSION: 10;
+export const PREWARM_MANIFEST_VERSION: 11;
 
 // @public
 export interface PrewarmDeclaration {
@@ -1086,7 +1113,7 @@ export type PrimitiveInteractionShape = SphereInteractionShape | BoxInteractionS
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 13;
+export const QUALITY_PROFILE_VERSION: 14;
 
 // @public
 export interface QualityProfile {
@@ -1164,7 +1191,11 @@ export interface QualityProfileInteractionField {
     // (undocumented)
     readonly edgeFadeMetres: 8;
     // (undocumented)
+    readonly heroBreakerRoute: "art-directed-overturning-uniform-array";
+    // (undocumented)
     readonly maxActiveDisturbances: 128;
+    // (undocumented)
+    readonly maxActiveHeroBreakers: 8;
     // (undocumented)
     readonly maxSnapshotAgeTicks: 1;
     // (undocumented)
@@ -1411,7 +1442,7 @@ export interface QualityProfileSpectralWhitecaps {
     "sea-state-cut"
     ];
     // (undocumented)
-    readonly sourceLayout: "whitecap-wake-impact-combined";
+    readonly sourceLayout: "whitecap-wake-impact-hero-combined";
     // (undocumented)
     readonly stageLayout: "generation-history-advection-decay";
     // (undocumented)

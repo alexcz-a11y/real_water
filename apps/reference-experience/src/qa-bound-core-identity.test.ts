@@ -4,6 +4,7 @@ import {
   createMinimalWaterQualityProfile,
   MAX_ATTACHED_BODIES,
   MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
   MAX_GAMEPLAY_QUERY_POINTS,
   type RealWaterCapabilities,
 } from "real-water";
@@ -147,11 +148,12 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
     maxAttachedBodies: MAX_ATTACHED_BODIES,
     maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
     maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+    maxActiveHeroBreakers: MAX_ACTIVE_HERO_BREAKERS,
     interactionField: {
       radiusMetres: 48,
       edgeFadeMetres: 8,
       maxSnapshotAgeTicks: 1,
-      disturbanceKinds: ["radial-impact", "directional-wake"],
+      disturbanceKinds: ["radial-impact", "directional-wake", "hero-breaker"],
     },
     bodyInteraction: {
       fixedTickHz: 60,
@@ -343,6 +345,41 @@ describe("Ready capabilities", () => {
         CORE.drawingBuffer,
       ),
     ).toThrowError(/Quality Profile temporal/i);
+  });
+
+  it("rejects a Hero Breaker capacity that disagrees with Core", () => {
+    expect(() =>
+      readReadyCapabilities(
+        {
+          ...READY_CAPABILITIES,
+          gameplay: {
+            ...READY_CAPABILITIES.gameplay,
+            maxActiveHeroBreakers: 7,
+          },
+        } as unknown,
+        CORE.qualityProfile,
+        CORE.drawingBuffer,
+      ),
+    ).toThrowError(/maxActiveHeroBreakers/i);
+  });
+
+  it("rejects an interaction field without the Hero Breaker disturbance kind", () => {
+    expect(() =>
+      readReadyCapabilities(
+        {
+          ...READY_CAPABILITIES,
+          gameplay: {
+            ...READY_CAPABILITIES.gameplay,
+            interactionField: {
+              ...READY_CAPABILITIES.gameplay.interactionField,
+              disturbanceKinds: ["radial-impact", "directional-wake"],
+            },
+          },
+        } as unknown,
+        CORE.qualityProfile,
+        CORE.drawingBuffer,
+      ),
+    ).toThrowError(/interactionField/i);
   });
 
   it("rejects planar dimensions that disagree with the Core drawing buffer", () => {

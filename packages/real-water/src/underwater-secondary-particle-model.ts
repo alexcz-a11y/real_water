@@ -102,7 +102,8 @@ interface UnderwaterParticleLane {
 export interface UnderwaterSecondaryParticleImpact {
   /** Domain-derived identity forwarded by the local-interaction seam. */
   readonly stableSourceId: number;
-  readonly kind: "radial-impact" | "directional-wake" | "propeller-wash";
+  readonly kind:
+    "radial-impact" | "directional-wake" | "propeller-wash" | "hero-breaker";
   readonly x: number;
   readonly z: number;
   readonly directionX: number;
@@ -364,10 +365,13 @@ function desiredCandidateCount(
   kind: UnderwaterSecondaryParticleKind,
   interaction: UnderwaterSecondaryParticleInteraction,
 ): number {
-  const impactCount = Math.min(
-    interaction.impacts.length,
-    MAX_PRESSURE_IMPACTS,
-  );
+  let pressureImpactCount = 0;
+  for (const impact of interaction.impacts) {
+    if (impact.kind !== "hero-breaker") {
+      pressureImpactCount += 1;
+    }
+  }
+  const impactCount = Math.min(pressureImpactCount, MAX_PRESSURE_IMPACTS);
   return Math.min(
     maximumCandidateCount(kind),
     baseCandidateCount(kind) + impactCount * candidatesPerImpact(kind),
@@ -423,7 +427,26 @@ function writeCandidates(options: {
     lane.impactStableSourceIds,
     lane.impactSourceOrder,
   );
-  const impactCount = Math.min(canonicalImpactCount, MAX_PRESSURE_IMPACTS);
+  let underwaterImpactCount = 0;
+  for (
+    let canonicalIndex = 0;
+    canonicalIndex < canonicalImpactCount;
+    canonicalIndex += 1
+  ) {
+    const sourceIndex = lane.impactSourceOrder[canonicalIndex];
+    const impact =
+      sourceIndex === undefined ? undefined : interaction.impacts[sourceIndex];
+    if (sourceIndex === undefined || impact === undefined) {
+      throw new Error(
+        "A canonical underwater-particle source is missing from prepared scratch.",
+      );
+    }
+    if (impact.kind !== "hero-breaker") {
+      lane.impactSourceOrder[underwaterImpactCount] = sourceIndex;
+      underwaterImpactCount += 1;
+    }
+  }
+  const impactCount = Math.min(underwaterImpactCount, MAX_PRESSURE_IMPACTS);
   beginLaneCandidateTick(lane, snapshot);
   camera.updateWorldMatrix(true, false);
   const cameraWorld = camera.matrixWorld.elements;

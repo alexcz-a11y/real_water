@@ -200,7 +200,11 @@ export interface GameplayCapabilitiesInteractionField {
   readonly radiusMetres: 48;
   readonly edgeFadeMetres: 8;
   readonly maxSnapshotAgeTicks: 1;
-  readonly disturbanceKinds: readonly ["radial-impact", "directional-wake"];
+  readonly disturbanceKinds: readonly [
+    "radial-impact",
+    "directional-wake",
+    "hero-breaker",
+  ];
 }
 
 /**
@@ -242,6 +246,7 @@ export interface GameplayCapabilities {
   readonly maxAttachedBodies: 32;
   readonly maxQueryPointsPerTick: 2_048;
   readonly maxActiveDisturbances: 128;
+  readonly maxActiveHeroBreakers: 8;
   readonly interactionField: GameplayCapabilitiesInteractionField;
   readonly bodyInteraction: GameplayCapabilitiesBodyInteraction;
 }
@@ -268,6 +273,13 @@ export const MAX_GAMEPLAY_QUERY_POINTS = 2_048 as const;
 export const MAX_ACTIVE_DISTURBANCES = 128 as const;
 
 /**
+ * Maximum Hero Breakers retained inside the global Disturbance capacity.
+ *
+ * @public
+ */
+export const MAX_ACTIVE_HERO_BREAKERS = 8 as const;
+
+/**
  * Global retained-slot capacity shared by every prepared secondary-particle
  * consumer, independent of whether it later renders before or after TRAA.
  *
@@ -281,6 +293,7 @@ export const INTERACTION_FIELD_EDGE_FADE_METRES = 8 as const;
 const SUPPORTED_DISTURBANCE_KINDS = Object.freeze([
   "radial-impact",
   "directional-wake",
+  "hero-breaker",
 ] as const);
 const INTERACTION_FIELD_CAPABILITIES: GameplayCapabilitiesInteractionField =
   Object.freeze({
@@ -392,6 +405,7 @@ export function createCoreWebGPUCapabilities(
       maxAttachedBodies: MAX_ATTACHED_BODIES,
       maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
       maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+      maxActiveHeroBreakers: MAX_ACTIVE_HERO_BREAKERS,
       interactionField: INTERACTION_FIELD_CAPABILITIES,
       bodyInteraction: BODY_INTERACTION_CAPABILITIES,
     }),

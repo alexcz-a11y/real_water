@@ -1,7 +1,7 @@
 # real-water
 
 This alpha package exposes versioned minimal-water Quality Profiles, their
-canonical one-hundred-twenty-two-unit Prewarm Manifests, versioned Calm, Swell,
+canonical one-hundred-twenty-nine-unit Prewarm Manifests, versioned Calm, Swell,
 and Storm Water Presets, Environment Presets, deterministic Showcase Presets,
 and a pure JSON import/export and migration codec. It also exposes the Startup
 and ready Runtime Interfaces, normalized Core WebGPU and Gameplay Query
@@ -36,6 +36,9 @@ one prepared target and read back as four scalar captures with one GPU transfer.
 A separate canonical anchor-local source-identity capture maps the prepared
 96-metre Interaction Field and packs spectral whitecap, wake or propeller wash,
 impact, and their saturating union into RGBA without camera-jitter ambiguity.
+Hero Breaker foam occupies its own third anchor-local history channel before it
+joins that union, and a dedicated drawing-buffer-exact scalar capture preserves
+its identity without changing the established source-identity RGBA contract.
 Current-frame SSR exposes ssr-hit from the stock raw target, ssr-confidence from
 the compose-target alpha used by the shader, linear Float32 ssr-color from the
 raw RGB, ssr-roughness from view-normal alpha, reflection-base-color from the
@@ -83,13 +86,13 @@ Host viewport after opaque geometry. Real Water never reads `scene.environment`
 or guesses sky or weather. The water material is an unlit public NodeMaterial
 whose color and MRT come from the same optical path.
 
-Each Prewarm Manifest is version 10 and binds an immutable drawing buffer. The
+Each Prewarm Manifest is version 11 and binds an immutable drawing buffer. The
 factory hashes that complete work plan synchronously. Memory Host tests may omit
 the buffer and receive 320x180; Three Host fails closed if the renderer buffer
 does not match. Changing the physical drawing buffer creates a new manifest and
 requires a full conceal, dispose, prewarm, and reveal.
 
-`minimal` and `minimal-high-detail` are immutable version-13 structural Quality
+`minimal` and `minimal-high-detail` are immutable version-14 structural Quality
 Profiles. Both pin the Native temporal policy and the implemented reflection
 layer: TRAA at render scale 1 with a drawing-buffer-exact resolution policy and
 TAAU, dynamic resolution, frame generation, and MSAA samples off, plus
@@ -114,21 +117,23 @@ headed Native certification.
 
 Both profiles also pin one 48-metre local interaction field with an 8-metre
 Hermite edge fade, one Interaction Anchor, 128 shared preallocated Disturbance
-slots, current/previous snapshot banks, and a fixed 60 Hz Body coupling policy.
-The Prewarm Manifest compiles and hidden-executes radial-impact,
-directional-wake, Body socket emission, local-foam reprojection/resolve, and
-source-identity descriptors with scratch state, clears that state, and
-stabilizes the normal ready route before reveal. At runtime,
-`updateInteractionAnchor({ x, z })` moves only that current Host-frame
-world-space focus (the same coordinate frame used by Gameplay Queries);
-`submitDisturbances(...)` accepts caller-owned radial-impact or directional-wake
-typed arrays. When capacity is full, the lowest visual priority is dropped and
-identified by the receipt without resizing the prepared buffers or clearing
-already-generated foam. Radial-impact radii are bounded to 0.0001–48 metres and
-signed peak amplitudes to -4–4 metres so every accepted 128-source composition
-remains finite. Registered Body sockets upsert their directional wake or
-propeller-wash source in place after each fixed-step query; they do not require
-a caller to submit a new Disturbance every tick.
+slots, an eight-Hero-Breaker sub-capacity, current/previous snapshot banks, and
+a fixed 60 Hz Body coupling policy. The Prewarm Manifest compiles and
+hidden-executes radial-impact, directional-wake, art-directed Hero Breaker, Body
+socket emission, local-foam reprojection/resolve, and source-identity
+descriptors with scratch state, clears that state, and stabilizes the normal
+ready route before reveal. At runtime, `updateInteractionAnchor({ x, z })` moves
+only that current Host-frame world-space focus (the same coordinate frame used
+by Gameplay Queries); `submitDisturbances(...)` accepts caller-owned
+radial-impact, directional-wake, or Hero Breaker typed arrays. A Hero batch
+authors its direction, radius, deformation amplitude, foam and spray amounts,
+one-to-600-tick lifetime, and priority. When capacity is full, the lowest visual
+priority is dropped and identified by the receipt without resizing the prepared
+buffers or clearing already-generated foam. Radial-impact radii are bounded to
+0.0001–48 metres and signed peak amplitudes to -4–4 metres so every accepted
+128-source composition remains finite. Registered Body sockets upsert their
+directional wake or propeller-wash source in place after each fixed-step query;
+they do not require a caller to submit a new Disturbance every tick.
 
 Ready leases expose one-shot runtime invalidation. A Host Integration calls
 `invalidateForLongSuspension()` when its own lifecycle classifies a suspension

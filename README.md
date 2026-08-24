@@ -70,6 +70,26 @@ individual contracts:
 - Gameplay Query composes bounded local source envelopes with its deterministic
   CPU spectral-foam reconstruction without a GPU wait.
 
+Issue #29 adds one bounded, art-directed Hero Breaker without introducing a
+general fluid solve:
+
+- a public structure-of-arrays Disturbance carries authored direction, radius,
+  deformation amplitude, dedicated foam and spray amounts, fixed-tick lifetime,
+  and visual priority;
+- Hero Breakers share the existing 128 Disturbance slots while an eight-instance
+  sub-capacity keeps their current/previous descriptor storage preallocated;
+- one asymmetric crest-and-hollow profile supplies coherent CPU query height,
+  slope, velocity, and foam while the prepared current/previous render route
+  adds a forward curl for the focal overturning silhouette;
+- the dedicated Hero foam channel joins the existing persistent local union and
+  has its own named diagnostic capture;
+- Hero spray remains a stable source partition of the existing
+  `spray-droplet-mist` consumer, so the four-consumer 131,072-slot shared pool,
+  its Q16 contribution policy, and its hysteresis remain unchanged;
+- the built-in Showcase event at fixed tick 1,800 now submits the authored event
+  once per loop, while the existing QA Disturbance seam can trigger the same
+  public batch directly.
+
 Issue #20 shades that domain with a Host-owned basic optical path:
 
 - Fresnel, Host environment reflection, depth-aware refraction, absorption,
@@ -103,11 +123,11 @@ foundation:
 
 - an accessible Loading Experience appears before preparation begins;
 - the canonical minimal-water Prewarm Manifest declares exactly one hundred
-  twenty-two work units: a texture, Host equirect environment radiance, viewport
-  scene color, viewport scene depth, 6-attachment MRT, camera-relative clipmap,
-  four spectral bands, two fixed RGBA16F spectral-stage fields and two fixed
-  anchor-local RGBA16F source-history fields, a current anchor-local RGBA16F
-  height/slope/velocity field for bounded caustic sampling,
+  twenty-nine work units: a texture, Host equirect environment radiance,
+  viewport scene color, viewport scene depth, 6-attachment MRT, camera-relative
+  clipmap, four spectral bands, two fixed RGBA16F spectral-stage fields and two
+  fixed anchor-local RGBA16F source-history fields, a current anchor-local
+  RGBA16F height/slope/velocity field for bounded caustic sampling,
   reset/generate/history/advect/diffuse/decay routes, a packed output-resolution
   whitecap stage target and probe, a double-sided TSL NodeMaterial, a stable
   camera-medium waterline state, a shared waterline history reset, a
@@ -132,17 +152,20 @@ foundation:
   allocation route, ordered output-resolution post-TRAA
   resolved/accumulation/intermediate targets plus spray and a bounded
   emergence-driven lens-wetness final stage with independent diagnostics and
-  completion probes, current-color conversion, forty named diagnostics output
-  routes, eight hidden temporal stabilization frames, named-output completion
-  probes, and main-camera guard frame, plus the local interaction field, its
-  fixed current/previous uniform buffers, and the hidden-executed radial-impact,
-  directional-wake, and Body socket emission routes, plus bounded local-foam
-  reproject/resolve and source-identity target/probe routes, plus the bounded
-  128-tick foam-state timeline. Version 8 binds the physical drawing buffer into
-  that work plan; Version 9 adds the shared secondary-particle allocation and
-  ordered post-TRAA synthesis route; Version 10 adds the complete bounded
-  underwater caustic/tracer and lens-wetness routes; a viewport change creates a
-  new manifest and lease;
+  completion probes, current-color conversion, forty-one named diagnostics
+  output routes, eight hidden temporal stabilization frames, named-output
+  completion probes, and main-camera guard frame, plus the local interaction
+  field, its fixed current/previous uniform buffers, and the hidden-executed
+  radial-impact, directional-wake, Hero Breaker, and Body socket emission
+  routes, plus bounded local-foam reproject/resolve and source-identity
+  target/probe routes, plus the bounded 128-tick foam-state timeline and the
+  seven Hero state, deformation, foam, shared-consumer spray,
+  diagnostics-target, diagnostics-route, and probe work declarations. Version 8
+  binds the physical drawing buffer into that work plan; Version 9 adds the
+  shared secondary-particle allocation and ordered post-TRAA synthesis route;
+  Version 10 adds the complete bounded underwater caustic/tracer and
+  lens-wetness routes; Version 11 adds the bounded art-directed Hero Breaker
+  route; a viewport change creates a new manifest and lease;
 - the Three r185 Host Adapter borrows the Host renderer, scene, and main camera,
   restores their state after preparation, and never disposes them;
 - progress advances monotonically only when declared manifest work completes;
@@ -187,7 +210,7 @@ foundation:
   wall-clock sleeps or animation-frame polling;
 - the Reference Experience keeps the canvas hidden through preparation and
   reveals it on the next refresh after readiness;
-- immutable version-13 `minimal` and `minimal-high-detail` Quality Profiles pin
+- immutable version-14 `minimal` and `minimal-high-detail` Quality Profiles pin
   the Native temporal policy (TRAA at render scale 1; TAAU, dynamic resolution,
   frame generation, and MSAA samples off) and the implemented reflection layer
   (Host-adapter environment, drawing-buffer-exact planar, current-frame SSR, and

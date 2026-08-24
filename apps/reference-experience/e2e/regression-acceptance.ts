@@ -158,7 +158,7 @@ export async function attachRegressionAcceptance(
     createMinimalWaterQualityProfile(coreIdentity.qualityProfile.id),
     coreIdentity.drawingBuffer,
   );
-  assertQaPrewarmV14(details.qaPrewarm);
+  assertQaPrewarmV15(details.qaPrewarm);
   const [userAgent, hardwareConcurrency, drawingBuffer, navigatorGpuAdapter] =
     await Promise.all([
       page.evaluate(() => navigator.userAgent),
@@ -381,23 +381,23 @@ function chromeVersionFromUserAgent(userAgent: string): string {
   return /(?:Chrome|Chromium)\/([\d.]+)/u.exec(userAgent)?.[1] ?? userAgent;
 }
 
-function assertQaPrewarmV14(prewarm: QaFramePrewarmReceipt): void {
+function assertQaPrewarmV15(prewarm: QaFramePrewarmReceipt): void {
   if (
     prewarm.manifest.schema !== QA_FRAME_PREWARM_MANIFEST.schema ||
     prewarm.manifest.version !== QA_FRAME_PREWARM_MANIFEST.version ||
     prewarm.manifest.id !== QA_FRAME_PREWARM_MANIFEST.id
   ) {
-    throw new Error("Regression acceptance requires QA prewarm v14.");
+    throw new Error("Regression acceptance requires QA prewarm v15.");
   }
   if (
     canonicalJson(prewarm.manifest.captures) !==
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.captures) ||
     canonicalJson(prewarm.manifest.coreDeclarations) !==
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.coreDeclarations) ||
-    QA_FRAME_PREWARM_MANIFEST.captures.length !== 40
+    QA_FRAME_PREWARM_MANIFEST.captures.length !== 41
   ) {
     throw new Error(
-      "Regression acceptance requires the exact QA v14 40-name capture mapping.",
+      "Regression acceptance requires the exact QA v15 41-name capture mapping.",
     );
   }
   if (prewarm.rendererDevice === null || prewarm.rendererDevice === undefined) {

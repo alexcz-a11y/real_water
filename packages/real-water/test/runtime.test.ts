@@ -4,12 +4,15 @@ import {
   createMinimalWaterPrewarmManifest,
   createStaticHostPresentationAdapter,
   createStaticHostSimulationAdapter,
+  MAX_ACTIVE_HERO_BREAKERS,
   prepareRealWater,
   type GameplayQueryResults,
+  type HeroBreakerDisturbanceBatch,
 } from "../src/index.js";
 import {
   createRealWaterRuntime,
   readHostSimulationState,
+  type RuntimeStateSink,
 } from "../src/runtime.js";
 import { createTestEnvironmentAdapter } from "./test-host-environment.js";
 
@@ -79,11 +82,12 @@ describe("ready Open Water runtime", () => {
       maxAttachedBodies: 32,
       maxQueryPointsPerTick: 2_048,
       maxActiveDisturbances: 128,
+      maxActiveHeroBreakers: 8,
       interactionField: {
         radiusMetres: 48,
         edgeFadeMetres: 8,
         maxSnapshotAgeTicks: 1,
-        disturbanceKinds: ["radial-impact", "directional-wake"],
+        disturbanceKinds: ["radial-impact", "directional-wake", "hero-breaker"],
       },
       bodyInteraction: {
         fixedTickHz: 60,
@@ -101,8 +105,147 @@ describe("ready Open Water runtime", () => {
         generatedDisturbanceKinds: ["directional-wake", "propeller-wash"],
       },
     });
+    expect(MAX_ACTIVE_HERO_BREAKERS).toBe(8);
     expect(Object.isFrozen(lease.capabilities.gameplay)).toBe(true);
     await lease.dispose();
+  });
+
+  it("validates the exact Hero Breaker batch before any runtime mutation", async () => {
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        simulation: STATIC_SIMULATION,
+        stepDelayMs: 0,
+      }),
+    }).ready;
+    const batch = heroBreakerBatch({ id: 29 });
+    const invalid = [
+      { ...batch, variant: "another-shape" },
+      { ...batch, directions: Float32Array.of(0, 1, 0) },
+      { ...batch, radii: Float32Array.of(0) },
+      { ...batch, amplitudes: Float32Array.of(-0.01) },
+      { ...batch, foamAmounts: Float32Array.of(1.01) },
+      { ...batch, sprayAmounts: Float32Array.of(-0.01) },
+      { ...batch, lifetimeTicks: Uint16Array.of(0) },
+      { ...batch, lifetimeTicks: Uint16Array.of(601) },
+      {
+        ...batch,
+        count: 2,
+        ids: Uint32Array.of(29, 30),
+        positions: new Float32Array(6),
+        directions: Float32Array.of(1, 0, 0, 1, 0, 0),
+        radii: Float32Array.of(8, 8),
+        amplitudes: Float32Array.of(1, 4.01),
+        foamAmounts: Float32Array.of(1, 1),
+        sprayAmounts: Float32Array.of(1, 1),
+        lifetimeTicks: Uint16Array.of(60, 60),
+        priorities: Uint8Array.of(1, 1),
+      },
+      {
+        ...batch,
+        count: 2,
+        ids: Uint32Array.of(29, 29),
+        positions: new Float32Array(6),
+        directions: Float32Array.of(1, 0, 0, 1, 0, 0),
+        radii: Float32Array.of(8, 8),
+        amplitudes: Float32Array.of(1, 1),
+        foamAmounts: Float32Array.of(1, 1),
+        sprayAmounts: Float32Array.of(1, 1),
+        lifetimeTicks: Uint16Array.of(60, 60),
+        priorities: Uint8Array.of(1, 1),
+      },
+    ];
+
+    for (const candidate of invalid) {
+      expect(() =>
+        lease.submitDisturbances(
+          candidate as unknown as HeroBreakerDisturbanceBatch,
+        ),
+      ).toThrow();
+      expect(lease.inspectRuntime()).toMatchObject({
+        activeDisturbanceCount: 0,
+        activeHeroBreakerCount: 0,
+      });
+    }
+    expect(() =>
+      lease.submitDisturbances({
+        ...batch,
+        directions: Float32Array.of(1, 0),
+      }),
+    ).toThrow(/Hero-breaker Disturbance directions buffer/i);
+    expect(() =>
+      lease.submitDisturbances({
+        ...batch,
+        kind: "unknown",
+      } as unknown as HeroBreakerDisturbanceBatch),
+    ).toThrow(/unsupported disturbance batch kind/i);
+    expect(lease.inspectRuntime()).toMatchObject({
+      activeDisturbanceCount: 0,
+      activeHeroBreakerCount: 0,
+    });
+
+    expect(lease.submitDisturbances(batch)).toMatchObject({
+      acceptedDisturbanceIds: [29],
+      droppedDisturbanceIds: [],
+      activeDisturbanceCount: 1,
+    });
+    expect(() => lease.submitDisturbances(batch)).toThrow(/already active/i);
+    expect(lease.inspectRuntime()).toMatchObject({
+      activeDisturbanceCount: 1,
+      activeHeroBreakerCount: 1,
+    });
+    await lease.dispose();
+  });
+
+  it("publishes fixed-tick Hero Breaker render inputs and legacy defaults", () => {
+    const state = Object.freeze({
+      seed: 0,
+      tick: 17,
+      timeSeconds: 999,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      seaLevelMetres: 0,
+      simulationResetRevision: 0,
+    });
+    let interaction: Parameters<RuntimeStateSink["synchronize"]>[1] | undefined;
+    const runtime = createRealWaterRuntime(
+      () => {},
+      { snapshot: () => state },
+      createStaticHostPresentationAdapter(),
+      {
+        synchronize(_snapshot, nextInteraction) {
+          interaction = nextInteraction;
+        },
+      },
+    );
+
+    runtime.submitDisturbances(heroBreakerBatch({ id: 81 }));
+    expect(interaction?.impacts[0]).toMatchObject({
+      kind: "hero-breaker",
+      startTimeSeconds: 999,
+      startTick: 17,
+      lifetimeTicks: 60,
+    });
+    expect(interaction?.impacts[0]?.foamAmount).toBeCloseTo(0.8, 6);
+    expect(interaction?.impacts[0]?.sprayAmount).toBeCloseTo(0.6, 6);
+    runtime.submitDisturbances({
+      kind: "radial-impact",
+      count: 1,
+      ids: Uint32Array.of(82),
+      positions: new Float32Array(3),
+      radii: Float32Array.of(8),
+      amplitudes: Float32Array.of(1),
+      priorities: Uint8Array.of(1),
+    });
+    expect(interaction?.impacts[1]).toMatchObject({
+      kind: "radial-impact",
+      startTick: 17,
+      lifetimeTicks: 120,
+      foamAmount: 1,
+      sprayAmount: 1,
+    });
   });
 
   it("keeps Gameplay Queries and snapshots coherent with Host sea level", async () => {
@@ -971,4 +1114,24 @@ function createWhitecapProbePositions(): Float32Array {
     0,
     16,
   );
+}
+
+function heroBreakerBatch(options: {
+  readonly id: number;
+  readonly priority?: number;
+  readonly lifetimeTicks?: number;
+}): HeroBreakerDisturbanceBatch {
+  return {
+    kind: "hero-breaker",
+    count: 1,
+    ids: Uint32Array.of(options.id),
+    positions: Float32Array.of(0, 0, 0),
+    directions: Float32Array.of(1, 0, 0),
+    radii: Float32Array.of(8),
+    amplitudes: Float32Array.of(2),
+    foamAmounts: Float32Array.of(0.8),
+    sprayAmounts: Float32Array.of(0.6),
+    lifetimeTicks: Uint16Array.of(options.lifetimeTicks ?? 60),
+    priorities: Uint8Array.of(options.priority ?? 128),
+  };
 }

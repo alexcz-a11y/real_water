@@ -3,6 +3,7 @@ import {
   createMinimalWaterQualityProfile,
   MAX_ATTACHED_BODIES,
   MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
   MAX_GAMEPLAY_QUERY_POINTS,
   MAX_SECONDARY_PARTICLES,
   type HostEnvironmentReflectionDescriptor,
@@ -178,6 +179,7 @@ const GAMEPLAY_CAPABILITY_KEYS = [
   "maxAttachedBodies",
   "maxQueryPointsPerTick",
   "maxActiveDisturbances",
+  "maxActiveHeroBreakers",
   "interactionField",
   "bodyInteraction",
 ] as const;
@@ -320,6 +322,11 @@ export function readReadyCapabilities(
       "Ready capabilities.gameplay.maxActiveDisturbances disagrees with Core.",
     );
   }
+  if (value.gameplay.maxActiveHeroBreakers !== MAX_ACTIVE_HERO_BREAKERS) {
+    throw new Error(
+      "Ready capabilities.gameplay.maxActiveHeroBreakers disagrees with Core.",
+    );
+  }
   const interactionField = value.gameplay.interactionField;
   if (
     !isRecord(interactionField) ||
@@ -328,9 +335,10 @@ export function readReadyCapabilities(
     interactionField.edgeFadeMetres !== 8 ||
     interactionField.maxSnapshotAgeTicks !== 1 ||
     !Array.isArray(interactionField.disturbanceKinds) ||
-    interactionField.disturbanceKinds.length !== 2 ||
+    interactionField.disturbanceKinds.length !== 3 ||
     interactionField.disturbanceKinds[0] !== "radial-impact" ||
-    interactionField.disturbanceKinds[1] !== "directional-wake"
+    interactionField.disturbanceKinds[1] !== "directional-wake" ||
+    interactionField.disturbanceKinds[2] !== "hero-breaker"
   ) {
     throw new Error(
       "Ready capabilities.gameplay.interactionField disagrees with Core.",
@@ -373,6 +381,7 @@ export function readReadyCapabilities(
         maxAttachedBodies: MAX_ATTACHED_BODIES,
         maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
         maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+        maxActiveHeroBreakers: MAX_ACTIVE_HERO_BREAKERS,
         interactionField: {
           radiusMetres: 48 as const,
           edgeFadeMetres: 8 as const,
@@ -380,6 +389,7 @@ export function readReadyCapabilities(
           disturbanceKinds: [
             "radial-impact" as const,
             "directional-wake" as const,
+            "hero-breaker" as const,
           ],
         },
         bodyInteraction,

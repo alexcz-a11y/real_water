@@ -16,7 +16,7 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV15,
+  type QaHarnessV16,
 } from "../src/qa-harness.js";
 import { REFERENCE_ENVIRONMENT_LIGHTING } from "../src/reference-optical-inputs.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
@@ -239,7 +239,7 @@ test("captures color, depth, normal, and optical intermediates", async ({
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -386,7 +386,7 @@ test("reports metric optical thickness from the Host 1m and 21m scene-depth fixt
       offAxisCamera,
       controls,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -585,7 +585,7 @@ test("makes Fresnel, environment, refraction, absorption, scattering, and crest 
       nadirFrontlit,
       dark,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -991,7 +991,7 @@ test("captures an isolated stock-TRAA horizon golden after eight prime presents"
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ camera, swell, lighting }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1165,7 +1165,7 @@ test("replays 32 paused continuous-control presents with live stock jitter", asy
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ camera, swell }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1215,7 +1215,7 @@ test("ignores Host scene environment and lights and follows only the Environment
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ camera, lighting }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1285,7 +1285,7 @@ test("ignores Host scene environment and lights and follows only the Environment
     "underwater-shadow",
     "underwater-caustics",
   ] as const;
-  expect(Object.keys(result.baseline.captures)).toHaveLength(40);
+  expect(Object.keys(result.baseline.captures)).toHaveLength(41);
   expect(
     Object.fromEntries(
       shadingNames.map((name) => [name, result.decoy.captures[name]]),
@@ -1322,7 +1322,7 @@ test("updates glint from a hot sun angular radius without re-preparing", async (
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ camera, lighting, wideSun }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV15 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarnessV16 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

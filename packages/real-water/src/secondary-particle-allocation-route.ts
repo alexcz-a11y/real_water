@@ -203,6 +203,9 @@ export function createSecondaryParticleAllocationRoute(options: {
     get activeDisturbanceCount(): number {
       return requireReplayEndpoint(replayEndpoint).activeDisturbanceCount;
     },
+    get activeHeroBreakerCount(): number {
+      return requireReplayEndpoint(replayEndpoint).activeHeroBreakerCount;
+    },
     get activeBodyWakeCount(): number {
       return requireReplayEndpoint(replayEndpoint).activeBodyWakeCount;
     },

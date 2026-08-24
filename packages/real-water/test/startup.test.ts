@@ -89,6 +89,7 @@ const TEST_GAMEPLAY_CAPABILITIES = Object.freeze({
   maxAttachedBodies: 32 as const,
   maxQueryPointsPerTick: 2_048 as const,
   maxActiveDisturbances: 128 as const,
+  maxActiveHeroBreakers: 8 as const,
   interactionField: Object.freeze({
     radiusMetres: 48 as const,
     edgeFadeMetres: 8 as const,
@@ -96,6 +97,7 @@ const TEST_GAMEPLAY_CAPABILITIES = Object.freeze({
     disturbanceKinds: Object.freeze([
       "radial-impact",
       "directional-wake",
+      "hero-breaker",
     ] as const),
   }),
   bodyInteraction: Object.freeze({
@@ -451,15 +453,15 @@ describe("prepareRealWater", () => {
     });
     const lease = await run.ready;
     const preparedSelection = {
-      effectId: "minimal-water-surface",
-      variantId: "basic",
+      effectId: "hero-breaker",
+      variantId: "art-directed-overturning",
     };
     lease.selectEffectVariant(preparedSelection);
 
     let failure: unknown;
     try {
       lease.selectEffectVariant({
-        effectId: "minimal-water-surface",
+        effectId: "hero-breaker",
         variantId: "undeclared",
       });
     } catch (cause) {
@@ -470,13 +472,13 @@ describe("prepareRealWater", () => {
       name: "RealWaterRuntimeError",
       code: "EFFECT_NOT_PREWARMED",
       diagnostics: {
-        effectId: "minimal-water-surface",
+        effectId: "hero-breaker",
         manifestHash: manifest.manifestHash,
         variantId: "undeclared",
       },
       diagnosticText:
         "EFFECT_NOT_PREWARMED: The requested effect variant was not prepared by this lease.\n" +
-        "effectId: minimal-water-surface\n" +
+        "effectId: hero-breaker\n" +
         `manifestHash: ${manifest.manifestHash}\n` +
         "variantId: undeclared",
     });
@@ -831,12 +833,12 @@ describe("prepareRealWater", () => {
     );
     expect(lease.manifest).toEqual({
       schema: "real-water/prewarm",
-      version: 10,
+      version: 11,
       id: manifest.id,
       manifestHash: manifest.manifestHash,
       qualityProfile: {
         schema: "real-water/quality-profile",
-        version: 13,
+        version: 14,
         id: "minimal",
         profileHash: manifest.qualityProfile.profileHash,
       },
@@ -874,6 +876,10 @@ describe("prepareRealWater", () => {
         {
           effectId: "lens-wetness",
           variantId: "bounded-emergence-decay",
+        },
+        {
+          effectId: "hero-breaker",
+          variantId: "art-directed-overturning",
         },
       ],
     });
@@ -1054,7 +1060,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 122,
+        totalWork: 129,
       },
     });
   });
@@ -1722,7 +1728,7 @@ describe("prepareRealWater", () => {
 
     expect(Object.isFrozen(manifest)).toBe(true);
     expect(Object.isFrozen(manifest.drawingBuffer)).toBe(true);
-    expect(manifest.version).toBe(10);
+    expect(manifest.version).toBe(11);
     expect(manifest.drawingBuffer).toEqual({ width: 320, height: 180 });
     expect(Object.isFrozen(manifest.declarations)).toBe(true);
     expect(Object.isFrozen(first)).toBe(true);
@@ -1737,6 +1743,13 @@ describe("prepareRealWater", () => {
       "water-local-interaction-buffers",
       "water-local-interaction-radial-impact-route",
       "water-local-interaction-directional-wake-route",
+      "water-hero-breaker-state",
+      "water-hero-breaker-deformation-route",
+      "water-hero-breaker-foam-route",
+      "water-hero-breaker-spray-route",
+      "water-hero-breaker-foam-diagnostics-target",
+      "water-hero-breaker-foam-diagnostics-route",
+      "water-hero-breaker-foam-probe",
       "water-body-socket-emission-route",
       "water-spectral-band-swell",
       "water-spectral-band-wind",
