@@ -27,17 +27,17 @@ rather than repeated per prompt, so every generation in this pack carried it.
 
 ## Approved views
 
-| File | View | sha256 (first 16) |
-|---|---|---|
-| `hero-vessel-anchor-3q-v001.png` | Identity anchor, port bow three-quarter | `885bd16eda6936c6` |
-| `hero-vessel-elev-front-v001.png` | Front elevation | `55ce065cfdb73ce5` |
-| `hero-vessel-elev-port-v001.png` | Orthographic port elevation | `bff9b80b2ccc2031` |
-| `hero-vessel-elev-stern-v001.png` | Orthographic stern elevation | `18bdb15ef2103838` |
-| `hero-vessel-plan-top-v001.png` | Orthographic top view | `7c6b979a02fbbf72` |
-| `hero-vessel-mat-hull-paint-v001.png` | Material — topside paint, orange stripe, waterline | `bf6cb48399d5ac03` |
-| `hero-vessel-mat-fender-rope-v001.png` | Material — rubber fender, rope, graphite cleat | `6fde4d4c93e68ca8` |
-| `hero-vessel-mat-deck-winch-v001.png` | Material — deck non-slip, stanchion base, winch | `c92b6be3ddbc6964` |
-| `hero-vessel-lookdev-wet-v001.png` | Wet look-dev | `802cec9e78ef37cf` |
+| File | View | Reve image id | sha256 (first 16) |
+|---|---|---|---|
+| `hero-vessel-anchor-3q-v001.png` | Identity anchor, port bow three-quarter | `819409ea-b3c8-46ff-b9a1-5a2c5df4e04e` | `885bd16eda6936c6` |
+| `hero-vessel-elev-front-v001.png` | Front elevation | `85bcc5f2-b53a-4ce5-b783-0af9238f4522` | `55ce065cfdb73ce5` |
+| `hero-vessel-elev-port-v001.png` | Orthographic port elevation | `9c154aba-447a-4746-a114-d65c8cba0189` | `bff9b80b2ccc2031` |
+| `hero-vessel-elev-stern-v001.png` | Orthographic stern elevation | `0415525d-40d2-4399-9107-120c7ab8b34b` | `18bdb15ef210383b` |
+| `hero-vessel-plan-top-v001.png` | Orthographic top view | `d49c15c9-1327-4601-8788-58366982204a` | `7c6b979a02fbbf72` |
+| `hero-vessel-mat-hull-paint-v001.png` | Material — topside paint, orange stripe, waterline | `faa10bf6-8bec-4d6b-9e20-5db2e0f04a7c` | `bf6cb48399d5ac03` |
+| `hero-vessel-mat-fender-rope-v001.png` | Material — rubber fender, rope, graphite cleat | `582f4008-f7c3-4b3b-be2d-528cb128618b` | `6fde4d4c93e68ca8` |
+| `hero-vessel-mat-deck-winch-v001.png` | Material — deck non-slip, stanchion base, winch | `bfb77c35-96e7-4914-82f7-c7fc1b02fc3b` | `c92b6be3ddbc6964` |
+| `hero-vessel-lookdev-wet-v001.png` | Wet look-dev | `4998bfc2-cfa5-47d8-b57c-a163d84d4c95` | `802cec9e78ef37cf` |
 
 The five geometric views are Ingredients of `@hero-vessel`. The three material studies and the wet
 look-dev are deliberately **not** Ingredients: a tight surface crop carries no identity information
@@ -152,6 +152,15 @@ Terms §2.3 attaches a licence that runs the other way, and its scope depends on
    §1.3(b) prohibits "automatically or programmatically extract or scrape data or Outputs from the
    Services". Whether an agent operating the published UI falls inside that phrase is not settled
    by the text, and §1.4 addresses agents acting on a user's behalf without resolving it either way.
+
+   Searched again on 2026-08-24 across the Reve help centre, whose "Download & share your content"
+   article (`help.reve.com/hc/en-us/articles/46802994402836`) is the only published guidance on
+   saving Output. It says: "Select any image and click the download button to save it to your
+   device, then share it anywhere you'd like." That settles **what may be done with a downloaded
+   file** — the documented path endorses saving and onward sharing, which is what this pack does.
+   It says nothing about **who or what may press the button**, which is the half §1.3(b) turns on.
+   The published text does not resolve it; the question stays open rather than being closed by an
+   absence of prohibition.
 
 Item 1 is closed; item 2 remains an open fact, not a finding. The heading carries no count, so
 closing the rest will not date it again.

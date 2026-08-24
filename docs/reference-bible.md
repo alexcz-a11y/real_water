@@ -172,8 +172,13 @@ Their semantics are fixed by the proxy vessel and are not renegotiated by the vi
 
 ### Navigation buoy — 2.4 m
 
-Fixed: floating navigation buoy; matte white body with a safety orange band; graphite fittings;
-visible mooring hardware; no light or radar reflector beyond what the anchor shows.
+Fixed: floating navigation buoy; spherical matte white float body on a tapered neck, with a single
+safety orange band around its widest point; graphite fittings, including a lifting eye on the neck;
+a graphite navigation lantern in a protective cage at the very top.
+
+The approved anchor introduced the lantern, which the specification had not named. It is kept: a
+navigation buoy without a light is not one. Fixed here so that the eight derivative views inherit it
+rather than each inventing their own.
 
 Three parts the buoy's function requires and no floating view can show. Fixed in advance under §11
 so that generation does not get to invent them:
@@ -181,9 +186,15 @@ so that generation does not get to invent them:
 - **A graphite ballast keel hangs beneath the hull on a short central shaft, its mass concentrated
   in a weight at the very bottom.** The buoy's righting moment comes from this weight, so its depth
   below the waterline is a modelling input, not decoration.
-- **A single heavy graphite mooring ring is set into the base of the hull, with the first links of
-  an anchor chain shackled through it.** This is the visible mooring hardware named above, seen
-  from below.
+- **A single heavy graphite mooring ring is set into the base of the hull directly below the lifting
+  eye, with the first links of an anchor chain shackled through it, and the chain hangs from that
+  ring alone.** This is the visible mooring hardware named above. Its angular position is fixed here
+  because generation does not keep it consistent: derivative views rotate the lifting eye correctly
+  and leave the ring where it was, and three of eight candidates dropped the ring entirely and let
+  the chain float free. Where an approved view disagrees with this sentence, this sentence wins.
+- **The ballast shaft is rigid and the chain is not.** They are separate parts that both hang below
+  the hull, and generation repeatedly merges them — hanging the ballast weight on the chain, which
+  would leave the buoy with no righting moment at all. The weight is carried by the shaft.
 - **A band of dark green-brown biological growth covers the hull from the waterline downward**,
   ending where the ballast shaft begins.
 
@@ -195,16 +206,72 @@ none of them, which is why they are written here rather than discovered mid-pack
 Fixed: closed marine shipping crate; composite or timber body in warm grey; graphite corner
 hardware and banding; no markings, no stencilled text.
 
+Three parts the crate's function requires and a three-quarter anchor cannot show. Fixed in advance
+under §11:
+
+- **Two graphite skids run the full length of the underside, lifting the body clear of whatever it
+  rests on.** They set the crate's floating attitude and the height of its waterline, so their depth
+  is a modelling input.
+- **A recessed graphite rope becket is set into each end panel.** The crate has to be moved by hand
+  or by line, and the beckets are where a rope or a hook takes hold.
+- **The lid meets the body on a single continuous seam around all four sides, closed by six graphite
+  over-centre clamps — two on each long side and one on each end panel.** The seam is where the
+  geometry splits, so its height on the body is fixed here rather than left to whichever view
+  happens to show it. The count was written as four per the original guess and corrected to six from
+  the approved anchor, which distributed them that way in every candidate.
+
+Two graphite bands run over the lid and down both long sides, and the eight corners carry graphite
+castings. The crate carries no painted marking of any colour: safety orange appeared on two anchor
+candidates as stripes and bands, which §2 reserves for markings and signal elements — a cargo crate
+in this world has neither.
+
+Every crate view that includes the underside or an end panel shows these. The three-quarter anchor
+shows the clamps and one becket and hides the skids entirely.
+
 ### Underwater structure — 8 m
 
 Fixed: submerged receiver structure with clear semantic regions; wet concrete and graphite;
 biological growth limited to what does not obscure the silhouette. It is a caustic and volume
 receiver, so its upper surfaces must read as broad and continuous.
 
+The semantic regions are fixed here, because "clear semantic regions" is an acceptance criterion of
+`#39` and generation will otherwise invent a different set for every view:
+
+- **A broad flat concrete deck across the top**, unbroken except where the instrument bay opens.
+  This is the caustic receiver: it is the reason the asset exists, and nothing may clutter it.
+- **A recessed graphite instrument bay set into the deck**, its opening a plain rectangle.
+- **Four square concrete legs**, one at each corner, carrying the deck.
+- **A single continuous concrete footing slab** joining the legs at the bottom.
+
+Three parts the structure's function requires and a three-quarter anchor cannot show. Fixed in
+advance under §11:
+
+- **The underside of the deck is a flat, unbroken concrete soffit.** It bounds the shadowed volume
+  between the legs, which is the volume half of "caustic and volume receiver", so it is geometry the
+  reconstruction needs and no top-down or horizon-level view reveals.
+- **The footing slab's outer edge is chamfered and its underside is flat**, so the structure meets
+  the seabed on a definite plane rather than trailing off into it.
+- **Biological growth covers the legs and the footing from the slab upward to roughly deck height,
+  and stops clear of the deck surface.** The deck stays bare concrete, because growth on it would
+  break the continuous receiver surface the asset exists to provide.
+
 ### Basalt sea stack — 250–300 m
 
 Fixed: columnar basalt sea stack; warm grey to graphite; no beach, no shoreline, no vegetation mass.
 Distant silhouette and reflection subject only.
+
+Two things the stack's role requires that a three-quarter anchor cannot show, fixed in advance under
+§11:
+
+- **The waterline band is a single horizontal dark stain running unbroken around the whole stack**,
+  darker than the rock above it and free of weed. The stack is a reflection subject, so where its
+  silhouette meets the water is the part the reflection reads from, and it must not vary by view.
+- **The base below the waterline continues straight down as the same columnar rock**, without
+  flaring into a plinth or a skirt of debris. Nothing in this world sees it, but the reconstruction
+  needs the silhouette to terminate somewhere definite.
+
+This is the one asset with no top view: Bible §6 omits it because the stack is a distant silhouette
+and is not reconstructed at part level.
 
 ## 11. Two checklists, each covering a different half
 
