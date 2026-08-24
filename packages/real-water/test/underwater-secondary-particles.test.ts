@@ -574,6 +574,73 @@ describe("underwater secondary-particle consumers", () => {
     }
   });
 
+  it("restores retention history before replacing a same-tick candidate set", () => {
+    const consumerId = UNDERWATER_SUSPENDED_PARTICLE_CONSUMER_ID;
+    const view = camera();
+    const local = interactionFromImpacts([]);
+    const replaced = createParticles();
+    const fresh = createParticles();
+
+    for (const particles of [replaced, fresh]) {
+      const initial = particles.candidateBatch(
+        consumerId,
+        snapshot(20),
+        local,
+        view,
+      );
+      particles.applyRetained(binding(consumerId, initial, [0]));
+      const absent = particles.candidateBatch(
+        consumerId,
+        snapshot(21),
+        local,
+        view,
+      );
+      particles.applyRetained(binding(consumerId, absent, []));
+    }
+
+    const polluted = replaced.candidateBatch(
+      consumerId,
+      snapshot(22),
+      local,
+      view,
+    );
+    replaced.applyRetained(binding(consumerId, polluted, [0]));
+    const replacement = replaced.candidateBatch(
+      consumerId,
+      snapshot(22),
+      local,
+      view,
+    );
+    replaced.applyRetained(binding(consumerId, replacement, []));
+
+    const direct = fresh.candidateBatch(consumerId, snapshot(22), local, view);
+    fresh.applyRetained(binding(consumerId, direct, []));
+
+    const replacedNext = replaced.candidateBatch(
+      consumerId,
+      snapshot(23),
+      local,
+      view,
+    );
+    replaced.applyRetained(binding(consumerId, replacedNext, [0]));
+    const freshNext = fresh.candidateBatch(
+      consumerId,
+      snapshot(23),
+      local,
+      view,
+    );
+    fresh.applyRetained(binding(consumerId, freshNext, [0]));
+
+    expect(replaced.inspect().retainedOpacitySamples[consumerId]).toBe(
+      fresh.inspect().retainedOpacitySamples[consumerId],
+    );
+    expect(
+      Array.from(replaced.retainedLane(consumerId).colors.slice(0, 4)),
+    ).toEqual(Array.from(fresh.retainedLane(consumerId).colors.slice(0, 4)));
+    replaced.reset();
+    fresh.reset();
+  });
+
   it("uses fixed maximum storage and reaches genuine global pressure at peak input", () => {
     const particles = createParticles();
     const view = camera();

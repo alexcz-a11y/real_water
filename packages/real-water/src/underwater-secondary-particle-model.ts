@@ -65,6 +65,7 @@ interface UnderwaterParticleRetainedStorage {
 
 interface UnderwaterParticleRetentionHistory {
   beginTick(tick: number, previousTick: number | null): void;
+  restartTick(): void;
   markSubmitted(keyHigh: number, keyLow: number, tick: number): void;
   reentryOpacityScale(
     keyHigh: number,
@@ -777,6 +778,7 @@ function beginLaneCandidateTick(
   lane.continuitySeed = snapshot.seed;
   lane.continuityResetRevision = snapshot.simulationResetRevision;
   if (lane.candidateTick === snapshot.tick) {
+    lane.retentionHistory?.restartTick();
     return;
   }
   const previousTick = lane.candidateTick;
@@ -804,9 +806,18 @@ function createUnderwaterParticleRetentionHistory(
   }
   const hashRecords = new Uint32Array(hashCapacity);
   const hashStamps = new Uint32Array(hashCapacity);
+  const undoRecords = new Uint32Array(recordCapacity);
+  const undoLastSubmittedTick = new Float64Array(recordCapacity);
+  const undoLastRetainedTick = new Float64Array(recordCapacity);
+  const undoRampStartTick = new Float64Array(recordCapacity);
+  const undoEverRetained = new Uint8Array(recordCapacity);
+  const undoStamps = new Uint32Array(recordCapacity);
   const hashMask = hashCapacity - 1;
   let hashGeneration = 1;
+  let undoGeneration = 1;
   let recordCount = 0;
+  let tickBaseRecordCount = 0;
+  let undoCount = 0;
 
   const advanceHashGeneration = (): void => {
     hashGeneration += 1;
@@ -835,9 +846,43 @@ function createUnderwaterParticleRetentionHistory(
     }
     return -1;
   };
+  const advanceUndoGeneration = (): void => {
+    undoGeneration += 1;
+    if (undoGeneration >= 0xffff_ffff) {
+      undoStamps.fill(0);
+      undoGeneration = 1;
+    }
+    undoCount = 0;
+  };
+  const recordUndo = (record: number): void => {
+    if (
+      record >= tickBaseRecordCount ||
+      undoStamps[record] === undoGeneration
+    ) {
+      return;
+    }
+    undoStamps[record] = undoGeneration;
+    undoRecords[undoCount] = record;
+    undoLastSubmittedTick[undoCount] =
+      lastSubmittedTick[record] ?? Number.NEGATIVE_INFINITY;
+    undoLastRetainedTick[undoCount] =
+      lastRetainedTick[record] ?? Number.NEGATIVE_INFINITY;
+    undoRampStartTick[undoCount] =
+      rampStartTick[record] ?? Number.NEGATIVE_INFINITY;
+    undoEverRetained[undoCount] = everRetained[record] ?? 0;
+    undoCount += 1;
+  };
+  const rebuildTickBaseHash = (): void => {
+    advanceHashGeneration();
+    for (let record = 0; record < tickBaseRecordCount; record += 1) {
+      insertHash(record);
+    }
+  };
   const clear = (): void => {
     recordCount = 0;
+    tickBaseRecordCount = 0;
     advanceHashGeneration();
+    advanceUndoGeneration();
   };
 
   return Object.freeze({
@@ -845,6 +890,8 @@ function createUnderwaterParticleRetentionHistory(
       advanceHashGeneration();
       if (previousTick === null) {
         recordCount = 0;
+        tickBaseRecordCount = 0;
+        advanceUndoGeneration();
         return;
       }
       let write = 0;
@@ -864,6 +911,23 @@ function createUnderwaterParticleRetentionHistory(
         write += 1;
       }
       recordCount = write;
+      tickBaseRecordCount = recordCount;
+      advanceUndoGeneration();
+    },
+    restartTick(): void {
+      for (let undo = undoCount - 1; undo >= 0; undo -= 1) {
+        const record = undoRecords[undo] ?? 0;
+        lastSubmittedTick[record] =
+          undoLastSubmittedTick[undo] ?? Number.NEGATIVE_INFINITY;
+        lastRetainedTick[record] =
+          undoLastRetainedTick[undo] ?? Number.NEGATIVE_INFINITY;
+        rampStartTick[record] =
+          undoRampStartTick[undo] ?? Number.NEGATIVE_INFINITY;
+        everRetained[record] = undoEverRetained[undo] ?? 0;
+      }
+      recordCount = tickBaseRecordCount;
+      rebuildTickBaseHash();
+      advanceUndoGeneration();
     },
     markSubmitted(high: number, low: number, tick: number): void {
       let record = findRecord(high, low);
@@ -881,6 +945,8 @@ function createUnderwaterParticleRetentionHistory(
         rampStartTick[record] = Number.NEGATIVE_INFINITY;
         everRetained[record] = 0;
         insertHash(record);
+      } else {
+        recordUndo(record);
       }
       lastSubmittedTick[record] = tick;
     },
@@ -897,6 +963,7 @@ function createUnderwaterParticleRetentionHistory(
           "Underwater retained particle is missing reentry history.",
         );
       }
+      recordUndo(record);
       if (everRetained[record] === 0) {
         everRetained[record] = 1;
         lastRetainedTick[record] = tick;

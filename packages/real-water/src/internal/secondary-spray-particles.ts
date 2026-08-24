@@ -22,7 +22,10 @@ import {
   type SecondaryParticleOutputFrustumVisibility,
 } from "../secondary-particle-visibility.js";
 import type { LocalInteractionRenderSnapshot } from "./local-interaction.js";
-import type { SecondaryParticleAllocationParticipant } from "../secondary-particle-allocation-route.js";
+import {
+  createSecondaryParticleCameraInputRevision,
+  type SecondaryParticleAllocationParticipant,
+} from "../secondary-particle-allocation-route.js";
 import type {
   SecondaryParticleCandidateBatch,
   SecondaryParticleConsumerBinding,
@@ -98,8 +101,13 @@ export function createSecondarySprayAllocationParticipant(
   secondarySpray: SecondarySprayParticles,
   camera: PerspectiveCamera,
 ): SecondaryParticleAllocationParticipant {
+  const cameraInputRevision =
+    createSecondaryParticleCameraInputRevision(camera);
   const participant: SecondaryParticleAllocationParticipant = {
     consumerId: SECONDARY_SPRAY_PARTICLE_CONSUMER_ID,
+    candidateInputRevision() {
+      return cameraInputRevision();
+    },
     candidateBatch(
       snapshot: OpenWaterRuntimeSnapshot,
       interaction: LocalInteractionRenderSnapshot,

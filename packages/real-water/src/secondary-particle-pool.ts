@@ -134,9 +134,16 @@ export interface SecondaryParticlePoolFrame {
 
 export interface SecondaryParticlePool {
   consumer(consumerId: string): SecondaryParticleConsumerBinding;
+  /**
+   * Opens one allocation transaction. An identical resolved
+   * `{tick, continuityRevision, allocationRevision}` reuses its frame. Changing
+   * only `allocationRevision` restores that tick's first-submit history
+   * checkpoint before accepting a replacement candidate set.
+   */
   beginTick(
     tick: number,
     continuityRevision: number,
+    allocationRevision?: number,
   ): "accepting-candidates" | "reuse-current-tick";
   submit(
     consumer: SecondaryParticleConsumerBinding,
@@ -284,6 +291,25 @@ export function createSecondaryParticlePool(
   const historySubmittedTick = new Float64Array(historyCapacity);
   let historyCount = 0;
 
+  // Same-tick allocation revisions are speculative views over one tick-start
+  // history checkpoint. The journal stores each pre-existing record at most
+  // once, so rollback remains bounded by the declared maximum request count
+  // without copying the full multi-cohort history.
+  const checkpointRecord = new Uint32Array(totalMaximum);
+  const checkpointLastRetained = new Float64Array(totalMaximum);
+  const checkpointRetainedSince = new Float64Array(totalMaximum);
+  const checkpointCooldownUntil = new Float64Array(totalMaximum);
+  const checkpointPressureRetired = new Uint8Array(totalMaximum);
+  const checkpointPoolSlot = new Uint32Array(totalMaximum);
+  const checkpointSubmittedTick = new Float64Array(totalMaximum);
+  const checkpointRecordStamps = new Uint32Array(historyCapacity);
+  let checkpointRecordGeneration = 1;
+  let checkpointJournalCount = 0;
+  let checkpointHistoryCount = 0;
+  let checkpointPreviousResolvedTick = Number.NEGATIVE_INFINITY;
+  let checkpointTick = -1;
+  let checkpointContinuityRevision = -1;
+
   let hashCapacity = 1;
   while (hashCapacity < Math.max(4, historyCapacity * 2)) {
     hashCapacity *= 2;
@@ -364,15 +390,21 @@ export function createSecondaryParticlePool(
   let transaction: "idle" | "accepting" | "invalid" | "resolved" = "idle";
   let tick = -1;
   let continuityRevision = -1;
+  let allocationRevision = -1;
+  let resolvedAllocationRevision = -1;
   let previousResolvedTick = Number.NEGATIVE_INFINITY;
   let hasCurrent = false;
 
-  function rebuildHistory(): void {
+  function advanceHashGeneration(): void {
     hashGeneration += 1;
     if (hashGeneration === 0xffff_ffff) {
       hashStamps.fill(0);
       hashGeneration = 1;
     }
+  }
+
+  function rebuildHistory(): void {
+    advanceHashGeneration();
     let write = 0;
     for (let read = 0; read < historyCount; read += 1) {
       const incumbent =
@@ -400,6 +432,78 @@ export function createSecondaryParticlePool(
       write += 1;
     }
     historyCount = write;
+  }
+
+  function rebuildHistoryHash(): void {
+    advanceHashGeneration();
+    for (let record = 0; record < historyCount; record += 1) {
+      insertHash(record);
+    }
+  }
+
+  function openHistoryAttemptJournal(): void {
+    checkpointRecordGeneration += 1;
+    if (checkpointRecordGeneration === 0xffff_ffff) {
+      checkpointRecordStamps.fill(0);
+      checkpointRecordGeneration = 1;
+    }
+    checkpointJournalCount = 0;
+  }
+
+  function openHistoryCheckpoint(): void {
+    openHistoryAttemptJournal();
+    checkpointHistoryCount = historyCount;
+    checkpointPreviousResolvedTick = previousResolvedTick;
+    checkpointTick = tick;
+    checkpointContinuityRevision = continuityRevision;
+  }
+
+  function journalHistoryRecord(record: number): void {
+    if (
+      record >= checkpointHistoryCount ||
+      checkpointRecordStamps[record] === checkpointRecordGeneration
+    ) {
+      return;
+    }
+    if (checkpointJournalCount >= totalMaximum) {
+      throw new RangeError(
+        "Secondary-particle same-tick undo journal capacity was exceeded.",
+      );
+    }
+    const journal = checkpointJournalCount;
+    checkpointJournalCount += 1;
+    checkpointRecordStamps[record] = checkpointRecordGeneration;
+    checkpointRecord[journal] = record;
+    checkpointLastRetained[journal] = historyLastRetained[record] ?? 0;
+    checkpointRetainedSince[journal] = historyRetainedSince[record] ?? 0;
+    checkpointCooldownUntil[journal] = historyCooldownUntil[record] ?? 0;
+    checkpointPressureRetired[journal] = historyPressureRetired[record] ?? 0;
+    checkpointPoolSlot[journal] = historyPoolSlot[record] ?? EMPTY_SLOT;
+    checkpointSubmittedTick[journal] = historySubmittedTick[record] ?? 0;
+  }
+
+  function restoreHistoryCheckpoint(): void {
+    if (
+      checkpointTick !== tick ||
+      checkpointContinuityRevision !== continuityRevision
+    ) {
+      throw new Error(
+        "Secondary-particle same-tick history checkpoint disappeared.",
+      );
+    }
+    for (let journal = 0; journal < checkpointJournalCount; journal += 1) {
+      const record = checkpointRecord[journal] ?? 0;
+      historyLastRetained[record] = checkpointLastRetained[journal] ?? 0;
+      historyRetainedSince[record] = checkpointRetainedSince[journal] ?? 0;
+      historyCooldownUntil[record] = checkpointCooldownUntil[journal] ?? 0;
+      historyPressureRetired[record] = checkpointPressureRetired[journal] ?? 0;
+      historyPoolSlot[record] = checkpointPoolSlot[journal] ?? EMPTY_SLOT;
+      historySubmittedTick[record] = checkpointSubmittedTick[journal] ?? 0;
+    }
+    historyCount = checkpointHistoryCount;
+    previousResolvedTick = checkpointPreviousResolvedTick;
+    rebuildHistoryHash();
+    openHistoryAttemptJournal();
   }
 
   function insertHash(record: number): void {
@@ -559,16 +663,39 @@ export function createSecondaryParticlePool(
       }
       return binding;
     },
-    beginTick(nextTick: number, nextContinuityRevision: number) {
+    beginTick(
+      nextTick: number,
+      nextContinuityRevision: number,
+      nextAllocationRevision = 0,
+    ) {
       assertNonnegativeInteger(nextTick, "tick");
       assertNonnegativeInteger(nextContinuityRevision, "continuityRevision");
+      assertNonnegativeInteger(nextAllocationRevision, "allocationRevision");
       if (
         hasCurrent &&
+        transaction === "resolved" &&
         nextTick === mutableFrame.tick &&
-        nextContinuityRevision === mutableFrame.continuityRevision
+        nextContinuityRevision === mutableFrame.continuityRevision &&
+        nextAllocationRevision === resolvedAllocationRevision
       ) {
         transaction = "resolved";
         return "reuse-current-tick";
+      }
+      if (
+        nextTick === tick &&
+        nextContinuityRevision === continuityRevision &&
+        nextAllocationRevision !== allocationRevision
+      ) {
+        restoreHistoryCheckpoint();
+        allocationRevision = nextAllocationRevision;
+        for (let index = 0; index < consumerCount; index += 1) {
+          const state = states[index];
+          if (state !== undefined) {
+            state.candidateCount = 0;
+          }
+        }
+        transaction = "accepting";
+        return "accepting-candidates";
       }
       const continuityChanged =
         hasCurrent && nextContinuityRevision !== continuityRevision;
@@ -586,7 +713,9 @@ export function createSecondaryParticlePool(
         previousResolvedTick = Number.NEGATIVE_INFINITY;
       }
       continuityRevision = nextContinuityRevision;
+      allocationRevision = nextAllocationRevision;
       rebuildHistory();
+      openHistoryCheckpoint();
       for (let index = 0; index < consumerCount; index += 1) {
         const state = states[index];
         if (state !== undefined) {
@@ -638,6 +767,7 @@ export function createSecondaryParticlePool(
           if (historySubmittedTick[record] === tick) {
             throw new TypeError("Duplicate secondary-particle stable key.");
           }
+          journalHistoryRecord(record);
           historySubmittedTick[record] = tick;
           const candidate = state.candidateOffset + state.candidateCount;
           state.candidateCount += 1;
@@ -836,6 +966,7 @@ export function createSecondaryParticlePool(
           historyLastRetained[record] !== previousResolvedTick
         ) {
           while (slotStamps[nextFreeSlot] === slotGeneration) nextFreeSlot += 1;
+          journalHistoryRecord(record);
           historyPoolSlot[record] = nextFreeSlot;
           slotStamps[nextFreeSlot] = slotGeneration;
         }
@@ -870,6 +1001,7 @@ export function createSecondaryParticlePool(
           const incumbent =
             previousResolvedTick !== Number.NEGATIVE_INFINITY &&
             historyLastRetained[record] === previousResolvedTick;
+          journalHistoryRecord(record);
           if (!incumbent) historyRetainedSince[record] = tick;
           historyLastRetained[record] = tick;
           historyCooldownUntil[record] = Number.NEGATIVE_INFINITY;
@@ -899,11 +1031,13 @@ export function createSecondaryParticlePool(
               candidateReentryBlock[candidate] === REENTRY_ALLOWED &&
               state.pressureReentryPolicy === "forbidden-until-absent"
             ) {
+              journalHistoryRecord(record);
               historyPressureRetired[record] = 1;
             } else if (
               candidateReentryBlock[candidate] === REENTRY_ALLOWED &&
               (historyCooldownUntil[record] ?? 0) <= tick
             ) {
+              journalHistoryRecord(record);
               historyCooldownUntil[record] =
                 tick + SECONDARY_PARTICLE_REENTRY_COOLDOWN_TICKS;
             }
@@ -989,6 +1123,7 @@ export function createSecondaryParticlePool(
       mutableFrame.continuityRevision = continuityRevision;
       mutableFrame.retainedCount = retainedCount;
       previousResolvedTick = tick;
+      resolvedAllocationRevision = allocationRevision;
       hasCurrent = true;
       transaction = "resolved";
       return frame;

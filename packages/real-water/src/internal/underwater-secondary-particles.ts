@@ -21,7 +21,10 @@ import {
   vec4,
 } from "three/tsl";
 import type { OpenWaterRuntimeSnapshot, RuntimeStateSink } from "../runtime.js";
-import type { SecondaryParticleAllocationParticipant } from "../secondary-particle-allocation-route.js";
+import {
+  createSecondaryParticleCameraInputRevision,
+  type SecondaryParticleAllocationParticipant,
+} from "../secondary-particle-allocation-route.js";
 import type {
   SecondaryParticleCandidateBatch,
   SecondaryParticleConsumerBinding,
@@ -86,10 +89,15 @@ export function createUnderwaterSecondaryParticleAllocationParticipants(
   particles: UnderwaterSecondaryParticles,
   camera: PerspectiveCamera,
 ): readonly SecondaryParticleAllocationParticipant[] {
+  const cameraInputRevision =
+    createSecondaryParticleCameraInputRevision(camera);
   return Object.freeze(
     particles.consumerPlans.map((plan) =>
       Object.freeze({
         consumerId: plan.consumerId,
+        candidateInputRevision() {
+          return cameraInputRevision();
+        },
         candidateBatch(
           snapshot: OpenWaterRuntimeSnapshot,
           interaction: LocalInteractionRenderSnapshot,
