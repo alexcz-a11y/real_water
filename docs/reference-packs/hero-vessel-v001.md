@@ -137,8 +137,10 @@ Terms §2.3 attaches a licence that runs the other way, and its scope depends on
 ### Two facts this record cannot settle
 
 1. ~~The account tier of the generating account is not recorded here.~~ **Settled 2026-08-24: the
-   generating account (`jackson.neo2230@gmail.com`) is on the Reve **Free plan**, read from
-   `https://app.reve.com/account`.** Terms §2.3 therefore applies in full to these nine views: they
+   generating account was on the Reve **Free plan** at the time of this pack, read from the account
+   page.** The account's own identity is deliberately not recorded: §2.3 turns on the *tier*, and the
+   conclusion below is identical for any Free account, so an identifier here would carry no
+   information and a permanent cost. Terms §2.3 therefore applies in full to these nine views: they
    "may be made available ... to and/or searchable by other users, including on Reve's Inspiration
    page", and a "perpetual license to Reve **and other users** to reproduce, distribute, create
    derivative works of and publicly display such Output" has been granted. Ownership is retained
