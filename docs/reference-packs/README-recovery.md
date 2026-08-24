@@ -36,3 +36,22 @@ correctly reject.
 
 **So the account is a single point of failure for the modelling line.** A second copy of the pixels
 somewhere durable would remove it; that is the project owner's call, not a decision this record makes.
+
+## The recovery was exercised, not just described
+
+On 2026-08-24 all nine hero vessel views were re-downloaded from their recorded Reve image ids and
+compared against the pack files: **9 of 9 matched byte for byte**. Two things came out of the
+exercise that the description alone would not have caught:
+
+- **One recorded hash was wrong.** `hero-vessel-elev-stern-v001.png` was written as
+  `18bdb15ef2103838`; the file's actual hash is `18bdb15ef210383b`. A single transposed character
+  in the last position, which no reading would have found and which would have failed a future
+  recovery as if the file were corrupt. Corrected.
+- **Downloaded filenames are not the recorded filenames.** The service names files from its own
+  image titles, which record the operation rather than the view — the hero vessel's identity anchor
+  downloads as `Reframed image.png` and its top view as `Remove Starboard Guard.png`. It also
+  rewrites `&` to `_`. The rename step in the procedure above is therefore not cosmetic: without the
+  Reve image id column, matching a downloaded file back to a pack row would rest on those titles.
+
+Recovering a pack you have never recovered is not a plan; it is a hope. This one has now been run
+once end to end on the pack the modelling line reaches first.
