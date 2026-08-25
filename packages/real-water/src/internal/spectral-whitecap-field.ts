@@ -582,6 +582,10 @@ export function createUnifiedFoamField(
           snapshotOverride?: OpenWaterRuntimeSnapshot,
         ): Promise<void> => {
           stageTimelineState(tick, tickSnapshot, snapshotOverride);
+          // Timeline selection chooses the latest complete state through T-1,
+          // but Hero Breaker age is evaluated at the field tick being executed.
+          // Sparse interaction writes must not pin that clock to their snapshot.
+          uniforms.tick.value = tick;
           await executeFixedTick(
             renderer,
             kernels,
