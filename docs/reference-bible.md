@@ -273,9 +273,20 @@ Two things the stack's role requires that a three-quarter anchor cannot show, fi
 This is the one asset with no top view: Bible §6 omits it because the stack is a distant silhouette
 and is not reconstructed at part level.
 
-## 11. Two checklists, each covering a different half
+## 11. Three checklists, each covering a different half
 
-Every asset gets both. Run them at different moments, because they answer opposite questions.
+Every asset gets all three. Run them at different moments, because they answer different questions:
+two compare images against each other, and the third compares the specification against the images.
+
+**After the album closes — every fixed part against every view that should show it.** Walk §10's
+fixed-part list for the asset and, for each part, name the approved views whose angle should show it
+and confirm it is there. Run it from the specification, not from the images.
+
+This is the check the hero vessel pack did not run, and it cost two approved views (see
+`reference-packs/hero-vessel-v001.md`). The reason it is a separate pass is that the other two
+checks are driven by *disputes between images*, and **an absent part starts no dispute**: a view
+missing the running gear agrees with every view that also cannot see it. Absence is invisible to any
+check that compares images to each other; only the specification notices it.
 
 **Before the album opens — what must exist but the anchor cannot show.** List the parts that the
 asset's function implies and the chosen anchor angle hides. On the hero vessel this list would have
