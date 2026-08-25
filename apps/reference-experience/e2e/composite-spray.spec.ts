@@ -19,12 +19,21 @@ const SEED = 0x4000_0000;
 const ACTIVE_FRAME_COUNT = 3;
 const PRIME_TICKS = 24;
 const EXPIRE_TICKS = 48;
-const FAR_ANCHOR = { x: 50_000, z: 50_000 } as const;
-const ACTIVE_ANCHORS = Object.freeze([
-  Object.freeze({ x: -3, z: 0 }),
-  Object.freeze({ x: 0, z: 0 }),
-  Object.freeze({ x: 3, z: 0 }),
-] as const satisfies readonly InteractionAnchor[]);
+const FAR_ANCHOR = {
+  x: 50_000,
+  z: 50_000,
+} as const satisfies InteractionAnchor;
+// Hero sprayAmount is consumed by the post-TRAA secondary writer, while zero
+// amplitude and foam leave the Prepared Surface identical between A and B.
+const HERO_SPRAY = Object.freeze({
+  id: 0x4000_0028,
+  position: [0, 0, -6] as const,
+  direction: [1, 0, 0] as const,
+  radiusMetres: 10,
+  sprayAmount: 1,
+  lifetimeTicks: EXPIRE_TICKS,
+  priority: 255,
+});
 const CAMERA = {
   projection: "perspective" as const,
   position: [0, 10, 18] as const,
@@ -58,6 +67,10 @@ interface CaptureShape {
 
 interface SprayRouteFrame {
   readonly tick: number;
+  readonly temporalResetFrame: boolean;
+  readonly current: string;
+  readonly depth: string;
+  readonly motion: string;
   readonly final: string;
   readonly contribution: string;
   readonly overdraw: string;
@@ -83,12 +96,13 @@ async function captureSprayRoute(
 ): Promise<readonly SprayRouteFrame[]> {
   return page.evaluate(
     async ({
+      activeFrameCount,
       activeRoute,
-      activeAnchors,
       camera,
       controls,
       expireTicks,
       farAnchor,
+      hero,
       primeTicks,
       seed,
     }) => {
@@ -102,33 +116,47 @@ async function captureSprayRoute(
         transition: "continuous",
       });
       await harness.setCamera(camera, { transition: "continuous" });
+      await harness.updateInteractionAnchor(farAnchor);
+      await harness.submitDisturbances({
+        kind: "hero-breaker",
+        count: 1,
+        ids: Uint32Array.of(hero.id),
+        positions: Float32Array.from(hero.position),
+        directions: Float32Array.from(hero.direction),
+        radii: Float32Array.of(hero.radiusMetres),
+        amplitudes: Float32Array.of(0),
+        foamAmounts: Float32Array.of(0),
+        sprayAmounts: Float32Array.of(activeRoute ? hero.sprayAmount : 0),
+        lifetimeTicks: Uint16Array.of(hero.lifetimeTicks),
+        priorities: Uint8Array.of(hero.priority),
+      });
 
-      for (let index = 0; index < activeAnchors.length; index += 1) {
-        const activeAnchor = activeAnchors[index];
-        if (activeAnchor === undefined) {
-          throw new Error("The spray route lost an active anchor.");
-        }
-        await harness.updateInteractionAnchor(
-          activeRoute ? activeAnchor : farAnchor,
-        );
+      for (let index = 0; index < activeFrameCount; index += 1) {
         await harness.advanceTicks(index === 0 ? primeTicks : 1);
         frames.push(await captureFrame(harness));
       }
 
-      await harness.updateInteractionAnchor(farAnchor);
       await harness.advanceTicks(expireTicks);
       frames.push(await captureFrame(harness));
       return frames;
 
       async function captureFrame(qa: QaHarnessV17): Promise<SprayRouteFrame> {
         const presentation = await qa.present();
-        const [final, contribution, overdraw] = await Promise.all([
-          qa.capture("final-color"),
-          qa.capture("secondary-particle-contribution"),
-          qa.capture("secondary-particle-overdraw"),
-        ]);
+        const [current, depth, motion, final, contribution, overdraw] =
+          await Promise.all([
+            qa.capture("current-color"),
+            qa.capture("depth"),
+            qa.capture("motion-vector"),
+            qa.capture("final-color"),
+            qa.capture("secondary-particle-contribution"),
+            qa.capture("secondary-particle-overdraw"),
+          ]);
         return {
           tick: presentation.tick,
+          temporalResetFrame: presentation.temporal.resetFrame,
+          current: current.data,
+          depth: depth.data,
+          motion: motion.data,
           final: final.data,
           contribution: contribution.data,
           overdraw: overdraw.data,
@@ -153,12 +181,13 @@ async function captureSprayRoute(
       }
     },
     {
+      activeFrameCount: ACTIVE_FRAME_COUNT,
       activeRoute: active,
-      activeAnchors: ACTIVE_ANCHORS,
       camera: CAMERA,
       controls: SPRAY_CONTROLS,
       expireTicks: EXPIRE_TICKS,
       farAnchor: FAR_ANCHOR,
+      hero: HERO_SPRAY,
       primeTicks: PRIME_TICKS,
       seed: SEED,
     },
@@ -185,6 +214,23 @@ function maxRgbDifference(left: Uint8Array, right: Uint8Array): number {
       Math.abs((left[index] ?? 0) - (right[index] ?? 0)),
       Math.abs((left[index + 1] ?? 0) - (right[index + 1] ?? 0)),
       Math.abs((left[index + 2] ?? 0) - (right[index + 2] ?? 0)),
+    );
+  }
+  return maximum;
+}
+
+function maxScalarDifference(
+  left: ArrayLike<number>,
+  right: ArrayLike<number>,
+): number {
+  expect(left.length, "maxScalarDifference requires equal lengths").toBe(
+    right.length,
+  );
+  let maximum = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    maximum = Math.max(
+      maximum,
+      Math.abs((left[index] ?? 0) - (right[index] ?? 0)),
     );
   }
   return maximum;
@@ -323,6 +369,36 @@ test("composites moving spray after TRAA without persistent residue and exposes 
   const activeOverdraw = active.map(decodeOverdraw);
   const offContribution = off.map(decodeContribution);
   const offOverdraw = off.map(decodeOverdraw);
+  for (let index = 0; index < active.length; index += 1) {
+    const activeFrame = requiredFrame(active, index, "active");
+    const offFrame = requiredFrame(off, index, "off");
+    expect(
+      maxRgbDifference(
+        decodeUint8(activeFrame.current),
+        decodeUint8(offFrame.current),
+      ),
+      `pre-TRAA current-color frame ${String(index + 1)}`,
+    ).toBe(0);
+    expect(
+      maxScalarDifference(
+        decodeFloat32(activeFrame.depth),
+        decodeFloat32(offFrame.depth),
+      ),
+      `pre-TRAA depth frame ${String(index + 1)}`,
+    ).toBe(0);
+    expect(activeFrame.temporalResetFrame).toBe(offFrame.temporalResetFrame);
+    // Reset frames feed the TRAA node an explicit rejection velocity, so the
+    // raw motion AOV is only a causal input on non-reset frames.
+    if (!activeFrame.temporalResetFrame) {
+      expect(
+        maxScalarDifference(
+          decodeFloat32(activeFrame.motion),
+          decodeFloat32(offFrame.motion),
+        ),
+        `pre-TRAA motion frame ${String(index + 1)}`,
+      ).toBe(0);
+    }
+  }
   for (let index = 0; index < ACTIVE_FRAME_COUNT; index += 1) {
     const activeFrame = requiredFrame(active, index, "active");
     const offFrame = requiredFrame(off, index, "off");
@@ -456,9 +532,16 @@ test("composites moving spray after TRAA without persistent residue and exposes 
     ({ consumerId }) => consumerId === "spray-droplet-mist",
   );
   expect(spray?.requested).toBeGreaterThan(0);
-  expect(
-    diagnostics.consumers
-      .filter(({ consumerId }) => consumerId !== "spray-droplet-mist")
-      .every(({ requested }) => requested === 0),
-  ).toBe(true);
+  // Every declared consumer submits its base candidates. Isolation here means
+  // the off-camera consumers are wholly invisible and retain nothing.
+  for (const consumer of diagnostics.consumers.filter(
+    ({ consumerId }) => consumerId !== "spray-droplet-mist",
+  )) {
+    expect(consumer.retained, consumer.consumerId).toBe(0);
+    expect(consumer.invisibleOrOccluded, consumer.consumerId).toBe(
+      consumer.requested,
+    );
+    expect(consumer.contributionMinimumQ16, consumer.consumerId).toBeNull();
+    expect(consumer.contributionMaximumQ16, consumer.consumerId).toBeNull();
+  }
 });
