@@ -536,6 +536,23 @@ test("rapid viewport changes reveal only the latest drawing buffer", async ({
 
   await page.setViewportSize(RAPID_FIRST);
   await expect(page.getByTestId("loading-experience")).toBeVisible();
+  // The Loading DOM is mounted before executeTransition creates an attempt.
+  // Wait for generation 2 so this route exercises in-flight cancellation
+  // instead of allowing the intermediate request to be coalesced away.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
+          if (harness === undefined) {
+            throw new Error("QA Harness is unavailable.");
+          }
+          return harness.snapshot().generation;
+        }),
+      { timeout: 5_000 },
+    )
+    .toBe(before.generation + 1);
+
   await page.setViewportSize(NEXT);
   await expect(page.getByTestId("reference-stage")).toHaveCount(1, {
     timeout: 60_000,
@@ -560,7 +577,7 @@ test("rapid viewport changes reveal only the latest drawing buffer", async ({
     { camera: CAMERA, seed: SEED },
   );
 
-  expect(after.snapshot.generation).toBeGreaterThan(before.generation);
+  expect(after.snapshot.generation).toBe(before.generation + 2);
   expect(after.snapshot.viewport).toEqual({
     drawingBufferWidth: NEXT.width,
     drawingBufferHeight: NEXT.height,
