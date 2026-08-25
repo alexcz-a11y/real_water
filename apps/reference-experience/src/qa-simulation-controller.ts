@@ -10,6 +10,7 @@ export interface QaHostSimulationController extends HostSimulationAdapter {
 
 export interface QaHostSimulationControllerOptions {
   readonly integrateFixedStep?: () => void;
+  readonly afterFixedStep?: (state: HostSimulationState) => void;
   readonly reset?: () => void;
 }
 
@@ -53,6 +54,7 @@ export function createQaHostSimulationController(
           state.seaLevelMetres,
           simulationResetRevision,
         );
+        options.afterFixedStep?.(state);
       }
       return state;
     },

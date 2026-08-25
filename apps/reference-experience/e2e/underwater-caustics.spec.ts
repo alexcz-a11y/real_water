@@ -12,7 +12,7 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV17,
+  type QaHarness,
 } from "../src/qa-harness.js";
 import { REFERENCE_ENVIRONMENT_LIGHTING } from "../src/reference-optical-inputs.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
@@ -84,7 +84,7 @@ test("replays caustics from the prepared surface and changes only with authorita
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ camera, environment, flat, seed, swell, tick }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -230,7 +230,7 @@ test("gates caustics independently to bounded visible underwater receivers", asy
       swell,
       tick,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

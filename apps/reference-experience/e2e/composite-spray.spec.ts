@@ -7,7 +7,7 @@ import {
 import type {
   QaCameraV1,
   QaCaptureV17,
-  QaHarnessV17,
+  QaHarness,
   QaPresentationReceiptV17,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
@@ -92,7 +92,7 @@ async function captureSprayRoute(
       primeTicks,
       seed,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -120,7 +120,7 @@ async function captureSprayRoute(
       frames.push(await captureFrame(harness));
       return frames;
 
-      async function captureFrame(qa: QaHarnessV17): Promise<SprayRouteFrame> {
+      async function captureFrame(qa: QaHarness): Promise<SprayRouteFrame> {
         const presentation = await qa.present();
         const [final, contribution, overdraw] = await Promise.all([
           qa.capture("final-color"),

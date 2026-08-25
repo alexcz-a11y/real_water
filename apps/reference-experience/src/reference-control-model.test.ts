@@ -3,13 +3,16 @@ import {
   createMinimalWaterPrewarmManifest,
   createMinimalWaterQualityProfile,
   createReferenceEnvironmentPreset,
+  createStormFrontEnvironmentPreset,
   createWaterPreset,
   type ArtisticControls,
+  type EnvironmentPreset,
   type HostEnvironmentSnapshot,
   type HeroBreakerDisturbanceBatch,
   type OpenWaterRuntimeSnapshot,
   type QualityProfile,
   type RealWaterLease,
+  type WaterPreset,
 } from "real-water";
 import {
   createReferenceControlModel,
@@ -18,6 +21,85 @@ import {
 } from "./reference-control-model.js";
 
 describe("Reference Control Model", () => {
+  it("applies whole Water and Environment presets through the authoritative hot seams", () => {
+    const fixture = createFixture();
+    fixture.model.bind(fixture.binding);
+    const waterPreset = createWaterPreset("storm");
+    const environmentPreset = createStormFrontEnvironmentPreset();
+
+    fixture.model.applyWaterPreset(waterPreset);
+
+    expect(fixture.updateArtisticControls).toHaveBeenCalledWith(
+      waterPreset.artisticControls,
+      { transition: "sea-state-cut" },
+    );
+    expect(
+      Object.keys(fixture.updateArtisticControls.mock.lastCall?.[0] ?? {}),
+    ).toHaveLength(20);
+    expect(fixture.claimManualLook).toHaveBeenCalledTimes(1);
+    expect(fixture.claimManualLook.mock.invocationCallOrder[0]).toBeGreaterThan(
+      fixture.updateArtisticControls.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(fixture.model.snapshot()).toMatchObject({
+      lookControlOwner: "manual",
+      artisticControls: waterPreset.artisticControls,
+    });
+
+    fixture.model.applyEnvironmentPreset(environmentPreset);
+
+    const expectedEnvironment = {
+      lighting: environmentPreset.lighting,
+      weather: environmentPreset.weather,
+      atmosphere: environmentPreset.atmosphere,
+    };
+    expect(fixture.setEnvironmentState).toHaveBeenLastCalledWith(
+      expectedEnvironment,
+    );
+    expect(fixture.model.snapshot().environment).toEqual(expectedEnvironment);
+    expect(
+      Object.keys(fixture.model.snapshot().environment.lighting),
+    ).toHaveLength(9);
+    expect(
+      Object.keys(fixture.model.snapshot().environment.weather),
+    ).toHaveLength(5);
+    expect(
+      Object.keys(fixture.model.snapshot().environment.atmosphere),
+    ).toHaveLength(5);
+    expect(fixture.claimManualLook).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed on invalid Water and Environment presets without mutating the model", () => {
+    const fixture = createFixture();
+    fixture.model.bind(fixture.binding);
+    const before = fixture.model.snapshot();
+    const invalidWater = {
+      ...createWaterPreset("storm"),
+      artisticControls: {
+        ...createWaterPreset("storm").artisticControls,
+        waveStrength: Number.NaN,
+      },
+    } as WaterPreset;
+    const invalidEnvironment = {
+      ...createStormFrontEnvironmentPreset(),
+      weather: {
+        ...createStormFrontEnvironmentPreset().weather,
+        rainIntensity: Number.POSITIVE_INFINITY,
+      },
+    } as EnvironmentPreset;
+
+    expect(() => fixture.model.applyWaterPreset(invalidWater)).toThrowError(
+      /finite|waveStrength/u,
+    );
+    expect(() =>
+      fixture.model.applyEnvironmentPreset(invalidEnvironment),
+    ).toThrowError(/finite|rainIntensity/u);
+
+    expect(fixture.model.snapshot()).toBe(before);
+    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
+    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
+    expect(fixture.claimManualLook).not.toHaveBeenCalled();
+  });
+
   it("writes complete Water and Environment snapshots through their hot seams", () => {
     const fixture = createFixture();
     fixture.model.bind(fixture.binding);
@@ -110,6 +192,90 @@ describe("Reference Control Model", () => {
     );
   });
 
+  it("releases and adopts Showcase looks without duplicate writes, then reclaims on the next manual edit", () => {
+    const fixture = createFixture();
+    fixture.model.bind(fixture.binding);
+    fixture.model.setNumeric("crestSharpness", 1.4);
+    expect(fixture.model.snapshot().lookControlOwner).toBe("manual");
+    expect(fixture.claimManualLook).toHaveBeenCalledTimes(1);
+
+    fixture.updateArtisticControls.mockClear();
+    fixture.setEnvironmentState.mockClear();
+    fixture.model.releaseManualLookOwnership();
+    const afterRelease = fixture.model.snapshot();
+    expect(afterRelease.lookControlOwner).toBe("showcase");
+    fixture.model.releaseManualLookOwnership();
+    expect(fixture.model.snapshot()).toBe(afterRelease);
+
+    const showcaseControls = createWaterPreset("calm").artisticControls;
+    const showcaseEnvironmentPreset = createStormFrontEnvironmentPreset();
+    const showcaseEnvironment = {
+      lighting: showcaseEnvironmentPreset.lighting,
+      weather: showcaseEnvironmentPreset.weather,
+      atmosphere: showcaseEnvironmentPreset.atmosphere,
+    };
+    const beforeAdoptRevision = fixture.model.snapshot().revision;
+    fixture.model.adoptShowcaseLook(showcaseControls, showcaseEnvironment);
+
+    expect(fixture.model.snapshot()).toMatchObject({
+      revision: beforeAdoptRevision + 1,
+      lookControlOwner: "showcase",
+      artisticControls: showcaseControls,
+      environment: showcaseEnvironment,
+    });
+    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
+    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
+    expect(fixture.claimManualLook).toHaveBeenCalledTimes(1);
+
+    fixture.model.setNumeric("waveStrength", 0.75);
+    expect(fixture.claimManualLook).toHaveBeenCalledTimes(2);
+    expect(fixture.model.snapshot().lookControlOwner).toBe("manual");
+  });
+
+  it("strictly validates adopted Showcase snapshots and rejects disposed ownership changes", () => {
+    const fixture = createFixture();
+    fixture.model.bind(fixture.binding);
+    const before = fixture.model.snapshot();
+    const controlsWithExtraField = {
+      ...createWaterPreset("calm").artisticControls,
+      unexpected: 1,
+    } as unknown as ArtisticControls;
+    const invalidEnvironment = {
+      ...fixture.initialEnvironment,
+      weather: {
+        ...fixture.initialEnvironment.weather,
+        rainIntensity: Number.NaN,
+      },
+    };
+
+    expect(() =>
+      fixture.model.adoptShowcaseLook(
+        controlsWithExtraField,
+        fixture.initialEnvironment,
+      ),
+    ).toThrowError(/complete supported control set/u);
+    expect(() =>
+      fixture.model.adoptShowcaseLook(
+        createWaterPreset("calm").artisticControls,
+        invalidEnvironment,
+      ),
+    ).toThrowError(/finite|rainIntensity/u);
+    expect(fixture.model.snapshot()).toBe(before);
+    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
+    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
+
+    fixture.model.dispose();
+    expect(() => fixture.model.releaseManualLookOwnership()).toThrowError(
+      /disposed/u,
+    );
+    expect(() =>
+      fixture.model.adoptShowcaseLook(
+        createWaterPreset("calm").artisticControls,
+        fixture.initialEnvironment,
+      ),
+    ).toThrowError(/disposed/u);
+  });
+
   it("submits the one-Hero draft as a complete batch with unique uint32 ids", () => {
     const fixture = createFixture();
     fixture.model.bind(fixture.binding);
@@ -196,6 +362,23 @@ describe("Reference Control Model", () => {
     expect(fixture.model.snapshot().qualityProfile.activeId).toBe(
       "minimal-high-detail",
     );
+    expect(fixture.model.snapshot().lookControlOwner).toBe("manual");
+  });
+
+  it("adopts an incoming replacement lease without replay while Showcase owns the look", () => {
+    const fixture = createFixture();
+    fixture.model.bind(fixture.binding);
+    const replacement = fixture.createReplacementBinding();
+
+    fixture.model.bind(replacement.binding);
+
+    expect(replacement.claimManualLook).not.toHaveBeenCalled();
+    expect(replacement.updateArtisticControls).not.toHaveBeenCalled();
+    expect(replacement.setEnvironmentState).not.toHaveBeenCalled();
+    expect(fixture.model.snapshot()).toMatchObject({
+      lookControlOwner: "showcase",
+      artisticControls: createWaterPreset("calm").artisticControls,
+    });
   });
 
   it("rolls a rejected replacement binding back to an unbound model", () => {

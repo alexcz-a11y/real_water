@@ -3,7 +3,7 @@ import { createWaterPreset } from "real-water";
 import type {
   QaCameraV1,
   QaCaptureV17,
-  QaHarnessV17,
+  QaHarness,
   QaPresentationReceiptV17,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
@@ -46,7 +46,7 @@ interface HeroFrame {
   readonly heroFoam: QaCaptureV17;
   readonly secondaryContribution: QaCaptureV17;
   readonly secondaryOverdraw: QaCaptureV17;
-  readonly query: Awaited<ReturnType<QaHarnessV17["queryGameplay"]>>;
+  readonly query: Awaited<ReturnType<QaHarness["queryGameplay"]>>;
 }
 
 test.describe.configure({ mode: "serial" });
@@ -70,7 +70,7 @@ test("renders and byte-replays one bounded art-directed Hero Breaker", async ({
 
   const result = await page.evaluate(
     async ({ activeAgeTicks, camera, controls, hero, seed, startTick }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

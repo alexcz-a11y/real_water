@@ -109,12 +109,26 @@ prepared systems:
 - the declared post-TRAA order is now TRAA, shared secondary particles, Storm
   atmosphere, lens wetness, then presentation;
 - four normalized captures unpack one RGBA16F target into rain-ripple, aerosol,
-  cloud-shadow, and lightning evidence; Showcase Preset v2 hashes the Storm
-  Water/Environment identities, both Hero events, and the camera timeline;
-  `weather-front` at fixed tick 3,600 now applies the Storm looks and triggers
-  the second Hero Breaker on the pinned Storm camera once per loop; the first
-  Showcase camera is applied before prewarm so the main-camera guard and first
-  visible frame share the same view.
+  cloud-shadow, and lightning evidence; Showcase Preset v3 hashes the route
+  seed, all three Water/Environment looks, proxy-vessel controls, both Hero
+  events, and the camera timeline; `weather-front` at fixed tick 3,600 now
+  applies the Storm looks and triggers the second Hero Breaker on the pinned
+  Storm camera once per loop; the first Showcase camera is applied before
+  prewarm so the main-camera guard and first visible frame share the same view.
+
+Issue #36 completes the Reference Experience around those prepared routes:
+
+- Director runs one exact 5,400-tick route at 60 Hz: Calm Sunrise at tick 0,
+  Blue Noon Swell at tick 1,800, Storm Front at tick 3,600, and a deterministic
+  loop reset at tick 5,400;
+- Sandbox keeps the same ready lease while desktop mouse orbit/zoom, vessel
+  controls, pause, reset, mode, and authored-look controls replace the Director
+  schedule; leaving Sandbox clears held input;
+- the test-only QA Harness replays the same versioned Showcase seed, look,
+  camera, proxy-body, Host Environment, and event timeline, then retains the
+  recipe-pinned capture tick and named buffers for exact comparison;
+- mode and hot-preset changes never bypass the Loading Experience: only a
+  structural Quality Profile change prepares a new runtime.
 
 Issue #20 shades that domain with a Host-owned basic optical path:
 

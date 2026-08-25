@@ -4,10 +4,18 @@ import { createQaHostSimulationController } from "./qa-simulation-controller.js"
 describe("QA Host Simulation Controller", () => {
   it("runs Host integration once at each current tick before advancing state", () => {
     const integratedTicks: number[] = [];
+    const completedTicks: number[] = [];
+    const order: string[] = [];
     let resetCount = 0;
     const simulation = createQaHostSimulationController({
       integrateFixedStep() {
         integratedTicks.push(simulation.snapshot().tick);
+        order.push(`integrate:${simulation.snapshot().tick}`);
+      },
+      afterFixedStep(state) {
+        completedTicks.push(state.tick);
+        order.push(`after:${state.tick}`);
+        expect(simulation.snapshot()).toBe(state);
       },
       reset() {
         resetCount += 1;
@@ -16,8 +24,18 @@ describe("QA Host Simulation Controller", () => {
 
     expect(simulation.advance(3).tick).toBe(3);
     expect(integratedTicks).toEqual([0, 1, 2]);
+    expect(completedTicks).toEqual([1, 2, 3]);
+    expect(order).toEqual([
+      "integrate:0",
+      "after:1",
+      "integrate:1",
+      "after:2",
+      "integrate:2",
+      "after:3",
+    ]);
     expect(simulation.reset(25).tick).toBe(0);
     expect(resetCount).toBe(1);
+    expect(completedTicks).toEqual([1, 2, 3]);
   });
 
   it("starts at simulationResetRevision 0 and increments every explicit reset", () => {

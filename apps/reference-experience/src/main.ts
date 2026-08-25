@@ -19,9 +19,15 @@ import {
   type MemoryHostScenario,
   type PrewarmDrawingBuffer,
   type RealWaterLease,
+  type ShowcaseCameraKeyframe,
+  type ShowcasePreset,
   type WebGPUDeviceLoss,
 } from "real-water";
-import type { QaFrameSource, QaHarnessV17 } from "./qa-harness.js";
+import type {
+  QaFrameSource,
+  QaHarness,
+  QaShowcaseReplayController,
+} from "./qa-harness.js";
 import {
   createQaPlanarReflectionFixture,
   disposeQaPlanarReflectionFixture,
@@ -35,15 +41,38 @@ import { createLocalPresetLibrary } from "./local-preset-library.js";
 import {
   createReferenceControlModel,
   type ReferenceControlBinding,
-  type ReferenceControlModel,
+  type ReferenceLookControlModel,
 } from "./reference-control-model.js";
 import { createReferenceControlPresenters } from "./reference-control-presenters.js";
 import {
   createReferenceHostPresentationController,
   type ReferenceHostPresentationController,
 } from "./reference-presentation-controller.js";
-import { createReferenceHostSimulationController } from "./reference-simulation-controller.js";
-import { createReferenceShowcaseSchedule } from "./reference-showcase-schedule.js";
+import {
+  createReferenceHostSimulationController,
+  type ReferenceHostSimulationController,
+} from "./reference-simulation-controller.js";
+import {
+  REFERENCE_PROXY_VESSEL_BODY_ID,
+  createReferenceShowcaseSchedule,
+  type ReferenceShowcaseSchedule,
+} from "./reference-showcase-schedule.js";
+import {
+  createReferenceExperienceModeController,
+  createReferenceExperienceModePresenter,
+  type AuthoredLookId,
+  type ReferenceExperienceMode,
+  type ReferenceExperienceModeController,
+} from "./reference-experience-mode.js";
+import {
+  REFERENCE_DEFAULT_AUTHORED_LOOK_ID,
+  isReferenceAuthoredLookId,
+  resolveReferenceAuthoredLook,
+} from "./reference-authored-looks.js";
+import {
+  createReferenceSandboxCameraController,
+  createReferenceSandboxControls,
+} from "./reference-sandbox-controls.js";
 import {
   REFERENCE_PROXY_VESSEL_SOCKETS,
   createReferenceProxyVessel,
@@ -69,6 +98,10 @@ if (mount === null) {
 const parameters = new URLSearchParams(window.location.search);
 const qaHarnessModule =
   import.meta.env.MODE === "test" ? await import("./qa-harness.js") : null;
+const modePreference: ReferenceModePreference = {
+  mode: readInitialExperienceMode(parameters),
+  sandboxLook: REFERENCE_DEFAULT_AUTHORED_LOOK_ID,
+};
 const referenceSessionReference: {
   current: ReferenceExperienceSession | null;
 } = { current: null };
@@ -90,6 +123,7 @@ const hostSetup = createHostSetup(
   parameters,
   qaHarnessModule,
   referenceControlModel,
+  modePreference,
   (cause) => {
     presentationFailureSink.report(cause);
   },
@@ -164,6 +198,10 @@ document.addEventListener("freeze", markLifecycleSuspension);
 document.addEventListener("resume", recoverFromLifecycleSuspension);
 
 if (qaHarnessModule !== null && parameters.get("qa") === "1") {
+  const showcaseReplay =
+    parameters.get("mode") === "qa"
+      ? createDeferredQaShowcaseReplayController(hostSetup)
+      : undefined;
   window.__REAL_WATER_QA__ = qaHarnessModule.createQaHarness({
     applySecondQualityProfile: () =>
       referenceSession.applyQualityProfile(
@@ -179,6 +217,7 @@ if (qaHarnessModule !== null && parameters.get("qa") === "1") {
     },
     snapshot: () => referenceSession.snapshot(),
     dispose: () => session.dispose(),
+    ...(showcaseReplay === undefined ? {} : { showcaseReplay }),
   });
 }
 
@@ -189,13 +228,20 @@ interface ReferenceHostSetup {
     drawingBuffer: PrewarmDrawingBuffer,
   ) => ReferenceHostAttempt;
   readonly frameSource: () => QaFrameSource | null;
+  readonly showcaseReplay: () => QaShowcaseReplayController | null;
   readonly synthesizeDeviceLoss?: () => void;
+}
+
+interface ReferenceModePreference {
+  mode: ReferenceExperienceMode;
+  sandboxLook: AuthoredLookId;
 }
 
 function createHostSetup(
   parameters: URLSearchParams,
   qaModule: QaHarnessModule | null,
-  controlModel: ReferenceControlModel,
+  controlModel: ReferenceLookControlModel,
+  modePreference: ReferenceModePreference,
   onPresentationError?: (cause: unknown) => void,
 ): ReferenceHostSetup {
   if (
@@ -246,6 +292,7 @@ function createHostSetup(
         };
       },
       frameSource: () => null,
+      showcaseReplay: () => null,
       synthesizeDeviceLoss: () => {
         if (activeControl === null) {
           throw new Error("The QA Memory host is not ready for device loss.");
@@ -256,6 +303,7 @@ function createHostSetup(
   }
 
   let activeFrameSource: QaFrameSource | null = null;
+  let activeShowcaseReplay: QaShowcaseReplayController | null = null;
   return {
     createHostAttempt: (drawingBuffer: PrewarmDrawingBuffer) => {
       const created = createThreeReferenceHostAttempt(
@@ -263,9 +311,11 @@ function createHostSetup(
         parameters.get("qa") === "1" ? qaModule : null,
         drawingBuffer,
         controlModel,
+        modePreference,
         onPresentationError,
       );
       activeFrameSource = created.frameSource;
+      activeShowcaseReplay = created.showcaseReplay;
       return {
         ...created.attempt,
         async dispose() {
@@ -275,11 +325,15 @@ function createHostSetup(
             if (activeFrameSource === created.frameSource) {
               activeFrameSource = null;
             }
+            if (activeShowcaseReplay === created.showcaseReplay) {
+              activeShowcaseReplay = null;
+            }
           }
         },
       };
     },
     frameSource: () => activeFrameSource,
+    showcaseReplay: () => activeShowcaseReplay,
   };
 }
 
@@ -348,13 +402,15 @@ function createControllableMemoryHost(
 interface CreatedThreeReferenceHostAttempt {
   readonly attempt: ReferenceHostAttempt;
   readonly frameSource: QaFrameSource | null;
+  readonly showcaseReplay: QaShowcaseReplayController | null;
 }
 
 function createThreeReferenceHostAttempt(
   parameters: URLSearchParams,
   qaModule: QaHarnessModule | null,
   drawingBuffer: PrewarmDrawingBuffer,
-  controlModel: ReferenceControlModel,
+  controlModel: ReferenceLookControlModel,
+  modePreference: ReferenceModePreference,
   onPresentationError?: (cause: unknown) => void,
 ): CreatedThreeReferenceHostAttempt {
   const renderer = new WebGPURenderer({
@@ -365,8 +421,10 @@ function createThreeReferenceHostAttempt(
   const seabed = addReferenceSeabed(scene, qaModule !== null);
   const proxyMode = parameters.get("proxy");
   const qaProxyRequested = proxyMode === "1" || proxyMode === "propeller";
+  const qaShowcaseRequested =
+    qaModule !== null && parameters.get("mode") === "qa";
   const proxyVessel =
-    qaModule === null || qaProxyRequested
+    qaModule === null || qaProxyRequested || qaShowcaseRequested
       ? createReferenceProxyVessel(
           scene,
           qaModule !== null && proxyMode === "propeller"
@@ -380,16 +438,14 @@ function createThreeReferenceHostAttempt(
             : {},
         )
       : undefined;
-  const disposeVesselControls =
-    proxyVessel === undefined
-      ? undefined
-      : bindReferenceVesselControls(proxyVessel);
 
   const width = drawingBuffer.width;
   const height = drawingBuffer.height;
   const referenceShowcase = createReferenceShowcasePreset();
   const initialShowcaseCamera =
-    qaModule === null ? referenceShowcase.cameraTimeline[0] : undefined;
+    qaModule === null || qaShowcaseRequested
+      ? referenceShowcase.cameraTimeline[0]
+      : undefined;
   const camera = new PerspectiveCamera(50, width / height, 0.1, 4_000);
   camera.position.set(...(initialShowcaseCamera?.position ?? [8, 6, 10]));
   camera.fov = initialShowcaseCamera?.verticalFovDegrees ?? 50;
@@ -401,25 +457,22 @@ function createThreeReferenceHostAttempt(
   renderer.setPixelRatio(1);
   renderer.setSize(width, height, false);
   let disposed = false;
-  const qaSimulation = qaModule?.createQaHostSimulationController({
-    ...(proxyVessel === undefined
-      ? {}
-      : {
-          integrateFixedStep: proxyVessel.integrateFixedStep,
-          reset: () => {
-            proxyVessel.reset();
-            proxyVessel.setControls({ throttle: 1, steering: 0 });
-          },
-        }),
-  });
   const qaPresentation = qaModule?.createQaHostPresentationController();
   const environment = createReferenceEnvironmentAdapter();
   let referencePresentation: ReferenceHostPresentationController | undefined;
+  let modeController: ReferenceExperienceModeController | null = null;
   const referenceShowcaseSchedule =
-    qaSimulation === undefined
+    proxyVessel !== undefined && (qaModule === null || qaShowcaseRequested)
       ? createReferenceShowcaseSchedule({
           showcase: referenceShowcase,
           environment,
+          enabled: qaModule === null && modePreference.mode === "director",
+          enforceQualityProfile: qaShowcaseRequested,
+          body: {
+            bodyId: REFERENCE_PROXY_VESSEL_BODY_ID,
+            reset: proxyVessel.reset,
+            setControls: proxyVessel.setControls,
+          },
           camera: {
             setCamera(keyframe) {
               if (appliedShowcaseCamera === keyframe) {
@@ -432,10 +485,38 @@ function createThreeReferenceHostAttempt(
               camera.updateMatrixWorld(true);
               appliedShowcaseCamera = keyframe;
               referencePresentation?.incrementCameraCut();
+              qaPresentation?.incrementCameraCut();
             },
+          },
+          onLookApplied: (look, controls, environmentState) => {
+            controlModel.adoptShowcaseLook(controls, environmentState);
+            if (
+              modeController !== null &&
+              modeController.snapshot().mode === "director" &&
+              isReferenceAuthoredLookId(look.id)
+            ) {
+              modeController.reportDirectorLook(look.id);
+            }
           },
         })
       : undefined;
+  const qaSimulation = qaModule?.createQaHostSimulationController({
+    ...(proxyVessel === undefined
+      ? {}
+      : {
+          integrateFixedStep: proxyVessel.integrateFixedStep,
+          afterFixedStep: (state) => {
+            referenceShowcaseSchedule?.afterFixedStep(state);
+            proxyVessel.present(1);
+          },
+          reset: () => {
+            proxyVessel.reset();
+            if (!qaShowcaseRequested) {
+              proxyVessel.setControls({ throttle: 1, steering: 0 });
+            }
+          },
+        }),
+  });
   const referenceSimulation =
     qaSimulation === undefined
       ? createReferenceHostSimulationController({
@@ -447,6 +528,7 @@ function createThreeReferenceHostAttempt(
             : {
                 afterFixedStep: referenceShowcaseSchedule.afterFixedStep,
               }),
+          ...(proxyVessel === undefined ? {} : { reset: proxyVessel.reset }),
         })
       : undefined;
   let referenceSimulationStarted = false;
@@ -497,9 +579,19 @@ function createThreeReferenceHostAttempt(
           environment,
           qaPresentation,
         ) ?? null);
+  const showcaseReplay = createQaShowcaseReplayController(
+    qaShowcaseRequested,
+    referenceShowcase,
+    referenceShowcaseSchedule,
+    proxyVessel,
+    environment,
+    camera,
+    () => appliedShowcaseCamera,
+  );
 
   return Object.freeze({
     frameSource,
+    showcaseReplay,
     attempt: {
       host: frameSource?.host ?? baseHost,
       createReadyStage: (lease: RealWaterLease) => {
@@ -507,26 +599,51 @@ function createThreeReferenceHostAttempt(
         proxyVessel?.attach(lease);
         referenceShowcaseSchedule?.bindLease(lease);
         const stage = createCanvasStage(renderer, lease);
+        stage.dataset.experienceMode =
+          qaModule === null ? modePreference.mode : "qa";
         referencePresentation?.start();
         return stage;
       },
-      decorateReadyStage: (stage: HTMLElement, lease: RealWaterLease) =>
-        bindReferenceControlStage(stage, controlModel, {
+      decorateReadyStage: (stage: HTMLElement, lease: RealWaterLease) => {
+        if (
+          qaModule === null &&
+          proxyVessel !== undefined &&
+          referenceShowcaseSchedule !== undefined &&
+          referenceSimulation !== undefined &&
+          referencePresentation !== undefined &&
+          initialShowcaseCamera !== undefined
+        ) {
+          return bindThreeReferenceReadyStage({
+            stage,
+            lease,
+            renderer,
+            camera,
+            proxyVessel,
+            environment,
+            controlModel,
+            schedule: referenceShowcaseSchedule,
+            simulation: referenceSimulation,
+            presentation: referencePresentation,
+            initialCamera: initialShowcaseCamera,
+            modePreference,
+            setModeController(controller) {
+              modeController = controller;
+            },
+          });
+        }
+        return bindReferenceControlStage(stage, controlModel, {
           lease,
           environment,
           claimManualLook: () => {
             referenceShowcaseSchedule?.setLookControlOwner("manual");
           },
-          ...(referencePresentation === undefined
-            ? {}
-            : { diagnostics: referencePresentation }),
-        }),
+        });
+      },
       dispose: () => {
         if (!disposed) {
           disposed = true;
           renderer.dispose();
           seabed.dispose();
-          disposeVesselControls?.();
           proxyVessel?.dispose();
           if (environment.texture !== null) {
             disposeHostTexture(environment.texture);
@@ -539,7 +656,7 @@ function createThreeReferenceHostAttempt(
 
 function bindReferenceControlStage(
   stage: HTMLElement,
-  model: ReferenceControlModel,
+  model: ReferenceLookControlModel,
   binding: ReferenceControlBinding,
 ): ReadyStageDecoration {
   model.bind(binding);
@@ -563,62 +680,252 @@ function bindReferenceControlStage(
   });
 }
 
-function bindReferenceVesselControls(vessel: ReferenceProxyVessel): () => void {
-  const held = new Set<string>();
-  const acceptedKeys = new Set([
-    "ArrowUp",
-    "ArrowDown",
-    "ArrowLeft",
-    "ArrowRight",
-    "KeyW",
-    "KeyA",
-    "KeyS",
-    "KeyD",
-  ]);
-  const apply = (): void => {
-    vessel.setControls({
-      throttle:
-        Number(held.has("ArrowUp") || held.has("KeyW")) -
-        Number(held.has("ArrowDown") || held.has("KeyS")),
-      steering:
-        Number(held.has("ArrowLeft") || held.has("KeyA")) -
-        Number(held.has("ArrowRight") || held.has("KeyD")),
-    });
-  };
-  const onKeyDown = (event: KeyboardEvent): void => {
-    if (
-      !acceptedKeys.has(event.code) ||
-      event.repeat ||
-      isControlKeyboardTarget(event.target)
-    ) {
-      return;
-    }
-    held.add(event.code);
-    apply();
-  };
-  const onKeyUp = (event: KeyboardEvent): void => {
-    if (!acceptedKeys.has(event.code)) {
-      return;
-    }
-    held.delete(event.code);
-    apply();
-  };
-  window.addEventListener("keydown", onKeyDown);
-  window.addEventListener("keyup", onKeyUp);
-  return (): void => {
-    window.removeEventListener("keydown", onKeyDown);
-    window.removeEventListener("keyup", onKeyUp);
-    held.clear();
-  };
+interface BindThreeReferenceReadyStageOptions {
+  readonly stage: HTMLElement;
+  readonly lease: RealWaterLease;
+  readonly renderer: WebGPURenderer;
+  readonly camera: PerspectiveCamera;
+  readonly proxyVessel: ReferenceProxyVessel;
+  readonly environment: ReferenceEnvironmentAdapter;
+  readonly controlModel: ReferenceLookControlModel;
+  readonly schedule: ReferenceShowcaseSchedule;
+  readonly simulation: ReferenceHostSimulationController;
+  readonly presentation: ReferenceHostPresentationController;
+  readonly initialCamera: ShowcaseCameraKeyframe;
+  readonly modePreference: ReferenceModePreference;
+  readonly setModeController: (
+    controller: ReferenceExperienceModeController | null,
+  ) => void;
 }
 
-function isControlKeyboardTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof Element &&
-    target.closest(
-      "input, select, textarea, button, [contenteditable='true']",
-    ) !== null
+function bindThreeReferenceReadyStage(
+  options: BindThreeReferenceReadyStageOptions,
+): ReadyStageDecoration {
+  const sandboxCamera = createReferenceSandboxCameraController(options.camera, {
+    resetKeyframe: {
+      position: options.initialCamera.position,
+      target: options.initialCamera.target,
+      verticalFovDegrees: options.initialCamera.verticalFovDegrees,
+    },
+    onCameraCut: options.presentation.incrementCameraCut,
+  });
+  const sandboxControls = createReferenceSandboxControls({
+    vessel: options.proxyVessel,
+    camera: sandboxCamera,
+  });
+  const inputAttachment = sandboxControls.attach(
+    options.stage,
+    options.renderer.domElement,
   );
+  let controller: ReferenceExperienceModeController | null = null;
+  const binding: ReferenceControlBinding = {
+    lease: options.lease,
+    environment: options.environment,
+    claimManualLook: () => {
+      options.schedule.setLookControlOwner("manual");
+      if (controller?.snapshot().mode === "director") {
+        controller.setMode("sandbox");
+      }
+    },
+    diagnostics: options.presentation,
+  };
+  options.controlModel.bind(binding);
+
+  let controlPresenters:
+    ReturnType<typeof createReferenceControlPresenters> | undefined;
+  let modePresenter:
+    ReturnType<typeof createReferenceExperienceModePresenter> | undefined;
+  let unsubscribeMode: () => void = () => {};
+  try {
+    controlPresenters = createReferenceControlPresenters(
+      options.stage,
+      options.controlModel,
+    );
+    controller = createReferenceExperienceModeController({
+      initialLook:
+        options.modePreference.mode === "sandbox"
+          ? options.modePreference.sandboxLook
+          : REFERENCE_DEFAULT_AUTHORED_LOOK_ID,
+      setShowcaseEnabled: options.schedule.setEnabled,
+      setSandboxInputEnabled(enabled) {
+        sandboxControls.setEnabled(enabled);
+        if (enabled) {
+          options.proxyVessel.setControls({ throttle: 0, steering: 0 });
+          sandboxControls.resetCamera();
+        }
+      },
+      setSimulationPaused: (paused) => {
+        options.simulation.setPaused(paused);
+      },
+      resetDirector() {
+        options.simulation.reset();
+        options.schedule.reset();
+      },
+      resetSandbox() {
+        options.simulation.reset();
+        sandboxControls.resetCamera();
+        applySandboxLook(
+          options.controlModel,
+          controller?.snapshot().activeLook ??
+            REFERENCE_DEFAULT_AUTHORED_LOOK_ID,
+        );
+      },
+      selectSandboxLook: (look) => {
+        applySandboxLook(options.controlModel, look);
+      },
+      releaseManualLookOwnership() {
+        options.controlModel.releaseManualLookOwnership();
+        options.schedule.setLookControlOwner("showcase");
+      },
+    });
+    options.setModeController(controller);
+    const desiredMode = options.modePreference.mode;
+    if (desiredMode === "sandbox") {
+      controller.setMode("sandbox");
+      if (options.controlModel.snapshot().lookControlOwner !== "manual") {
+        applySandboxLook(
+          options.controlModel,
+          REFERENCE_DEFAULT_AUTHORED_LOOK_ID,
+        );
+      }
+    }
+    unsubscribeMode = controller.subscribe((snapshot) => {
+      options.modePreference.mode = snapshot.mode;
+      if (snapshot.mode === "sandbox") {
+        options.modePreference.sandboxLook = snapshot.activeLook;
+      }
+      options.stage.dataset.experienceMode = snapshot.mode;
+    });
+    modePresenter = createReferenceExperienceModePresenter(
+      options.stage,
+      controller,
+    );
+  } catch (cause) {
+    options.setModeController(null);
+    controller?.dispose();
+    controlPresenters?.dispose();
+    options.controlModel.unbind(options.lease);
+    inputAttachment.dispose();
+    sandboxControls.dispose();
+    throw cause;
+  }
+
+  let disposed = false;
+  return Object.freeze({
+    dispose(): void {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      options.setModeController(null);
+      modePresenter?.dispose();
+      unsubscribeMode();
+      controller?.dispose();
+      controlPresenters?.dispose();
+      options.controlModel.unbind(options.lease);
+      inputAttachment.dispose();
+      sandboxControls.dispose();
+    },
+  });
+}
+
+function applySandboxLook(
+  model: ReferenceLookControlModel,
+  look: AuthoredLookId,
+): void {
+  const resolved = resolveReferenceAuthoredLook(look);
+  model.applyWaterPreset(resolved.waterPreset);
+  model.applyEnvironmentPreset(resolved.environmentPreset);
+}
+
+function createQaShowcaseReplayController(
+  requested: boolean,
+  showcase: ShowcasePreset,
+  schedule: ReferenceShowcaseSchedule | undefined,
+  vessel: ReferenceProxyVessel | undefined,
+  environment: ReferenceEnvironmentAdapter,
+  camera: PerspectiveCamera,
+  appliedCamera: () => ShowcaseCameraKeyframe | undefined,
+): QaShowcaseReplayController | null {
+  if (!requested || schedule === undefined || vessel === undefined) {
+    return null;
+  }
+  return Object.freeze({
+    preset: () => showcase,
+    activate(): void {
+      schedule.setLookControlOwner("showcase");
+      schedule.setEnabled(true);
+      schedule.reset();
+    },
+    deactivate(): void {
+      schedule.setEnabled(false);
+    },
+    snapshot() {
+      const route = schedule.snapshot();
+      const cameraKeyframe = appliedCamera();
+      if (cameraKeyframe === undefined) {
+        throw new Error("The QA Showcase camera has not been applied.");
+      }
+      const body = vessel.inspect();
+      return Object.freeze({
+        look: Object.freeze({
+          id: route.activeLook.id,
+          waterPreset: route.activeLook.waterPreset,
+          environmentPreset: route.activeLook.environmentPreset,
+        }),
+        camera: Object.freeze({
+          projection: "perspective" as const,
+          position: cameraKeyframe.position,
+          target: cameraKeyframe.target,
+          up: Object.freeze([camera.up.x, camera.up.y, camera.up.z] as const),
+          verticalFovDegrees: camera.fov,
+          near: camera.near,
+          far: camera.far,
+        }),
+        body: Object.freeze({
+          id: REFERENCE_PROXY_VESSEL_BODY_ID,
+          controls: body.controls,
+          fixedStepCount: body.fixedStepCount,
+          pose: body.pose,
+        }),
+        environment: environment.snapshot(),
+        events: route.events,
+      });
+    },
+  });
+}
+
+function createDeferredQaShowcaseReplayController(
+  hostSetup: ReferenceHostSetup,
+): QaShowcaseReplayController {
+  let active: QaShowcaseReplayController | null = null;
+  const requireController = (): QaShowcaseReplayController => {
+    const controller = hostSetup.showcaseReplay();
+    if (controller === null) {
+      throw new Error("The QA Showcase replay Host is not ready.");
+    }
+    return controller;
+  };
+  return Object.freeze({
+    preset: () => requireController().preset(),
+    activate(): void {
+      const controller = requireController();
+      active = controller;
+      controller.activate();
+    },
+    deactivate(): void {
+      const controller = active;
+      active = null;
+      controller?.deactivate();
+    },
+    snapshot: () => (active ?? requireController()).snapshot(),
+  });
+}
+
+function readInitialExperienceMode(
+  parameters: URLSearchParams,
+): ReferenceExperienceMode {
+  return parameters.get("mode") === "sandbox" ? "sandbox" : "director";
 }
 
 function createCanvasStage(
@@ -748,6 +1055,6 @@ function readRevealFrames(
 
 declare global {
   interface Window {
-    __REAL_WATER_QA__?: QaHarnessV17;
+    __REAL_WATER_QA__?: QaHarness;
   }
 }

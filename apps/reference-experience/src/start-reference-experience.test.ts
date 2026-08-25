@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  REFERENCE_SHOWCASE_SEED,
   createMemoryHostLifecycleAdapter,
   createMinimalWaterQualityProfile,
   createStaticHostPresentationAdapter,
@@ -241,7 +242,7 @@ describe("ReferenceExperienceSession.reportPresentationFailure", () => {
     ).not.toBeNull();
   });
 
-  it("becomes ready with the Reference Host Simulation at seed 0", async () => {
+  it("becomes ready with the Reference Showcase seed", async () => {
     const simulation = createReferenceHostSimulationController();
     installMinimalDocument();
     mount = document.createElement("div") as unknown as typeof mount;
@@ -275,7 +276,7 @@ describe("ReferenceExperienceSession.reportPresentationFailure", () => {
     currentSession = session;
     await waitForReady(session);
     expect(simulation.snapshot()).toEqual({
-      seed: 0,
+      seed: REFERENCE_SHOWCASE_SEED,
       tick: 0,
       timeSeconds: 0,
       paused: false,

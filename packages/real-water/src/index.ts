@@ -209,6 +209,8 @@ export {
   ENVIRONMENT_PRESET_SCHEMA,
   ENVIRONMENT_PRESET_VERSION,
   createAuthoredEnvironmentPreset,
+  createBlueNoonEnvironmentPreset,
+  createCalmSunriseEnvironmentPreset,
   createReferenceEnvironmentPreset,
   createStormFrontEnvironmentPreset,
   environmentPresetIdentity,
@@ -224,6 +226,7 @@ export type {
 } from "./environment-preset.js";
 
 export {
+  REFERENCE_SHOWCASE_SEED,
   SHOWCASE_PRESET_SCHEMA,
   SHOWCASE_PRESET_VERSION,
   createAuthoredShowcasePreset,
@@ -233,8 +236,11 @@ export {
   showcasePresetIdentity,
 } from "./showcase-preset.js";
 export type {
+  ShowcaseBodyKeyframe,
   ShowcaseCameraKeyframe,
+  ShowcaseCapturePoint,
   ShowcaseEventKeyframe,
+  ShowcaseLookKeyframe,
   ShowcasePreset,
   ShowcasePresetAuthoring,
   ShowcasePresetIdentity,

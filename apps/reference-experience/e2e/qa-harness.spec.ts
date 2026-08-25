@@ -10,7 +10,7 @@ import {
 import {
   QA_CAPTURE_VERSION,
   type QaCameraV1,
-  type QaHarnessV17,
+  type QaHarness,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
@@ -64,6 +64,9 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       environmentCommands: {
         updateEnvironment: typeof harness.updateEnvironment,
       },
+      showcaseCommands: {
+        replayShowcase: typeof harness.replayShowcase,
+      },
       frozen: Object.isFrozen(harness),
     };
   });
@@ -104,7 +107,7 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
     // value. Everywhere else compares against the exported constant, so this
     // assertion is what makes a bump deliberate instead of self-confirming.
     // eslint-disable-next-line no-restricted-syntax
-    version: 17,
+    version: 18,
     fixedTickHz: 60,
     captureNames: [
       "final-color",
@@ -360,6 +363,9 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
     environmentCommands: {
       updateEnvironment: "function",
     },
+    showcaseCommands: {
+      replayShowcase: "function",
+    },
     frozen: true,
   });
 });
@@ -378,7 +384,7 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
     const harness = window.__REAL_WATER_QA__ as
-      | (QaHarnessV17 & {
+      | (QaHarness & {
           updateArtisticControls(
             controls: {
               readonly waveStrength: number;
@@ -551,7 +557,7 @@ test("presents camera-relative Open Water through the horizon", async ({
   await page.goto("/?qa=1&host=three");
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -607,7 +613,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -958,7 +964,7 @@ test("matches the visible WebGPU canvas RGB to the same-frame final-color captur
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }

@@ -2,6 +2,8 @@ import type { EnvironmentPresetIdentity } from "./environment-preset.js";
 import {
   ENVIRONMENT_PRESET_SCHEMA,
   ENVIRONMENT_PRESET_VERSION,
+  createBlueNoonEnvironmentPreset,
+  createCalmSunriseEnvironmentPreset,
   createReferenceEnvironmentPreset,
   createStormFrontEnvironmentPreset,
   environmentPresetIdentity,
@@ -35,7 +37,14 @@ export const SHOWCASE_PRESET_SCHEMA = "real-water/showcase-preset" as const;
  *
  * @public
  */
-export const SHOWCASE_PRESET_VERSION = 2 as const;
+export const SHOWCASE_PRESET_VERSION = 3 as const;
+
+/**
+ * The fixed unsigned seed carried by the built-in Reference Showcase recipe.
+ *
+ * @public
+ */
+export const REFERENCE_SHOWCASE_SEED = 0x5eed_0025 as const;
 
 /**
  * A finite position or target in the Three.js Y-up coordinate contract.
@@ -67,6 +76,43 @@ export interface ShowcaseEventKeyframe {
 }
 
 /**
+ * One stable named QA capture point on the Showcase fixed-tick timeline.
+ *
+ * @public
+ */
+export interface ShowcaseCapturePoint {
+  readonly id: string;
+  readonly tick: number;
+  readonly captureNames: readonly string[];
+}
+
+/**
+ * One named pair of Water and Environment Preset identities on the fixed-tick
+ * Showcase timeline. Different ids may share a tick and execute in array
+ * order; the last keyframe at that tick is the final global look.
+ *
+ * @public
+ */
+export interface ShowcaseLookKeyframe {
+  readonly tick: number;
+  readonly id: string;
+  readonly waterPreset: WaterPresetIdentity;
+  readonly environmentPreset: EnvironmentPresetIdentity;
+}
+
+/**
+ * One deterministic control input for a stable Showcase body identity.
+ *
+ * @public
+ */
+export interface ShowcaseBodyKeyframe {
+  readonly tick: number;
+  readonly bodyId: string;
+  readonly throttle: number;
+  readonly steering: number;
+}
+
+/**
  * The preset identities and semantic events that make one deterministic Storm
  * Front Showcase segment reproducible.
  *
@@ -88,12 +134,16 @@ export interface ShowcaseStormFrontSegment {
 export interface ShowcasePresetAuthoring {
   readonly id: string;
   readonly durationTicks: number;
+  readonly seed: number;
   readonly waterPreset: WaterPresetIdentity;
   readonly environmentPreset: EnvironmentPresetIdentity;
   readonly qualityProfile: QualityProfileIdentity;
   readonly stormFront: ShowcaseStormFrontSegment;
+  readonly lookTimeline: readonly ShowcaseLookKeyframe[];
+  readonly bodyTimeline: readonly ShowcaseBodyKeyframe[];
   readonly cameraTimeline: readonly ShowcaseCameraKeyframe[];
   readonly eventTimeline: readonly ShowcaseEventKeyframe[];
+  readonly captureTimeline: readonly ShowcaseCapturePoint[];
 }
 
 /**
@@ -126,15 +176,36 @@ const SHOWCASE_PRESET_KEYS = [
   "id",
   "presetHash",
   "durationTicks",
+  "seed",
   "waterPreset",
   "environmentPreset",
   "qualityProfile",
   "stormFront",
+  "lookTimeline",
+  "bodyTimeline",
   "cameraTimeline",
   "eventTimeline",
+  "captureTimeline",
 ] as const;
 const SHOWCASE_AUTHORING_KEYS = [
   "id",
+  "durationTicks",
+  "seed",
+  "waterPreset",
+  "environmentPreset",
+  "qualityProfile",
+  "stormFront",
+  "lookTimeline",
+  "bodyTimeline",
+  "cameraTimeline",
+  "eventTimeline",
+  "captureTimeline",
+] as const;
+const LEGACY_V2_SHOWCASE_PRESET_KEYS = [
+  "schema",
+  "version",
+  "id",
+  "presetHash",
   "durationTicks",
   "waterPreset",
   "environmentPreset",
@@ -143,10 +214,11 @@ const SHOWCASE_AUTHORING_KEYS = [
   "cameraTimeline",
   "eventTimeline",
 ] as const;
-const LEGACY_SHOWCASE_PRESET_KEYS = SHOWCASE_PRESET_KEYS.filter(
+const LEGACY_V1_SHOWCASE_PRESET_KEYS = LEGACY_V2_SHOWCASE_PRESET_KEYS.filter(
   (key) => key !== "stormFront",
 );
-const LEGACY_SHOWCASE_PRESET_VERSION = 1 as const;
+const LEGACY_V1_SHOWCASE_PRESET_VERSION = 1 as const;
+const LEGACY_V2_SHOWCASE_PRESET_VERSION = 2 as const;
 const LEGACY_ENVIRONMENT_PRESET_VERSION = 1 as const;
 const LEGACY_QUALITY_PROFILE_VERSION = 14 as const;
 type LegacyEnvironmentPresetIdentity = Omit<
@@ -170,6 +242,14 @@ const CAMERA_KEYFRAME_KEYS = [
   "verticalFovDegrees",
 ] as const;
 const EVENT_KEYFRAME_KEYS = ["tick", "id"] as const;
+const CAPTURE_POINT_KEYS = ["id", "tick", "captureNames"] as const;
+const LOOK_KEYFRAME_KEYS = [
+  "tick",
+  "id",
+  "waterPreset",
+  "environmentPreset",
+] as const;
+const BODY_KEYFRAME_KEYS = ["tick", "bodyId", "throttle", "steering"] as const;
 const STORM_FRONT_KEYS = [
   "eventId",
   "heroBreakerEventId",
@@ -185,22 +265,83 @@ const SHA256_IDENTIFIER = /^sha256:[0-9a-f]{64}$/u;
  * @public
  */
 export function createReferenceShowcasePreset(): ShowcasePreset {
+  const calmWater = waterPresetIdentity(createWaterPreset("calm"));
+  const calmEnvironment = environmentPresetIdentity(
+    createCalmSunriseEnvironmentPreset(),
+  );
+  const swellWater = waterPresetIdentity(createWaterPreset("swell"));
+  const blueNoonEnvironment = environmentPresetIdentity(
+    createBlueNoonEnvironmentPreset(),
+  );
+  const stormWater = waterPresetIdentity(createWaterPreset("storm"));
+  const stormEnvironment = environmentPresetIdentity(
+    createStormFrontEnvironmentPreset(),
+  );
   return createAuthoredShowcasePreset({
     id: "reference-loop",
     durationTicks: 5_400,
-    waterPreset: waterPresetIdentity(createWaterPreset("swell")),
-    environmentPreset: environmentPresetIdentity(
-      createReferenceEnvironmentPreset(),
-    ),
+    seed: REFERENCE_SHOWCASE_SEED,
+    waterPreset: calmWater,
+    environmentPreset: calmEnvironment,
     qualityProfile: qualityProfileIdentity(createMinimalWaterQualityProfile()),
     stormFront: {
       eventId: "weather-front",
       heroBreakerEventId: "storm-front-hero-breaker",
-      waterPreset: waterPresetIdentity(createWaterPreset("storm")),
-      environmentPreset: environmentPresetIdentity(
-        createStormFrontEnvironmentPreset(),
-      ),
+      waterPreset: stormWater,
+      environmentPreset: stormEnvironment,
     },
+    lookTimeline: [
+      {
+        tick: 0,
+        id: "calm-sunrise",
+        waterPreset: calmWater,
+        environmentPreset: calmEnvironment,
+      },
+      {
+        tick: 1_800,
+        id: "blue-noon-swell",
+        waterPreset: swellWater,
+        environmentPreset: blueNoonEnvironment,
+      },
+      {
+        tick: 3_600,
+        id: "storm-front",
+        waterPreset: stormWater,
+        environmentPreset: stormEnvironment,
+      },
+      {
+        tick: 5_400,
+        id: "calm-sunrise",
+        waterPreset: calmWater,
+        environmentPreset: calmEnvironment,
+      },
+    ],
+    bodyTimeline: [
+      {
+        tick: 0,
+        bodyId: "reference-proxy-vessel",
+        throttle: 0.45,
+        steering: 0,
+      },
+      {
+        tick: 1_800,
+        bodyId: "reference-proxy-vessel",
+        throttle: 0.7,
+        steering: 0.18,
+      },
+      {
+        tick: 3_600,
+        bodyId: "reference-proxy-vessel",
+        throttle: 0.9,
+        steering: -0.22,
+      },
+      {
+        tick: 5_400,
+        bodyId: "reference-proxy-vessel",
+        throttle: 0.45,
+        steering: 0,
+      },
+    ],
     cameraTimeline: [
       {
         tick: 0,
@@ -233,6 +374,49 @@ export function createReferenceShowcasePreset(): ShowcasePreset {
       { tick: 3_600, id: "weather-front" },
       { tick: 3_600, id: "storm-front-hero-breaker" },
     ],
+    captureTimeline: [
+      {
+        id: "calm-sunrise",
+        tick: 0,
+        captureNames: ["final-color", "depth", "normal"],
+      },
+      {
+        id: "calm-stability",
+        tick: 120,
+        captureNames: ["final-color"],
+      },
+      {
+        id: "blue-noon-swell",
+        tick: 1_800,
+        captureNames: [
+          "final-color",
+          "depth",
+          "normal",
+          "hero-breaker-foam",
+          "underwater-caustics",
+          "underwater-particles",
+          "underwater-bubbles",
+          "lens-wetness",
+        ],
+      },
+      {
+        id: "storm-front",
+        tick: 3_600,
+        captureNames: [
+          "final-color",
+          "hero-breaker-foam",
+          "storm-rain-ripples",
+          "storm-aerosol",
+          "storm-cloud-shadow",
+          "storm-lightning",
+        ],
+      },
+      {
+        id: "loop-reset",
+        tick: 5_400,
+        captureNames: ["final-color"],
+      },
+    ],
   });
 }
 
@@ -250,7 +434,8 @@ export function createAuthoredShowcasePreset(
     !isRecord(value) ||
     !hasExactKeys(value, SHOWCASE_AUTHORING_KEYS) ||
     !isStableId(value.id) ||
-    !isPositiveSafeInteger(value.durationTicks)
+    !isPositiveSafeInteger(value.durationTicks) ||
+    !isUnsigned32(value.seed)
   ) {
     throw invalidAuthoring();
   }
@@ -264,9 +449,27 @@ export function createAuthoredShowcasePreset(
     value.eventTimeline,
     durationTicks,
   );
+  const waterPreset = normalizeWaterPresetIdentity(value.waterPreset);
+  const environmentPreset = normalizeEnvironmentPresetIdentity(
+    value.environmentPreset,
+  );
+  const qualityProfile = normalizeQualityProfileIdentity(value.qualityProfile);
   const stormFront = normalizeStormFrontSegment(
     value.stormFront,
     cameraTimeline,
+    eventTimeline,
+  );
+  const lookTimeline = normalizeLookTimeline(value.lookTimeline, durationTicks);
+  const bodyTimeline = normalizeBodyTimeline(value.bodyTimeline, durationTicks);
+  const captureTimeline = normalizeCaptureTimeline(
+    value.captureTimeline,
+    durationTicks,
+  );
+  assertLookTimelineCoherence(
+    lookTimeline,
+    waterPreset,
+    environmentPreset,
+    stormFront,
     eventTimeline,
   );
   const content = {
@@ -274,14 +477,16 @@ export function createAuthoredShowcasePreset(
     version: SHOWCASE_PRESET_VERSION,
     id: value.id,
     durationTicks,
-    waterPreset: normalizeWaterPresetIdentity(value.waterPreset),
-    environmentPreset: normalizeEnvironmentPresetIdentity(
-      value.environmentPreset,
-    ),
-    qualityProfile: normalizeQualityProfileIdentity(value.qualityProfile),
+    seed: value.seed,
+    waterPreset,
+    environmentPreset,
+    qualityProfile,
     stormFront,
+    lookTimeline,
+    bodyTimeline,
     cameraTimeline,
     eventTimeline,
+    captureTimeline,
   };
 
   return Object.freeze({
@@ -290,12 +495,16 @@ export function createAuthoredShowcasePreset(
     id: content.id,
     presetHash: sha256Identifier(JSON.stringify(content)),
     durationTicks: content.durationTicks,
+    seed: content.seed,
     waterPreset: content.waterPreset,
     environmentPreset: content.environmentPreset,
     qualityProfile: content.qualityProfile,
     stormFront: content.stormFront,
+    lookTimeline: content.lookTimeline,
+    bodyTimeline: content.bodyTimeline,
     cameraTimeline: content.cameraTimeline,
     eventTimeline: content.eventTimeline,
+    captureTimeline: content.captureTimeline,
   });
 }
 
@@ -324,12 +533,16 @@ export function normalizeShowcasePreset(
     normalized = createAuthoredShowcasePreset({
       id: value.id,
       durationTicks: value.durationTicks,
+      seed: value.seed,
       waterPreset: value.waterPreset,
       environmentPreset: value.environmentPreset,
       qualityProfile: value.qualityProfile,
       stormFront: value.stormFront,
+      lookTimeline: value.lookTimeline,
+      bodyTimeline: value.bodyTimeline,
       cameraTimeline: value.cameraTimeline,
       eventTimeline: value.eventTimeline,
+      captureTimeline: value.captureTimeline,
     } as ShowcasePresetAuthoring);
   } catch {
     throw invalidPreset();
@@ -341,9 +554,8 @@ export function normalizeShowcasePreset(
 }
 
 /**
- * Migrates the complete committed version-one Showcase recipe by upgrading its
- * referenced Environment and Quality identities and adding the pinned Storm
- * Front segment. Other legacy/future shapes remain fail-closed.
+ * Migrates the complete version-one and version-two Showcase recipes through
+ * explicit semantic rungs. Other legacy/future shapes remain fail-closed.
  *
  * @public
  */
@@ -353,18 +565,94 @@ export function migrateShowcasePreset(candidate: unknown): ShowcasePreset {
   }
   if (
     isRecord(candidate) &&
-    candidate.version === LEGACY_SHOWCASE_PRESET_VERSION
+    candidate.version === LEGACY_V2_SHOWCASE_PRESET_VERSION
+  ) {
+    return migrateVersionTwoShowcasePreset(candidate);
+  }
+  if (
+    isRecord(candidate) &&
+    candidate.version === LEGACY_V1_SHOWCASE_PRESET_VERSION
   ) {
     return migrateVersionOneShowcasePreset(candidate);
   }
   throw invalidPreset();
 }
 
+function migrateVersionTwoShowcasePreset(
+  candidate: Record<string, unknown>,
+): ShowcasePreset {
+  if (
+    !hasExactKeys(candidate, LEGACY_V2_SHOWCASE_PRESET_KEYS) ||
+    candidate.schema !== SHOWCASE_PRESET_SCHEMA ||
+    !isStableId(candidate.id) ||
+    !isPositiveSafeInteger(candidate.durationTicks) ||
+    typeof candidate.presetHash !== "string"
+  ) {
+    throw invalidPreset();
+  }
+  const durationTicks = candidate.durationTicks;
+  let waterPreset: WaterPresetIdentity;
+  let environmentPreset: EnvironmentPresetIdentity;
+  let qualityProfile: QualityProfileIdentity;
+  let stormFront: ShowcaseStormFrontSegment;
+  let cameraTimeline: readonly ShowcaseCameraKeyframe[];
+  let eventTimeline: readonly ShowcaseEventKeyframe[];
+  try {
+    waterPreset = normalizeWaterPresetIdentity(candidate.waterPreset);
+    environmentPreset = normalizeEnvironmentPresetIdentity(
+      candidate.environmentPreset,
+    );
+    qualityProfile = normalizeQualityProfileIdentity(candidate.qualityProfile);
+    cameraTimeline = normalizeCameraTimeline(
+      candidate.cameraTimeline,
+      durationTicks,
+    );
+    eventTimeline = normalizeEventTimeline(
+      candidate.eventTimeline,
+      durationTicks,
+    );
+    stormFront = normalizeStormFrontSegment(
+      candidate.stormFront,
+      cameraTimeline,
+      eventTimeline,
+    );
+  } catch {
+    throw invalidPreset();
+  }
+  const legacyContent = {
+    schema: SHOWCASE_PRESET_SCHEMA,
+    version: LEGACY_V2_SHOWCASE_PRESET_VERSION,
+    id: candidate.id,
+    durationTicks,
+    waterPreset,
+    environmentPreset,
+    qualityProfile,
+    stormFront,
+    cameraTimeline,
+    eventTimeline,
+  };
+  if (
+    candidate.presetHash !== sha256Identifier(JSON.stringify(legacyContent))
+  ) {
+    throw invalidPreset();
+  }
+  return createVersionThreeFromVersionTwoSemantics({
+    id: candidate.id,
+    durationTicks,
+    waterPreset,
+    environmentPreset,
+    qualityProfile,
+    stormFront,
+    cameraTimeline,
+    eventTimeline,
+  });
+}
+
 function migrateVersionOneShowcasePreset(
   candidate: Record<string, unknown>,
 ): ShowcasePreset {
   if (
-    !hasExactKeys(candidate, LEGACY_SHOWCASE_PRESET_KEYS) ||
+    !hasExactKeys(candidate, LEGACY_V1_SHOWCASE_PRESET_KEYS) ||
     candidate.schema !== SHOWCASE_PRESET_SCHEMA ||
     !isStableId(candidate.id) ||
     !isPositiveSafeInteger(candidate.durationTicks) ||
@@ -399,7 +687,7 @@ function migrateVersionOneShowcasePreset(
   }
   const legacyContent = {
     schema: SHOWCASE_PRESET_SCHEMA,
-    version: LEGACY_SHOWCASE_PRESET_VERSION,
+    version: LEGACY_V1_SHOWCASE_PRESET_VERSION,
     id: candidate.id,
     durationTicks,
     waterPreset,
@@ -435,7 +723,7 @@ function migrateVersionOneShowcasePreset(
     createStormFrontEnvironmentPreset(),
   );
   const stormWater = waterPresetIdentity(createWaterPreset("storm"));
-  return createAuthoredShowcasePreset({
+  return createVersionThreeFromVersionTwoSemantics({
     id: candidate.id,
     durationTicks,
     waterPreset,
@@ -462,6 +750,111 @@ function migrateVersionOneShowcasePreset(
           )
         : eventTimeline,
   });
+}
+
+interface VersionTwoShowcaseSemantics {
+  readonly id: string;
+  readonly durationTicks: number;
+  readonly waterPreset: WaterPresetIdentity;
+  readonly environmentPreset: EnvironmentPresetIdentity;
+  readonly qualityProfile: QualityProfileIdentity;
+  readonly stormFront: ShowcaseStormFrontSegment;
+  readonly cameraTimeline: readonly ShowcaseCameraKeyframe[];
+  readonly eventTimeline: readonly ShowcaseEventKeyframe[];
+}
+
+function createVersionThreeFromVersionTwoSemantics(
+  legacy: VersionTwoShowcaseSemantics,
+): ShowcasePreset {
+  const stormEvent = legacy.eventTimeline.find(
+    ({ id }) => id === legacy.stormFront.eventId,
+  );
+  if (stormEvent === undefined) {
+    throw invalidPreset();
+  }
+  return createAuthoredShowcasePreset({
+    id: legacy.id,
+    durationTicks: legacy.durationTicks,
+    seed: 0,
+    waterPreset: legacy.waterPreset,
+    environmentPreset: legacy.environmentPreset,
+    qualityProfile: legacy.qualityProfile,
+    stormFront: legacy.stormFront,
+    lookTimeline: createMigratedLookTimeline(legacy, stormEvent.tick),
+    bodyTimeline: [
+      {
+        tick: 0,
+        bodyId: "reference-proxy-vessel",
+        throttle: 0,
+        steering: 0,
+      },
+      {
+        tick: legacy.durationTicks,
+        bodyId: "reference-proxy-vessel",
+        throttle: 0,
+        steering: 0,
+      },
+    ],
+    cameraTimeline: legacy.cameraTimeline,
+    eventTimeline: legacy.eventTimeline,
+    captureTimeline: createMigratedCaptureTimeline(
+      legacy.durationTicks,
+      stormEvent.tick,
+    ),
+  });
+}
+
+function createMigratedCaptureTimeline(
+  durationTicks: number,
+  stormTick: number,
+): readonly ShowcaseCapturePoint[] {
+  return [
+    {
+      id: "legacy-start",
+      tick: 0,
+      captureNames: ["final-color"],
+    },
+    ...(stormTick > 0 && stormTick < durationTicks
+      ? [
+          {
+            id: "legacy-storm",
+            tick: stormTick,
+            captureNames: ["final-color"],
+          },
+        ]
+      : []),
+    {
+      id: "legacy-loop",
+      tick: durationTicks,
+      captureNames: ["final-color"],
+    },
+  ];
+}
+
+function createMigratedLookTimeline(
+  legacy: VersionTwoShowcaseSemantics,
+  stormTick: number,
+): readonly ShowcaseLookKeyframe[] {
+  return [
+    {
+      tick: 0,
+      id: "base",
+      waterPreset: legacy.waterPreset,
+      environmentPreset: legacy.environmentPreset,
+    },
+    {
+      tick: stormTick,
+      id: "storm-front",
+      waterPreset: legacy.stormFront.waterPreset,
+      environmentPreset: legacy.stormFront.environmentPreset,
+    },
+    {
+      tick: legacy.durationTicks,
+      id: "base",
+      waterPreset: legacy.waterPreset,
+      environmentPreset: legacy.environmentPreset,
+    },
+  ];
 }
 
 /**
@@ -687,6 +1080,204 @@ function normalizeEventTimeline(
   return Object.freeze(timeline);
 }
 
+function normalizeCaptureTimeline(
+  value: unknown,
+  durationTicks: number,
+): readonly ShowcaseCapturePoint[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw invalidAuthoring();
+  }
+  const timeline: ShowcaseCapturePoint[] = [];
+  const ids = new Set<string>();
+  let previousTick = -1;
+  for (const candidate of value) {
+    if (
+      !isRecord(candidate) ||
+      !hasExactKeys(candidate, CAPTURE_POINT_KEYS) ||
+      !isStableId(candidate.id) ||
+      ids.has(candidate.id) ||
+      !isTimelineTick(candidate.tick, durationTicks) ||
+      candidate.tick < previousTick ||
+      !Array.isArray(candidate.captureNames) ||
+      candidate.captureNames.length === 0
+    ) {
+      throw invalidAuthoring();
+    }
+    const captureNames = new Set<string>();
+    for (const captureName of candidate.captureNames) {
+      if (!isStableId(captureName) || captureNames.has(captureName)) {
+        throw invalidAuthoring();
+      }
+      captureNames.add(captureName);
+    }
+    timeline.push(
+      Object.freeze({
+        id: candidate.id,
+        tick: candidate.tick,
+        captureNames: Object.freeze([...candidate.captureNames]),
+      }),
+    );
+    ids.add(candidate.id);
+    previousTick = candidate.tick;
+  }
+  return Object.freeze(timeline);
+}
+
+function normalizeLookTimeline(
+  value: unknown,
+  durationTicks: number,
+): readonly ShowcaseLookKeyframe[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw invalidAuthoring();
+  }
+  const timeline: ShowcaseLookKeyframe[] = [];
+  const idsByTick = new Map<number, Set<string>>();
+  let previousTick = -1;
+  for (const candidate of value) {
+    if (
+      !isRecord(candidate) ||
+      !hasExactKeys(candidate, LOOK_KEYFRAME_KEYS) ||
+      !isTimelineTick(candidate.tick, durationTicks) ||
+      candidate.tick < previousTick ||
+      !isStableId(candidate.id) ||
+      hasTimelineId(idsByTick, candidate.tick, candidate.id)
+    ) {
+      throw invalidAuthoring();
+    }
+    timeline.push(
+      Object.freeze({
+        tick: candidate.tick,
+        id: candidate.id,
+        waterPreset: normalizeWaterPresetIdentity(candidate.waterPreset),
+        environmentPreset: normalizeEnvironmentPresetIdentity(
+          candidate.environmentPreset,
+        ),
+      }),
+    );
+    recordTimelineId(idsByTick, candidate.tick, candidate.id);
+    previousTick = candidate.tick;
+  }
+  return Object.freeze(timeline);
+}
+
+function normalizeBodyTimeline(
+  value: unknown,
+  durationTicks: number,
+): readonly ShowcaseBodyKeyframe[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw invalidAuthoring();
+  }
+  const timeline: ShowcaseBodyKeyframe[] = [];
+  const bodyIdsByTick = new Map<number, Set<string>>();
+  const initializedBodyIds = new Set<string>();
+  let previousTick = -1;
+  for (const candidate of value) {
+    if (
+      !isRecord(candidate) ||
+      !hasExactKeys(candidate, BODY_KEYFRAME_KEYS) ||
+      !isTimelineTick(candidate.tick, durationTicks) ||
+      candidate.tick < previousTick ||
+      !isStableId(candidate.bodyId) ||
+      (!initializedBodyIds.has(candidate.bodyId) && candidate.tick !== 0) ||
+      hasTimelineId(bodyIdsByTick, candidate.tick, candidate.bodyId) ||
+      !isUnitControl(candidate.throttle) ||
+      !isUnitControl(candidate.steering)
+    ) {
+      throw invalidAuthoring();
+    }
+    timeline.push(
+      Object.freeze({
+        tick: candidate.tick,
+        bodyId: candidate.bodyId,
+        throttle: candidate.throttle,
+        steering: candidate.steering,
+      }),
+    );
+    initializedBodyIds.add(candidate.bodyId);
+    recordTimelineId(bodyIdsByTick, candidate.tick, candidate.bodyId);
+    previousTick = candidate.tick;
+  }
+  return Object.freeze(timeline);
+}
+
+function assertLookTimelineCoherence(
+  lookTimeline: readonly ShowcaseLookKeyframe[],
+  waterPreset: WaterPresetIdentity,
+  environmentPreset: EnvironmentPresetIdentity,
+  stormFront: ShowcaseStormFrontSegment,
+  eventTimeline: readonly ShowcaseEventKeyframe[],
+): void {
+  const stormEvent = eventTimeline.find(({ id }) => id === stormFront.eventId);
+  if (
+    !lookTimeline.some(
+      (look) =>
+        look.tick === 0 &&
+        sameWaterPresetIdentity(look.waterPreset, waterPreset) &&
+        sameEnvironmentPresetIdentity(
+          look.environmentPreset,
+          environmentPreset,
+        ),
+    ) ||
+    stormEvent === undefined ||
+    !lookTimeline.some(
+      (look) =>
+        look.tick === stormEvent.tick &&
+        sameWaterPresetIdentity(look.waterPreset, stormFront.waterPreset) &&
+        sameEnvironmentPresetIdentity(
+          look.environmentPreset,
+          stormFront.environmentPreset,
+        ),
+    )
+  ) {
+    throw invalidAuthoring();
+  }
+}
+
+function sameWaterPresetIdentity(
+  left: WaterPresetIdentity,
+  right: WaterPresetIdentity,
+): boolean {
+  return (
+    left.schema === right.schema &&
+    left.version === right.version &&
+    left.id === right.id &&
+    left.presetHash === right.presetHash
+  );
+}
+
+function sameEnvironmentPresetIdentity(
+  left: EnvironmentPresetIdentity,
+  right: EnvironmentPresetIdentity,
+): boolean {
+  return (
+    left.schema === right.schema &&
+    left.version === right.version &&
+    left.id === right.id &&
+    left.presetHash === right.presetHash
+  );
+}
+
+function hasTimelineId(
+  idsByTick: ReadonlyMap<number, ReadonlySet<string>>,
+  tick: number,
+  id: string,
+): boolean {
+  return idsByTick.get(tick)?.has(id) === true;
+}
+
+function recordTimelineId(
+  idsByTick: Map<number, Set<string>>,
+  tick: number,
+  id: string,
+): void {
+  const ids = idsByTick.get(tick);
+  if (ids === undefined) {
+    idsByTick.set(tick, new Set([id]));
+  } else {
+    ids.add(id);
+  }
+}
+
 function normalizeVector(value: unknown): ShowcaseVector3 {
   if (
     !Array.isArray(value) ||
@@ -715,6 +1306,19 @@ function isTimelineTick(
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function isUnitControl(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= -1 && value <= 1;
+}
+
+function isUnsigned32(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= 0xffff_ffff
+  );
 }
 
 function isPositiveSafeInteger(value: unknown): value is number {

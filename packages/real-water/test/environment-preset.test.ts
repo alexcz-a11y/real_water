@@ -3,6 +3,8 @@ import {
   ENVIRONMENT_PRESET_SCHEMA,
   ENVIRONMENT_PRESET_VERSION,
   createAuthoredEnvironmentPreset,
+  createBlueNoonEnvironmentPreset,
+  createCalmSunriseEnvironmentPreset,
   createReferenceEnvironmentPreset,
   createStormFrontEnvironmentPreset,
   environmentPresetIdentity,
@@ -12,6 +14,70 @@ import {
 } from "../src/environment-preset.js";
 
 describe("Environment Presets", () => {
+  it("authors distinct complete Calm Sunrise and Blue Noon Environment looks", () => {
+    const sunrise = createCalmSunriseEnvironmentPreset();
+    const noon = createBlueNoonEnvironmentPreset();
+
+    expect(sunrise).toMatchObject({
+      id: "calm-sunrise",
+      lighting: {
+        sunDirectionY: 0.38,
+        sunColorR: 1,
+        sunColorG: 0.72,
+        sunColorB: 0.48,
+        sunIntensity: 0.78,
+        environmentIntensity: 0.68,
+      },
+      weather: {
+        windStrength: 0.18,
+        gustStrength: 0.06,
+        rainIntensity: 0,
+      },
+      atmosphere: {
+        cloudCoverage: 0.12,
+        horizonHaze: 0.38,
+        stormAerosolIntensity: 0,
+        lightningIntensity: 0,
+      },
+    });
+    expect(noon).toMatchObject({
+      id: "blue-noon",
+      lighting: {
+        sunDirectionY: 0.97,
+        sunColorR: 0.82,
+        sunColorG: 0.91,
+        sunColorB: 1,
+        sunIntensity: 1.2,
+        environmentIntensity: 1.15,
+      },
+      weather: {
+        windStrength: 0.55,
+        gustStrength: 0.18,
+        rainIntensity: 0,
+      },
+      atmosphere: {
+        cloudCoverage: 0.08,
+        horizonHaze: 0.12,
+        stormAerosolIntensity: 0,
+        lightningIntensity: 0,
+      },
+    });
+    expect(sunrise.reflection).toEqual(noon.reflection);
+    expect(sunrise.presetHash).toBe(
+      "sha256:6206f0d812c6d9b062034e0920863efb89af195fb35875d4c961b7fa0465b8a2",
+    );
+    expect(noon.presetHash).toBe(
+      "sha256:366f723401eafbc5c087eee97bb6ff6bb264e1c265c04355a82276740ae55dc0",
+    );
+    for (const preset of [sunrise, noon]) {
+      expect(Object.isFrozen(preset)).toBe(true);
+      expect(Object.isFrozen(preset.lighting)).toBe(true);
+      expect(Object.isFrozen(preset.reflection)).toBe(true);
+      expect(Object.isFrozen(preset.weather)).toBe(true);
+      expect(Object.isFrozen(preset.atmosphere)).toBe(true);
+    }
+  });
+
   it("authors the complete Storm Front Environment look", () => {
     const preset = createStormFrontEnvironmentPreset();
 
