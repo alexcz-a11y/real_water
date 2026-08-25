@@ -271,9 +271,19 @@ advance under §11:
   reconstruction needs and no top-down or horizon-level view reveals.
 - **The footing slab's outer edge is chamfered and its underside is flat**, so the structure meets
   the seabed on a definite plane rather than trailing off into it.
-- **Biological growth covers the legs and the footing from the slab upward to roughly deck height,
-  and stops clear of the deck surface.** The deck stays bare concrete, because growth on it would
-  break the continuous receiver surface the asset exists to provide.
+- **Biological growth covers the legs and the footing from the slab upward to a little past half the
+  legs' clear height, and stops well clear of the deck surface.** The deck stays bare concrete,
+  because growth on it would break the continuous receiver surface the asset exists to provide.
+
+  This said "to roughly deck height" until 2026-08-25, which all three approved elevations
+  contradict. Measured on the legs' clear height between the deck soffit and the footing: `#39` read
+  0.523 with a per-column olive-pixel median, and this pack's owner read 0.553 / 0.573 / 0.604 with a
+  different leg-band window. **The magnitudes differ and the reading does not: growth stops a little
+  past halfway.** The half of this sentence that carries the acceptance weight is "stops clear of the
+  deck" — two candidates were rejected for breaking it and all three approved views satisfy it — so
+  the height was a loose upper bound rather than a target. It is now written as what the pixels show,
+  because "roughly deck height" would send the next reconstruction to the deck and every approved
+  view would then disagree with it.
 
 ### Basalt sea stack — 250–300 m
 
