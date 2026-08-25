@@ -293,6 +293,9 @@ test("captures color, depth, normal, and optical intermediates", async ({
     "underwater-light-shafts",
     "underwater-shadow",
     "underwater-caustics",
+    "underwater-particles",
+    "underwater-bubbles",
+    "lens-wetness",
     "planar-color",
     "planar-target-alpha",
     "ssr-hit",
@@ -304,6 +307,13 @@ test("captures color, depth, normal, and optical intermediates", async ({
     "ssr-history-color",
     "ssr-history-frame-weight",
     "ssr-history-input-color",
+    "secondary-particle-contribution",
+    "secondary-particle-overdraw",
+    "hero-breaker-foam",
+    "storm-rain-ripples",
+    "storm-aerosol",
+    "storm-cloud-shadow",
+    "storm-lightning",
   ]);
   expect(
     result.versions.every((version) => version === QA_CAPTURE_VERSION),
