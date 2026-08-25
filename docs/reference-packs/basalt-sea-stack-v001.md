@@ -107,7 +107,20 @@ record of the service's output terms applies to this pack too.
   | w@0.95 / w@0.25 | −4.2 % | +0.9 % | **+32.8 %** | −0.9 % |
 
   Front and back hold to each other within 2.3 % on every pair and the anchor within 4.8 %; the side
-  elevation stands 14–37 % apart on all four. That is the procedure's unambiguous case — a tight
+  elevation stands 14–37 % apart on all four.
+
+  **The ruling was re-tested against the segmentation itself on 2026-08-25**, after `#38` showed that
+  a one-sided luma threshold is blind to anything brighter than the backdrop. Swept across seven
+  settings — one-sided at −8, −12, −20, −30 and −40.8 luma, and two-sided at 20 and 40.8 — the outlier
+  is the side elevation every time, at **+36.8 % to +37.8 %**. Two further settings, two-sided at 8
+  and 12, name the back elevation instead, **and those two are provably contaminated rather than
+  alternative readings**: this backdrop is not flat, varying by 12–13 luma across a single frame, so a
+  threshold below that necessarily classifies backdrop as object. Every threshold above the
+  backdrop's own range agrees.
+
+  Recorded because a ruling that moved when the mask moved is what this record refused to make
+  earlier on the same asset, using three bounding-box measures that disagreed with each other. **The
+  difference now is not confidence — it is that the disagreeing settings can be shown to be broken.** That is the procedure's unambiguous case — a tight
   cluster and one view outside it — so **the side elevation tapers far more sharply than the object
   does, and is evidence for column arrangement only, not for taper.**
 

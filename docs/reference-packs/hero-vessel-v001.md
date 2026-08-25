@@ -134,6 +134,14 @@ denominator here twice over, and these quantities are given as ratios among them
 For reference only, and not to be built from: fender outer edge 2037 px, hull at the lowest
 fender-free station 1812 px.
 
+**A caveat on this pack's segmentation, for anyone re-measuring.** These views defeat a one-sided
+luma threshold worse than any other pack here. On the port and stern elevations the corner patches
+are saturated, so the backdrop estimates as 255.0 and the threshold collapses; on the front elevation
+32 % of the object's area is lost to interior holes and **80 % of what is lost is brighter than the
+backdrop** — the matte white superstructure. The figures above are unaffected because every feature
+they measure is dark against white: the running gear, the fenders, and the hull below the waterline
+stripe. **Anything measured on the white topsides needs a different mask.**
+
 **Two independent self-checks say the reading is sound**: the two propeller discs agree with each
 other to 0.3 %, and the pair is symmetric about the centreline to 0.06 %. Neither was imposed by the
 measurement.
@@ -159,26 +167,48 @@ its ticket requires — it replaces the appearance, not the interface. Measured 
 elevation, the hubs sit further outboard than that.
 
 **The disagreement survives removing every shared denominator.** Expressed as a pure ratio, shaft
-spacing over propeller diameter is **2.6713** in the approved pixels and **2.5089** in the model
-built to the socket — 6.08 % apart. `#37` reached −6.1 % from the opposite direction, converting the
-pixels into metres against its own beam; two routes with nothing in common converged.
+spacing over propeller diameter is **2.6713** in the approved pixels. Against the socket itself
+(∓1.05 m over the 0.845 m diameter the specification gives) the ratio is **2.4852**, so the gap is
+**7.5 %**. `#37`'s built hubs sit at ∓1.06 — one hub radius outboard of the socket — giving 2.5089
+and a 6.08 % gap; both figures are correct for what they describe and they are not the same
+comparison.
 
 So this is not a normalisation artefact, and it forces a choice between two things rather than
 leaving three possibilities open:
 
-- **The socket position is what should move.** Taking the sockets as correct implies a propeller
-  diameter of **0.786 m** from the pixel ratio. Three independent sources say 0.845: Bible §10's
-  text, `#37`'s model built from that text without reference to the pixels, and this pack's own
-  measurement at 0.8453. Those three agree to 0.3 mm.
-- **The stern elevation is stretched athwartships by 6 %.** This cannot be ruled out from inside the
-  image, and it is worth stating why the usual test does not settle it: the two propeller discs agree
-  with each other to 0.3 % and the pair is symmetric to 0.06 %, but **a uniform horizontal scale
-  preserves both of those**. Internal consistency is evidence against a local defect and no evidence
-  at all against a global one.
+- ~~**The stern elevation is stretched athwartships.**~~ **Ruled out, and by arithmetic rather than by
+  measurement.** Both quantities in that ratio are horizontal: the diameter is the bronze silhouette's
+  x-extent and the spacing is the difference between two x-centres. **A uniform horizontal scale
+  multiplies numerator and denominator by the same factor and cancels**, so a stretch cannot produce
+  this gap and cannot be supported by it either.
 
-**Not ruled here.** Moving a socket is an interface renegotiation between `#25` and `#37`, which is
-outside what a pack owner decides. Recorded so that whoever does rule has both branches and the
-number that separates them.
+  Recorded because the route to it is worth more than the result. The internal-consistency figures —
+  the two discs agreeing to 0.3 %, the pair symmetric to 0.06 % — do not settle it, since **a uniform
+  scale preserves both**; internal consistency is evidence against a local defect and none at all
+  against a global one. The obvious next step was to test the disc for roundness, and that test is
+  dirty here: the port propeller's upper blade passes behind the A-bracket, so its bronze bounding
+  box reads 323 × 223 from occlusion, not from any distortion. **Asking whether the hypothesis could
+  leave a trace in the numbers already taken settled it without opening the image at all.**
+
+- **The socket position is what the pixels disagree with.** Not ruled here — see below — and the
+  supporting figure is weaker than this record first claimed. Bible §10 gives 0.845 m, and `#37`'s
+  model agrees with it, but that model was built from the text: **agreement there is transcription,
+  not corroboration.** This pack never converted its own measurement into metres at all; the 0.8453 m
+  once cited here was `#37` converting these pixels against its own beam anchor. **One specification
+  and one reading of it are not three sources**, and the 0.035 % agreement was tight enough that it
+  should have prompted the question of what the two shared.
+
+**Ruled 2026-08-25: the socket does not move, and no pixels change.** Two grounds, either sufficient.
+`#37`'s ticket fixes that it replaces the vessel's appearance and not its interface, and **a scope
+does not widen just because a contradiction turns up inside it**. And the pixels that disagree come
+from the one region of this pack marked as invented — the stern was recovered by canvas extension, so
+**what that tool painted does not gain evidential weight from a later decision that pixels may now be
+corrected**.
+
+So the residue is entirely a matter of what this record says: **the stern elevation places the shaft
+centres about 7.5 % further outboard than the frozen socket, the socket is authoritative for the
+model, and the disagreement sits in an invented region.** Nothing here needs a pixel edited or a view
+regenerated.
 
 **Depth is not comparable yet and no figure is offered.** This record's "below the hull" is a
 threshold — the lowest row where the hull silhouette is still wider than half its maximum — while
