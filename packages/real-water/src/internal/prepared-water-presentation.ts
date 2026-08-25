@@ -835,7 +835,7 @@ export function createPresentationRouteBridge(
     const waterlineCandidate = waterline.preview(
       camera,
       snapshot,
-      snapshotResetReason !== null,
+      snapshotResetReason,
     );
     const resetReason =
       snapshotResetReason ??
