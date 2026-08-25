@@ -158,13 +158,22 @@ A view that breaks any one of these is rejected regardless of how good it looks.
   found to have dropped it, while the stern elevation had it in full and to measurable precision.
   **Write "I did not find it in" and list the views actually opened, never "no view shows it".**
 
-  **What that search could have seen.** State the floor. Inspection here is done on crops downscaled
-  from 4096 px to roughly 1100 px, a factor of 3.7, so **a feature under about 12 px at full
-  resolution occupies under 3 px in what was actually looked at** and a claim resting on eye
-  inspection cannot speak below that. Contrast has a floor too: an 8-luma step was found by
-  measurement and was invisible by eye, and the sea stack's waterline stain was mis-read by eye as
-  level-and-chromatic when it was level-and-achromatic — **a 7-point colour difference that only a
-  measurement resolved.**
+  **What that search could have seen.** Two different limits, and only one of them is a floor.
+
+  A **floor** is where the eye stops receiving. Inspection here is done on crops downscaled from
+  4096 px to roughly 1100 px, a factor of 3.7, so **a feature under about 12 px at full resolution
+  occupies under 3 px in what was actually looked at**, and an 8-luma step went unseen until it was
+  measured. Below a floor you get nothing, and **you can tell that you got nothing** — so declaring
+  it is enough.
+
+  The other limit has no floor and needs a different remedy: **properties the eye reads as a
+  category rather than a quantity, where it does not fail silently but answers confidently and
+  wrong.** The sea stack's waterline was read by eye as level-and-chromatic; measured, it is
+  level-and-achromatic — the level half right, the stain half wrong, on a 7-point colour difference
+  that is not small at 4096 px at all. Hue against luminance is the standing example: **a darkening
+  and a deposit look alike and are different facts about the object.** For anything of that kind,
+  measure instead of looking — a declared floor does not cover it, because the reading arrives with
+  no sign that it is out of range.
 
   Without both, the sentence collapses three different states into one word: searched thoroughly and
   found nothing, never opened that view, opened it but the feature is below what the method can
