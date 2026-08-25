@@ -149,12 +149,26 @@ A view that breaks any one of these is rejected regardless of how good it looks.
 
 - Independently prompted angles. Every derivative view derives from the approved anchor.
 - Silent identity drift accepted because the new image is more attractive.
-- Any claim about geometry on a side no approved view shows. **Before writing that sentence, open
-  every view.** "Absent from the view that should have had it" is not "absent from the pack": the
-  hero vessel's running gear was recorded as shown by nothing after one elevation was found to have
-  dropped it, while the stern elevation had it in full and to measurable precision. **Write "I did
-  not find it in" and name the views actually opened, never "no view shows it".** The two read
-  identically and the second sends a reconstruction off to build from prose.
+- Any claim about geometry on a side no approved view shows. **An absence claim is a universal
+  negative, so it is only ever as good as the search that produced it, and it must carry that search
+  with it.** A search can be weak in exactly two ways, and the claim has to close both:
+
+  **Which views were opened.** "Absent from the view that should have had it" is not "absent from
+  the pack": the hero vessel's running gear was recorded as shown by nothing after one elevation was
+  found to have dropped it, while the stern elevation had it in full and to measurable precision.
+  **Write "I did not find it in" and list the views actually opened, never "no view shows it".**
+
+  **What that search could have seen.** State the floor. Inspection here is done on crops downscaled
+  from 4096 px to roughly 1100 px, a factor of 3.7, so **a feature under about 12 px at full
+  resolution occupies under 3 px in what was actually looked at** and a claim resting on eye
+  inspection cannot speak below that. Contrast has a floor too: an 8-luma step was found by
+  measurement and was invisible by eye, and the sea stack's waterline stain was mis-read by eye as
+  level-and-chromatic when it was level-and-achromatic — **a 7-point colour difference that only a
+  measurement resolved.**
+
+  Without both, the sentence collapses three different states into one word: searched thoroughly and
+  found nothing, never opened that view, opened it but the feature is below what the method can
+  resolve. **The first licenses invention; the other two are homework.**
 - Brands, logos, and generated text or numerals.
 - Downloaded art packs, third-party textures, and any asset whose licence is unverified.
 
@@ -364,8 +378,12 @@ and the wrong size, and pass every other check in this document.**
 
 Run on the marine crate's lid seam as a share of the object's height, the three elevations give
 0.1046 / 0.1029 / 0.1035 — agreeing to 1.6 %, so that part is sound. **The check found nothing, which
-is the result and not a reason to skip it**: it was built because the gap is real, and one part
-passing does not close it.
+is the result and not a reason to skip it**: it was built because the gap is real.
+
+Two things are closed here and they are not the same thing. **The gap in this document's checks is
+closed** — nothing could previously catch a present-but-mis-sized part, and now something can. **The
+question for the crate's lid seam is closed** — measured, sound. **Every other part of every asset
+remains unmeasured**, so the second closure is one part wide and must not be read as the first.
 
 **Before the album opens — what must exist but the anchor cannot show.** List the parts that the
 asset's function implies and the chosen anchor angle hides. On the hero vessel this list would have
