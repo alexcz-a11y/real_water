@@ -273,7 +273,7 @@ Two things the stack's role requires that a three-quarter anchor cannot show, fi
 This is the one asset with no top view: Bible §6 omits it because the stack is a distant silhouette
 and is not reconstructed at part level.
 
-## 11. Three checklists, each covering a different half
+## 11. Three checklists, each covering a different question
 
 Every asset gets all three. Run them at different moments, because they answer different questions:
 two compare images against each other, and the third compares the specification against the images.
