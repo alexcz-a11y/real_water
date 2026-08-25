@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { writeFile } from "node:fs/promises";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import {
   SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
@@ -6,6 +7,7 @@ import {
   WATER_PRESET_VERSION,
   createWaterPreset,
   type ArtisticControls,
+  type HostEnvironmentSnapshot,
   type HostEnvironmentState,
 } from "real-water";
 import type { QaFramePrewarmReceipt } from "../src/qa-frame-driver.js";
@@ -29,6 +31,7 @@ import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
 import {
   attachRegressionAcceptance,
   coreManifestEvidence,
+  regressionAcceptanceArtifacts,
 } from "./regression-acceptance.js";
 import {
   formatGate,
@@ -75,6 +78,33 @@ const TRAA_STABILITY_CONTROLS = {
   underwaterColor: 1,
   underwaterExposure: 1,
 } satisfies ArtisticControls;
+// Quality Profile v15 routes final-color through particles, storm atmosphere,
+// and lens wetness after TRAA. These pure-TRAA fixtures keep those stages at
+// identity so current-color/final-color comparisons still measure TRAA alone.
+const TRAA_ISOLATION_ANCHOR = { x: 50_000, z: 50_000 } as const;
+const TRAA_ISOLATION_ENVIRONMENT = Object.freeze({
+  lighting: REFERENCE_ENVIRONMENT_LIGHTING,
+  weather: Object.freeze({
+    windDirectionX: 1,
+    windDirectionZ: 0,
+    windStrength: 0,
+    gustStrength: 0,
+    rainIntensity: 0,
+  }),
+  atmosphere: Object.freeze({
+    cloudCoverage: 0,
+    cloudShadowStrength: 0,
+    horizonHaze: 0,
+    stormAerosolIntensity: 0,
+    lightningIntensity: 0,
+  }),
+}) satisfies HostEnvironmentSnapshot;
+const TRAA_ISOLATION_EVIDENCE = Object.freeze({
+  schema: "real-water/traa-isolation-fixture" as const,
+  version: 1 as const,
+  interactionAnchor: TRAA_ISOLATION_ANCHOR,
+  environment: TRAA_ISOLATION_ENVIRONMENT,
+});
 const TEMPORAL_QA_HARNESS = {
   schema: QA_HARNESS_SCHEMA,
   version: QA_HARNESS_VERSION,
@@ -620,14 +650,15 @@ test("resets TRAA history on the first present and matches current-color within 
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(
-    async ({ camera, seed }) => {
+    async ({ anchor, camera, environment, seed }) => {
       const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
       await harness.reset({ seed });
+      await harness.updateEnvironment(environment);
       await harness.setCamera(camera, { transition: "continuous" });
-      await harness.updateInteractionAnchor({ x: 50_000, z: 50_000 });
+      await harness.updateInteractionAnchor(anchor);
       await harness.advanceTicks(1);
       const first = await harness.present();
       const firstCaptures = {
@@ -654,7 +685,12 @@ test("resets TRAA history on the first present and matches current-color within 
         },
       };
     },
-    { camera: OBLIQUE_CAMERA, seed: SEED },
+    {
+      anchor: TRAA_ISOLATION_ANCHOR,
+      camera: OBLIQUE_CAMERA,
+      environment: TRAA_ISOLATION_ENVIRONMENT,
+      seed: SEED,
+    },
   );
 
   expect(result.captureNames[0]).toBe("final-color");
@@ -721,12 +757,16 @@ test("gates TRAA warp residuals on a frozen-simulation fast pan", async ({
       frameCount,
       tickCount,
       targetX,
+      environment,
+      anchor,
     }) => {
       const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
       await harness.reset({ seed });
+      await harness.updateEnvironment(environment);
+      await harness.updateInteractionAnchor(anchor);
       await harness.updateArtisticControls(controls, {
         transition: "continuous",
       });
@@ -828,6 +868,8 @@ test("gates TRAA warp residuals on a frozen-simulation fast pan", async ({
       frameCount: FAST_PAN_FRAMES,
       tickCount: FAST_PAN_TICK,
       targetX: FAST_PAN_TARGET_X,
+      environment: TRAA_ISOLATION_ENVIRONMENT,
+      anchor: TRAA_ISOLATION_ANCHOR,
     },
   );
 
@@ -919,6 +961,7 @@ test("gates TRAA warp residuals on a frozen-simulation fast pan", async ({
     controlRevision: first.controlRevision,
     prewarm,
     artisticControls: FAST_PAN_CONTROLS,
+    traaIsolation: TRAA_ISOLATION_EVIDENCE,
     temporalStress: createTemporalStressEvidence({
       id: "fast-pan-frozen-simulation",
       startTick: FAST_PAN_TICK,
@@ -1347,18 +1390,20 @@ test("gates TRAA thin water detail on a jitter-only horizon hold", async ({
     async ({
       camera,
       controls,
-      lighting,
       seed,
       primeCount,
       frameCount,
       tickCount,
+      environment,
+      anchor,
     }) => {
       const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
       await harness.reset({ seed });
-      await harness.updateEnvironmentLighting(lighting);
+      await harness.updateEnvironment(environment);
+      await harness.updateInteractionAnchor(anchor);
       await harness.updateArtisticControls(controls, {
         transition: "continuous",
       });
@@ -1450,11 +1495,12 @@ test("gates TRAA thin water detail on a jitter-only horizon hold", async ({
     {
       camera: HORIZON_CAMERA,
       controls: TRAA_STABILITY_CONTROLS,
-      lighting: REFERENCE_ENVIRONMENT_LIGHTING,
       seed: SEED,
       primeCount: THIN_PRIME_PRESENTATIONS,
       frameCount: THIN_FRAMES,
       tickCount: THIN_TICK,
+      environment: TRAA_ISOLATION_ENVIRONMENT,
+      anchor: TRAA_ISOLATION_ANCHOR,
     },
   );
 
@@ -1519,6 +1565,7 @@ test("gates TRAA thin water detail on a jitter-only horizon hold", async ({
     controlRevision: firstThin.controlRevision,
     prewarm,
     artisticControls: TRAA_STABILITY_CONTROLS,
+    traaIsolation: TRAA_ISOLATION_EVIDENCE,
     temporalStress: createTemporalStressEvidence({
       id: "thin-detail-jitter-only-hold",
       startTick: THIN_TICK,
@@ -1736,7 +1783,7 @@ test("camera-cut resets TRAA history once; a continuous pan does not", async ({
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(
-    async ({ seed, setup, pan, cut }) => {
+    async ({ anchor, cut, environment, pan, seed, setup }) => {
       const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
@@ -1755,6 +1802,8 @@ test("camera-cut resets TRAA history once; a continuous pan does not", async ({
         camera: QaCameraV1,
       ) {
         await qa.reset({ seed: nextSeed });
+        await qa.updateEnvironment(environment);
+        await qa.updateInteractionAnchor(anchor);
         await qa.setCamera(camera, { transition: "continuous" });
         await qa.present();
         let presentation!: QaPresentationReceiptV17;
@@ -1791,6 +1840,8 @@ test("camera-cut resets TRAA history once; a continuous pan does not", async ({
       setup: OBLIQUE_CAMERA,
       pan: PAN_CAMERA,
       cut: CUT_CAMERA,
+      environment: TRAA_ISOLATION_ENVIRONMENT,
+      anchor: TRAA_ISOLATION_ANCHOR,
     },
   );
 
@@ -1829,7 +1880,7 @@ test("origin-shift resets TRAA history once; the same origin does not", async ({
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(
-    async ({ seed, camera }) => {
+    async ({ anchor, camera, environment, seed }) => {
       const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
@@ -1848,6 +1899,8 @@ test("origin-shift resets TRAA history once; the same origin does not", async ({
         nextCamera: QaCameraV1,
       ) {
         await qa.reset({ seed: nextSeed });
+        await qa.updateEnvironment(environment);
+        await qa.updateInteractionAnchor(anchor);
         await qa.setCamera(nextCamera, { transition: "continuous" });
         await qa.present();
         let presentation!: QaPresentationReceiptV17;
@@ -1877,7 +1930,12 @@ test("origin-shift resets TRAA history once; the same origin does not", async ({
         };
       }
     },
-    { seed: SEED, camera: OBLIQUE_CAMERA },
+    {
+      anchor: TRAA_ISOLATION_ANCHOR,
+      camera: OBLIQUE_CAMERA,
+      environment: TRAA_ISOLATION_ENVIRONMENT,
+      seed: SEED,
+    },
   );
 
   expect(result.same.originRevision).toBe(
@@ -1912,7 +1970,7 @@ test("sea-state-cut resets TRAA history once; a continuous control change does n
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(
-    async ({ seed, camera, controls }) => {
+    async ({ anchor, camera, controls, environment, seed }) => {
       const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
@@ -1944,6 +2002,8 @@ test("sea-state-cut resets TRAA history once; a continuous control change does n
         nextCamera: QaCameraV1,
       ) {
         await qa.reset({ seed: nextSeed });
+        await qa.updateEnvironment(environment);
+        await qa.updateInteractionAnchor(anchor);
         await qa.setCamera(nextCamera, { transition: "continuous" });
         await qa.present();
         let presentation!: QaPresentationReceiptV17;
@@ -1973,7 +2033,13 @@ test("sea-state-cut resets TRAA history once; a continuous control change does n
         };
       }
     },
-    { seed: SEED, camera: OBLIQUE_CAMERA, controls: SWELL_CONTROLS },
+    {
+      anchor: TRAA_ISOLATION_ANCHOR,
+      camera: OBLIQUE_CAMERA,
+      controls: SWELL_CONTROLS,
+      environment: TRAA_ISOLATION_ENVIRONMENT,
+      seed: SEED,
+    },
   );
 
   expect(result.continuousReceipt).toMatchObject({
@@ -2167,6 +2233,7 @@ async function attachTemporalStressAcceptance(
     readonly controlRevision: number;
     readonly prewarm: QaFramePrewarmReceipt;
     readonly artisticControls: ArtisticControls;
+    readonly traaIsolation?: typeof TRAA_ISOLATION_EVIDENCE;
     readonly temporalStress: ReturnType<typeof createTemporalStressEvidence>;
   },
 ): Promise<void> {
@@ -2190,6 +2257,19 @@ async function attachTemporalStressAcceptance(
     },
     temporalStress: details.temporalStress,
   });
+  if (details.traaIsolation !== undefined) {
+    const artifacts = regressionAcceptanceArtifacts(testInfo);
+    const path = artifacts.jsonPath.replace(/\.json$/u, ".traa-isolation.json");
+    await writeFile(
+      path,
+      `${JSON.stringify(details.traaIsolation, null, 2)}\n`,
+      "utf8",
+    );
+    await testInfo.attach("traa-isolation-fixture", {
+      path,
+      contentType: "application/json",
+    });
+  }
 }
 
 function assertGlintLightingExceptRadius(
