@@ -889,7 +889,10 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     if (shape.elementType === "float32") {
       const values = decodeFloat32(capture.data);
       expect(values).toHaveLength(pixelCount * shape.components);
-      if (capture.name === "ssr-hit") {
+      if (
+        capture.name === "ssr-hit" ||
+        capture.name === "secondary-particle-overdraw"
+      ) {
         expect(
           values.every((value) => Number.isFinite(value) && value >= 0),
         ).toBe(true);
