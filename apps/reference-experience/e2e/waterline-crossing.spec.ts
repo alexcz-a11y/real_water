@@ -1,5 +1,6 @@
+import { writeFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
-import type { ArtisticControls } from "real-water";
+import type { ArtisticControls, HostEnvironmentSnapshot } from "real-water";
 import {
   QA_CAPTURE_SCHEMA,
   QA_CAPTURE_VERSION,
@@ -9,16 +10,45 @@ import {
   type QaCameraV1,
   type QaHarnessV17,
 } from "../src/qa-harness.js";
+import { REFERENCE_ENVIRONMENT_LIGHTING } from "../src/reference-optical-inputs.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
 import {
   attachRegressionAcceptance,
   coreManifestEvidence,
+  regressionAcceptanceArtifacts,
 } from "./regression-acceptance.js";
 
 const VIEWPORT = { width: 320, height: 180 } as const;
 const SEED = 0x4000_0000;
 const TICK = 30;
+// Quality Profile v15 routes final-color through particles, storm atmosphere,
+// and lens wetness after TRAA. Keep those stages at identity so the crossing
+// reset-frame comparison measures TRAA alone.
+const TRAA_ISOLATION_ANCHOR = { x: 50_000, z: 50_000 } as const;
+const TRAA_ISOLATION_ENVIRONMENT = Object.freeze({
+  lighting: REFERENCE_ENVIRONMENT_LIGHTING,
+  weather: Object.freeze({
+    windDirectionX: 1,
+    windDirectionZ: 0,
+    windStrength: 0,
+    gustStrength: 0,
+    rainIntensity: 0,
+  }),
+  atmosphere: Object.freeze({
+    cloudCoverage: 0,
+    cloudShadowStrength: 0,
+    horizonHaze: 0,
+    stormAerosolIntensity: 0,
+    lightningIntensity: 0,
+  }),
+}) satisfies HostEnvironmentSnapshot;
+const TRAA_ISOLATION_EVIDENCE = Object.freeze({
+  schema: "real-water/traa-isolation-fixture" as const,
+  version: 1 as const,
+  interactionAnchor: TRAA_ISOLATION_ANCHOR,
+  environment: TRAA_ISOLATION_ENVIRONMENT,
+});
 const WATERLINE_CONTROLS = Object.freeze({
   waveStrength: 2,
   swellDrama: 1,
@@ -60,12 +90,14 @@ test("renders a stable non-black underside and bounds crossing rejection", async
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(
-    async ({ controls, seed, tick }) => {
+    async ({ controls, environment, interactionAnchor, seed, tick }) => {
       const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
       await harness.reset({ seed });
+      await harness.updateEnvironment(environment);
+      await harness.updateInteractionAnchor(interactionAnchor);
       await harness.advanceTicks(tick);
       await harness.updateArtisticControls(controls, {
         transition: "continuous",
@@ -127,7 +159,13 @@ test("renders a stable non-black underside and bounds crossing rejection", async
       const stableBelow = await presentAt(-0.45);
       return { query, above, crossing, crossingBelow, below, stableBelow };
     },
-    { controls: WATERLINE_CONTROLS, seed: SEED, tick: TICK },
+    {
+      controls: WATERLINE_CONTROLS,
+      environment: TRAA_ISOLATION_ENVIRONMENT,
+      interactionAnchor: TRAA_ISOLATION_ANCHOR,
+      seed: SEED,
+      tick: TICK,
+    },
   );
 
   expect(result.query.height).toBeGreaterThan(1);
@@ -292,6 +330,20 @@ test("renders a stable non-black underside and bounds crossing rejection", async
       names: QA_HARNESS_CAPTURE_NAMES,
     },
     artisticControls: WATERLINE_CONTROLS,
+  });
+  const artifacts = regressionAcceptanceArtifacts(testInfo);
+  const isolationPath = artifacts.jsonPath.replace(
+    /\.json$/u,
+    ".traa-isolation.json",
+  );
+  await writeFile(
+    isolationPath,
+    `${JSON.stringify(TRAA_ISOLATION_EVIDENCE, null, 2)}\n`,
+    "utf8",
+  );
+  await testInfo.attach("traa-isolation-fixture", {
+    path: isolationPath,
+    contentType: "application/json",
   });
 });
 
