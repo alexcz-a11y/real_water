@@ -134,6 +134,14 @@ denominator here twice over, and these quantities are given as ratios among them
 For reference only, and not to be built from: fender outer edge 2037 px, hull at the lowest
 fender-free station 1812 px.
 
+**A caveat on this pack's segmentation, for anyone re-measuring.** These views defeat a one-sided
+luma threshold worse than any other pack here. On the port and stern elevations the corner patches
+are saturated, so the backdrop estimates as 255.0 and the threshold collapses; on the front elevation
+32 % of the object's area is lost to interior holes and **80 % of what is lost is brighter than the
+backdrop** — the matte white superstructure. The figures above are unaffected because every feature
+they measure is dark against white: the running gear, the fenders, and the hull below the waterline
+stripe. **Anything measured on the white topsides needs a different mask.**
+
 **Two independent self-checks say the reading is sound**: the two propeller discs agree with each
 other to 0.3 %, and the pair is symmetric about the centreline to 0.06 %. Neither was imposed by the
 measurement.
