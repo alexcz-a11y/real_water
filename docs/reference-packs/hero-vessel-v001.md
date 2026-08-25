@@ -135,12 +135,29 @@ For reference only, and not to be built from: fender outer edge 2037 px, hull at
 fender-free station 1812 px.
 
 **A caveat on this pack's segmentation, for anyone re-measuring.** These views defeat a one-sided
-luma threshold worse than any other pack here. On the port and stern elevations the corner patches
-are saturated, so the backdrop estimates as 255.0 and the threshold collapses; on the front elevation
-32 % of the object's area is lost to interior holes and **80 % of what is lost is brighter than the
-backdrop** — the matte white superstructure. The figures above are unaffected because every feature
-they measure is dark against white: the running gear, the fenders, and the hull below the waterline
-stripe. **Anything measured on the white topsides needs a different mask.**
+luma threshold, but not all in the same way, and the two failures need opposite fixes.
+
+**Port and stern elevations: the backdrop estimate is right, the threshold is too wide.** Their
+backdrop is a genuinely flat pure white — sampled down both side margins it reads 255.0 with a range
+of 0.0, so the corner estimate of 255.0 is exact rather than saturated, and **0.00 % of backdrop
+falls below the threshold**. Nothing is lost to a bad estimate. What is lost is everything between
+214.2 and 255: the matte white superstructure sits in that band and is dropped by the 40.8-luma
+threshold width alone. **On these two views a narrower threshold fixes it; a two-sided one does
+nothing, because with the backdrop at the 255 ceiling there is no brighter-than-backdrop category to
+recover.**
+
+**Front elevation: the backdrop estimate itself is wrong.** Its corners read 225.7 while the true
+backdrop down the side margins is 239.0 — the corners are 13 luma darker than the field they are
+meant to represent. The threshold is therefore 13 luma too strict, and 32 % of the object's area is
+lost, **80 % of it brighter than the estimate**. Here the estimate is what needs replacing, not the
+width.
+
+**The figures above are unaffected, and it is worth saying that this is luck rather than judgement.**
+Every feature they measure — the running gear, the fenders, the hull below the waterline stripe — is
+near-black against white, far below any threshold in play, and the propeller measurements used a hue
+mask rather than a luma one. **A one-sided luma threshold happened to be the right instrument for
+them.** Anything measured on the white topsides, or anything whose edge sits in the mid-tones, needs
+a mask chosen rather than inherited.
 
 **Two independent self-checks say the reading is sound**: the two propeller discs agree with each
 other to 0.3 %, and the pair is symmetric about the centreline to 0.06 %. Neither was imposed by the
