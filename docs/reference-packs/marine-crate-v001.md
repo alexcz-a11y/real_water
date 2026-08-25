@@ -59,6 +59,25 @@ Only the five geometric views are Ingredients of `@marine-crate`, per Bible §6.
 - One anchor candidate placed four clamps on a single face and further clamps on the end, which is
   neither the specified layout nor a consistent one.
 
+## A view rejected after approval
+
+Found 2026-08-25 by the `#48` reconstruction running Bible §11's specification-first checklist, and
+verified here at full resolution on the same files.
+
+**The front long-side elevation is missing the bottom graphite hoop.** The back elevation carries
+three horizontal hoops — two upper and one at the very bottom, immediately above the skids. The end
+elevation carries the bottom hoop too. The front elevation's lower half is bare timber down to the
+skids.
+
+**Ruling: the hoop exists and the front elevation is the rejected view.** A band present on an end
+panel and on one long side cannot be anything but continuous around the body; a band absent from one
+long side alone would have to stop and restart at two corners for no reason. Take the banding from
+the back and end elevations.
+
+This is the third defect this pack shipped that no image-versus-image check could have caught, and
+it has the same shape as the hero vessel's: **an absent part starts no dispute.** The front elevation
+agrees with every view that also cannot see the bottom hoop, which is every view except two.
+
 ## Known differences from the specification
 
 - **The clamp bodies drift between the front and back elevations.** Both show two clamps in the

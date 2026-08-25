@@ -22,9 +22,9 @@ Excluded: military, historical sail, science fiction, cartoon, post-apocalyptic,
 
 | Colour | Role | Where it appears |
 |---|---|---|
-| Graphite | Structural and mechanical mass | Deck fittings, machinery, frames, rails, hardware, submerged structure |
+| Graphite | Structural and mechanical mass | Deck fittings, machinery, frames, rails, hardware, submerged structure, crate banding and corner castings |
 | Warm grey | Weathered neutral ground | Hull below the waterline band, concrete, rock, worn composite |
-| Matte white | Primary superstructure | Wheelhouse, cabin sides, buoy upper body, crate banding |
+| Matte white | Primary superstructure | Wheelhouse, cabin sides, buoy upper body |
 | Safety orange | Signal only, never a field colour | Hull stripe, buoy band, grab rails, float collars, markings |
 
 Safety orange is a marking colour. It never becomes the dominant surface of an asset. If an image
@@ -220,13 +220,24 @@ under §11:
   happens to show it. The count was written as four per the original guess and corrected to six from
   the approved anchor, which distributed them that way in every candidate.
 
-Two graphite bands run over the lid and down both long sides, and the eight corners carry graphite
-castings. The crate carries no painted marking of any colour: safety orange appeared on two anchor
+**Two graphite bands cross the lid and stop at its edge**, ending as short stubs on the lid rim —
+they do not turn down the body. The body carries its own **continuous horizontal graphite hoops**,
+including one at the very bottom immediately above the skids. The eight corners carry graphite
+castings. This replaces "and down both long sides", which the approved pixels contradict: the lid
+bands end at the rim in the anchor and on the end elevation, and neither long-side elevation carries
+a vertical strap. **The difference is geometric, not decorative — the banding is not a U-shaped wrap
+over three faces.** The crate carries no painted marking of any colour: safety orange appeared on two anchor
 candidates as stripes and bands, which §2 reserves for markings and signal elements — a cargo crate
 in this world has neither.
 
-Every crate view that includes the underside or an end panel shows these. The three-quarter anchor
-shows the clamps and one becket and hides the skids entirely.
+Every crate view that includes the underside or an end panel shows these.
+
+**Correction 2026-08-25 — the skids are not hidden.** This paragraph used to argue that the skids
+had to be fixed in advance because the anchor could not show them. The anchor shows both skids
+plainly, fork slots and chamfered ends included, and the end elevation photographs them square-on,
+so their depth is measurable rather than inferred. The parts above stay fixed here — that was the
+right call for the becket depth and the seam height — but **the skid entry is now supported by
+pixels, and its confidence goes up rather than staying at "specified, unseen".**
 
 ### Underwater structure — 8 m
 
