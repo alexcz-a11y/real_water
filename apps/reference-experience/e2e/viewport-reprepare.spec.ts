@@ -2,8 +2,10 @@ import { expect, test } from "@playwright/test";
 import {
   createMinimalWaterPrewarmManifest,
   createMinimalWaterQualityProfile,
+  type HostEnvironmentSnapshot,
 } from "real-water";
 import type { QaCameraV1, QaHarnessV17 } from "../src/qa-harness.js";
+import { REFERENCE_ENVIRONMENT_LIGHTING } from "../src/reference-optical-inputs.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
 
@@ -20,6 +22,27 @@ const CAMERA = {
   far: 100,
 } satisfies QaCameraV1;
 const SEED = 0x4000_0000;
+// Quality Profile v15 routes final-color through particles, storm atmosphere,
+// and lens wetness after TRAA. Keep those stages at identity on both sides of
+// the viewport reprepare so the reset-frame comparison measures TRAA alone.
+const TRAA_ISOLATION_ANCHOR = { x: 50_000, z: 50_000 } as const;
+const TRAA_ISOLATION_ENVIRONMENT = Object.freeze({
+  lighting: REFERENCE_ENVIRONMENT_LIGHTING,
+  weather: Object.freeze({
+    windDirectionX: 1,
+    windDirectionZ: 0,
+    windStrength: 0,
+    gustStrength: 0,
+    rainIntensity: 0,
+  }),
+  atmosphere: Object.freeze({
+    cloudCoverage: 0,
+    cloudShadowStrength: 0,
+    horizonHaze: 0,
+    stormAerosolIntensity: 0,
+    lightningIntensity: 0,
+  }),
+}) satisfies HostEnvironmentSnapshot;
 
 function expectedSsrCapabilities(width: number, height: number) {
   return {
@@ -85,12 +108,14 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const before = await page.evaluate(
-    async ({ camera, seed }) => {
+    async ({ anchor, camera, environment, seed }) => {
       const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
       await harness.reset({ seed });
+      await harness.updateEnvironment(environment);
+      await harness.updateInteractionAnchor(anchor);
       await harness.setCamera(camera, { transition: "continuous" });
       const presented = await harness.present();
       const planarColor = await harness.capture("planar-color");
@@ -142,7 +167,12 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
         underwater: underwater.data,
       };
     },
-    { camera: CAMERA, seed: SEED },
+    {
+      anchor: TRAA_ISOLATION_ANCHOR,
+      camera: CAMERA,
+      environment: TRAA_ISOLATION_ENVIRONMENT,
+      seed: SEED,
+    },
   );
 
   expect(before.snapshot.state).toBe("ready");
@@ -247,13 +277,15 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
   await expect(page.getByTestId("loading-experience")).toHaveCount(0);
 
   const after = await page.evaluate(
-    async ({ camera, seed }) => {
+    async ({ anchor, camera, environment, seed }) => {
       const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
       const snapshot = harness.snapshot();
       await harness.reset({ seed });
+      await harness.updateEnvironment(environment);
+      await harness.updateInteractionAnchor(anchor);
       await harness.setCamera(camera, { transition: "continuous" });
       const presented = await harness.present();
       const current = await harness.capture("current-color");
@@ -342,7 +374,12 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
         repeatedUnderwaterHeight: repeatedUnderwater.height,
       };
     },
-    { camera: CAMERA, seed: SEED },
+    {
+      anchor: TRAA_ISOLATION_ANCHOR,
+      camera: CAMERA,
+      environment: TRAA_ISOLATION_ENVIRONMENT,
+      seed: SEED,
+    },
   );
 
   expect(after.snapshot.generation).toBe(before.snapshot.generation + 1);
