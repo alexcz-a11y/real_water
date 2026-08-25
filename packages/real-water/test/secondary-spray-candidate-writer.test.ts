@@ -204,6 +204,77 @@ describe("secondary spray candidate writer", () => {
     expect(reverse.colors).toEqual(forward.colors);
   });
 
+  it("rebases absolute interaction sources without changing particle identity or pressure", () => {
+    const originX = 32;
+    const originZ = -16;
+    const equivalentBatches = [
+      [
+        writeBatch([], {
+          capacity: 4,
+          count: 4,
+          anchorX: 2,
+          anchorZ: -1,
+        }),
+        writeBatch([], {
+          capacity: 4,
+          count: 4,
+          anchorX: 2,
+          anchorZ: -1,
+          originX,
+          originZ,
+        }),
+      ],
+      [
+        writeBatch([impact(0x1_0000_0251, 3)], {
+          capacity: 4,
+          count: 4,
+        }),
+        writeBatch([impact(0x1_0000_0251, 3)], {
+          capacity: 4,
+          count: 4,
+          originX,
+          originZ,
+        }),
+      ],
+      [
+        writeBatch([hero(0x1_0000_0252, -2, 1 / 4_096)], {
+          capacity: 1,
+          count: 0,
+        }),
+        writeBatch([hero(0x1_0000_0252, -2, 1 / 4_096)], {
+          capacity: 1,
+          count: 0,
+          originX,
+          originZ,
+        }),
+      ],
+      [
+        writeBatch([], {
+          capacity: 2,
+          count: 0,
+          stormFront: stormFrame({
+            rainSprayStrength: 1 / MAX_SECONDARY_RAIN_SPRAY_CANDIDATES,
+            stormAerosolStrength: 1 / MAX_SECONDARY_STORM_AEROSOL_CANDIDATES,
+          }),
+        }),
+        writeBatch([], {
+          capacity: 2,
+          count: 0,
+          originX,
+          originZ,
+          stormFront: stormFrame({
+            rainSprayStrength: 1 / MAX_SECONDARY_RAIN_SPRAY_CANDIDATES,
+            stormAerosolStrength: 1 / MAX_SECONDARY_STORM_AEROSOL_CANDIDATES,
+          }),
+        }),
+      ],
+    ] as const;
+
+    for (const [baseline, shifted] of equivalentBatches) {
+      expectOriginRebasedBatch(shifted, baseline, originX, originZ);
+    }
+  });
+
   it("emits Hero spray only inside its authored tick interval", () => {
     const source = hero(0x1_0000_0301, 0, 1 / 64, 80, 10);
     const before = writeBatch([source], { capacity: 64, count: 0, tick: 79 });
@@ -277,6 +348,10 @@ function writeBatch(
     count?: number;
     tick?: number;
     revision?: number;
+    originX?: number;
+    originZ?: number;
+    anchorX?: number;
+    anchorZ?: number;
     stormFront?: StormFrontFrame;
   }> = {},
 ) {
@@ -293,19 +368,21 @@ function writeBatch(
     sizes: new Float32Array(capacity),
     colors: new Float32Array(capacity * 4),
   };
+  const originX = options.originX ?? 0;
+  const originZ = options.originZ ?? 0;
   const camera = new PerspectiveCamera(70, 16 / 9, 0.1, 200);
-  camera.position.set(0, 2, 8);
-  camera.lookAt(0, 0, 0);
+  camera.position.set(-originX, 2, 8 - originZ);
+  camera.lookAt(-originX, 0, -originZ);
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld(true);
   const stableKeyWriter =
     createSecondaryParticleStableKeyWriter("spray-droplet-mist");
   const writtenCount = writeSecondarySprayCandidates(
-    snapshot(options.tick),
+    snapshot(options.tick, originX, originZ),
     {
       revision: options.revision ?? 0,
-      anchorX: 0,
-      anchorZ: 0,
+      anchorX: options.anchorX ?? 0,
+      anchorZ: options.anchorZ ?? 0,
       impacts,
     },
     options.stormFront ?? stormFrame(),
@@ -337,6 +414,35 @@ function writeBatch(
     sizes: storage.sizes,
     colors: storage.colors,
   };
+}
+
+function expectOriginRebasedBatch(
+  shifted: ReturnType<typeof writeBatch>,
+  baseline: ReturnType<typeof writeBatch>,
+  originX: number,
+  originZ: number,
+): void {
+  expect(shifted.count).toBe(baseline.count);
+  expect(shifted.high).toEqual(baseline.high);
+  expect(shifted.low).toEqual(baseline.low);
+  expect(shifted.contributions).toEqual(baseline.contributions);
+  expect(shifted.payloads).toEqual(baseline.payloads);
+  expect(shifted.sizes).toEqual(baseline.sizes);
+  expect(shifted.colors).toEqual(baseline.colors);
+  for (let ordinal = 0; ordinal < baseline.count; ordinal += 1) {
+    const positionOffset = ordinal * 3;
+    expect(shifted.positions[positionOffset]).toBeCloseTo(
+      (baseline.positions[positionOffset] ?? 0) - originX,
+      5,
+    );
+    expect(shifted.positions[positionOffset + 1]).toBe(
+      baseline.positions[positionOffset + 1],
+    );
+    expect(shifted.positions[positionOffset + 2]).toBeCloseTo(
+      (baseline.positions[positionOffset + 2] ?? 0) - originZ,
+      5,
+    );
+  }
 }
 
 function mean(values: Float32Array, start: number, end: number): number {
@@ -458,14 +564,18 @@ function hero(
   });
 }
 
-function snapshot(tick = 73): OpenWaterRuntimeSnapshot {
+function snapshot(
+  tick = 73,
+  originX = 0,
+  originZ = 0,
+): OpenWaterRuntimeSnapshot {
   return Object.freeze({
     seed: 0x1020_3040,
     tick,
     timeSeconds: tick / 60,
     paused: false,
-    originX: 0,
-    originZ: 0,
+    originX,
+    originZ,
     seaLevelMetres: 0,
     simulationResetRevision: 0,
     artisticControls: createWaterPreset("swell").artisticControls,

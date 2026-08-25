@@ -1,6 +1,7 @@
-// This proves only that every capture-count site states the same number. It
-// cannot prove that the number is correct: a wrong count changed consistently
-// everywhere passes because DIAGNOSTICS_CAPTURE_NAMES is the source of truth.
+// Count sites prove only that every repeated count agrees with the registry.
+// Exact-name sites additionally prove that the five complete repeated lists
+// preserve every registry member in registry order. Neither check can prove
+// that DIAGNOSTICS_CAPTURE_NAMES itself is the correct product contract.
 
 import { readFile } from "node:fs/promises";
 
@@ -173,6 +174,46 @@ const WIRING_SITES = [
   ],
 ];
 
+// These are the complete literal repetitions of DIAGNOSTICS_CAPTURE_NAMES.
+// Partial lists and generated documentation are intentionally excluded. The
+// selectors describe the surrounding expectation, so line shifts and other
+// arrays in the same test do not change which site is checked.
+const EXACT_NAME_SITES = [
+  {
+    path: "packages/real-water/test/diagnostics.test.ts",
+    label: "diagnostics capture-name contract",
+    matcher: "toEqual",
+    subjectPath: "DIAGNOSTICS_CAPTURE_NAMES",
+  },
+  {
+    path: "apps/reference-experience/e2e/qa-harness.spec.ts",
+    label: "QA Harness contract capture names",
+    matcher: "toEqual",
+    subjectPath: "contract",
+    property: "captureNames",
+  },
+  {
+    path: "apps/reference-experience/e2e/qa-harness.spec.ts",
+    label: "QA presentation capture names",
+    matcher: "toMatchObject",
+    subjectPath: "result.first.presentation",
+    property: "captureNames",
+  },
+  {
+    path: "apps/reference-experience/e2e/qa-harness.spec.ts",
+    label: "QA captured output names",
+    matcher: "toEqual",
+    subjectCall: "result.first.captures.map",
+    mappedProperty: "name",
+  },
+  {
+    path: "apps/reference-experience/e2e/optical-path.spec.ts",
+    label: "optical captured output names",
+    matcher: "toEqual",
+    subjectPath: "result.names",
+  },
+];
+
 const SMALL_WORDS = [
   "zero",
   "one",
@@ -226,8 +267,10 @@ for (const [path, reason] of DO_NOT_TOUCH) {
 
 const { default: ts } = await import("typescript");
 const cache = new Map();
+const sourceFileCache = new Map();
 const failures = [];
-const truth = await readDiagnosticsCaptureCount();
+const truthNames = await readDiagnosticsCaptureNames();
+const truth = truthNames.length;
 const truthWord = integerToEnglish(truth);
 
 for (const [path, label, pattern] of NUMERIC_SITES) {
@@ -315,20 +358,49 @@ for (const [path, label, pattern] of WIRING_SITES) {
   }
 }
 
+for (const site of EXACT_NAME_SITES) {
+  const matches = await exactNameExpectations(site);
+  if (matches.length !== 1) {
+    failures.push(cardinalityFailure(site.path, site.label, matches.length));
+    continue;
+  }
+  const result = namesFromExpectation(matches[0], site);
+  if (result.failure !== undefined) {
+    failures.push(`${describe(site.path, site.label)} ${result.failure}`);
+    continue;
+  }
+  if (result.names.length !== truthNames.length) {
+    failures.push(
+      `${describe(site.path, site.label)} has ${result.names.length} names; DIAGNOSTICS_CAPTURE_NAMES has ${truthNames.length}.`,
+    );
+    continue;
+  }
+  const mismatch = result.names.findIndex(
+    (name, index) => name !== truthNames[index],
+  );
+  if (mismatch !== -1) {
+    failures.push(
+      `${describe(site.path, site.label)} has ${JSON.stringify(result.names[mismatch])} at index ${mismatch}; DIAGNOSTICS_CAPTURE_NAMES has ${JSON.stringify(truthNames[mismatch])}.`,
+    );
+  }
+}
+
 const countSiteCount =
   NUMERIC_SITES.length + PROSE_SITES.length + MANIFEST_LABEL_SITES.length;
 console.log(
   `Capture-count source: ${DIAGNOSTICS_PATH} DIAGNOSTICS_CAPTURE_NAMES has ${truth} (${JSON.stringify(truthWord)}).`,
 );
 console.log(
-  `Checked ${countSiteCount} count sites and ${WIRING_SITES.length} capture-name wiring anchors.`,
+  `Checked ${countSiteCount} count sites, ${EXACT_NAME_SITES.length} exact-name sites, and ${WIRING_SITES.length} capture-name wiring anchors.`,
 );
 
 if (failures.length === 0) {
-  console.log("Capture-count sites agree with DIAGNOSTICS_CAPTURE_NAMES.");
+  console.log(
+    "Capture counts, exact-name lists, and wiring agree with DIAGNOSTICS_CAPTURE_NAMES.",
+  );
 } else {
   console.error(
-    `Capture-count site check failed with ${failures.length} problem${failures.length === 1 ? "" : "s"}:`,
+    `Capture consistency check failed with ${failures.length} problem${failures.length === 1 ? "" : "s"}:`,
   );
   for (const failure of failures) {
     console.error(`  ${failure}`);
@@ -336,17 +408,14 @@ if (failures.length === 0) {
   process.exitCode = 1;
 }
 
-async function readDiagnosticsCaptureCount() {
-  const body = await source(DIAGNOSTICS_PATH);
-  const file = ts.createSourceFile(
-    DIAGNOSTICS_PATH,
-    body,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
+async function readDiagnosticsCaptureNames() {
+  const declarations = collectNodes(
+    await sourceFile(DIAGNOSTICS_PATH),
+    (node) =>
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === "DIAGNOSTICS_CAPTURE_NAMES",
   );
-  const declarations = [];
-  visit(file);
   if (declarations.length !== 1) {
     throw new Error(
       `${DIAGNOSTICS_PATH}: found ${declarations.length} DIAGNOSTICS_CAPTURE_NAMES declarations; expected exactly one.`,
@@ -382,18 +451,163 @@ async function readDiagnosticsCaptureCount() {
       `${DIAGNOSTICS_PATH}: DIAGNOSTICS_CAPTURE_NAMES must be a non-empty literal string array.`,
     );
   }
-  return array.elements.length;
+  return array.elements.map((element) => element.text);
+}
+
+async function exactNameExpectations(site) {
+  return collectNodes(await sourceFile(site.path), (node) =>
+    isSelectedExpectation(node, site),
+  );
+}
+
+async function sourceFile(path) {
+  if (!sourceFileCache.has(path)) {
+    sourceFileCache.set(
+      path,
+      ts.createSourceFile(
+        path,
+        await source(path),
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TS,
+      ),
+    );
+  }
+  return sourceFileCache.get(path);
+}
+
+function collectNodes(root, predicate) {
+  const matches = [];
+  visit(root);
+  return matches;
 
   function visit(node) {
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === "DIAGNOSTICS_CAPTURE_NAMES"
-    ) {
-      declarations.push(node);
+    if (predicate(node)) {
+      matches.push(node);
     }
     ts.forEachChild(node, visit);
   }
+}
+
+function isSelectedExpectation(node, site) {
+  if (
+    !ts.isCallExpression(node) ||
+    !ts.isPropertyAccessExpression(node.expression) ||
+    node.expression.name.text !== site.matcher
+  ) {
+    return false;
+  }
+  const expectCall = unwrap(node.expression.expression);
+  if (
+    expectCall === undefined ||
+    !ts.isCallExpression(expectCall) ||
+    !ts.isIdentifier(expectCall.expression) ||
+    expectCall.expression.text !== "expect" ||
+    expectCall.arguments.length !== 1
+  ) {
+    return false;
+  }
+  const subject = unwrap(expectCall.arguments[0]);
+  if (site.subjectPath !== undefined) {
+    return propertyPath(subject) === site.subjectPath;
+  }
+  if (
+    subject === undefined ||
+    !ts.isCallExpression(subject) ||
+    propertyPath(unwrap(subject.expression)) !== site.subjectCall
+  ) {
+    return false;
+  }
+  return (
+    site.mappedProperty === undefined ||
+    mapsDestructuredProperty(subject, site.mappedProperty)
+  );
+}
+
+function mapsDestructuredProperty(call, name) {
+  if (call.arguments.length !== 1 || !ts.isArrowFunction(call.arguments[0])) {
+    return false;
+  }
+  const callback = call.arguments[0];
+  if (
+    callback.parameters.length !== 1 ||
+    !ts.isObjectBindingPattern(callback.parameters[0].name) ||
+    callback.parameters[0].name.elements.length !== 1
+  ) {
+    return false;
+  }
+  const binding = callback.parameters[0].name.elements[0];
+  return (
+    binding.propertyName === undefined &&
+    ts.isIdentifier(binding.name) &&
+    binding.name.text === name &&
+    ts.isIdentifier(callback.body) &&
+    callback.body.text === name
+  );
+}
+
+function namesFromExpectation(expectation, site) {
+  if (expectation.arguments.length !== 1) {
+    return { failure: "must pass exactly one expected value to the matcher." };
+  }
+  let value = unwrap(expectation.arguments[0]);
+  if (site.property !== undefined) {
+    if (value === undefined || !ts.isObjectLiteralExpression(value)) {
+      return {
+        failure: `must use an object literal containing ${site.property}.`,
+      };
+    }
+    const properties = value.properties.filter(
+      (property) =>
+        ts.isPropertyAssignment(property) &&
+        propertyName(property.name) === site.property,
+    );
+    if (properties.length !== 1) {
+      return {
+        failure: `contains ${properties.length} ${site.property} properties; expected exactly one.`,
+      };
+    }
+    value = unwrap(properties[0].initializer);
+  }
+  if (value === undefined || !ts.isArrayLiteralExpression(value)) {
+    return { failure: "must use a literal capture-name array." };
+  }
+  if (
+    value.elements.some(
+      (element) =>
+        !ts.isStringLiteral(element) &&
+        !ts.isNoSubstitutionTemplateLiteral(element),
+    )
+  ) {
+    return { failure: "must contain only literal strings." };
+  }
+  return { names: value.elements.map((element) => element.text) };
+}
+
+function propertyPath(expression) {
+  const value = unwrap(expression);
+  if (value === undefined) {
+    return undefined;
+  }
+  if (ts.isIdentifier(value)) {
+    return value.text;
+  }
+  if (!ts.isPropertyAccessExpression(value)) {
+    return undefined;
+  }
+  const prefix = propertyPath(value.expression);
+  return prefix === undefined ? undefined : `${prefix}.${value.name.text}`;
+}
+
+function propertyName(name) {
+  if (
+    ts.isIdentifier(name) ||
+    ts.isStringLiteral(name) ||
+    ts.isNoSubstitutionTemplateLiteral(name)
+  ) {
+    return name.text;
+  }
+  return undefined;
 }
 
 function unwrap(expression) {
