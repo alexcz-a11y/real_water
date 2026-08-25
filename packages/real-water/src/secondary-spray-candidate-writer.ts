@@ -224,8 +224,8 @@ export function writeSecondarySprayCandidates(
     const sourceRadius = impact?.radius ?? 24;
     const radialDistance =
       Math.sqrt(randomB) * sourceRadius * (focal ? 0.35 : 1);
-    const sourceX = impact?.x ?? interaction.anchorX;
-    const sourceZ = impact?.z ?? interaction.anchorZ;
+    const sourceX = (impact?.x ?? interaction.anchorX) - snapshot.originX;
+    const sourceZ = (impact?.z ?? interaction.anchorZ) - snapshot.originZ;
     const directionX = impact?.directionX ?? Math.cos(angle);
     const directionZ = impact?.directionZ ?? Math.sin(angle);
     const drift = (0.25 + randomC * 1.5) * ageSeconds;
@@ -549,9 +549,15 @@ export function writeSecondarySprayCandidates(
       const lateral = hero.radius * (randomB * 2 - 1) * 0.5;
       const drift = (0.4 + randomC * 1.6) * ageSeconds;
       const x =
-        hero.x + hero.directionX * (along + drift) - hero.directionZ * lateral;
+        hero.x -
+        snapshot.originX +
+        hero.directionX * (along + drift) -
+        hero.directionZ * lateral;
       const z =
-        hero.z + hero.directionZ * (along + drift) + hero.directionX * lateral;
+        hero.z -
+        snapshot.originZ +
+        hero.directionZ * (along + drift) +
+        hero.directionX * lateral;
       const kind = mix32(keyHigh ^ sourceLocalOrdinal) % 3;
       const initialVerticalSpeed =
         kind === 0
