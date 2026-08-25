@@ -118,9 +118,17 @@ record of the service's output terms applies to this pack too.
   threshold below that necessarily classifies backdrop as object. Every threshold above the
   backdrop's own range agrees.
 
+  Re-tested again the same day against the **backdrop estimate** rather than the threshold, after a
+  scan of all forty-four approved images found that corner patches are systematically darker than the
+  side margins they stand in for — on this asset's side elevation by 6 luma. Re-deriving the backdrop
+  from the side margins instead moves the side elevation from **+36.89 % to +36.65 %**, and every
+  other view by less than 0.1 percentage point. **The estimate defect is real and this ruling does not
+  depend on it.**
+
   Recorded because a ruling that moved when the mask moved is what this record refused to make
   earlier on the same asset, using three bounding-box measures that disagreed with each other. **The
-  difference now is not confidence — it is that the disagreeing settings can be shown to be broken.** That is the procedure's unambiguous case — a tight
+  difference now is not confidence — it is that the disagreeing settings can be shown to be broken,
+  and that the two known instrument defects were each tested against rather than assumed harmless.** That is the procedure's unambiguous case — a tight
   cluster and one view outside it — so **the side elevation tapers far more sharply than the object
   does, and is evidence for column arrangement only, not for taper.**
 
