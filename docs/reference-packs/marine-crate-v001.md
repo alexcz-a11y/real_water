@@ -59,6 +59,28 @@ Only the five geometric views are Ingredients of `@marine-crate`, per Bible §6.
 - One anchor candidate placed four clamps on a single face and further clamps on the end, which is
   neither the specified layout nor a consistent one.
 
+## The hinge and the catch, ruled in against two elevations
+
+Found 2026-08-25 by the `#48` reconstruction while checking an unrelated structural relationship —
+**not by looking for them.** The top view carries a graphite fitting at the midpoint of each long
+side, and the two are different: round knuckles on one, a raised bar with side ears on the other. A
+hinge and a catch. Both long-side elevations show plain timber at the same place.
+
+**Ruled in.** The reasoning is in Bible §10; the part worth keeping here is why the count of views
+did not decide it. **The two elevations are not two witnesses about the same thing** — an
+orthographic elevation puts a near-face rim fitting on the silhouette and hides a far-face one
+entirely, so each speaks only for its own face. One view against one, twice.
+
+Both elevations were checked at full resolution before ruling: the seam is unobstructed and the wood
+grain is fully resolved, so a knuckle would have been unmistakable. **Their silence is a real absence,
+which is what makes the tie a real tie rather than one side being under-evidenced.**
+
+The reconstruction's own note on how it nearly went the other way is worth repeating, because it is a
+failure mode of records rather than of images: it had already logged the hinge as hardware that
+**"never appears in any view"** and therefore had to be invented. It was in the top view the whole
+time. **"The reference does not show it" and "I did not find it in the reference" read identically in
+a record, and the first sends the reader off to invent something.**
+
 ## A view rejected after approval
 
 Found 2026-08-25 by the `#48` reconstruction running Bible §11's specification-first checklist, and

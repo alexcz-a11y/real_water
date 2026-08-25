@@ -229,13 +229,40 @@ under §11:
   happens to show it. The count was written as four per the original guess and corrected to six from
   the approved anchor, which distributed them that way in every candidate.
 
-**Two graphite bands cross the lid and stop at its edge**, ending as short stubs on the lid rim —
-they do not turn down the body. The body carries its own **continuous horizontal graphite hoops**,
-including one at the very bottom immediately above the skids. The eight corners carry graphite
-castings. This replaces "and down both long sides", which the approved pixels contradict: the lid
-bands end at the rim in the anchor and on the end elevation, and neither long-side elevation carries
-a vertical strap. **The difference is geometric, not decorative — the banding is not a U-shaped wrap
-over three faces.** The crate carries no painted marking of any colour: safety orange appeared on two anchor
+The lid's hardware is **one scheme running round all four sides of the rim**, not two unrelated
+systems, and every piece of it sits at the same quarter positions:
+
+- **Two graphite bands cross the lid across its width, at 0.236 and 0.766 of its length**, ending in
+  short stubs at the lid rim. They do not turn down the body. (Measured twice independently on the
+  top view: 0.2359 / 0.7643 and 0.2357 / 0.7695.)
+- **Each band's stub is the upper hook of an over-centre clamp.** The bands and the clamps are one
+  assembly seen from two sides, which is why 2 bands × 2 ends = 4 long-side clamps, plus 1 on each
+  end panel, gives the **6** that section 10 already recorded from counting the anchor. The counted
+  number and the derived number agree, which is evidence rather than circular reasoning because the
+  6 was counted before the relationship was known.
+- **Each end panel carries two short graphite tongues on the lid rim, at 0.239 and 0.751 of its
+  width.** The same quarter-point layout on the other axis. They stay on the rim: a row scan of the
+  top view finds no lengthwise band at all, and a lengthwise band would necessarily show on the lid.
+- **One central hinge at the midpoint of one long side**, two round knuckles.
+- **One central catch at the midpoint of the opposite long side**, a central raised bar with side ears.
+
+The hinge and the catch appear in the top view and in neither long-side elevation. **They are fixed
+here anyway**, on two independent grounds. The functional one: this ticket requires a lid that opens,
+and a lid that meets the body on a seam and is held by clamps must be hinged or it is a loose board.
+The evidential one, which needs no functional argument at all: **the two fittings are different from
+each other and functionally complementary** — a hinge on one side, a catch on the other — and a
+generation artefact would have to invent two co-operating pieces on opposite faces to produce that.
+
+**The two elevations are not two witnesses here.** In an orthographic elevation a near-face rim
+fitting stands out on the silhouette and a far-face one is invisible, so each elevation speaks only
+for its own face. It is one view against one, twice, with no majority either time — and both
+elevations were checked at full resolution: the seam is unobstructed and the wood grain is fully
+resolved, so their silence is a real absence rather than a limit of the image.
+
+This replaces "and down both long sides", which the approved pixels contradict: the lid bands end at
+the rim in the anchor and on the end elevation, and neither long-side elevation carries a vertical
+strap. **The difference is geometric, not decorative — the banding is not a U-shaped wrap over three
+faces.** The crate carries no painted marking of any colour: safety orange appeared on two anchor
 candidates as stripes and bands, which §2 reserves for markings and signal elements — a cargo crate
 in this world has neither.
 
