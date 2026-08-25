@@ -180,7 +180,7 @@ The approved anchor introduced the lantern, which the specification had not name
 navigation buoy without a light is not one. Fixed here so that the eight derivative views inherit it
 rather than each inventing their own.
 
-Three parts the buoy's function requires and no floating view can show. Fixed in advance under §11
+The parts the buoy's function requires and no floating view can show. Fixed in advance under §11
 so that generation does not get to invent them:
 
 - **A graphite ballast keel hangs beneath the hull on a short central shaft, its mass concentrated
@@ -198,8 +198,17 @@ so that generation does not get to invent them:
 - **A band of dark green-brown biological growth covers the hull from the waterline downward**,
   ending where the ballast shaft begins.
 
-Every buoy view that includes the underwater body shows all three. The floating anchor view shows
+Every buoy view that includes the underwater body shows all of them. The floating anchor view shows
 none of them, which is why they are written here rather than discovered mid-pack.
+
+This paragraph said "Three parts" and "all three" above four bullets until 2026-08-25. It was written
+with three and broke when a fourth was inserted between them. **The count was correct when written;
+what failed was an edit that changed one of two places three lines apart.** Removing the count is not
+a style rule — it decouples those two places so that inserting an item is a single edit again.
+
+Two modelling sessions read this paragraph independently and both stopped at the third bullet. The
+number does not merely omit the fourth item: it hands the reader a completion signal at the third,
+which is a different defect from missing information and is not fixed by reading more carefully.
 
 ### Marine crate — 1.2 m
 
