@@ -2,9 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 import {
   readHostPresentationBinding,
   readHostPresentationRoute,
+  type HostPresentationRoute,
   type HostPresentedFrame,
 } from "real-water";
 import {
+  type DiagnosticsCapture,
+  type DiagnosticsCaptureName,
+  type HostDiagnosticsPresentedFrame,
+  type HostDiagnosticsPresentRequest,
+  type HostDiagnosticsRoute,
+} from "real-water/diagnostics";
+import {
+  REFERENCE_ENGINEERING_DIAGNOSTICS_INTERVAL_MS,
   REFERENCE_PRESENTATION_INTERVAL_MS,
   createReferenceHostPresentationController,
 } from "./reference-presentation-controller.js";
@@ -39,6 +48,89 @@ function createScheduler() {
   });
   const cancelFrame = vi.fn();
   return { callbacks, scheduleFrame, cancelFrame };
+}
+
+function createDiagnosticsCapture(
+  name: DiagnosticsCaptureName,
+): DiagnosticsCapture {
+  if (name !== "final-color") {
+    throw new Error(`Unsupported test diagnostics capture: ${name}`);
+  }
+  return {
+    name,
+    format: "rgba8unorm-srgb",
+    width: 1,
+    height: 1,
+    origin: "top-left",
+    data: new Uint8Array([0, 0, 0, 255]),
+  };
+}
+
+function createDiagnosticsFrame(
+  request: HostDiagnosticsPresentRequest,
+  presentationId = 1,
+): HostDiagnosticsPresentedFrame {
+  return {
+    ...createReceipt(presentationId),
+    waterline: {
+      classification: "above",
+      seaLevelMetres: 0,
+      surfaceHeightMetres: 0,
+      signedDistanceMetres: 1,
+      submersion: 0,
+      transitionRevision: 0,
+      lensWetnessImpulse: false,
+    },
+    secondaryParticles: {
+      capacity: 131_072,
+      maximumCandidateCount: 0,
+      requested: 0,
+      retained: 0,
+      thinned: 0,
+      invisibleOrOccluded: 0,
+      reentryCooldown: 0,
+      lifecycleReentryForbidden: 0,
+      retainedByFloor: 0,
+      retainedByGlobalCompetition: 0,
+      retainedIncumbents: 0,
+      requestedAboveSoftCeiling: 0,
+      overSubscribed: false,
+      contributionMinimumQ16: null,
+      contributionMaximumQ16: null,
+      dropReasons: {
+        invisibleOrOccluded: 0,
+        globalContributionPressure: 0,
+        reentryCooldown: 0,
+        lifecycleReentryForbidden: 0,
+      },
+      consumers: [],
+    },
+    outputs: request.outputs.map(createDiagnosticsCapture),
+    compileCount: 2,
+    probeCount: 3,
+    diagnosticReadbackCount: request.outputs.length,
+    sceneRenderCount: presentationId,
+    width: 1,
+    height: 1,
+  };
+}
+
+function createDiagnosticsCapableRoute(
+  present: HostPresentationRoute["present"],
+  diagnostics: HostDiagnosticsRoute,
+): HostPresentationRoute {
+  const route: HostPresentationRoute = { present };
+  return new Proxy(route, {
+    get(target, property, receiver) {
+      if (
+        typeof property === "symbol" &&
+        property.description === "real-water/host-diagnostics-route"
+      ) {
+        return diagnostics;
+      }
+      return Reflect.get(target, property, receiver) as unknown;
+    },
+  });
 }
 
 describe("Reference Host Presentation Controller", () => {
@@ -355,5 +447,280 @@ describe("Reference Host Presentation Controller", () => {
     await Promise.resolve();
     expect(onError).not.toHaveBeenCalled();
     bindingB.dispose();
+  });
+
+  it("keeps diagnostics closed by default and when explicitly disabled", async () => {
+    const { callbacks, scheduleFrame } = createScheduler();
+    const present = vi.fn(async () => createReceipt(1));
+    const presentDiagnostics = vi.fn(
+      async (request: HostDiagnosticsPresentRequest) =>
+        createDiagnosticsFrame(request),
+    );
+    const controller = createReferenceHostPresentationController({
+      scheduleFrame,
+      cancelFrame: vi.fn(),
+    });
+    const binding = controller.bind(
+      createDiagnosticsCapableRoute(present, {
+        present: presentDiagnostics,
+      }),
+    );
+    controller.start();
+
+    callbacks[0]?.(0);
+    await vi.waitFor(() => {
+      expect(present).toHaveBeenCalledTimes(1);
+    });
+    expect(presentDiagnostics).not.toHaveBeenCalled();
+
+    controller.setDiagnosticsSampling({
+      enabled: false,
+      outputs: ["final-color"],
+    });
+    await vi.waitFor(() => {
+      expect(scheduleFrame).toHaveBeenCalledTimes(2);
+    });
+    callbacks[1]?.(REFERENCE_PRESENTATION_INTERVAL_MS);
+    await vi.waitFor(() => {
+      expect(present).toHaveBeenCalledTimes(2);
+    });
+    expect(presentDiagnostics).not.toHaveBeenCalled();
+    binding.dispose();
+  });
+
+  it("replaces a normal present with one bounded diagnostics sample and publishes a frozen summary", async () => {
+    const { callbacks, scheduleFrame } = createScheduler();
+    const present = vi.fn(async () => createReceipt(2));
+    let releaseDiagnostics: (() => void) | undefined;
+    const presentDiagnostics = vi.fn(
+      (request: HostDiagnosticsPresentRequest) =>
+        new Promise<HostDiagnosticsPresentedFrame>((resolve) => {
+          releaseDiagnostics = () => resolve(createDiagnosticsFrame(request));
+        }),
+    );
+    const subscriber = vi.fn();
+    const controller = createReferenceHostPresentationController({
+      scheduleFrame,
+      cancelFrame: vi.fn(),
+    });
+    controller.setDiagnosticsSampling({
+      enabled: true,
+      outputs: ["final-color"],
+    });
+    const unsubscribe = controller.subscribeDiagnostics(subscriber);
+    const binding = controller.bind(
+      createDiagnosticsCapableRoute(present, {
+        present: presentDiagnostics,
+      }),
+    );
+    controller.start();
+
+    callbacks[0]?.(0);
+    expect(presentDiagnostics).toHaveBeenCalledTimes(1);
+    expect(presentDiagnostics).toHaveBeenCalledWith({
+      outputs: ["final-color"],
+    });
+    expect(present).not.toHaveBeenCalled();
+    expect(scheduleFrame).toHaveBeenCalledTimes(1);
+
+    releaseDiagnostics?.();
+    await vi.waitFor(() => {
+      expect(subscriber).toHaveBeenCalledTimes(1);
+    });
+    const summary = subscriber.mock.calls[0]?.[0];
+    expect(summary).toMatchObject({
+      presentationId: 1,
+      width: 1,
+      height: 1,
+      compileCount: 2,
+      probeCount: 3,
+      diagnosticReadbackCount: 1,
+      sceneRenderCount: 1,
+      requestedOutputNames: ["final-color"],
+      requestedOutputCount: 1,
+      returnedOutputNames: ["final-color"],
+      returnedOutputCount: 1,
+    });
+    expect(summary).not.toHaveProperty("outputs");
+    expect(Object.isFrozen(summary)).toBe(true);
+    expect(Object.isFrozen(summary.requestedOutputNames)).toBe(true);
+    expect(Object.isFrozen(summary.returnedOutputNames)).toBe(true);
+    expect(Object.isFrozen(summary.waterline)).toBe(true);
+    expect(Object.isFrozen(summary.secondaryParticles)).toBe(true);
+    expect(Object.isFrozen(summary.secondaryParticles.consumers)).toBe(true);
+    unsubscribe();
+    unsubscribe();
+    await vi.waitFor(() => {
+      expect(scheduleFrame).toHaveBeenCalledTimes(2);
+    });
+
+    callbacks[1]?.(REFERENCE_PRESENTATION_INTERVAL_MS);
+    await vi.waitFor(() => {
+      expect(present).toHaveBeenCalledTimes(1);
+    });
+    expect(presentDiagnostics).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(scheduleFrame).toHaveBeenCalledTimes(3);
+    });
+
+    callbacks[2]?.(REFERENCE_ENGINEERING_DIAGNOSTICS_INTERVAL_MS);
+    expect(presentDiagnostics).toHaveBeenCalledTimes(2);
+    expect(present).toHaveBeenCalledTimes(1);
+    releaseDiagnostics?.();
+    await vi.waitFor(() => {
+      expect(scheduleFrame).toHaveBeenCalledTimes(4);
+    });
+    expect(subscriber).toHaveBeenCalledTimes(1);
+    binding.dispose();
+  });
+
+  it("requests no named outputs unless the client explicitly opts in", async () => {
+    const { callbacks, scheduleFrame } = createScheduler();
+    const present = vi.fn(async () => createReceipt(2));
+    const presentDiagnostics = vi.fn(
+      async (request: HostDiagnosticsPresentRequest) =>
+        createDiagnosticsFrame(request),
+    );
+    const controller = createReferenceHostPresentationController({
+      scheduleFrame,
+      cancelFrame: vi.fn(),
+    });
+    controller.setDiagnosticsSampling({ enabled: true });
+    const binding = controller.bind(
+      createDiagnosticsCapableRoute(present, { present: presentDiagnostics }),
+    );
+    controller.start();
+
+    callbacks[0]?.(0);
+    await vi.waitFor(() => {
+      expect(presentDiagnostics).toHaveBeenCalledTimes(1);
+    });
+    expect(presentDiagnostics.mock.calls[0]?.[0]).toEqual({ outputs: [] });
+    await vi.waitFor(() => {
+      expect(scheduleFrame).toHaveBeenCalledTimes(2);
+    });
+
+    controller.setDiagnosticsSampling({
+      enabled: true,
+      outputs: ["final-color"],
+    });
+    controller.setDiagnosticsSampling({
+      enabled: true,
+      outputs: ["final-color"],
+    });
+    callbacks[1]?.(REFERENCE_PRESENTATION_INTERVAL_MS);
+    await vi.waitFor(() => {
+      expect(present).toHaveBeenCalledTimes(1);
+    });
+    expect(presentDiagnostics).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(scheduleFrame).toHaveBeenCalledTimes(3);
+    });
+    callbacks[2]?.(REFERENCE_ENGINEERING_DIAGNOSTICS_INTERVAL_MS);
+    await vi.waitFor(() => {
+      expect(presentDiagnostics).toHaveBeenCalledTimes(2);
+    });
+    expect(presentDiagnostics.mock.calls[1]?.[0]).toEqual({
+      outputs: ["final-color"],
+    });
+    binding.dispose();
+  });
+
+  it("does not publish a diagnostics sample after disabling or disposing its generation", async () => {
+    const { callbacks, scheduleFrame } = createScheduler();
+    const subscriber = vi.fn();
+    const releases: Array<() => void> = [];
+    const presentDiagnostics = vi.fn(
+      (request: HostDiagnosticsPresentRequest) =>
+        new Promise<HostDiagnosticsPresentedFrame>((resolve) => {
+          releases.push(() => resolve(createDiagnosticsFrame(request)));
+        }),
+    );
+    const present = vi.fn(async () => createReceipt(2));
+    const controller = createReferenceHostPresentationController({
+      scheduleFrame,
+      cancelFrame: vi.fn(),
+    });
+    controller.subscribeDiagnostics(subscriber);
+    controller.setDiagnosticsSampling({ enabled: true });
+    const bindingA = controller.bind(
+      createDiagnosticsCapableRoute(present, {
+        present: presentDiagnostics,
+      }),
+    );
+    controller.start();
+    callbacks[0]?.(0);
+    expect(presentDiagnostics).toHaveBeenCalledTimes(1);
+
+    controller.setDiagnosticsSampling({ enabled: false });
+    releases[0]?.();
+    await vi.waitFor(() => {
+      expect(scheduleFrame).toHaveBeenCalledTimes(2);
+    });
+    expect(subscriber).not.toHaveBeenCalled();
+    callbacks[1]?.(REFERENCE_PRESENTATION_INTERVAL_MS);
+    await vi.waitFor(() => {
+      expect(present).toHaveBeenCalledTimes(1);
+    });
+    expect(presentDiagnostics).toHaveBeenCalledTimes(1);
+
+    bindingA.dispose();
+    controller.setDiagnosticsSampling({ enabled: true });
+    const bindingB = controller.bind(
+      createDiagnosticsCapableRoute(present, {
+        present: presentDiagnostics,
+      }),
+    );
+    controller.start();
+    callbacks[scheduleFrame.mock.calls.length - 1]?.(
+      REFERENCE_PRESENTATION_INTERVAL_MS * 2,
+    );
+    expect(presentDiagnostics).toHaveBeenCalledTimes(2);
+    bindingB.dispose();
+    const bindingC = controller.bind(
+      createDiagnosticsCapableRoute(present, {
+        present: presentDiagnostics,
+      }),
+    );
+    const scheduledBeforeStaleCompletion = scheduleFrame.mock.calls.length;
+    releases[1]?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(subscriber).not.toHaveBeenCalled();
+    expect(scheduleFrame).toHaveBeenCalledTimes(scheduledBeforeStaleCompletion);
+    bindingC.dispose();
+  });
+
+  it("routes diagnostics rejection to onError and stops the single present loop", async () => {
+    const { callbacks, scheduleFrame } = createScheduler();
+    const onError = vi.fn();
+    const present = vi.fn(async () => createReceipt(1));
+    const presentDiagnostics = vi.fn(async () => {
+      throw new Error("Synthetic Engineering diagnostics rejection.");
+    });
+    const controller = createReferenceHostPresentationController({
+      scheduleFrame,
+      cancelFrame: vi.fn(),
+      onError,
+    });
+    controller.setDiagnosticsSampling({ enabled: true });
+    const binding = controller.bind(
+      createDiagnosticsCapableRoute(present, {
+        present: presentDiagnostics,
+      }),
+    );
+    controller.start();
+    callbacks[0]?.(0);
+
+    await vi.waitFor(() => {
+      expect(onError).toHaveBeenCalledTimes(1);
+    });
+    expect(onError.mock.calls[0]?.[0]).toMatchObject({
+      message: "Synthetic Engineering diagnostics rejection.",
+    });
+    expect(presentDiagnostics).toHaveBeenCalledTimes(1);
+    expect(present).not.toHaveBeenCalled();
+    expect(scheduleFrame).toHaveBeenCalledTimes(1);
+    binding.dispose();
   });
 });

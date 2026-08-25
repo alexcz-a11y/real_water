@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createMemoryHostLifecycleAdapter,
   createMinimalWaterQualityProfile,
@@ -77,6 +77,55 @@ describe("ReferenceExperienceSession.applyQualityProfile", () => {
     const after = session.snapshot();
     expect(after.generation).toBe(before.generation + 1);
     expect(after.manifestHash).toBe(before.manifestHash);
+  });
+
+  it("disposes the ready-stage decoration before structural preparation replaces the stage", async () => {
+    installMinimalDocument();
+    mount = document.createElement("div") as unknown as typeof mount;
+    document.body.append(mount as unknown as Node);
+    const decorationDisposals: Array<ReturnType<typeof vi.fn>> = [];
+    const session = startReferenceExperience(mount as unknown as Element, {
+      initialDrawingBuffer: {
+        width: INITIAL.drawingBufferWidth,
+        height: INITIAL.drawingBufferHeight,
+      },
+      createHostAttempt: () => ({
+        host: createMemoryHostLifecycleAdapter({
+          simulation: createStaticHostSimulationAdapter(),
+          environment: createReferenceEnvironmentAdapter(),
+          presentation: createStaticHostPresentationAdapter(),
+          stepDelayMs: 0,
+        }),
+        createReadyStage: () => {
+          const stage = document.createElement("main");
+          stage.dataset.testid = "reference-stage";
+          return stage;
+        },
+        decorateReadyStage: () => {
+          const dispose = vi.fn();
+          decorationDisposals.push(dispose);
+          return { dispose };
+        },
+        dispose() {},
+      }),
+      presetLibrary: createLocalPresetLibrary({
+        storage: createMemoryLocalPresetStorage(),
+      }),
+      revealDelayFrames: 1,
+    });
+    currentSession = session;
+    await waitForReady(session);
+
+    const applying = session.applyQualityProfile(
+      createMinimalWaterQualityProfile("minimal-high-detail"),
+    );
+
+    expect(decorationDisposals).toHaveLength(1);
+    expect(decorationDisposals[0]).toHaveBeenCalledTimes(1);
+    expect(mount.querySelector("[data-testid='reference-stage']")).toBeNull();
+    await applying;
+    await waitForReady(session);
+    expect(decorationDisposals).toHaveLength(2);
   });
 });
 

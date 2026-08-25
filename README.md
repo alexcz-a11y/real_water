@@ -215,6 +215,11 @@ foundation:
   underwater haze, turbidity, light shafts, color, and exposure from versioned
   Calm, Swell, and Storm Water Presets, and revisions them only when the
   snapshot changes;
+- the Reference Experience projects one UI-neutral control and diagnostics model
+  into an accessible, event-driven Artist presenter and an explicitly lazy
+  Engineering presenter; Engineering monitoring is bounded, named GPU outputs
+  require opt-in, and a Quality Profile draft shows its reload requirement
+  before Apply returns through complete preparation;
 - synchronous Gameplay Queries fill caller-owned height, normal, velocity, foam,
   tick, control-revision, and snapshot-age buffers with no GPU readback;
 - query capacity is fixed at 2,048 points per simulation tick and fails with a

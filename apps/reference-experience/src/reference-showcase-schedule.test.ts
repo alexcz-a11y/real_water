@@ -148,6 +148,85 @@ describe("Reference Showcase schedule", () => {
     ).toBe(1);
   });
 
+  it("cedes scheduled Water and Environment look writes without pausing the Showcase timeline", () => {
+    const fixture = createScheduleFixture();
+
+    fixture.schedule.setLookControlOwner("manual");
+    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
+    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
+
+    fixture.schedule.afterFixedStep(fixture.state(HERO_TICK));
+    fixture.schedule.afterFixedStep(fixture.state(STORM_TICK));
+    fixture.schedule.afterFixedStep(
+      fixture.state(STORM_TICK + REFERENCE_STORM_FRONT_LIGHTNING_OFFSET_TICKS),
+    );
+
+    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
+    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
+    expect(fixture.submissionTicks).toEqual([HERO_TICK, STORM_TICK]);
+    expect(fixture.cameraStates.at(-1)).toMatchObject({
+      tick: STORM_TICK,
+      position: [-18, 5, 24],
+    });
+  });
+
+  it("restores the deterministic current Showcase look when ownership returns", () => {
+    const fixture = createScheduleFixture();
+    fixture.schedule.setLookControlOwner("manual");
+    fixture.schedule.afterFixedStep(
+      fixture.state(STORM_TICK + REFERENCE_STORM_FRONT_LIGHTNING_OFFSET_TICKS),
+    );
+
+    fixture.schedule.setLookControlOwner("showcase");
+
+    expect(fixture.updateArtisticControls).toHaveBeenCalledTimes(1);
+    expect(fixture.updateArtisticControls).toHaveBeenLastCalledWith(
+      createWaterPreset("storm").artisticControls,
+    );
+    expect(fixture.setEnvironmentState).toHaveBeenCalledTimes(1);
+    expect(
+      fixture.environmentStates.at(-1)?.atmosphere.lightningIntensity,
+    ).toBe(1);
+    const cameraWriteCount = fixture.setCamera.mock.calls.length;
+    const heroSubmissionCount = fixture.submitDisturbances.mock.calls.length;
+
+    fixture.schedule.setLookControlOwner("showcase");
+
+    expect(fixture.updateArtisticControls).toHaveBeenCalledTimes(1);
+    expect(fixture.setEnvironmentState).toHaveBeenCalledTimes(1);
+    expect(fixture.setCamera).toHaveBeenCalledTimes(cameraWriteCount);
+    expect(fixture.submitDisturbances).toHaveBeenCalledTimes(
+      heroSubmissionCount,
+    );
+  });
+
+  it("preserves manual look ownership through bind, reset, Host reset, and replay", () => {
+    const fixture = createScheduleFixture();
+    fixture.schedule.setLookControlOwner("manual");
+
+    fixture.schedule.bindLease(fixture.lease);
+    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
+    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
+    expect(fixture.setCamera).toHaveBeenCalledTimes(1);
+
+    fixture.schedule.reset();
+    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
+    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
+    expect(fixture.setCamera).toHaveBeenCalledTimes(2);
+
+    fixture.schedule.afterFixedStep(fixture.state(HERO_TICK));
+    fixture.schedule.afterFixedStep(
+      fixture.state(SHOWCASE_DURATION_TICKS + STORM_TICK),
+    );
+    fixture.schedule.afterFixedStep(fixture.state(1, 1));
+    fixture.schedule.afterFixedStep(fixture.state(HERO_TICK, 1));
+
+    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
+    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
+    expect(fixture.submitDisturbances).toHaveBeenCalledTimes(5);
+    expect(fixture.cameraStates.at(-1)).toMatchObject({ tick: HERO_TICK });
+  });
+
   it("restores the base look at the next loop before replaying Storm Front", () => {
     const fixture = createScheduleFixture();
     fixture.schedule.afterFixedStep(fixture.state(STORM_TICK));

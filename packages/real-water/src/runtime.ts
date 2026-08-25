@@ -74,28 +74,244 @@ export interface ArtisticControls {
   readonly underwaterExposure: number;
 }
 
-export const ARTISTIC_CONTROL_KEYS = [
-  "waveStrength",
-  "swellDrama",
-  "directionality",
-  "choppiness",
-  "crestSharpness",
-  "microDetail",
-  "timeScale",
-  "grazingReflection",
-  "environmentReflection",
-  "depthSeeThrough",
-  "depthColoring",
-  "inWaterGlow",
-  "crestGlow",
-  "whitecapAmount",
-  "foamPersistence",
-  "underwaterHaze",
-  "underwaterTurbidity",
-  "underwaterLightShafts",
-  "underwaterColor",
-  "underwaterExposure",
-] as const;
+/**
+ * UI-neutral grouping for the prepared Artistic Controls.
+ *
+ * @public
+ */
+export type ArtisticControlGroup =
+  "sea-character" | "surface-optics" | "whitewater" | "underwater";
+
+/**
+ * UI-neutral presentation and range metadata for one Artistic Control.
+ *
+ * @public
+ */
+export interface ArtisticControlDescriptor {
+  /** Artistic Control property updated through a complete snapshot. */
+  readonly key: keyof ArtisticControls;
+  /** Short perceptual name intended for a visible control label. */
+  readonly label: string;
+  /** Perceptual help text that does not claim a physical measurement. */
+  readonly description: string;
+  /** Stable authored grouping shared by control presenters. */
+  readonly group: ArtisticControlGroup;
+  /** Inclusive lower value accepted by the runtime. */
+  readonly min: number;
+  /** Inclusive upper value accepted by the runtime. */
+  readonly max: number;
+  /** Suggested input increment; values inside the range remain continuous. */
+  readonly step: number;
+}
+
+/**
+ * Authoritative presentation metadata and runtime ranges for Artistic Controls.
+ *
+ * @public
+ */
+export const ARTISTIC_CONTROL_DESCRIPTORS: readonly ArtisticControlDescriptor[] =
+  Object.freeze([
+    Object.freeze({
+      key: "waveStrength",
+      label: "Wave presence",
+      description:
+        "Sets the overall visual strength of the prepared sea, from still to bold.",
+      group: "sea-character",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "swellDrama",
+      label: "Swell drama",
+      description:
+        "Sets how much the longest swell band shapes the sea's drama.",
+      group: "sea-character",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "directionality",
+      label: "Directional focus",
+      description:
+        "Sets how strongly smaller wave bands follow the swell direction.",
+      group: "sea-character",
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "choppiness",
+      label: "Surface choppiness",
+      description: "Sets the visual strength of mid-scale surface chop.",
+      group: "sea-character",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "crestSharpness",
+      label: "Crest definition",
+      description:
+        "Sets how strongly every prepared wave band peaks at its crest.",
+      group: "sea-character",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "microDetail",
+      label: "Fine surface detail",
+      description: "Sets the visual strength of the finest ripple detail.",
+      group: "sea-character",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "timeScale",
+      label: "Motion pace",
+      description: "Sets how quickly all prepared wave bands move.",
+      group: "sea-character",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "grazingReflection",
+      label: "Grazing reflection",
+      description:
+        "Sets how strongly glancing views reflect the Host environment.",
+      group: "surface-optics",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "environmentReflection",
+      label: "Environment reflection",
+      description:
+        "Sets how strongly Host environment radiance appears on the surface.",
+      group: "surface-optics",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "depthSeeThrough",
+      label: "Depth clarity",
+      description:
+        "Sets how clearly the Host scene remains visible through the water.",
+      group: "surface-optics",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "depthColoring",
+      label: "Depth color",
+      description: "Sets how quickly water color builds with viewed depth.",
+      group: "surface-optics",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "inWaterGlow",
+      label: "In-water glow",
+      description: "Sets how much glow gathers through the water.",
+      group: "surface-optics",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "crestGlow",
+      label: "Crest glow",
+      description: "Sets how brightly thin crests transmit light.",
+      group: "surface-optics",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "whitecapAmount",
+      label: "Whitecap amount",
+      description: "Sets how readily steep crests form persistent whitecaps.",
+      group: "whitewater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "foamPersistence",
+      label: "Foam persistence",
+      description:
+        "Sets how long generated foam remains visible while moving and breaking up.",
+      group: "whitewater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "underwaterHaze",
+      label: "Underwater haze",
+      description: "Sets the density of depth-aware underwater haze.",
+      group: "underwater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "underwaterTurbidity",
+      label: "Underwater turbidity",
+      description:
+        "Sets how strongly distant underwater light is absorbed and scattered.",
+      group: "underwater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "underwaterLightShafts",
+      label: "Underwater light shafts",
+      description: "Sets the strength of depth-shadowed underwater sun shafts.",
+      group: "underwater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "underwaterColor",
+      label: "Underwater color",
+      description:
+        "Sets the strength of the authored underwater depth-color palette.",
+      group: "underwater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "underwaterExposure",
+      label: "Underwater exposure",
+      description: "Sets the exposure used only while the camera is submerged.",
+      group: "underwater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+  ]);
+
+/**
+ * Artistic Control keys in their authoritative presentation order.
+ *
+ * @public
+ */
+export const ARTISTIC_CONTROL_KEYS: readonly (keyof ArtisticControls)[] =
+  Object.freeze(
+    ARTISTIC_CONTROL_DESCRIPTORS.map((descriptor) => descriptor.key),
+  );
 
 const DEFAULT_ARTISTIC_CONTROLS: ArtisticControls =
   createWaterPreset("swell").artisticControls;
@@ -653,58 +869,36 @@ function freezeArtisticControls(controls: ArtisticControls): ArtisticControls {
     );
   }
 
-  assertControlRange(value.waveStrength, 0, 2, "waveStrength");
-  assertControlRange(value.swellDrama, 0, 2, "swellDrama");
-  assertControlRange(value.directionality, 0, 1, "directionality");
-  assertControlRange(value.choppiness, 0, 2, "choppiness");
-  assertControlRange(value.crestSharpness, 0, 2, "crestSharpness");
-  assertControlRange(value.microDetail, 0, 2, "microDetail");
-  assertControlRange(value.timeScale, 0, 2, "timeScale");
-  assertControlRange(value.grazingReflection, 0, 2, "grazingReflection");
-  assertControlRange(
-    value.environmentReflection,
-    0,
-    2,
-    "environmentReflection",
-  );
-  assertControlRange(value.depthSeeThrough, 0, 2, "depthSeeThrough");
-  assertControlRange(value.depthColoring, 0, 2, "depthColoring");
-  assertControlRange(value.inWaterGlow, 0, 2, "inWaterGlow");
-  assertControlRange(value.crestGlow, 0, 2, "crestGlow");
-  assertControlRange(value.whitecapAmount, 0, 2, "whitecapAmount");
-  assertControlRange(value.foamPersistence, 0, 2, "foamPersistence");
-  assertControlRange(value.underwaterHaze, 0, 2, "underwaterHaze");
-  assertControlRange(value.underwaterTurbidity, 0, 2, "underwaterTurbidity");
-  assertControlRange(
-    value.underwaterLightShafts,
-    0,
-    2,
-    "underwaterLightShafts",
-  );
-  assertControlRange(value.underwaterColor, 0, 2, "underwaterColor");
-  assertControlRange(value.underwaterExposure, 0, 2, "underwaterExposure");
+  for (const descriptor of ARTISTIC_CONTROL_DESCRIPTORS) {
+    assertControlRange(
+      controls[descriptor.key],
+      descriptor.min,
+      descriptor.max,
+      descriptor.key,
+    );
+  }
 
   return Object.freeze({
-    waveStrength: value.waveStrength,
-    swellDrama: value.swellDrama,
-    directionality: value.directionality,
-    choppiness: value.choppiness,
-    crestSharpness: value.crestSharpness,
-    microDetail: value.microDetail,
-    timeScale: value.timeScale,
-    grazingReflection: value.grazingReflection,
-    environmentReflection: value.environmentReflection,
-    depthSeeThrough: value.depthSeeThrough,
-    depthColoring: value.depthColoring,
-    inWaterGlow: value.inWaterGlow,
-    crestGlow: value.crestGlow,
-    whitecapAmount: value.whitecapAmount,
-    foamPersistence: value.foamPersistence,
-    underwaterHaze: value.underwaterHaze,
-    underwaterTurbidity: value.underwaterTurbidity,
-    underwaterLightShafts: value.underwaterLightShafts,
-    underwaterColor: value.underwaterColor,
-    underwaterExposure: value.underwaterExposure,
+    waveStrength: controls.waveStrength,
+    swellDrama: controls.swellDrama,
+    directionality: controls.directionality,
+    choppiness: controls.choppiness,
+    crestSharpness: controls.crestSharpness,
+    microDetail: controls.microDetail,
+    timeScale: controls.timeScale,
+    grazingReflection: controls.grazingReflection,
+    environmentReflection: controls.environmentReflection,
+    depthSeeThrough: controls.depthSeeThrough,
+    depthColoring: controls.depthColoring,
+    inWaterGlow: controls.inWaterGlow,
+    crestGlow: controls.crestGlow,
+    whitecapAmount: controls.whitecapAmount,
+    foamPersistence: controls.foamPersistence,
+    underwaterHaze: controls.underwaterHaze,
+    underwaterTurbidity: controls.underwaterTurbidity,
+    underwaterLightShafts: controls.underwaterLightShafts,
+    underwaterColor: controls.underwaterColor,
+    underwaterExposure: controls.underwaterExposure,
   });
 }
 

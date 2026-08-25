@@ -97,6 +97,8 @@ try {
   }
 
   const requiredExports = [
+    "ARTISTIC_CONTROL_DESCRIPTORS",
+    "ARTISTIC_CONTROL_KEYS",
     "ENVIRONMENT_PRESET_SCHEMA",
     "ENVIRONMENT_PRESET_VERSION",
     "QUALITY_PROFILE_SCHEMA",
@@ -147,6 +149,11 @@ try {
     "for (const name of requiredExports) {",
     '  if (!(name in realWater)) throw new Error("Missing packed export: " + name);',
     "}",
+    'const artisticControlKeys = ["waveStrength","swellDrama","directionality","choppiness","crestSharpness","microDetail","timeScale","grazingReflection","environmentReflection","depthSeeThrough","depthColoring","inWaterGlow","crestGlow","whitecapAmount","foamPersistence","underwaterHaze","underwaterTurbidity","underwaterLightShafts","underwaterColor","underwaterExposure"];',
+    'if (JSON.stringify(realWater.ARTISTIC_CONTROL_KEYS) !== JSON.stringify(artisticControlKeys) || !Object.isFrozen(realWater.ARTISTIC_CONTROL_KEYS)) throw new Error("Packed Artistic Control key order drifted.");',
+    'if (!Array.isArray(realWater.ARTISTIC_CONTROL_DESCRIPTORS) || !Object.isFrozen(realWater.ARTISTIC_CONTROL_DESCRIPTORS) || realWater.ARTISTIC_CONTROL_DESCRIPTORS.length !== artisticControlKeys.length) throw new Error("Packed Artistic Control descriptors drifted.");',
+    'const artisticControlGroups = ["sea-character","sea-character","sea-character","sea-character","sea-character","sea-character","sea-character","surface-optics","surface-optics","surface-optics","surface-optics","surface-optics","surface-optics","whitewater","whitewater","underwater","underwater","underwater","underwater","underwater"];',
+    'for (let index = 0; index < artisticControlKeys.length; index += 1) { const descriptor = realWater.ARTISTIC_CONTROL_DESCRIPTORS[index]; if (!Object.isFrozen(descriptor) || descriptor?.key !== artisticControlKeys[index] || descriptor.group !== artisticControlGroups[index] || typeof descriptor.label !== "string" || descriptor.label.length === 0 || typeof descriptor.description !== "string" || descriptor.description.length === 0 || descriptor.min !== 0 || descriptor.max !== (descriptor.key === "directionality" ? 1 : 2) || descriptor.step !== 0.01) throw new Error("Packed Artistic Control descriptor drifted: " + artisticControlKeys[index]); }',
     "const packedPresets = [",
     '  realWater.createWaterPreset("storm"),',
     "  realWater.createReferenceEnvironmentPreset(),",
@@ -322,12 +329,15 @@ try {
   writeFileSync(
     join(consumerRoot, "index.mts"),
     [
-      'import { createMemoryBodyPhysicsAdapter, createMemoryHostLifecycleAdapter, createMinimalWaterPrewarmManifest, createMinimalWaterQualityProfile, createStaticHostEnvironmentAdapter, createStaticHostPresentationAdapter, createSupportedHostEnvironmentReflection, createStaticHostSimulationAdapter, prepareRealWater, type BodyAttachment, type BodyPhysicsState, type GameplayQueryResults, type QualityProfile, type QualityProfileLensWetness, type QualityProfileUnderwaterCaustics, type QualityProfileUnderwaterTracers, type RealWaterLease } from "real-water";',
+      'import { ARTISTIC_CONTROL_DESCRIPTORS, ARTISTIC_CONTROL_KEYS, createMemoryBodyPhysicsAdapter, createMemoryHostLifecycleAdapter, createMinimalWaterPrewarmManifest, createMinimalWaterQualityProfile, createStaticHostEnvironmentAdapter, createStaticHostPresentationAdapter, createSupportedHostEnvironmentReflection, createStaticHostSimulationAdapter, prepareRealWater, type ArtisticControlDescriptor, type ArtisticControlGroup, type ArtisticControls, type BodyAttachment, type BodyPhysicsState, type GameplayQueryResults, type QualityProfile, type QualityProfileLensWetness, type QualityProfileUnderwaterCaustics, type QualityProfileUnderwaterTracers, type RealWaterLease } from "real-water";',
       'import { DIAGNOSTICS_CAPTURE_NAMES, readHostDiagnosticsRoute, type DiagnosticsCaptureBase, type HostPresentedFrame, type HostPresentedTemporal, type HostPresentationRoute } from "real-water/diagnostics";',
       "const profile: QualityProfile = createMinimalWaterQualityProfile();",
       "const caustics: QualityProfileUnderwaterCaustics = profile.underwater.caustics;",
       "const tracers: QualityProfileUnderwaterTracers = profile.underwater.tracers;",
       "const lensWetness: QualityProfileLensWetness = profile.postTraaComposition.lensWetness;",
+      "const artisticControlDescriptor: ArtisticControlDescriptor = ARTISTIC_CONTROL_DESCRIPTORS[0]!;",
+      "const artisticControlGroup: ArtisticControlGroup = artisticControlDescriptor.group;",
+      "const artisticControlKeys: readonly (keyof ArtisticControls)[] = ARTISTIC_CONTROL_KEYS;",
       "const manifest = createMinimalWaterPrewarmManifest(profile);",
       "const environment = createStaticHostEnvironmentAdapter(createSupportedHostEnvironmentReflection(), {",
       "  sunDirectionX: 0.32, sunDirectionY: 0.84, sunDirectionZ: 0.44,",
@@ -345,6 +355,9 @@ try {
       "void caustics;",
       "void tracers;",
       "void lensWetness;",
+      "void artisticControlDescriptor;",
+      "void artisticControlGroup;",
+      "void artisticControlKeys;",
       "void captureBase;",
       "void readHostDiagnosticsRoute;",
       "type Presented = HostPresentedFrame;",
