@@ -335,10 +335,11 @@ Two things the stack's role requires that a three-quarter anchor cannot show, fi
 This is the one asset with no top view: Bible §6 omits it because the stack is a distant silhouette
 and is not reconstructed at part level.
 
-## 11. Three checklists, each covering a different question
+## 11. Checklists, each covering a different question
 
-Every asset gets all three. Run them at different moments, because they answer different questions:
-two compare images against each other, and the third compares the specification against the images.
+Every asset gets all of them. Run them at different moments, because they answer different questions:
+some compare images against each other, one compares the specification against the images, and the
+last compares a part against itself across views.
 
 **After the album closes — every fixed part against every view that should show it.** Walk §10's
 fixed-part list for the asset and, for each part, name the approved views whose angle should show it
@@ -349,6 +350,22 @@ This is the check the hero vessel pack did not run, and it cost two approved vie
 checks are driven by *disputes between images*, and **an absent part starts no dispute**: a view
 missing the running gear agrees with every view that also cannot see it. Absence is invisible to any
 check that compares images to each other; only the specification notices it.
+
+**Once every part is confirmed present — is each one the same size in every view that shows it?**
+Pick a fraction that is internal to the part and to the object: a landmark's height as a share of the
+object's height, a fitting's width as a share of the face it sits on. Read it in every view that
+shows the part. They should agree to a couple of percent.
+
+**This checklist exists because the one above it is a proxy.** "Is the fixed part present" is a
+yes/no, and a part drawn at half its size answers yes. Nothing else here would catch it either: the
+whole-object proportion check moves by too little when one part is wrong, and image-to-image
+comparison has no ruler. **A part can be present, correct in material and colour, in the right place,
+and the wrong size, and pass every other check in this document.**
+
+Run on the marine crate's lid seam as a share of the object's height, the three elevations give
+0.1046 / 0.1029 / 0.1035 — agreeing to 1.6 %, so that part is sound. **The check found nothing, which
+is the result and not a reason to skip it**: it was built because the gap is real, and one part
+passing does not close it.
 
 **Before the album opens — what must exist but the anchor cannot show.** List the parts that the
 asset's function implies and the chosen anchor angle hides. On the hero vessel this list would have
