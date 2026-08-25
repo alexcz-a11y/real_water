@@ -4,7 +4,7 @@ import {
   createMinimalWaterQualityProfile,
   type HostEnvironmentSnapshot,
 } from "real-water";
-import type { QaCameraV1, QaHarnessV17 } from "../src/qa-harness.js";
+import type { QaCameraV1, QaHarness } from "../src/qa-harness.js";
 import { REFERENCE_ENVIRONMENT_LIGHTING } from "../src/reference-optical-inputs.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
@@ -109,7 +109,7 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
 
   const before = await page.evaluate(
     async ({ anchor, camera, environment, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -255,7 +255,7 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
   await expect(page.getByTestId("loading-experience")).toBeVisible();
 
   const invalidated = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -278,7 +278,7 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
 
   const after = await page.evaluate(
     async ({ anchor, camera, environment, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -493,7 +493,7 @@ test("reprepares a new drawing-buffer manifest through conceal, dispose, and rev
   expect(maxDiff).toBeLessThanOrEqual(1);
 
   const sameSize = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -527,7 +527,7 @@ test("rapid viewport changes reveal only the latest drawing buffer", async ({
   await page.goto("/?qa=1&host=three");
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const before = await page.evaluate(() => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -545,7 +545,7 @@ test("rapid viewport changes reveal only the latest drawing buffer", async ({
 
   const after = await page.evaluate(
     async ({ camera, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

@@ -1,17 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
-import type {
-  ArtisticControls,
-  ArtisticControlUpdateReceipt,
-  DisturbanceSubmissionReceipt,
-  HostEnvironmentSnapshot,
-  HeroBreakerDisturbanceBatch,
-  HostSimulationState,
-  ShowcaseCameraKeyframe,
-} from "real-water";
 import {
   createAuthoredShowcasePreset,
+  createBlueNoonEnvironmentPreset,
+  createCalmSunriseEnvironmentPreset,
+  createMinimalWaterPrewarmManifest,
+  createMinimalWaterQualityProfile,
   createReferenceShowcasePreset,
+  createStormFrontEnvironmentPreset,
   createWaterPreset,
+  type ArtisticControls,
+  type ArtisticControlUpdateOptions,
+  type ArtisticControlUpdateReceipt,
+  type DisturbanceSubmissionReceipt,
+  type HeroBreakerDisturbanceBatch,
+  type HostEnvironmentSnapshot,
+  type HostSimulationState,
+  type ShowcaseCameraKeyframe,
 } from "real-water";
 import {
   REFERENCE_HERO_BREAKER_AMPLITUDE_METRES,
@@ -23,7 +27,7 @@ import {
   REFERENCE_HERO_BREAKER_PRIORITY,
   REFERENCE_HERO_BREAKER_RADIUS_METRES,
   REFERENCE_HERO_BREAKER_SPRAY_AMOUNT,
-  REFERENCE_STORM_FRONT_EVENT_ID,
+  REFERENCE_PROXY_VESSEL_BODY_ID,
   REFERENCE_STORM_FRONT_LIGHTNING_OFFSET_TICKS,
   createReferenceShowcaseSchedule,
 } from "./reference-showcase-schedule.js";
@@ -33,14 +37,78 @@ const STORM_TICK = 3_600;
 const SHOWCASE_DURATION_TICKS = 5_400;
 
 describe("Reference Showcase schedule", () => {
-  it("submits the authored Hero Breaker at the exact fixed tick", () => {
-    const fixture = createScheduleFixture();
+  it("starts Calm Sunrise and enters all three authored looks at exact 30-second ticks", () => {
+    const fixture = createScheduleFixture({ retainInitialWrites: true });
+
+    expect(fixture.showcase.durationTicks).toBe(SHOWCASE_DURATION_TICKS);
+    expect(fixture.artisticControlStates).toEqual([
+      createWaterPreset("calm").artisticControls,
+    ]);
+    expect(fixture.environmentStates.at(-1)).toMatchObject({
+      lighting: createCalmSunriseEnvironmentPreset().lighting,
+      weather: { windStrength: 0.18, rainIntensity: 0 },
+    });
+    expect(fixture.bodyControls.at(-1)).toEqual({
+      throttle: 0.45,
+      steering: 0,
+    });
+    expect(fixture.cameraStates.at(-1)).toMatchObject({ tick: 0 });
+
+    fixture.clearWrites();
     fixture.schedule.afterFixedStep(fixture.state(HERO_TICK - 1));
-    expect(fixture.submitDisturbances).not.toHaveBeenCalled();
+    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
 
     fixture.schedule.afterFixedStep(fixture.state(HERO_TICK));
+    expect(fixture.artisticControlStates.at(-1)).toEqual(
+      createWaterPreset("swell").artisticControls,
+    );
+    expect(fixture.environmentStates.at(-1)).toMatchObject({
+      lighting: createBlueNoonEnvironmentPreset().lighting,
+      weather: { windStrength: 0.55, rainIntensity: 0 },
+    });
+    expect(fixture.bodyControls.at(-1)).toEqual({
+      throttle: 0.7,
+      steering: 0.18,
+    });
+    expect(fixture.cameraStates.at(-1)).toMatchObject({
+      tick: HERO_TICK,
+      position: [36, 12, 18],
+      verticalFovDegrees: 44,
+    });
 
-    expect(fixture.submitDisturbances).toHaveBeenCalledTimes(1);
+    fixture.schedule.afterFixedStep(fixture.state(STORM_TICK));
+    expect(fixture.artisticControlStates.at(-1)).toEqual(
+      createWaterPreset("storm").artisticControls,
+    );
+    expect(fixture.environmentStates.at(-1)).toMatchObject({
+      lighting: createStormFrontEnvironmentPreset().lighting,
+      weather: { rainIntensity: 0.9 },
+      atmosphere: {
+        cloudCoverage: 0.9,
+        stormAerosolIntensity: 0.8,
+        lightningIntensity: 0,
+      },
+    });
+    expect(fixture.bodyControls.at(-1)).toEqual({
+      throttle: 0.9,
+      steering: -0.22,
+    });
+    expect(fixture.cameraStates.at(-1)).toMatchObject({
+      tick: STORM_TICK,
+      position: [-18, 5, 24],
+      verticalFovDegrees: 58,
+    });
+    expect(
+      fixture.updateArtisticControls.mock.calls.map(
+        ([, options]) => options?.transition,
+      ),
+    ).toEqual(["sea-state-cut", "sea-state-cut"]);
+  });
+
+  it("submits the authored focal and Storm Hero Breakers with exact public batches", () => {
+    const fixture = createScheduleFixture();
+    fixture.schedule.afterFixedStep(fixture.state(HERO_TICK));
+
     const batch = fixture.submitted[0];
     expect(batch).toMatchObject({ kind: "hero-breaker", count: 1 });
     expect(batch?.ids).toEqual(
@@ -78,59 +146,14 @@ describe("Reference Showcase schedule", () => {
     expect(batch?.priorities).toEqual(
       Uint8Array.of(REFERENCE_HERO_BREAKER_PRIORITY),
     );
-  });
-
-  it("does not miss a crossed tick or repeat within the same traversal", () => {
-    const fixture = createScheduleFixture();
-
-    fixture.schedule.afterFixedStep(fixture.state(HERO_TICK + 1));
-    fixture.schedule.afterFixedStep(fixture.state(HERO_TICK + 1));
-    fixture.schedule.afterFixedStep(fixture.state(3_600));
-
-    expect(fixture.submitDisturbances).toHaveBeenCalledTimes(2);
-  });
-
-  it("enters the authored Storm Front at its exact fixed tick", () => {
-    const fixture = createScheduleFixture();
-
-    fixture.schedule.afterFixedStep(fixture.state(STORM_TICK - 1));
-    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
-    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
-    fixture.submitDisturbances.mockClear();
-    fixture.submitted.length = 0;
-    fixture.submissionTicks.length = 0;
 
     fixture.schedule.afterFixedStep(fixture.state(STORM_TICK));
-
-    expect(fixture.updateArtisticControls).toHaveBeenCalledWith(
-      createWaterPreset("storm").artisticControls,
-    );
-    expect(fixture.environmentStates.at(-1)).toMatchObject({
-      weather: { rainIntensity: 0.9 },
-      atmosphere: {
-        cloudCoverage: 0.9,
-        cloudShadowStrength: 0.75,
-        stormAerosolIntensity: 0.8,
-        lightningIntensity: 0,
-      },
-    });
-    expect(REFERENCE_STORM_FRONT_EVENT_ID).toBe("weather-front");
-    expect(fixture.submitDisturbances).toHaveBeenCalledTimes(1);
-    expect(fixture.submitted[0]?.ids).toEqual(
-      Uint32Array.of(REFERENCE_HERO_BREAKER_DISTURBANCE_ID),
-    );
-    expect(fixture.cameraStates.at(-1)).toMatchObject({
-      tick: STORM_TICK,
-      position: [-18, 5, 24],
-      target: [0, 0, 0],
-      verticalFovDegrees: 58,
-    });
+    expect(fixture.submissionTicks).toEqual([HERO_TICK, STORM_TICK]);
   });
 
-  it("authors a bounded lightning transient from the fixed-tick timeline", () => {
+  it("authors the bounded lightning transient from the fixed-tick Storm segment", () => {
     const fixture = createScheduleFixture();
     fixture.schedule.afterFixedStep(fixture.state(STORM_TICK));
-
     fixture.schedule.afterFixedStep(
       fixture.state(
         STORM_TICK + REFERENCE_STORM_FRONT_LIGHTNING_OFFSET_TICKS - 1,
@@ -148,134 +171,80 @@ describe("Reference Showcase schedule", () => {
     ).toBe(1);
   });
 
-  it("cedes scheduled Water and Environment look writes without pausing the Showcase timeline", () => {
-    const fixture = createScheduleFixture();
-
-    fixture.schedule.setLookControlOwner("manual");
-    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
-    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
-
-    fixture.schedule.afterFixedStep(fixture.state(HERO_TICK));
-    fixture.schedule.afterFixedStep(fixture.state(STORM_TICK));
-    fixture.schedule.afterFixedStep(
-      fixture.state(STORM_TICK + REFERENCE_STORM_FRONT_LIGHTNING_OFFSET_TICKS),
-    );
-
-    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
-    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
-    expect(fixture.submissionTicks).toEqual([HERO_TICK, STORM_TICK]);
-    expect(fixture.cameraStates.at(-1)).toMatchObject({
-      tick: STORM_TICK,
-      position: [-18, 5, 24],
-    });
-  });
-
-  it("restores the deterministic current Showcase look when ownership returns", () => {
-    const fixture = createScheduleFixture();
-    fixture.schedule.setLookControlOwner("manual");
-    fixture.schedule.afterFixedStep(
-      fixture.state(STORM_TICK + REFERENCE_STORM_FRONT_LIGHTNING_OFFSET_TICKS),
-    );
-
-    fixture.schedule.setLookControlOwner("showcase");
-
-    expect(fixture.updateArtisticControls).toHaveBeenCalledTimes(1);
-    expect(fixture.updateArtisticControls).toHaveBeenLastCalledWith(
-      createWaterPreset("storm").artisticControls,
-    );
-    expect(fixture.setEnvironmentState).toHaveBeenCalledTimes(1);
-    expect(
-      fixture.environmentStates.at(-1)?.atmosphere.lightningIntensity,
-    ).toBe(1);
-    const cameraWriteCount = fixture.setCamera.mock.calls.length;
-    const heroSubmissionCount = fixture.submitDisturbances.mock.calls.length;
-
-    fixture.schedule.setLookControlOwner("showcase");
-
-    expect(fixture.updateArtisticControls).toHaveBeenCalledTimes(1);
-    expect(fixture.setEnvironmentState).toHaveBeenCalledTimes(1);
-    expect(fixture.setCamera).toHaveBeenCalledTimes(cameraWriteCount);
-    expect(fixture.submitDisturbances).toHaveBeenCalledTimes(
-      heroSubmissionCount,
-    );
-  });
-
-  it("preserves manual look ownership through bind, reset, Host reset, and replay", () => {
-    const fixture = createScheduleFixture();
-    fixture.schedule.setLookControlOwner("manual");
-
-    fixture.schedule.bindLease(fixture.lease);
-    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
-    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
-    expect(fixture.setCamera).toHaveBeenCalledTimes(1);
-
-    fixture.schedule.reset();
-    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
-    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
-    expect(fixture.setCamera).toHaveBeenCalledTimes(2);
-
-    fixture.schedule.afterFixedStep(fixture.state(HERO_TICK));
-    fixture.schedule.afterFixedStep(
-      fixture.state(SHOWCASE_DURATION_TICKS + STORM_TICK),
-    );
-    fixture.schedule.afterFixedStep(fixture.state(1, 1));
-    fixture.schedule.afterFixedStep(fixture.state(HERO_TICK, 1));
-
-    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
-    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
-    expect(fixture.submitDisturbances).toHaveBeenCalledTimes(5);
-    expect(fixture.cameraStates.at(-1)).toMatchObject({ tick: HERO_TICK });
-  });
-
-  it("restores the base look at the next loop before replaying Storm Front", () => {
+  it("resets the body, look, camera, and bounded event receipt at the 5,400-tick loop", () => {
     const fixture = createScheduleFixture();
     fixture.schedule.afterFixedStep(fixture.state(STORM_TICK));
     fixture.schedule.afterFixedStep(fixture.state(SHOWCASE_DURATION_TICKS));
 
+    expect(fixture.resetBody).toHaveBeenCalledTimes(2);
+    expect(fixture.artisticControlStates.at(-1)).toEqual(
+      createWaterPreset("calm").artisticControls,
+    );
     expect(fixture.environmentStates.at(-1)).toMatchObject({
       weather: { rainIntensity: 0 },
-      atmosphere: {
-        stormAerosolIntensity: 0,
-        lightningIntensity: 0,
-      },
+      atmosphere: { stormAerosolIntensity: 0, lightningIntensity: 0 },
     });
-    expect(fixture.artisticControlStates.at(-1)).toEqual(
-      createWaterPreset("swell").artisticControls,
-    );
+    expect(fixture.bodyControls.at(-1)).toEqual({
+      throttle: 0.45,
+      steering: 0,
+    });
     expect(fixture.cameraStates.at(-1)).toMatchObject({
-      tick: 0,
+      tick: SHOWCASE_DURATION_TICKS,
       position: [12, 7, 18],
     });
-
-    fixture.schedule.afterFixedStep(
-      fixture.state(SHOWCASE_DURATION_TICKS + STORM_TICK),
-    );
-    expect(fixture.environmentStates.at(-1)?.weather.rainIntensity).toBe(0.9);
+    expect(fixture.schedule.snapshot()).toMatchObject({
+      tick: SHOWCASE_DURATION_TICKS,
+      traversalTick: 0,
+      activeLook: { id: "calm-sunrise" },
+      events: [{ id: "showcase-start", tick: SHOWCASE_DURATION_TICKS }],
+    });
   });
 
-  it("fires the focal and Storm Hero Breakers once in every Showcase loop", () => {
+  it("disables every Director write while Sandbox owns the same runtime", () => {
     const fixture = createScheduleFixture();
+    fixture.schedule.setEnabled(false);
+    fixture.schedule.afterFixedStep(fixture.state(STORM_TICK));
 
-    for (let traversal = 0; traversal < 3; traversal += 1) {
-      fixture.schedule.afterFixedStep(
-        fixture.state(traversal * SHOWCASE_DURATION_TICKS + HERO_TICK),
-      );
-      fixture.schedule.afterFixedStep(
-        fixture.state(traversal * SHOWCASE_DURATION_TICKS + STORM_TICK),
-      );
-    }
+    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
+    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
+    expect(fixture.setCamera).not.toHaveBeenCalled();
+    expect(fixture.setBodyControls).not.toHaveBeenCalled();
+    expect(fixture.submitDisturbances).not.toHaveBeenCalled();
 
-    expect(fixture.submissionTicks).toEqual([
-      HERO_TICK,
-      STORM_TICK,
-      SHOWCASE_DURATION_TICKS + HERO_TICK,
-      SHOWCASE_DURATION_TICKS + STORM_TICK,
-      SHOWCASE_DURATION_TICKS * 2 + HERO_TICK,
-      SHOWCASE_DURATION_TICKS * 2 + STORM_TICK,
-    ]);
+    fixture.schedule.setEnabled(true);
+    fixture.schedule.reset();
+    expect(fixture.updateArtisticControls).toHaveBeenCalledWith(
+      createWaterPreset("calm").artisticControls,
+      { transition: "sea-state-cut" },
+    );
+    expect(fixture.setCamera).toHaveBeenCalledWith(
+      fixture.showcase.cameraTimeline[0],
+    );
   });
 
-  it("re-arms after an explicit reset, a Host reset, and a ready-lease rebind", () => {
+  it("cedes only look writes when manual controls claim an enabled Director timeline", () => {
+    const fixture = createScheduleFixture();
+    fixture.schedule.setLookControlOwner("manual");
+    fixture.schedule.afterFixedStep(fixture.state(HERO_TICK));
+    fixture.schedule.afterFixedStep(fixture.state(STORM_TICK));
+
+    expect(fixture.updateArtisticControls).not.toHaveBeenCalled();
+    expect(fixture.setEnvironmentState).not.toHaveBeenCalled();
+    expect(fixture.setCamera).toHaveBeenCalled();
+    expect(fixture.setBodyControls).toHaveBeenCalledWith({
+      throttle: 0.9,
+      steering: -0.22,
+    });
+    expect(fixture.submissionTicks).toEqual([HERO_TICK, STORM_TICK]);
+
+    fixture.schedule.setLookControlOwner("showcase");
+    expect(fixture.updateArtisticControls).toHaveBeenLastCalledWith(
+      createWaterPreset("storm").artisticControls,
+      { transition: "sea-state-cut" },
+    );
+  });
+
+  it("re-arms after explicit reset, Host reset, and ready-lease rebind", () => {
     const fixture = createScheduleFixture();
     fixture.schedule.afterFixedStep(fixture.state(HERO_TICK));
 
@@ -287,62 +256,102 @@ describe("Reference Showcase schedule", () => {
 
     fixture.schedule.bindLease(fixture.lease);
     fixture.schedule.afterFixedStep(fixture.state(HERO_TICK, 2));
-
     expect(fixture.submitDisturbances).toHaveBeenCalledTimes(4);
   });
 
-  it("requires a ready lease and rejects an unannounced rewind", () => {
-    const schedule = createReferenceShowcaseSchedule({
-      environment: { setEnvironmentState() {} },
-      camera: { setCamera() {} },
-    });
-    expect(() => schedule.afterFixedStep(hostState(1))).toThrowError(
-      /ready lease/i,
-    );
-
+  it("fails closed on seed, rewind, Quality Profile, look, or body divergence", () => {
     const fixture = createScheduleFixture();
+    expect(() =>
+      fixture.schedule.afterFixedStep({
+        ...fixture.state(1),
+        seed: fixture.showcase.seed + 1,
+      }),
+    ).toThrowError(/seed diverged/i);
+
     fixture.schedule.afterFixedStep(fixture.state(20));
     expect(() =>
       fixture.schedule.afterFixedStep(fixture.state(19)),
     ).toThrowError(/moved backwards/i);
-  });
 
-  it("rejects a Storm segment whose pinned look is not this build's look", () => {
-    const reference = createReferenceShowcasePreset();
-    const mismatched = createAuthoredShowcasePreset({
-      id: reference.id,
-      durationTicks: reference.durationTicks,
-      waterPreset: reference.waterPreset,
-      environmentPreset: reference.environmentPreset,
-      qualityProfile: reference.qualityProfile,
-      stormFront: {
-        ...reference.stormFront,
-        environmentPreset: {
-          ...reference.stormFront.environmentPreset,
-          presetHash: `sha256:${"0".repeat(64)}`,
-        },
-      },
-      cameraTimeline: reference.cameraTimeline,
-      eventTimeline: reference.eventTimeline,
+    const highDetailLease = {
+      ...fixture.lease,
+      manifest: createMinimalWaterPrewarmManifest(
+        createMinimalWaterQualityProfile("minimal-high-detail"),
+      ),
+    };
+    expect(() => fixture.schedule.bindLease(highDetailLease)).toThrowError(
+      /Quality Profile/i,
+    );
+    const sandboxSchedule = createReferenceShowcaseSchedule({
+      environment: { setEnvironmentState() {} },
+      camera: { setCamera() {} },
+      body: createNoopBody(),
+      enforceQualityProfile: false,
     });
+    expect(() => sandboxSchedule.bindLease(highDetailLease)).not.toThrow();
+
+    const mismatchedLook = createAuthoredShowcasePreset({
+      id: fixture.showcase.id,
+      durationTicks: fixture.showcase.durationTicks,
+      seed: fixture.showcase.seed,
+      waterPreset: fixture.showcase.waterPreset,
+      environmentPreset: fixture.showcase.environmentPreset,
+      qualityProfile: fixture.showcase.qualityProfile,
+      stormFront: fixture.showcase.stormFront,
+      lookTimeline: fixture.showcase.lookTimeline.map((look) =>
+        look.id === "blue-noon-swell"
+          ? { ...look, waterPreset: fixture.showcase.stormFront.waterPreset }
+          : look,
+      ),
+      bodyTimeline: fixture.showcase.bodyTimeline,
+      cameraTimeline: fixture.showcase.cameraTimeline,
+      eventTimeline: fixture.showcase.eventTimeline,
+      captureTimeline: fixture.showcase.captureTimeline,
+    });
+    expect(() =>
+      createReferenceShowcaseSchedule({
+        showcase: mismatchedLook,
+        environment: { setEnvironmentState() {} },
+        camera: { setCamera() {} },
+        body: createNoopBody(),
+      }),
+    ).toThrowError(/pinned preset identities/i);
 
     expect(() =>
       createReferenceShowcaseSchedule({
-        showcase: mismatched,
         environment: { setEnvironmentState() {} },
         camera: { setCamera() {} },
+        body: { ...createNoopBody(), bodyId: "other-body" },
       }),
-    ).toThrowError(/pinned preset identities/i);
+    ).toThrowError(/body timeline/i);
+  });
+
+  it("requires a ready lease before playback", () => {
+    const schedule = createReferenceShowcaseSchedule({
+      environment: { setEnvironmentState() {} },
+      camera: { setCamera() {} },
+      body: createNoopBody(),
+    });
+    expect(() => schedule.afterFixedStep(hostState(1))).toThrowError(
+      /ready lease/i,
+    );
+    expect(() => schedule.reset()).toThrowError(/ready lease/i);
   });
 });
 
-function createScheduleFixture() {
+interface FixtureOptions {
+  readonly retainInitialWrites?: boolean;
+}
+
+function createScheduleFixture(options: FixtureOptions = {}) {
+  const showcase = createReferenceShowcasePreset();
   let runtimeState = hostState(0);
   const submitted: HeroBreakerDisturbanceBatch[] = [];
   const submissionTicks: number[] = [];
   const artisticControlStates: ArtisticControls[] = [];
   const environmentStates: HostEnvironmentSnapshot[] = [];
   const cameraStates: ShowcaseCameraKeyframe[] = [];
+  const bodyControls: Array<{ throttle: number; steering: number }> = [];
   const submitDisturbances = vi.fn(
     (batch: HeroBreakerDisturbanceBatch): DisturbanceSubmissionReceipt => {
       submitted.push(cloneBatch(batch));
@@ -359,13 +368,16 @@ function createScheduleFixture() {
     },
   );
   const updateArtisticControls = vi.fn(
-    (controls: ArtisticControls): ArtisticControlUpdateReceipt => {
+    (
+      controls: ArtisticControls,
+      updateOptions?: ArtisticControlUpdateOptions,
+    ): ArtisticControlUpdateReceipt => {
       artisticControlStates.push(structuredClone(controls));
       return Object.freeze({
         artisticControls: Object.freeze({ ...controls }),
         changed: true,
         revision: artisticControlStates.length,
-        transition: "continuous",
+        transition: updateOptions?.transition ?? "continuous",
         seaStateCutRevision: 0,
       });
     },
@@ -376,7 +388,14 @@ function createScheduleFixture() {
   const setCamera = vi.fn((state: ShowcaseCameraKeyframe): void => {
     cameraStates.push(structuredClone(state));
   });
+  const resetBody = vi.fn();
+  const setBodyControls = vi.fn(
+    (controls: { readonly throttle: number; readonly steering: number }) => {
+      bodyControls.push({ ...controls });
+    },
+  );
   const lease = {
+    manifest: createMinimalWaterPrewarmManifest(),
     inspectRuntime: () => ({
       tick: runtimeState.tick,
       seaLevelMetres: runtimeState.seaLevelMetres,
@@ -386,30 +405,52 @@ function createScheduleFixture() {
     updateArtisticControls,
   };
   const schedule = createReferenceShowcaseSchedule({
+    showcase,
     environment: { setEnvironmentState },
     camera: { setCamera },
+    body: {
+      bodyId: REFERENCE_PROXY_VESSEL_BODY_ID,
+      reset: resetBody,
+      setControls: setBodyControls,
+    },
   });
   schedule.bindLease(lease);
-  updateArtisticControls.mockClear();
-  setEnvironmentState.mockClear();
-  artisticControlStates.length = 0;
-  environmentStates.length = 0;
-  setCamera.mockClear();
-  cameraStates.length = 0;
+
+  const clearWrites = (): void => {
+    updateArtisticControls.mockClear();
+    setEnvironmentState.mockClear();
+    artisticControlStates.length = 0;
+    environmentStates.length = 0;
+    setCamera.mockClear();
+    cameraStates.length = 0;
+    setBodyControls.mockClear();
+    bodyControls.length = 0;
+    submitDisturbances.mockClear();
+    submitted.length = 0;
+    submissionTicks.length = 0;
+  };
+  if (options.retainInitialWrites !== true) {
+    clearWrites();
+  }
   return {
     artisticControlStates,
-    environmentStates,
+    bodyControls,
     cameraStates,
+    clearWrites,
+    environmentStates,
     lease,
+    resetBody,
     schedule,
+    showcase,
     submitted,
     submissionTicks,
-    setEnvironmentState,
+    setBodyControls,
     setCamera,
+    setEnvironmentState,
     submitDisturbances,
     updateArtisticControls,
     state(tick: number, simulationResetRevision = 0): HostSimulationState {
-      runtimeState = hostState(tick, simulationResetRevision);
+      runtimeState = hostState(tick, simulationResetRevision, showcase.seed);
       return runtimeState;
     },
   };
@@ -418,9 +459,10 @@ function createScheduleFixture() {
 function hostState(
   tick: number,
   simulationResetRevision = 0,
+  seed = createReferenceShowcasePreset().seed,
 ): HostSimulationState {
   return Object.freeze({
-    seed: 0,
+    seed,
     tick,
     timeSeconds: tick / 60,
     paused: false,
@@ -429,6 +471,14 @@ function hostState(
     seaLevelMetres: 3,
     simulationResetRevision,
   });
+}
+
+function createNoopBody() {
+  return {
+    bodyId: REFERENCE_PROXY_VESSEL_BODY_ID,
+    reset() {},
+    setControls() {},
+  };
 }
 
 function cloneBatch(

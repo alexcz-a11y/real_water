@@ -18,7 +18,7 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV17,
+  type QaHarness,
   type QaPresentationReceiptV17,
 } from "../src/qa-harness.js";
 import {
@@ -265,7 +265,7 @@ test("settles presented water motion, then records deterministic nonzero motion 
 
   const result = await page.evaluate(
     async ({ camera, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -470,7 +470,7 @@ test("projects queried heights independently onto nearby motion AOV across a six
 
   const result = await page.evaluate(
     async ({ camera, seed, points }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -651,7 +651,7 @@ test("resets TRAA history on the first present and matches current-color within 
 
   const result = await page.evaluate(
     async ({ anchor, camera, environment, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -760,7 +760,7 @@ test("gates TRAA warp residuals on a frozen-simulation fast pan", async ({
       environment,
       anchor,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1055,7 +1055,7 @@ test("gates TRAA high-frequency glints on a moving horizon strafe", async ({
       onLighting,
       offLighting,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1397,7 +1397,7 @@ test("gates TRAA thin water detail on a jitter-only horizon hold", async ({
       environment,
       anchor,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1642,7 +1642,7 @@ test("replays sixteen fixed-tick TRAA frames with an identical jitter sequence a
 
   const result = await page.evaluate(
     async ({ camera, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1784,7 +1784,7 @@ test("camera-cut resets TRAA history once; a continuous pan does not", async ({
 
   const result = await page.evaluate(
     async ({ anchor, cut, environment, pan, seed, setup }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1797,7 +1797,7 @@ test("camera-cut resets TRAA history once; a continuous pan does not", async ({
       return { primed, continuous, cut: cutFrame, stable };
 
       async function primePresentedFrames(
-        qa: QaHarnessV17,
+        qa: QaHarness,
         nextSeed: number,
         camera: QaCameraV1,
       ) {
@@ -1817,7 +1817,7 @@ test("camera-cut resets TRAA history once; a continuous pan does not", async ({
         };
       }
 
-      async function capturePresentedBuffers(qa: QaHarnessV17) {
+      async function capturePresentedBuffers(qa: QaHarness) {
         const presentation = await qa.present();
         return {
           presentation,
@@ -1825,7 +1825,7 @@ test("camera-cut resets TRAA history once; a continuous pan does not", async ({
         };
       }
 
-      async function readPresentedBuffers(qa: QaHarnessV17) {
+      async function readPresentedBuffers(qa: QaHarness) {
         return {
           current: (await qa.capture("current-color")).data,
           final: (await qa.capture("final-color")).data,
@@ -1881,7 +1881,7 @@ test("origin-shift resets TRAA history once; the same origin does not", async ({
 
   const result = await page.evaluate(
     async ({ anchor, camera, environment, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1894,7 +1894,7 @@ test("origin-shift resets TRAA history once; the same origin does not", async ({
       return { primed, same, continuous, shifted, cut, stable };
 
       async function primePresentedFrames(
-        qa: QaHarnessV17,
+        qa: QaHarness,
         nextSeed: number,
         nextCamera: QaCameraV1,
       ) {
@@ -1918,7 +1918,7 @@ test("origin-shift resets TRAA history once; the same origin does not", async ({
         };
       }
 
-      async function capturePresentedBuffers(qa: QaHarnessV17) {
+      async function capturePresentedBuffers(qa: QaHarness) {
         const presentation = await qa.present();
         return {
           presentation,
@@ -1971,7 +1971,7 @@ test("sea-state-cut resets TRAA history once; a continuous control change does n
 
   const result = await page.evaluate(
     async ({ anchor, camera, controls, environment, seed }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -1997,7 +1997,7 @@ test("sea-state-cut resets TRAA history once; a continuous control change does n
       };
 
       async function primePresentedFrames(
-        qa: QaHarnessV17,
+        qa: QaHarness,
         nextSeed: number,
         nextCamera: QaCameraV1,
       ) {
@@ -2021,7 +2021,7 @@ test("sea-state-cut resets TRAA history once; a continuous control change does n
         };
       }
 
-      async function capturePresentedBuffers(qa: QaHarnessV17) {
+      async function capturePresentedBuffers(qa: QaHarness) {
         const presentation = await qa.present();
         return {
           presentation,

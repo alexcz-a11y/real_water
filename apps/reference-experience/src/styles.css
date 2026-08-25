@@ -181,6 +181,78 @@ h1 {
   height: 100%;
 }
 
+.reference-canvas[data-sandbox-controls="enabled"] {
+  cursor: grab;
+  touch-action: none;
+}
+
+.reference-experience-mode-presenter {
+  position: fixed;
+  z-index: 11;
+  top: 1rem;
+  left: 1rem;
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 1rem;
+  border: 1px solid rgb(141 217 242 / 55%);
+  border-radius: 1rem;
+  color: #eaf8ff;
+  background: rgb(3 16 25 / 94%);
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 40%);
+}
+
+.reference-experience-mode-presenter h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.2rem;
+}
+
+.reference-experience-mode-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.reference-experience-mode-options button[aria-pressed="true"] {
+  border-color: #ffcf70;
+  color: #07131a;
+  background: #ffcf70;
+}
+
+.reference-experience-mode-presenter section {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.8rem;
+}
+
+.reference-experience-mode-presenter section[hidden] {
+  display: none;
+}
+
+.reference-experience-mode-presenter p {
+  margin: 0.65rem 0 0;
+  color: #c8e1eb;
+  line-height: 1.45;
+}
+
+.reference-experience-mode-presenter label {
+  font-weight: 750;
+}
+
+.reference-experience-mode-presenter select {
+  min-height: 2.75rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #8dd9f2;
+  border-radius: 0.65rem;
+  color: #eaf8ff;
+  background: #082939;
+  font: inherit;
+}
+
+.reference-experience-mode-presenter select:focus-visible {
+  outline: 3px solid #ffcf70;
+  outline-offset: 3px;
+}
+
 .reference-control-presenters {
   position: fixed;
   z-index: 10;
@@ -295,8 +367,14 @@ h1 {
 }
 
 @media (max-width: 40rem) {
-  .reference-control-presenters {
+  .reference-experience-mode-presenter {
     top: 0.5rem;
+    left: 0.5rem;
+    width: calc(100vw - 1rem);
+  }
+
+  .reference-control-presenters {
+    top: 18rem;
     right: 0.5rem;
     width: calc(100vw - 1rem);
   }

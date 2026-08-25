@@ -2,12 +2,12 @@
 
 This alpha package exposes versioned minimal-water Quality Profiles, their
 canonical one-hundred-forty-unit Prewarm Manifests, versioned Calm, Swell, and
-Storm Water Presets, Reference and Storm Front Environment Presets, and
-deterministic Showcase Preset v2 recipes that pin Storm segment identities,
-camera timeline, and both Hero events, plus a pure JSON import/export and
-migration codec. It also exposes the Startup and ready Runtime Interfaces,
-normalized Core WebGPU and Gameplay Query capabilities, structured errors, and
-Memory and Three r185 Host Adapters.
+Storm Water Presets, Calm Sunrise, Blue Noon, Reference, and Storm Front
+Environment Presets, and deterministic Showcase Preset v3 recipes that pin a
+seed plus look, body-control, camera, event, and named capture-point timelines,
+plus a pure JSON import/export and migration codec. It also exposes the Startup
+and ready Runtime Interfaces, normalized Core WebGPU and Gameplay Query
+capabilities, structured errors, and Memory and Three r185 Host Adapters.
 
 `ARTISTIC_CONTROL_DESCRIPTORS` is the UI-neutral source for the complete hot
 control order, perceptual labels, descriptions, groups, and accepted ranges.

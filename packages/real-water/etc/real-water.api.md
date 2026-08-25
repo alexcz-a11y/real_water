@@ -311,7 +311,13 @@ export function createAuthoredShowcasePreset(authoring: ShowcasePresetAuthoring)
 export function createAuthoredWaterPreset(id: WaterPresetId, artisticControls: ArtisticControls): WaterPreset;
 
 // @public
+export function createBlueNoonEnvironmentPreset(): EnvironmentPreset;
+
+// @public
 export function createBodyPhysicsAdapter(options: BodyPhysicsAdapterOptions): BodyPhysicsAdapter;
+
+// @public
+export function createCalmSunriseEnvironmentPreset(): EnvironmentPreset;
 
 // @public
 export function createMemoryBodyPhysicsAdapter(options: MemoryBodyPhysicsAdapterOptions): MemoryBodyPhysicsAdapter;
@@ -1805,6 +1811,9 @@ export interface RecoveryPresetImport {
 }
 
 // @public
+export const REFERENCE_SHOWCASE_SEED: 1592590373;
+
+// @public
 export interface RenderingCapabilities {
     // (undocumented)
     readonly backend: "core-webgpu";
@@ -2067,7 +2076,19 @@ export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "BODY_CAPACITY_EXCEEDED"
 export const SHOWCASE_PRESET_SCHEMA: "real-water/showcase-preset";
 
 // @public
-export const SHOWCASE_PRESET_VERSION: 2;
+export const SHOWCASE_PRESET_VERSION: 3;
+
+// @public
+export interface ShowcaseBodyKeyframe {
+    // (undocumented)
+    readonly bodyId: string;
+    // (undocumented)
+    readonly steering: number;
+    // (undocumented)
+    readonly throttle: number;
+    // (undocumented)
+    readonly tick: number;
+}
 
 // @public
 export interface ShowcaseCameraKeyframe {
@@ -2082,11 +2103,33 @@ export interface ShowcaseCameraKeyframe {
 }
 
 // @public
+export interface ShowcaseCapturePoint {
+    // (undocumented)
+    readonly captureNames: readonly string[];
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly tick: number;
+}
+
+// @public
 export interface ShowcaseEventKeyframe {
     // (undocumented)
     readonly id: string;
     // (undocumented)
     readonly tick: number;
+}
+
+// @public
+export interface ShowcaseLookKeyframe {
+    // (undocumented)
+    readonly environmentPreset: EnvironmentPresetIdentity;
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly tick: number;
+    // (undocumented)
+    readonly waterPreset: WaterPresetIdentity;
 }
 
 // @public
@@ -2102,7 +2145,11 @@ export interface ShowcasePreset extends ShowcasePresetAuthoring {
 // @public
 export interface ShowcasePresetAuthoring {
     // (undocumented)
+    readonly bodyTimeline: readonly ShowcaseBodyKeyframe[];
+    // (undocumented)
     readonly cameraTimeline: readonly ShowcaseCameraKeyframe[];
+    // (undocumented)
+    readonly captureTimeline: readonly ShowcaseCapturePoint[];
     // (undocumented)
     readonly durationTicks: number;
     // (undocumented)
@@ -2112,7 +2159,11 @@ export interface ShowcasePresetAuthoring {
     // (undocumented)
     readonly id: string;
     // (undocumented)
+    readonly lookTimeline: readonly ShowcaseLookKeyframe[];
+    // (undocumented)
     readonly qualityProfile: QualityProfileIdentity;
+    // (undocumented)
+    readonly seed: number;
     // (undocumented)
     readonly stormFront: ShowcaseStormFrontSegment;
     // (undocumented)

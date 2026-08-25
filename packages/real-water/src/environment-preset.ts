@@ -148,6 +148,78 @@ export interface EnvironmentPresetIdentity {
 }
 
 /**
+ * Returns the built-in Calm Sunrise Environment look.
+ *
+ * @public
+ */
+export function createCalmSunriseEnvironmentPreset(): EnvironmentPreset {
+  return createAuthoredEnvironmentPreset("calm-sunrise", {
+    lighting: {
+      sunDirectionX: 0.72,
+      sunDirectionY: 0.38,
+      sunDirectionZ: 0.58,
+      sunColorR: 1,
+      sunColorG: 0.72,
+      sunColorB: 0.48,
+      sunIntensity: 0.78,
+      environmentIntensity: 0.68,
+      sunAngularRadiusRadians: SUPPORTED_HOST_SUN_ANGULAR_RADIUS_RADIANS,
+    },
+    reflection: { ...SUPPORTED_HOST_ENVIRONMENT_REFLECTION },
+    weather: {
+      windDirectionX: 0.8,
+      windDirectionZ: 0.6,
+      windStrength: 0.18,
+      gustStrength: 0.06,
+      rainIntensity: 0,
+    },
+    atmosphere: {
+      cloudCoverage: 0.12,
+      cloudShadowStrength: 0.08,
+      horizonHaze: 0.38,
+      stormAerosolIntensity: 0,
+      lightningIntensity: 0,
+    },
+  });
+}
+
+/**
+ * Returns the built-in Blue Noon Environment look.
+ *
+ * @public
+ */
+export function createBlueNoonEnvironmentPreset(): EnvironmentPreset {
+  return createAuthoredEnvironmentPreset("blue-noon", {
+    lighting: {
+      sunDirectionX: -0.16,
+      sunDirectionY: 0.97,
+      sunDirectionZ: 0.18,
+      sunColorR: 0.82,
+      sunColorG: 0.91,
+      sunColorB: 1,
+      sunIntensity: 1.2,
+      environmentIntensity: 1.15,
+      sunAngularRadiusRadians: SUPPORTED_HOST_SUN_ANGULAR_RADIUS_RADIANS,
+    },
+    reflection: { ...SUPPORTED_HOST_ENVIRONMENT_REFLECTION },
+    weather: {
+      windDirectionX: 0.65,
+      windDirectionZ: 0.76,
+      windStrength: 0.55,
+      gustStrength: 0.18,
+      rainIntensity: 0,
+    },
+    atmosphere: {
+      cloudCoverage: 0.08,
+      cloudShadowStrength: 0.06,
+      horizonHaze: 0.12,
+      stormAerosolIntensity: 0,
+      lightningIntensity: 0,
+    },
+  });
+}
+
+/**
  * Returns the built-in Reference Environment Preset.
  *
  * @public

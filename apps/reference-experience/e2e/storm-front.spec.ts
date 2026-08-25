@@ -4,7 +4,7 @@ import {
   createWaterPreset,
   type HostEnvironmentSnapshot,
 } from "real-water";
-import type { QaCameraV1, QaHarnessV17 } from "../src/qa-harness.js";
+import type { QaCameraV1, QaHarness } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
 
@@ -93,8 +93,8 @@ const CAPTURE_NAMES = Object.freeze([
 ] as const);
 const HERO_CAPTURE_NAME = "hero-breaker-foam" as const;
 
-type PresentationReceipt = Awaited<ReturnType<QaHarnessV17["present"]>>;
-type CaptureReceipt = Awaited<ReturnType<QaHarnessV17["capture"]>>;
+type PresentationReceipt = Awaited<ReturnType<QaHarness["present"]>>;
+type CaptureReceipt = Awaited<ReturnType<QaHarness["capture"]>>;
 type SecondaryParticlesReceipt = PresentationReceipt["secondaryParticles"];
 type SecondaryParticleReceipt = SecondaryParticlesReceipt["consumers"][number];
 type StormCaptureName = (typeof CAPTURE_NAMES)[number];
@@ -124,9 +124,7 @@ interface StormFrame {
 
 interface HeroWeatherFrame {
   readonly baseline: PresentationIdentity;
-  readonly receipt: Awaited<
-    ReturnType<QaHarnessV17["submitDisturbances"]>
-  > | null;
+  readonly receipt: Awaited<ReturnType<QaHarness["submitDisturbances"]>> | null;
   readonly frame: StormFrame;
   readonly heroFoam: CapturedData;
 }
@@ -166,7 +164,7 @@ test("runs and byte-replays the complete prepared Storm Front route", async ({
       stormEnvironment,
       targetTick,
     }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

@@ -1,9 +1,14 @@
 import {
   ARTISTIC_CONTROL_DESCRIPTORS,
+  createAuthoredEnvironmentPreset,
+  createAuthoredWaterPreset,
   createMinimalWaterQualityProfile,
   createReferenceEnvironmentPreset,
   createWaterPreset,
+  normalizeEnvironmentPreset,
+  normalizeWaterPreset,
   type ArtisticControls,
+  type EnvironmentPreset,
   type HostEnvironmentAtmosphereState,
   type HostEnvironmentSnapshot,
   type HostEnvironmentState,
@@ -13,6 +18,7 @@ import {
   type OpenWaterRuntimeSnapshot,
   type QualityProfile,
   type RealWaterLease,
+  type WaterPreset,
 } from "real-water";
 import type { DiagnosticsCaptureName } from "real-water/diagnostics";
 import type { ReferenceEngineeringDiagnosticsSnapshot } from "./reference-engineering-diagnostics.js";
@@ -188,6 +194,7 @@ export interface ReferenceHeavyDiagnosticsSnapshot {
 export interface ReferenceControlSnapshot {
   readonly revision: number;
   readonly state: "unbound" | "bound" | "disposed";
+  readonly lookControlOwner?: "showcase" | "manual";
   readonly artisticControls: ArtisticControls;
   readonly environment: HostEnvironmentSnapshot;
   readonly heroBreakerDraft: ReferenceHeroBreakerDraft;
@@ -252,6 +259,21 @@ export interface ReferenceControlModel {
   bind(binding: ReferenceControlBinding): void;
   unbind(expectedLease?: RealWaterLease): void;
   dispose(): void;
+}
+
+export interface ReferenceLookControlSnapshot extends ReferenceControlSnapshot {
+  readonly lookControlOwner: "showcase" | "manual";
+}
+
+export interface ReferenceLookControlModel extends ReferenceControlModel {
+  snapshot(): ReferenceLookControlSnapshot;
+  applyWaterPreset(preset: WaterPreset): void;
+  applyEnvironmentPreset(preset: EnvironmentPreset): void;
+  releaseManualLookOwnership(): void;
+  adoptShowcaseLook(
+    controls: ArtisticControls,
+    environment: HostEnvironmentSnapshot,
+  ): void;
 }
 
 const ARTISTIC_NUMERIC_DESCRIPTORS = Object.freeze(
@@ -1020,7 +1042,7 @@ const DEFAULT_HERO_BREAKER_DRAFT: ReferenceHeroBreakerDraft = Object.freeze({
 
 export function createReferenceControlModel(
   options: ReferenceControlModelOptions,
-): ReferenceControlModel {
+): ReferenceLookControlModel {
   const scheduleInterval =
     options.setInterval ??
     ((callback: () => void, intervalMs: number) => {
@@ -1044,7 +1066,8 @@ export function createReferenceControlModel(
   let draftQualityProfileId: MinimalWaterQualityProfileId = "minimal";
   let qualityProfileDraftTouched = false;
   let qualityProfileApplying = false;
-  let manualOwnershipClaimed = false;
+  let lookControlOwner: ReferenceLookControlSnapshot["lookControlOwner"] =
+    "showcase";
   let activeBinding: ReferenceControlBinding | undefined;
   let runtime: ReferenceControlRuntimeSnapshot | null = null;
   let diagnosticsEnabled = false;
@@ -1056,13 +1079,14 @@ export function createReferenceControlModel(
   let nextHeroBreakerId = 0x2400_0001;
   let revision = 0;
   let state: ReferenceControlSnapshot["state"] = "unbound";
-  let currentSnapshot: ReferenceControlSnapshot;
+  let currentSnapshot: ReferenceLookControlSnapshot;
   const subscribers = new Set<ReferenceControlSubscriber>();
 
-  const buildSnapshot = (): ReferenceControlSnapshot =>
+  const buildSnapshot = (): ReferenceLookControlSnapshot =>
     Object.freeze({
       revision,
       state,
+      lookControlOwner,
       artisticControls,
       environment,
       heroBreakerDraft,
@@ -1093,11 +1117,11 @@ export function createReferenceControlModel(
   };
 
   const claimManualOwnership = (): void => {
-    if (manualOwnershipClaimed) {
+    if (lookControlOwner === "manual") {
       return;
     }
-    manualOwnershipClaimed = true;
     activeBinding?.claimManualLook();
+    lookControlOwner = "manual";
   };
 
   const detachBinding = (): void => {
@@ -1155,6 +1179,53 @@ export function createReferenceControlModel(
       subscribers.add(subscriber);
       subscriber(currentSnapshot);
       return () => subscribers.delete(subscriber);
+    },
+    applyWaterPreset(preset: WaterPreset): void {
+      assertUsable(state);
+      const normalized = normalizeWaterPreset(preset);
+      const candidate = normalized.artisticControls;
+      activeBinding?.lease.updateArtisticControls(candidate, {
+        transition: "sea-state-cut",
+      });
+      claimManualOwnership();
+      artisticControls = candidate;
+      runtime = readLightweightRuntime(activeBinding?.lease);
+      publish();
+    },
+    applyEnvironmentPreset(preset: EnvironmentPreset): void {
+      assertUsable(state);
+      const normalized = normalizeEnvironmentPreset(preset);
+      const candidate = freezeEnvironment({
+        lighting: normalized.lighting,
+        weather: normalized.weather,
+        atmosphere: normalized.atmosphere,
+      });
+      activeBinding?.environment.setEnvironmentState(candidate);
+      claimManualOwnership();
+      environment = candidate;
+      publish();
+    },
+    releaseManualLookOwnership(): void {
+      assertUsable(state);
+      if (lookControlOwner === "showcase") {
+        return;
+      }
+      lookControlOwner = "showcase";
+      publish();
+    },
+    adoptShowcaseLook(
+      controls: ArtisticControls,
+      nextEnvironment: HostEnvironmentSnapshot,
+    ): void {
+      assertUsable(state);
+      const nextArtisticControls = normalizeShowcaseArtisticControls(controls);
+      const acceptedEnvironment = normalizeShowcaseEnvironment(nextEnvironment);
+      const nextRuntime = readLightweightRuntime(activeBinding?.lease);
+      lookControlOwner = "showcase";
+      artisticControls = nextArtisticControls;
+      environment = acceptedEnvironment;
+      runtime = nextRuntime;
+      publish();
     },
     setNumeric(id: ReferenceNumericControlId, value: number): void {
       assertUsable(state);
@@ -1308,7 +1379,7 @@ export function createReferenceControlModel(
         if (!qualityProfileDraftTouched) {
           draftQualityProfileId = activeQualityProfileId;
         }
-        if (manualOwnershipClaimed) {
+        if (lookControlOwner === "manual") {
           binding.claimManualLook();
           binding.lease.updateArtisticControls(artisticControls, {
             transition: "continuous",
@@ -1503,6 +1574,54 @@ function freezeEnvironment(
     weather: Object.freeze({ ...candidate.weather }),
     atmosphere: Object.freeze({ ...candidate.atmosphere }),
   });
+}
+
+function normalizeShowcaseArtisticControls(
+  controls: ArtisticControls,
+): ArtisticControls {
+  return createAuthoredWaterPreset("swell", controls).artisticControls;
+}
+
+function normalizeShowcaseEnvironment(
+  candidate: HostEnvironmentSnapshot,
+): HostEnvironmentSnapshot {
+  if (!hasExactOwnKeys(candidate, ["lighting", "weather", "atmosphere"])) {
+    throw new TypeError(
+      "A Showcase Environment snapshot requires exact lighting, weather, and atmosphere fields.",
+    );
+  }
+  const normalized = createAuthoredEnvironmentPreset(
+    "reference-control-snapshot",
+    {
+      lighting: candidate.lighting,
+      reflection: createReferenceEnvironmentPreset().reflection,
+      weather: candidate.weather,
+      atmosphere: candidate.atmosphere,
+    },
+  );
+  return freezeEnvironment({
+    lighting: normalized.lighting,
+    weather: normalized.weather,
+    atmosphere: normalized.atmosphere,
+  });
+}
+
+function hasExactOwnKeys(
+  candidate: unknown,
+  keys: readonly string[],
+): candidate is Record<string, unknown> {
+  if (
+    typeof candidate !== "object" ||
+    candidate === null ||
+    Array.isArray(candidate)
+  ) {
+    return false;
+  }
+  const actual = Object.keys(candidate);
+  return (
+    actual.length === keys.length &&
+    keys.every((key) => Object.prototype.hasOwnProperty.call(candidate, key))
+  );
 }
 
 function setEnvironmentNumeric(

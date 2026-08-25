@@ -1,7 +1,10 @@
 import {
+  createBlueNoonEnvironmentPreset,
+  createCalmSunriseEnvironmentPreset,
   createMinimalWaterQualityProfile,
   createReferenceEnvironmentPreset,
   createReferenceShowcasePreset,
+  createStormFrontEnvironmentPreset,
   createWaterPreset,
   exportPresetJson,
   importPresetJson,
@@ -20,7 +23,10 @@ export const LOCAL_PRESET_BUILT_IN_RECORD_IDS = Object.freeze({
     storm: "built-in:water:storm",
   }),
   environment: Object.freeze({
+    calmSunrise: "built-in:environment:calm-sunrise",
+    blueNoon: "built-in:environment:blue-noon",
     reference: "built-in:environment:reference",
+    stormFront: "built-in:environment:storm-front",
   }),
   quality: Object.freeze({
     minimal: "built-in:quality:minimal",
@@ -305,9 +311,24 @@ function createDefaultBuiltIns(): readonly LocalPresetBuiltIn[] {
       preset: createWaterPreset("storm"),
     },
     {
+      recordId: LOCAL_PRESET_BUILT_IN_RECORD_IDS.environment.calmSunrise,
+      displayName: "Calm Sunrise Environment",
+      preset: createCalmSunriseEnvironmentPreset(),
+    },
+    {
+      recordId: LOCAL_PRESET_BUILT_IN_RECORD_IDS.environment.blueNoon,
+      displayName: "Blue Noon Environment",
+      preset: createBlueNoonEnvironmentPreset(),
+    },
+    {
       recordId: LOCAL_PRESET_BUILT_IN_RECORD_IDS.environment.reference,
       displayName: "Reference Environment",
       preset: createReferenceEnvironmentPreset(),
+    },
+    {
+      recordId: LOCAL_PRESET_BUILT_IN_RECORD_IDS.environment.stormFront,
+      displayName: "Storm Front Environment",
+      preset: createStormFrontEnvironmentPreset(),
     },
     {
       recordId: LOCAL_PRESET_BUILT_IN_RECORD_IDS.quality.minimal,

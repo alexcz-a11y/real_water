@@ -7,7 +7,7 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV17,
+  type QaHarness,
   type QaPresentationReceiptV17,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
@@ -87,7 +87,7 @@ test("replays independent bounded tracer AOVs and soft-fades them against scene 
   const captureAt = async (foregroundVisible: boolean) =>
     page.evaluate(
       async ({ camera, controls, foreground, seed, tick }) => {
-        const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+        const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
         if (harness === undefined) {
           throw new Error("QA Harness is unavailable.");
         }
@@ -226,7 +226,7 @@ test("drives genuine four-consumer pressure and permanently suppresses pressure-
 
   const result = await page.evaluate(
     async ({ camera, controls, seed, tick }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV17 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
