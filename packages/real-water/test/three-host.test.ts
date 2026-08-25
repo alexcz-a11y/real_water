@@ -602,6 +602,80 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(renderer.onDeviceLost).toBe(hostReplacementOnDeviceLost);
   });
 
+  it("cancellation waits for an in-flight compile before partial resource disposal", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+    const renderer = createPrewarmRenderer();
+    let releaseCompile!: () => void;
+    const pendingCompile = new Promise<void>((resolve) => {
+      releaseCompile = resolve;
+    });
+    renderer.compileAsync.mockImplementationOnce(() => pendingCompile);
+    const rawHost = createThreeHostLifecycleAdapter({
+      renderer,
+      scene,
+      camera,
+    });
+    let rawPreparation: ReturnType<typeof rawHost.prepare> | undefined;
+    const host = Object.freeze({
+      prepare(request: Parameters<typeof rawHost.prepare>[0]) {
+        rawPreparation = rawHost.prepare(request);
+        return rawPreparation;
+      },
+    });
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: new RecordingLoadingPresenter(),
+      host,
+    });
+    let promptTimeout: ReturnType<typeof setTimeout> | undefined;
+    let rawOutcome:
+      | Readonly<{ status: "ready" }>
+      | Readonly<{ status: "failed"; error: unknown }>
+      | undefined;
+
+    try {
+      await vi.waitFor(() => {
+        expect(renderer.compileAsync).toHaveBeenCalledTimes(1);
+      });
+      const preparingPlane = scene.getObjectByName("Real Water clipmap");
+      expect(preparingPlane).toBeDefined();
+
+      expect.soft(run.cancel("Cancelled during Three compile.")).toBe(true);
+      const promptOutcome = await Promise.race([
+        run.ready.then(
+          () => ({ status: "ready" as const }),
+          (error: unknown) => ({ status: "failed" as const, error }),
+        ),
+        new Promise<Readonly<{ status: "timeout" }>>((resolve) => {
+          promptTimeout = setTimeout(() => resolve({ status: "timeout" }), 100);
+        }),
+      ]);
+      expect.soft(promptOutcome).toMatchObject({
+        status: "failed",
+        error: {
+          code: "PREPARATION_CANCELLED",
+          message: "Cancelled during Three compile.",
+        },
+      });
+      expect.soft(scene.children).toContain(preparingPlane);
+    } finally {
+      if (promptTimeout !== undefined) {
+        clearTimeout(promptTimeout);
+      }
+      releaseCompile();
+      if (rawPreparation !== undefined) {
+        rawOutcome = await rawPreparation.then(
+          () => ({ status: "ready" as const }),
+          (error: unknown) => ({ status: "failed" as const, error }),
+        );
+      }
+    }
+
+    expect(rawOutcome).toMatchObject({ status: "failed" });
+    expect(scene.children).toHaveLength(0);
+  });
+
   it("rejects a drawing-buffer mismatch before compile or water allocation", async () => {
     const scene = new Scene();
     const camera = new PerspectiveCamera(50, 1, 0.1, 100);

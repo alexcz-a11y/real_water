@@ -164,15 +164,23 @@ export async function prepareMinimalWaterPlane(
       // Preserve the authoritative preparation or abort failure.
     }
   };
-  const cleanupAfterAbort = (): void => {
-    cleanupPreparation();
+  const cleanupImmediatelyAfterDeviceLossAbort = (): void => {
+    const reason: unknown = options.request.signal.reason;
+    // The Three Host device-loss race returns before its pending preparation,
+    // so a lost device keeps the prompt cleanup path. A live-device cancel
+    // instead reaches the catch below after the current async GPU call settles.
+    if (isDeviceLossAbortReason(reason)) {
+      cleanupPreparation();
+    }
   };
   if (options.request.signal.aborted) {
-    cleanupAfterAbort();
+    cleanupImmediatelyAfterDeviceLossAbort();
   } else {
-    options.request.signal.addEventListener("abort", cleanupAfterAbort, {
-      once: true,
-    });
+    options.request.signal.addEventListener(
+      "abort",
+      cleanupImmediatelyAfterDeviceLossAbort,
+      { once: true },
+    );
   }
 
   try {
@@ -591,7 +599,10 @@ export async function prepareMinimalWaterPlane(
     cleanupPreparation();
     throw cause;
   } finally {
-    options.request.signal.removeEventListener("abort", cleanupAfterAbort);
+    options.request.signal.removeEventListener(
+      "abort",
+      cleanupImmediatelyAfterDeviceLossAbort,
+    );
   }
 }
 
@@ -799,4 +810,13 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) {
     throw new Error("Three Host preparation was cancelled.");
   }
+}
+
+function isDeviceLossAbortReason(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    value.code === "WEBGPU_DEVICE_LOST"
+  );
 }

@@ -13,7 +13,10 @@ import {
   createMemoryLocalPresetStorage,
   type LocalPresetLibrary,
 } from "./local-preset-library.js";
-import { startReferenceExperience } from "./start-reference-experience.js";
+import {
+  startReferenceExperience,
+  type StartReferenceExperienceOptions,
+} from "./start-reference-experience.js";
 
 const INITIAL = Object.freeze({
   drawingBufferWidth: 320,
@@ -191,6 +194,102 @@ describe("ReferenceExperienceSession.applyViewport", () => {
     expect(after.viewport).toEqual(NEXT);
     expect(after.manifestHash).not.toBe(before.manifestHash);
   });
+
+  it("retires an in-flight viewport attempt before creating the latest", async () => {
+    const events: string[] = [];
+    let attemptNumber = 0;
+    let releaseSecondPreparation = (): void => {};
+    const secondPreparationGate = new Promise<void>((resolve) => {
+      releaseSecondPreparation = resolve;
+    });
+    let markSecondPrepared = (): void => {};
+    const secondPrepared = new Promise<void>((resolve) => {
+      markSecondPrepared = resolve;
+    });
+    const session = startSessionWithHostAttempt(() => {
+      const currentAttempt = (attemptNumber += 1);
+      events.push(`create-${String(currentAttempt)}`);
+      const baseHost = createMemoryHostLifecycleAdapter({
+        simulation: createStaticHostSimulationAdapter(),
+        environment: createReferenceEnvironmentAdapter(),
+        presentation: createStaticHostPresentationAdapter(),
+        stepDelayMs: 0,
+      });
+      return {
+        host: {
+          async prepare(request) {
+            if (currentAttempt !== 2) {
+              return baseHost.prepare(request);
+            }
+            request.signal.addEventListener(
+              "abort",
+              () => {
+                events.push("cancel-2");
+              },
+              { once: true },
+            );
+            const result = await baseHost.prepare(request);
+            markSecondPrepared();
+            await secondPreparationGate;
+            events.push("raw-settle-2");
+            if (result.status !== "ready") {
+              return result;
+            }
+            return {
+              ...result,
+              lease: {
+                ...result.lease,
+                async dispose() {
+                  events.push("release-2");
+                  await result.lease.dispose();
+                },
+              },
+            };
+          },
+        },
+        createReadyStage: () => {
+          const stage = document.createElement("main");
+          stage.dataset.testid = "reference-stage";
+          return stage;
+        },
+        dispose() {
+          events.push(`dispose-${String(currentAttempt)}`);
+        },
+      };
+    });
+    await waitForReady(session);
+
+    const first = session.applyViewport({
+      drawingBufferWidth: 400,
+      drawingBufferHeight: 200,
+    });
+    await secondPrepared;
+    let second = Promise.resolve();
+    try {
+      expect(session.snapshot().generation).toBe(2);
+      second = session.applyViewport(NEXT);
+      expect(events).toContain("cancel-2");
+      expect(events).not.toContain("create-3");
+    } finally {
+      releaseSecondPreparation();
+    }
+
+    await first;
+    await second;
+    await waitForReady(session);
+    const lifecycle = [
+      "create-2",
+      "cancel-2",
+      "raw-settle-2",
+      "release-2",
+      "dispose-2",
+      "create-3",
+    ];
+    expect(events.filter((event) => lifecycle.includes(event))).toEqual(
+      lifecycle,
+    );
+    expect(session.snapshot().viewport).toEqual(NEXT);
+  });
 });
 
 describe("ReferenceExperienceSession.reportPresentationFailure", () => {
@@ -307,15 +406,8 @@ function startSession(
     storage: createMemoryLocalPresetStorage(),
   }),
 ) {
-  installMinimalDocument();
-  mount = document.createElement("div") as unknown as typeof mount;
-  document.body.append(mount as unknown as Node);
-  const session = startReferenceExperience(mount as unknown as Element, {
-    initialDrawingBuffer: {
-      width: INITIAL.drawingBufferWidth,
-      height: INITIAL.drawingBufferHeight,
-    },
-    createHostAttempt: (drawingBuffer) => ({
+  return startSessionWithHostAttempt(
+    (drawingBuffer) => ({
       host: createMemoryHostLifecycleAdapter({
         simulation: createStaticHostSimulationAdapter(),
         environment: createReferenceEnvironmentAdapter(),
@@ -331,6 +423,25 @@ function startSession(
         void drawingBuffer;
       },
     }),
+    presetLibrary,
+  );
+}
+
+function startSessionWithHostAttempt(
+  createHostAttempt: StartReferenceExperienceOptions["createHostAttempt"],
+  presetLibrary: LocalPresetLibrary = createLocalPresetLibrary({
+    storage: createMemoryLocalPresetStorage(),
+  }),
+) {
+  installMinimalDocument();
+  mount = document.createElement("div") as unknown as typeof mount;
+  document.body.append(mount as unknown as Node);
+  const session = startReferenceExperience(mount as unknown as Element, {
+    initialDrawingBuffer: {
+      width: INITIAL.drawingBufferWidth,
+      height: INITIAL.drawingBufferHeight,
+    },
+    createHostAttempt,
     presetLibrary,
     revealDelayFrames: 1,
   });
