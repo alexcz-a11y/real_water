@@ -118,8 +118,12 @@ record of the service's output terms applies to this pack too.
 - **Two files in the navigation buoy pack carry a full-width border strip, and this pack does not.**
   Recorded here because the scan covered all forty-four approved images at once: see
   `navigation-buoy-v001.md`. Every sea stack view is clean to its last row.
-- **The base below the waterline is never shown terminating.** Bible §10 fixes it as the same
-  columnar rock continuing straight down without a plinth, and every view crops or fades it before
-  it ends. The reconstruction takes the termination from the Bible.
+- **The base is shown terminating, and what it terminates on is not.** This entry said the base was
+  "never shown terminating" until 2026-08-25. The anchor shows it plainly: the columns run straight
+  down and end on a flat plane, each foot visible, with no plinth and no skirt of debris — which is
+  exactly what Bible §10 specifies, so the specification is corroborated here rather than merely
+  asserted. What no view shows is how that base meets an actual seabed, because every view stands the
+  stack on a studio floor. **The distinction matters because the reconstruction needs the first fact
+  and not the second**, and the old wording denied it the one it needed.
 - The material studies show the column faces and the summit tops at a scale no elevation reaches;
   treat their part shapes as indicative and their materials as authoritative.
