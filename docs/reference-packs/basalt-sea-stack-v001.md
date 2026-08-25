@@ -85,10 +85,39 @@ record of the service's output terms applies to this pack too.
 
 ## Known differences from the specification
 
-- **The three elevations drift in silhouette.** The stack has no symmetry to hold them to, so the
-  front, side and back elevations differ in overall taper and summit profile by more than generation
-  noise: one reads noticeably more conical than the others. Treat the anchor as authoritative for
-  proportion and the elevations as evidence for column arrangement only.
+- **The side elevation is rejected for proportion.** This entry used to say only that "one reads
+  noticeably more conical than the others"; it is the side elevation, measured 2026-08-25 against
+  `.scratch/REFPACK-RATIO-CHECK.md`.
+
+  **This asset cannot be checked the way that procedure checks a box.** Its step 3 cross-derivation
+  needs three views spanning three independent axes; the stack is near-radial and Bible §6 gives it
+  no top view, so front, side and back all report the same two axes and none can predict another.
+  Every ratio that mixes a vertical dimension in is also unusable here — the summit is ragged and
+  each view composes it differently, so three such measures disagreed with each other about which
+  view was the outlier, one of them reversing when only the mask threshold changed.
+
+  **A purely horizontal ratio settles it.** Width at one height divided by width at another touches
+  no vertical quantity and is immune to framing:
+
+  | ratio | anchor | front | side | back |
+  |---|---|---|---|---|
+  | w@0.90 / w@0.15 | −4.7 % | −0.1 % | **+36.9 %** | +0.1 % |
+  | w@0.75 / w@0.30 | +1.3 % | −2.3 % | **+17.5 %** | −1.3 % |
+  | w@0.60 / w@0.20 | −4.8 % | +0.4 % | **+14.6 %** | −0.4 % |
+  | w@0.95 / w@0.25 | −4.2 % | +0.9 % | **+32.8 %** | −0.9 % |
+
+  Front and back hold to each other within 2.3 % on every pair and the anchor within 4.8 %; the side
+  elevation stands 14–37 % apart on all four. That is the procedure's unambiguous case — a tight
+  cluster and one view outside it — so **the side elevation tapers far more sharply than the object
+  does, and is evidence for column arrangement only, not for taper.**
+
+  Two limits on using this ruling, both from the procedure's step 6: it says nothing about the shape
+  of any individual column drawn in that view, and fractional positions read off it stay valid while
+  absolute distances do not.
+
+- **Two files in the navigation buoy pack carry a full-width border strip, and this pack does not.**
+  Recorded here because the scan covered all forty-four approved images at once: see
+  `navigation-buoy-v001.md`. Every sea stack view is clean to its last row.
 - **The base below the waterline is never shown terminating.** Bible §10 fixes it as the same
   columnar rock continuing straight down without a plinth, and every view crops or fades it before
   it ends. The reconstruction takes the termination from the Bible.

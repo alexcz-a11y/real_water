@@ -78,6 +78,44 @@ look-dev stay out of it, per Bible §6.
 - Three front elevations buried the mooring ring in the growth band so that it could not be read.
 - One anchor candidate carried a boarding ladder that nothing had asked for.
 
+## Two files carry a border strip that will corrupt a bbox measurement
+
+Found 2026-08-25 while a bounding box on `nav-buoy-elev-back-v001.png` returned a width of 4096 px —
+the full image. That was first written off as a segmentation bug and was not one.
+
+- `nav-buoy-elev-back-v001.png` — **the last four rows**, against a backdrop of 239.15:
+
+  | row | mean | vs backdrop |
+  |---|---|---|
+  | 4092 | 235.61 | **−3.49** |
+  | 4093 | 247.57 | +8.50 |
+  | 4094 | 254.57 | +15.49 |
+  | 4095 | 253.57 | +14.49 |
+
+- `nav-buoy-lookdev-wet-v001.png` — **the last row alone**, 191.19 against 181.95, +13.08. Rows 4088
+  through 4094 are normal.
+
+Every disturbed row is uniform across all 4096 columns: their per-column standard deviation matches
+the undisturbed rows above them (≈0.49 and ≈1.4 respectively), so this is a property of the whole
+row and not of anything in the picture.
+
+**It is not a white strip, which is what two separate readings each called it.** One reading found
+"the last two rows at 254", another "the last three rows rising to 247.6" — both are true at their own
+thresholds, and both miss that the run **starts with a row that is darker than the backdrop.** A dark
+row followed by three bright ones is an edge ramp, not a strip, and describing it as a strip would
+send anyone looking for it to the wrong signature.
+
+The conservative rule below was chosen to span two disagreeing readings. Measured exactly, it turns
+out to be the precise extent rather than a safety margin.
+
+All forty-four approved images across the five packs were scanned for this; **these two are the only
+ones**, and both are in this pack.
+
+**The files are not being edited.** Their sha256 values are their identity in the table above and in
+`README-recovery.md`, and a repaired file would fail both. Any measurement that derives a bounding
+box from these two must **discard the last four rows first**. A gate that does not will silently
+inherit a 4096-wide extent and report a proportion defect that is not in the object.
+
 ## Known differences from the specification
 
 - **The buoy is very nearly rotationally symmetric.** The side elevation differs from the front only
