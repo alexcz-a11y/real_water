@@ -60,13 +60,21 @@ test("lazy-loads Engineering, keeps heavy diagnostics opt-in, and applies struct
   await page.getByRole("button", { name: "Open Engineering controls" }).click();
   const engineering = page.getByTestId("engineering-control-presenter");
   await expect(engineering).toBeVisible();
+  const heavyDiagnosticsFolder = engineering.getByRole("button", {
+    name: "Heavy diagnostics · explicit opt-in",
+  });
+  await expect(heavyDiagnosticsFolder).toBeVisible();
+  await heavyDiagnosticsFolder.click();
   await expect(engineering.getByText("Enable readbacks")).toBeVisible();
   const heavyToggle = engineering
-    .locator("label")
+    .locator(".tp-lblv")
     .filter({ hasText: "Enable readbacks" })
     .locator('input[type="checkbox"]');
   await expect(heavyToggle).not.toBeChecked();
 
+  await engineering
+    .getByRole("button", { name: "Structural quality · reload required" })
+    .click();
   const qualityBlade = engineering
     .locator(".tp-lblv")
     .filter({ hasText: "Quality Profile" });
