@@ -79,6 +79,34 @@ undecided, because an undecided part drifts differently in every later view.
   not a material property, and reading it as wetness would bias the reconstruction.
 - A starboard three-quarter look-dev: no approved view covers that side, so nothing could check it.
 
+## Two approved views that should have been rejected
+
+Found 2026-08-24 by the `#37` reconstruction through cross-view checking, and verified here against
+the same files before recording. **Both are defects in this pack's approval, not in the model.**
+
+**1. The port elevation lost every part below the waterline.** Bible §10 fixes "two four-bladed
+bronze propellers on exposed shafts with A-bracket struts, set either side of a central skeg" as
+parts of this vessel. The port elevation draws the black bottom terminating in a smooth unbroken
+curve: no propellers, no shafts, no A-brackets, no skeg, no rudder. **Bible §8 invariant 2 — no part
+gained, no part lost — should have rejected this view and did not.**
+
+**2. The port elevation and the top view disagree on the deck-box arrangement.** The top view shows
+three deck boxes side by side in one transverse row across the beam, aft of the winch. The port
+elevation strings them out fore-and-aft at three different longitudinal stations. They cannot both
+be right.
+
+Take the deck-box arrangement from the **top view**, which sees the athwartships axis directly and
+is the only approved view that can resolve a fore-aft-versus-athwartships question at all. Take the
+running gear from Bible §10, since no approved view now shows it.
+
+**Why the review missed both.** Every derivative view was checked against the identity anchor for
+silhouette, part count, proportion, material and palette — but **pairwise between derivative views
+only where a part was visibly disputed**. A part that is simply *absent* from one view raises nothing
+to dispute: the anchor is a port-bow three-quarter and its running gear is below the frame, so
+"absent here too" read as consistent. The check that would have caught it is the one this pack
+never ran — **every fixed part in §10 against every view that should show it**, driven from the
+specification rather than from what the images happened to argue about.
+
 ## Known differences from the specification
 
 - The stern geometry is self-consistent across the stern elevation and the top view but descends
