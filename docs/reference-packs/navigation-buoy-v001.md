@@ -78,6 +78,23 @@ look-dev stay out of it, per Bible §6.
 - Three front elevations buried the mooring ring in the growth band so that it could not be read.
 - One anchor candidate carried a boarding ladder that nothing had asked for.
 
+## Two files carry a border strip that will corrupt a bbox measurement
+
+Found 2026-08-25 while a bounding box on `nav-buoy-elev-back-v001.png` returned a width of 4096 px —
+the full image. That was first written off as a segmentation bug and was not one.
+
+- `nav-buoy-elev-back-v001.png` — the last three rows (y 4093–4095) are a near-uniform band across
+  all 4096 columns, mean luma rising to 247.6 against a 239.3 backdrop.
+- `nav-buoy-lookdev-wet-v001.png` — the last row alone, 195.0 against 181.7.
+
+All forty-four approved images across the five packs were scanned for this; **these two are the only
+ones**, and both are in this pack.
+
+**The files are not being edited.** Their sha256 values are their identity in the table above and in
+`README-recovery.md`, and a repaired file would fail both. Any measurement that derives a bounding
+box from these two must **discard the last four rows first**. A gate that does not will silently
+inherit a 4096-wide extent and report a proportion defect that is not in the object.
+
 ## Known differences from the specification
 
 - **The buoy is very nearly rotationally symmetric.** The side elevation differs from the front only
