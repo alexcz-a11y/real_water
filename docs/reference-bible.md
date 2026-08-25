@@ -149,12 +149,35 @@ A view that breaks any one of these is rejected regardless of how good it looks.
 
 - Independently prompted angles. Every derivative view derives from the approved anchor.
 - Silent identity drift accepted because the new image is more attractive.
-- Any claim about geometry on a side no approved view shows. **Before writing that sentence, open
-  every view.** "Absent from the view that should have had it" is not "absent from the pack": the
-  hero vessel's running gear was recorded as shown by nothing after one elevation was found to have
-  dropped it, while the stern elevation had it in full and to measurable precision. **Write "I did
-  not find it in" and name the views actually opened, never "no view shows it".** The two read
-  identically and the second sends a reconstruction off to build from prose.
+- Any claim about geometry on a side no approved view shows. **An absence claim is a universal
+  negative, so it is only ever as good as the search that produced it, and it must carry that search
+  with it.** A search can be weak in exactly two ways, and the claim has to close both:
+
+  **Which views were opened.** "Absent from the view that should have had it" is not "absent from
+  the pack": the hero vessel's running gear was recorded as shown by nothing after one elevation was
+  found to have dropped it, while the stern elevation had it in full and to measurable precision.
+  **Write "I did not find it in" and list the views actually opened, never "no view shows it".**
+
+  **What that search could have seen.** Two different limits, and only one of them is a floor.
+
+  A **floor** is where the eye stops receiving. Inspection here is done on crops downscaled from
+  4096 px to roughly 1100 px, a factor of 3.7, so **a feature under about 12 px at full resolution
+  occupies under 3 px in what was actually looked at**, and an 8-luma step went unseen until it was
+  measured. Below a floor you get nothing, and **you can tell that you got nothing** — so declaring
+  it is enough.
+
+  The other limit has no floor and needs a different remedy: **properties the eye reads as a
+  category rather than a quantity, where it does not fail silently but answers confidently and
+  wrong.** The sea stack's waterline was read by eye as level-and-chromatic; measured, it is
+  level-and-achromatic — the level half right, the stain half wrong, on a 7-point colour difference
+  that is not small at 4096 px at all. Hue against luminance is the standing example: **a darkening
+  and a deposit look alike and are different facts about the object.** For anything of that kind,
+  measure instead of looking — a declared floor does not cover it, because the reading arrives with
+  no sign that it is out of range.
+
+  Without both, the sentence collapses three different states into one word: searched thoroughly and
+  found nothing, never opened that view, opened it but the feature is below what the method can
+  resolve. **The first licenses invention; the other two are homework.**
 - Brands, logos, and generated text or numerals.
 - Downloaded art packs, third-party textures, and any asset whose licence is unverified.
 
@@ -335,10 +358,11 @@ Two things the stack's role requires that a three-quarter anchor cannot show, fi
 This is the one asset with no top view: Bible §6 omits it because the stack is a distant silhouette
 and is not reconstructed at part level.
 
-## 11. Three checklists, each covering a different question
+## 11. Checklists, each covering a different question
 
-Every asset gets all three. Run them at different moments, because they answer different questions:
-two compare images against each other, and the third compares the specification against the images.
+Every asset gets all of them. Run them at different moments, because they answer different questions:
+some compare images against each other, one compares the specification against the images, and the
+last compares a part against itself across views.
 
 **After the album closes — every fixed part against every view that should show it.** Walk §10's
 fixed-part list for the asset and, for each part, name the approved views whose angle should show it
@@ -349,6 +373,26 @@ This is the check the hero vessel pack did not run, and it cost two approved vie
 checks are driven by *disputes between images*, and **an absent part starts no dispute**: a view
 missing the running gear agrees with every view that also cannot see it. Absence is invisible to any
 check that compares images to each other; only the specification notices it.
+
+**Once every part is confirmed present — is each one the same size in every view that shows it?**
+Pick a fraction that is internal to the part and to the object: a landmark's height as a share of the
+object's height, a fitting's width as a share of the face it sits on. Read it in every view that
+shows the part. They should agree to a couple of percent.
+
+**This checklist exists because the one above it is a proxy.** "Is the fixed part present" is a
+yes/no, and a part drawn at half its size answers yes. Nothing else here would catch it either: the
+whole-object proportion check moves by too little when one part is wrong, and image-to-image
+comparison has no ruler. **A part can be present, correct in material and colour, in the right place,
+and the wrong size, and pass every other check in this document.**
+
+Run on the marine crate's lid seam as a share of the object's height, the three elevations give
+0.1046 / 0.1029 / 0.1035 — agreeing to 1.6 %, so that part is sound. **The check found nothing, which
+is the result and not a reason to skip it**: it was built because the gap is real.
+
+Two things are closed here and they are not the same thing. **The gap in this document's checks is
+closed** — nothing could previously catch a present-but-mis-sized part, and now something can. **The
+question for the crate's lid seam is closed** — measured, sound. **Every other part of every asset
+remains unmeasured**, so the second closure is one part wide and must not be read as the first.
 
 **Before the album opens — what must exist but the anchor cannot show.** List the parts that the
 asset's function implies and the chosen anchor angle hides. On the hero vessel this list would have
