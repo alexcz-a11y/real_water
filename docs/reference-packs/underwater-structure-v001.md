@@ -66,6 +66,15 @@ record of the service's output terms applies to this pack too.
   That is impossible in a true orthographic elevation: the far legs sit exactly behind the near ones.
   The generation was right to leave the gap empty and the prompt was wrong. Recorded because the same
   mistake would look like a lost part to anyone auditing the view against its prompt.
-- **The deck soffit is never shown.** Bible §11 fixes it as a flat unbroken concrete plane, and no
-  approved view sees it. It is the volume half of "caustic and volume receiver", so the
-  reconstruction takes it from the Bible, not from these images.
+- **The deck soffit is seen only as a grazing sliver, and the reconstruction still takes it from the
+  Bible.** This entry said "never shown" until 2026-08-25, which is not quite true. All three
+  elevations look very slightly up at the deck edge, so between the deck's full width and the point
+  where the outline splits into legs there is a single connected band: on the front elevation the
+  width falls from 2800 px to 2666 px and holds there, one run, for about 90 px of height before
+  dropping to the two legs. That band is the underside, seen almost edge-on.
+
+  **What it proves is that the soffit is flat and reaches out past the legs. What it cannot show is
+  anything about the interior** — the shadowed volume between the legs is exactly what a grazing
+  view cannot reach. So the conclusion is unchanged and the reason for it is narrower than the entry
+  claimed: not "no evidence exists", but "the evidence that exists constrains the rim and not the
+  volume". Bible §11 remains the source.
