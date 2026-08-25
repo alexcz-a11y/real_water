@@ -97,7 +97,7 @@ be right.
 
 Take the deck-box arrangement from the **top view**, which sees the athwartships axis directly and
 is the only approved view that can resolve a fore-aft-versus-athwartships question at all. Take the
-running gear from Bible §10, since no approved view now shows it.
+running gear from **the stern elevation**, corrected below.
 
 **Why the review missed both.** Every derivative view was checked against the identity anchor for
 silhouette, part count, proportion, material and palette — but **pairwise between derivative views
@@ -106,6 +106,41 @@ to dispute: the anchor is a port-bow three-quarter and its running gear is below
 "absent here too" read as consistent. The check that would have caught it is the one this pack
 never ran — **every fixed part in §10 against every view that should show it**, driven from the
 specification rather than from what the images happened to argue about.
+
+## The stern elevation shows the running gear, and this record said nothing did
+
+Corrected 2026-08-25. The entry above used to end *"take the running gear from Bible §10, since no
+approved view now shows it"*, and that clause was reached by inference rather than by looking: the
+port elevation had lost everything below the waterline, and **"absent from the view that should have
+had it" was carried straight through to "absent from the pack"**. The stern elevation was never
+opened.
+
+It shows the whole assembly — two four-bladed bronze propellers, exposed shafts, A-bracket struts and
+the central skeg — and it shows them measurably. Normalised to the beam (2037 px):
+
+| quantity | measured |
+|---|---|
+| propeller diameter | 0.1586 beam (port) · 0.1581 beam (starboard) |
+| shaft centres, athwartships | 0.2882 and 0.7112 of beam |
+| running gear depth below the hull | 0.1713 beam |
+
+**Two independent self-checks say the reading is sound**: the two propeller discs agree with each
+other to 0.3 %, and the pair is symmetric about the centreline to 0.06 %. Neither was imposed by the
+measurement.
+
+**One caveat for anyone re-measuring**: the starboard propeller's blades fall partly into shadow, and
+a bronze-hue mask splits it into two clusters of 0.084 and 0.041 beam. Merged, it is 0.1581. Taken
+separately it reads as two small discs that do not exist.
+
+**What the stern elevation still cannot give is longitudinal station.** It is an end-on view, so the
+fore-and-aft position of the propellers remains unconstrained by any approved view and comes from the
+proxy vessel's socket, exactly as `#37` reported. **The axis that was genuinely unconstrained was
+one; this record claimed it was all of them.**
+
+That is this record's fourth absence claim of the kind — with the underwater structure's soffit, the
+sea stack's base, and the marine crate's hinge, all found the same day by three different sessions.
+The cost is not symmetric across them: **the soffit and the base merely understated evidence, while
+this one sent an active reconstruction to build from prose when pixels were available.**
 
 ## Known differences from the specification
 

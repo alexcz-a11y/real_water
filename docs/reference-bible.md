@@ -149,7 +149,12 @@ A view that breaks any one of these is rejected regardless of how good it looks.
 
 - Independently prompted angles. Every derivative view derives from the approved anchor.
 - Silent identity drift accepted because the new image is more attractive.
-- Any claim about geometry on a side no approved view shows.
+- Any claim about geometry on a side no approved view shows. **Before writing that sentence, open
+  every view.** "Absent from the view that should have had it" is not "absent from the pack": the
+  hero vessel's running gear was recorded as shown by nothing after one elevation was found to have
+  dropped it, while the stern elevation had it in full and to measurable precision. **Write "I did
+  not find it in" and name the views actually opened, never "no view shows it".** The two read
+  identically and the second sends a reconstruction off to build from prose.
 - Brands, logos, and generated text or numerals.
 - Downloaded art packs, third-party textures, and any asset whose licence is unverified.
 
