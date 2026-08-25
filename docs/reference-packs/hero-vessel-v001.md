@@ -118,11 +118,21 @@ opened.
 It shows the whole assembly — two four-bladed bronze propellers, exposed shafts, A-bracket struts and
 the central skeg — and it shows them measurably. Normalised to the beam (2037 px):
 
+**Use the ratios, not the beam fractions.** The first version of this table normalised against the
+silhouette's bounding box, which on a stern elevation is the **fender outer edge** — the fenders hang
+12.42 % outboard of the hull. Worse, the hull's own deck-edge beam cannot be recovered from this view
+at all, because the fenders overlap exactly the line you would measure. So beam is the wrong
+denominator here twice over, and these quantities are given as ratios among themselves instead:
+
 | quantity | measured |
 |---|---|
-| propeller diameter | 0.1586 beam (port) · 0.1581 beam (starboard) |
-| shaft centres, athwartships | 0.2882 and 0.7112 of beam |
-| running gear depth below the hull | 0.1713 beam |
+| propeller diameter | 322.5 px, the two discs agreeing to 0.3 % |
+| shaft spacing ÷ propeller diameter | **2.6713** |
+| running gear depth ÷ propeller diameter | **1.0822** |
+| pair symmetry about the centreline | 0.06 % |
+
+For reference only, and not to be built from: fender outer edge 2037 px, hull at the lowest
+fender-free station 1812 px.
 
 **Two independent self-checks say the reading is sound**: the two propeller discs agree with each
 other to 0.3 %, and the pair is symmetric about the centreline to 0.06 %. Neither was imposed by the
@@ -141,6 +151,40 @@ That is this record's fourth absence claim of the kind — with the underwater s
 sea stack's base, and the marine crate's hinge, all found the same day by three different sessions.
 The cost is not symmetric across them: **the soffit and the base merely understated evidence, while
 this one sent an active reconstruction to build from prose when pixels were available.**
+
+## The propeller sockets and the stern elevation disagree by 6 %, and it is not a units error
+
+The `#37` reconstruction placed its propeller hubs against `#25`'s frozen sockets at x = ∓1.05 m, as
+its ticket requires — it replaces the appearance, not the interface. Measured off the stern
+elevation, the hubs sit further outboard than that.
+
+**The disagreement survives removing every shared denominator.** Expressed as a pure ratio, shaft
+spacing over propeller diameter is **2.6713** in the approved pixels and **2.5089** in the model
+built to the socket — 6.08 % apart. `#37` reached −6.1 % from the opposite direction, converting the
+pixels into metres against its own beam; two routes with nothing in common converged.
+
+So this is not a normalisation artefact, and it forces a choice between two things rather than
+leaving three possibilities open:
+
+- **The socket position is what should move.** Taking the sockets as correct implies a propeller
+  diameter of **0.786 m** from the pixel ratio. Three independent sources say 0.845: Bible §10's
+  text, `#37`'s model built from that text without reference to the pixels, and this pack's own
+  measurement at 0.8453. Those three agree to 0.3 mm.
+- **The stern elevation is stretched athwartships by 6 %.** This cannot be ruled out from inside the
+  image, and it is worth stating why the usual test does not settle it: the two propeller discs agree
+  with each other to 0.3 % and the pair is symmetric to 0.06 %, but **a uniform horizontal scale
+  preserves both of those**. Internal consistency is evidence against a local defect and no evidence
+  at all against a global one.
+
+**Not ruled here.** Moving a socket is an interface renegotiation between `#25` and `#37`, which is
+outside what a pack owner decides. Recorded so that whoever does rule has both branches and the
+number that separates them.
+
+**Depth is not comparable yet and no figure is offered.** This record's "below the hull" is a
+threshold — the lowest row where the hull silhouette is still wider than half its maximum — while
+`#37`'s is a station in its model. A stern elevation is end-on and flattens every longitudinal
+station onto one outline, so the deepest point of the whole hull wins. The two numbers measure
+different things and their 18 % gap means nothing until a landmark both can locate replaces them.
 
 ## Known differences from the specification
 
