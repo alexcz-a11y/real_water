@@ -505,6 +505,7 @@ test("replays repeated crossings and treats a teleport as one camera-cut reset",
         return {
           presentation,
           finalColor: (await harness.capture("final-color")).data,
+          lensWetness: (await harness.capture("lens-wetness")).data,
           waterline: (await harness.capture("waterline")).data,
           depth: (await harness.capture("depth")).data,
           motion: (await harness.capture("motion-vector")).data,
@@ -539,6 +540,8 @@ test("replays repeated crossings and treats a teleport as one camera-cut reset",
           frames.map(async (frame) => ({
             classification: frame.presentation.waterline.classification,
             submersion: frame.presentation.waterline.submersion,
+            absoluteTransitionRevision:
+              frame.presentation.waterline.transitionRevision,
             transitionRevision:
               frame.presentation.waterline.transitionRevision -
               first.presentation.waterline.transitionRevision,
@@ -550,6 +553,7 @@ test("replays repeated crossings and treats a teleport as one camera-cut reset",
             resetFrame: frame.presentation.temporal.resetFrame,
             compileCount: frame.presentation.compileCount,
             finalColor: await sha256(frame.finalColor),
+            lensWetness: await sha256(frame.lensWetness),
             waterline: await sha256(frame.waterline),
             depth: await sha256(frame.depth),
             motion: await sha256(frame.motion),
@@ -593,6 +597,9 @@ test("replays repeated crossings and treats a teleport as one camera-cut reset",
   );
 
   expect(result.replay.frames).toEqual(result.first.frames);
+  expect(result.first.frames[3]?.lensWetness).not.toBe(
+    result.first.frames[2]?.lensWetness,
+  );
   expect(
     result.first.frames.map(({ classification }) => classification),
   ).toEqual([

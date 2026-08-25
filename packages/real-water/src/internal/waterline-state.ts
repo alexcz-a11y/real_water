@@ -1,5 +1,6 @@
 import { Vector3, type PerspectiveCamera } from "three/webgpu";
 import type { ArtisticControls, OpenWaterRuntimeSnapshot } from "../runtime.js";
+import type { HostSnapshotDiscontinuityReason } from "../temporal-continuity.js";
 import {
   evaluateSpectralSurface,
   prepareSpectralBands,
@@ -40,7 +41,7 @@ export interface WaterlineStateController {
   preview(
     camera: PerspectiveCamera,
     state: WaterlineSampleState,
-    discontinuous?: boolean,
+    discontinuityReason?: HostSnapshotDiscontinuityReason | null,
   ): WaterlineFrameCandidate;
   commit(candidate: WaterlineFrameCandidate): WaterlineFrameState;
   current(): WaterlineFrameState | undefined;
@@ -51,7 +52,7 @@ export function createWaterlineStateController(): WaterlineStateController {
   let committed: WaterlineFrameState | undefined;
 
   return {
-    preview(camera, state, discontinuous = false) {
+    preview(camera, state, discontinuityReason = null) {
       camera.getWorldPosition(cameraWorldPosition);
       const surface = evaluateSpectralSurface(
         cameraWorldPosition.x,
@@ -66,12 +67,18 @@ export function createWaterlineStateController(): WaterlineStateController {
       );
       const surfaceHeightMetres = surface.height + state.seaLevelMetres;
       const signedDistanceMetres = cameraWorldPosition.y - surfaceHeightMetres;
+      // A simulation reset starts a new deterministic replay identity. Other
+      // discontinuities only bypass hysteresis; they can still transition from
+      // the committed classification and emit a lens-wetness impulse.
+      const identityPredecessor =
+        discontinuityReason === "simulation-reset" ? undefined : committed;
       const classification = classifyWaterline(
         signedDistanceMetres,
-        discontinuous ? undefined : committed?.classification,
+        discontinuityReason === null ? committed?.classification : undefined,
       );
       const transitioned =
-        committed !== undefined && classification !== committed.classification;
+        identityPredecessor !== undefined &&
+        classification !== identityPredecessor.classification;
       const frameState = Object.freeze({
         classification,
         seaLevelMetres: state.seaLevelMetres,
@@ -79,9 +86,11 @@ export function createWaterlineStateController(): WaterlineStateController {
         signedDistanceMetres,
         submersion: waterlineSubmersion(signedDistanceMetres),
         transitionRevision:
-          (committed?.transitionRevision ?? 0) + (transitioned ? 1 : 0),
+          (identityPredecessor?.transitionRevision ?? 0) +
+          (transitioned ? 1 : 0),
         lensWetnessImpulse:
-          committed?.classification === "below" && classification !== "below",
+          identityPredecessor?.classification === "below" &&
+          classification !== "below",
       });
       return Object.freeze({ state: frameState, transitioned });
     },

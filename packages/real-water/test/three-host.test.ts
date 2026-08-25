@@ -1934,6 +1934,93 @@ describe("createThreeHostLifecycleAdapter", () => {
     await lease.dispose();
   });
 
+  it("resets waterline transition identity for deterministic same-lease replays", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    camera.position.set(0, 8, 0);
+    camera.updateMatrixWorld(true);
+    const simulation = createMutableSimulationAdapter();
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        simulation,
+        presentation,
+      }),
+    }).ready;
+    const query = {
+      count: 1,
+      positions: new Float32Array([0, 0, 0]),
+      results: {
+        heights: new Float32Array(1),
+        normals: new Float32Array(3),
+        velocities: new Float32Array(3),
+        foam: new Float32Array(1),
+        ticks: new Float64Array(1),
+        controlRevisions: new Float64Array(1),
+        snapshotAges: new Uint8Array(1),
+      },
+    };
+    const surfaceHeight = lease.queryGameplay(query).heights[0] ?? 0;
+    const diagnostics = readHostDiagnosticsRoute(
+      presentation.route as HostPresentationRoute,
+    );
+    const presentAt = async (offsetMetres: number) => {
+      camera.position.y = surfaceHeight + offsetMetres;
+      camera.updateMatrixWorld(true);
+      return readHostDiagnosticsPresentedFrame(
+        await diagnostics.present({ outputs: [] }),
+      );
+    };
+    const path = [0.5, 0.05, -0.5, -0.05, 0.5, 0.05, -0.5] as const;
+    const runPath = async (simulationResetRevision: number) => {
+      simulation.assign({ simulationResetRevision });
+      const resetFrame = await presentAt(0.5);
+      const frames = [];
+      for (const offsetMetres of path) {
+        frames.push(await presentAt(offsetMetres));
+      }
+      return { resetFrame, frames };
+    };
+
+    const first = await runPath(1);
+    const replay = await runPath(2);
+    expect(replay.resetFrame).toMatchObject({
+      temporal: { resetReason: "simulation-reset", resetFrame: true },
+      waterline: {
+        classification: "above",
+        lensWetnessImpulse: false,
+        transitionRevision: 0,
+      },
+    });
+    expect(
+      first.frames.map((frame) => frame.waterline.transitionRevision),
+    ).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(
+      replay.frames.map((frame) => frame.waterline.transitionRevision),
+    ).toEqual(first.frames.map((frame) => frame.waterline.transitionRevision));
+    expect(
+      replay.frames.map((frame) => frame.waterline.lensWetnessImpulse),
+    ).toEqual(first.frames.map((frame) => frame.waterline.lensWetnessImpulse));
+    presentation.incrementCameraCut();
+    const teleportedAbove = await presentAt(0.5);
+    expect(teleportedAbove).toMatchObject({
+      temporal: { resetReason: "camera-cut", resetFrame: true },
+      waterline: {
+        classification: "above",
+        lensWetnessImpulse: true,
+        transitionRevision: 7,
+      },
+    });
+
+    await lease.dispose();
+  });
+
   it("classifies a stable waterline and resets shared history once per crossing state", async () => {
     const scene = new Scene();
     const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
