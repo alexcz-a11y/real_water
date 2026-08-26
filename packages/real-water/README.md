@@ -1,5 +1,72 @@
 # real-water
 
+**A native Three.js WebGPU open-water runtime.** A four-band spectral ocean that
+holds together across distance and floating-origin shifts, a bounded local
+interaction field for wakes and impacts, and synchronous gameplay queries that
+agree with the surface being drawn — no GPU readback on the query path.
+
+```bash
+npm install real-water three
+```
+
+Requires **WebGPU** and **Three.js r185**. ESM only. `0.1.0-alpha.1` — see the
+[repository README](https://github.com/alexcz-a11y/real_water#project-status)
+for what is claimed and what is still gated.
+
+## Quick start
+
+```ts
+import {
+  createMinimalWaterPrewarmManifest,
+  createThreeHostLifecycleAdapter,
+  prepareRealWater,
+} from "real-water";
+
+const run = prepareRealWater({
+  manifest: createMinimalWaterPrewarmManifest(),
+  host: createThreeHostLifecycleAdapter({
+    renderer,
+    scene,
+    camera,
+    environment,
+    presentation,
+    simulation,
+  }),
+  loading: {
+    present(snapshot) {
+      if (snapshot.status === "preparing") {
+        const { completedWork, totalWork } = snapshot.progress;
+        showLoading(completedWork / totalWork);
+      }
+    },
+  },
+});
+
+const lease = await run.ready;
+lease.updateArtisticControls(controls);
+lease.queryGameplay({ count, positions, results });
+```
+
+`run.ready` resolves only after every one of the manifest's **140 declared work
+units** has completed and its GPU completion readbacks have returned. Requesting
+an effect variant that was never declared fails with `EFFECT_NOT_PREWARMED`
+_before_ any ready-runtime state changes.
+
+## Fixed capacities
+
+These are structural, preallocated, and never grow at runtime. Overflow returns
+a deterministic receipt rather than reallocating.
+
+| Capacity                              | Value       |
+| ------------------------------------- | ----------- |
+| Gameplay query points per tick        | 2,048       |
+| Disturbance slots                     | 128         |
+| Secondary particle pool (4 consumers) | 131,072     |
+| Interaction field radius / edge fade  | 48 m / 8 m  |
+| Query snapshot age                    | 0 or 1 tick |
+
+## What the package exposes
+
 This alpha package exposes versioned minimal-water Quality Profiles, their
 canonical one-hundred-forty-unit Prewarm Manifests, versioned Calm, Swell, and
 Storm Water Presets, Calm Sunrise, Blue Noon, Reference, and Storm Front

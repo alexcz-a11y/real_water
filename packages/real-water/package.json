@@ -1,7 +1,7 @@
 {
   "name": "real-water",
   "version": "0.1.0-alpha.1",
-  "description": "A native Three.js open-water runtime",
+  "description": "A native Three.js WebGPU open-water runtime: four-band spectral ocean, bounded local interaction, gameplay queries without GPU readback, and a manifest-gated startup lease.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -34,5 +34,37 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc --noEmit --project tsconfig.json"
-  }
+  },
+  "keywords": [
+    "three",
+    "threejs",
+    "webgpu",
+    "tsl",
+    "ocean",
+    "water",
+    "open-water",
+    "waves",
+    "buoyancy",
+    "wake",
+    "foam",
+    "caustics",
+    "reflection",
+    "ssr",
+    "traa",
+    "realtime",
+    "rendering",
+    "game-development",
+    "typescript",
+    "esm"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexcz-a11y/real_water.git",
+    "directory": "packages/real-water"
+  },
+  "bugs": {
+    "url": "https://github.com/alexcz-a11y/real_water/issues"
+  },
+  "homepage": "https://github.com/alexcz-a11y/real_water/tree/main/packages/real-water#readme",
+  "author": "Real Water contributors"
 }
