@@ -201,7 +201,6 @@ complete exported set.
 | `apps/reference-experience/` | Private demonstration app; where every quality claim is measured |
 | `docs/adr/`                  | 28 architecture decision records                                 |
 | `CONTEXT.md`                 | The domain glossary — every term, with what _not_ to call it     |
-| `docs/reference-bible.md`    | Visual identity contract for demonstration assets                |
 | `docs/agents/`               | Working agreements for AI agents contributing to this repo       |
 
 ## Verifying
