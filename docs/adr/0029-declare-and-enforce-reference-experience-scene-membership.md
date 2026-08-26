@@ -9,7 +9,7 @@ ticket derived from it inherited the obligation. We define **Scene Participation
 declared property of each Subject — which Reference Experience modes it is composed into and
 what water behavior it carries in each — hold ADR-0006's quality claims to Subjects whose
 declared participation is satisfied, and enforce the declaration with a committed check that
-measures the built tree rather than the file list.
+measures the built application rather than the file list.
 
 Participation is per-Subject rather than uniform. The buoy and the crate are Sandbox
 participants with a Body lease; the underwater structure is a caustic and volume receiver
@@ -40,8 +40,10 @@ five concurrent branches would all edit it.
 **State the obligation in prose and trust review to catch it.** Rejected. The defect's
 signature is that an unwired module is indistinguishable from a verified one by reading source:
 it sits under `src/`, has tests, types clean, and passes every green gate — which say only that
-it compiles and its unit tests pass. Only a measurement on the built output separates the two
-cases, and that measurement is the one a human already had to perform by hand to find this.
+it compiles and its unit tests pass. Only a measurement of the built application separates the
+two cases. The hand grep on the #49 merge is what found this, and it is not that measurement:
+it reached a true conclusion by a reading that cannot tell an unwired Subject from a minified
+one.
 
 ## Consequences
 
@@ -51,20 +53,48 @@ entry point of the built application. It belongs beside
 empty. A preview page must never satisfy it: preview pages are not entry points, which is
 precisely how 1133 approved lines shipped nothing.
 
-What the check keys on is not free, and the obvious key is wrong. The production build
-minifies, so identifiers do not survive it: in the built tree `createReferenceProxyVessel` and
+What the check keys on is deliberately left to whoever builds it, and this record does not
+prescribe a method. Four candidate methods were tried against the merged tree and all four
+failed, each for a reason the previous attempt did not suggest. They are written down because
+the next reader will think of at least two of them.
+
+**Identifiers in the built bundle.** The build minifies. `createReferenceProxyVessel` and
 `REFERENCE_PROXY_VESSEL_NAME` each appear zero times while the proxy vessel is fully composed
-into the scene, and the string literal `"Reference proxy vessel"` appears eight times. The hand
-measurement recorded on the #49 merge — grep the built output for `basalt` and
-`BasaltSeaStack`, zero hits — therefore reached a true conclusion through a reading that cannot
-separate an unwired Subject from a minified one, and mechanizing that reading would commit the
-wrong evidence as a gate. Each Subject declares instead a string-literal identity that survives
-minification, and that identity must exist on the composition path alone: a literal that also
-appears in a QA-only route or in preset data stays present after the Subject is removed from
-the scene, which is a green check standing over the exact defect the check exists to prevent.
-The check therefore ships with a negative control — removing one Subject from the scene
-assembly must turn it red — and that demonstration is evidence the ticket owes, not an
-assumption about the key.
+into the scene. The measurement's subject is rewritten by the build.
+
+**The exact declared string value.** The build also rewrites quote style: the source declares
+`"Reference proxy vessel"` and the bundle carries `` `Reference proxy vessel` ``, so an
+exact-value search over a wired Subject returns zero. Same failure, second form.
+
+**A count of the identity literal's text.** Of the eight occurrences of `Reference proxy vessel`
+in the bundle, exactly one is the identity constant. Six are error messages inside the vessel
+module, and the eighth is a substring of an unrelated sentence in `reference-sandbox-controls.ts`
+— a module that neither imports the constant nor creates a vessel; the text merely collides.
+Run as a negative control — remove the vessel from the scene assembly, empty `dist/`, rebuild —
+the count went from eight to one rather than to zero. The measurement returns a number, and the
+number is mostly about error prose.
+
+**The production module graph.** Not a text search, and immune to all three failures above: an
+entry-chunk module list separates a wired Subject from an unwired one. It still fails the
+negative control. `main.ts` imports two values from the vessel module, `createReferenceProxyVessel`
+and `REFERENCE_PROXY_VESSEL_SOCKETS`, so removing the composition leaves the second import
+holding the module in the graph. This is a property of Subject modules rather than an accident:
+a Subject exports more than its factory, and any surviving export keeps it reachable.
+
+The shape those four share is the finding, and it is the shape this project keeps meeting: there
+is no proxy readable off the build product that answers "did anyone place it". Every attempt
+measures something the build controls, something adjacent to the question, or something one
+level coarser than the question. Two of the four returned a plausible number while wrong, which
+is the dangerous kind. The direct measurement — ask the running scene which Subjects it contains
+— has not been tried, costs a browser, and is not decided here.
+
+What is fixed is the evidence standard rather than the method. The check must ship with both
+controls run and retained: with every Subject composed it is green, and with one Subject removed
+from the scene assembly it is red with that Subject's count at **zero**. The removal must take
+away the composition, not the module — deleting the file passes trivially and proves nothing.
+Both runs start from an emptied `dist/`, because a failed build leaves the previous build's
+output in place and every count then reads normal. A method that cannot produce that pair is not
+eligible, whatever it measures.
 
 The check measures reachability, not correctness. A Subject can be reachable and still wrong;
 this replaces "did anyone place it", not the T29 gates.
