@@ -26,6 +26,10 @@ Real Water defines the language for a reusable real-time open-water experience w
 
 **Reference Pack**: An approved canonical identity sheet and its identity-preserving multi-view derivatives used as evidence for one procedural model reconstruction. _Avoid_: Independent angle generation, cinematic beauty shot
 
+**Demonstration Subject**: A code-only procedural model reconstructed from an approved Reference Pack in order to populate the Reference Experience. _Avoid_: Reference Pack, proxy geometry, third-party art asset
+
+**Scene Participation**: The declared set of Reference Experience modes a Demonstration Subject is composed into, together with the water behavior it carries in each. _Avoid_: Present in the repository, visible on a preview page
+
 **Gameplay Coupling**: A bidirectional interaction in which water influences an object while the object creates wakes or disturbances, optimized for responsiveness and plausibility rather than physical conservation. _Avoid_: Full fluid–structure coupling, physically exact coupling
 
 **Interaction Shape**: A simplified, closed representation of a visible object used to calculate its interaction with water. _Avoid_: Render mesh, arbitrary triangle mesh
