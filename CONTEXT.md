@@ -24,7 +24,7 @@ Real Water defines the language for a reusable real-time open-water experience w
 
 **Reference Bible**: The shared visual identity, scale, material, palette, lighting, and framing rules used to keep generated demonstration assets coherent. _Avoid_: One-off prompt, mood board without constraints
 
-**Reference Pack**: An approved canonical identity sheet and its identity-preserving multi-view derivatives used as evidence for one procedural model reconstruction. _Avoid_: Independent angle generation, cinematic beauty shot
+**Reference Pack**: The complete set of approved material handed to one procedural model reconstruction — an approved canonical identity sheet, its identity-preserving multi-view derivatives, and a measurement GLB — delivered as one unit. The images are pixel evidence; the GLB is a measurement instrument whose derived labels stay provisional until a render confirms them, and whose topology and materials are never copied into the model. _Avoid_: Independent angle generation, cinematic beauty shot, treating the GLB as pixel evidence or as a mesh to ship
 
 **Gameplay Coupling**: A bidirectional interaction in which water influences an object while the object creates wakes or disturbances, optimized for responsiveness and plausibility rather than physical conservation. _Avoid_: Full fluid–structure coupling, physically exact coupling
 
