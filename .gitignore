@@ -18,3 +18,5 @@ packages/real-water/temp/
 # img2threejs reconstruction workspace: specs, renders, comparison sheets.
 # Pixels stay out of git (ADR-0022); the text record lives under docs/.
 .img2threejs/
+
+.DS_Store

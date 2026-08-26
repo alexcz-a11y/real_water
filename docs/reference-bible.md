@@ -368,8 +368,7 @@ last compares a part against itself across views.
 fixed-part list for the asset and, for each part, name the approved views whose angle should show it
 and confirm it is there. Run it from the specification, not from the images.
 
-This is the check the hero vessel pack did not run, and it cost two approved views (see
-`reference-packs/hero-vessel-v001.md`). The reason it is a separate pass is that the other two
+This is the check the hero vessel pack did not run, and it cost two approved views. The reason it is a separate pass is that the other two
 checks are driven by *disputes between images*, and **an absent part starts no dispute**: a view
 missing the running gear agrees with every view that also cannot see it. Absence is invisible to any
 check that compares images to each other; only the specification notices it.
