@@ -51,20 +51,38 @@ entry point of the built application. It belongs beside
 empty. A preview page must never satisfy it: preview pages are not entry points, which is
 precisely how 1133 approved lines shipped nothing.
 
-What the check keys on is not free, and the obvious key is wrong. The production build
-minifies, so identifiers do not survive it: in the built tree `createReferenceProxyVessel` and
-`REFERENCE_PROXY_VESSEL_NAME` each appear zero times while the proxy vessel is fully composed
-into the scene, and the string literal `"Reference proxy vessel"` appears eight times. The hand
-measurement recorded on the #49 merge — grep the built output for `basalt` and
-`BasaltSeaStack`, zero hits — therefore reached a true conclusion through a reading that cannot
-separate an unwired Subject from a minified one, and mechanizing that reading would commit the
-wrong evidence as a gate. Each Subject declares instead a string-literal identity that survives
-minification, and that identity must exist on the composition path alone: a literal that also
-appears in a QA-only route or in preset data stays present after the Subject is removed from
-the scene, which is a green check standing over the exact defect the check exists to prevent.
-The check therefore ships with a negative control — removing one Subject from the scene
-assembly must turn it red — and that demonstration is evidence the ticket owes, not an
-assumption about the key.
+What the check keys on is not free, and a text search over the built bundle cannot answer this
+question at all. Three separate reasons, each measured on a build of the merged tree rather
+than reasoned from the config. First, the build minifies, so identifiers do not survive:
+`createReferenceProxyVessel` and `REFERENCE_PROXY_VESSEL_NAME` each appear zero times while the
+proxy vessel is fully composed into the scene. Second, the build rewrites quote style, so even
+an exact-value search fails: the source declares `"Reference proxy vessel"` and the bundle
+carries `` `Reference proxy vessel` ``. Third, and fatally, the text that does match is
+dominated by prose that says nothing about composition. Of the eight occurrences of `Reference
+proxy vessel` in the bundle, exactly one is the identity constant; six are error messages
+inside the vessel module itself, and the eighth is a substring of an unrelated sentence in
+`reference-sandbox-controls.ts`, a module that never creates a vessel and only names one when
+validating its arguments.
+
+The negative control was run rather than assumed. Removing the vessel from the scene assembly
+and rebuilding from an emptied `dist/` took the count from eight to one, not to zero, and
+restoring it returned it to eight. So a presence test on that text would have stayed green over
+a Subject that had been removed — the exact defect the check exists to prevent. The hand
+measurement recorded on the #49 merge, grep the built output for `basalt` and `BasaltSeaStack`,
+therefore reached a true conclusion through a reading that could not have distinguished the two
+cases, and mechanizing it would have committed the wrong evidence as a gate.
+
+The check instead measures the production **module graph**: every declared Subject's module must
+appear among the modules of the production entry's chunks. That measurement is immune to all
+three failures above, and it is what "reachable from the production entry point" already means.
+The build emits no module list today and the app has no Vite config at all, so producing one is
+part of the work. The negative control stays an acceptance requirement rather than an
+assumption, and it must now reach zero: removing one Subject from the scene assembly turns the
+check red.
+
+Reachability is not composition. A module can be in the graph and its Subject still absent from
+the frame, which is what the T29 asset-region gates measure. The division is deliberate: this
+check answers "did anyone place it", and #40 answers "is it right".
 
 The check measures reachability, not correctness. A Subject can be reachable and still wrong;
 this replaces "did anyone place it", not the T29 gates.
