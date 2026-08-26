@@ -46,11 +46,25 @@ cases, and that measurement is the one a human already had to perform by hand to
 ## Consequences
 
 The check asserts that every declared Demonstration Subject is reachable from the production
-entry point, by looking for its identity in `apps/reference-experience/dist/` — the same
-measurement recorded on the #49 merge, mechanized. It belongs beside
-`scripts/check-reference-production.mjs` and fails when the declared population is empty. A
-preview page must never satisfy it: preview pages are not entry points, which is precisely how
-1133 approved lines shipped nothing.
+entry point of the built application. It belongs beside
+`scripts/check-reference-production.mjs` and fails when the declared population comes back
+empty. A preview page must never satisfy it: preview pages are not entry points, which is
+precisely how 1133 approved lines shipped nothing.
+
+What the check keys on is not free, and the obvious key is wrong. The production build
+minifies, so identifiers do not survive it: in the built tree `createReferenceProxyVessel` and
+`REFERENCE_PROXY_VESSEL_NAME` each appear zero times while the proxy vessel is fully composed
+into the scene, and the string literal `"Reference proxy vessel"` appears eight times. The hand
+measurement recorded on the #49 merge — grep the built output for `basalt` and
+`BasaltSeaStack`, zero hits — therefore reached a true conclusion through a reading that cannot
+separate an unwired Subject from a minified one, and mechanizing that reading would commit the
+wrong evidence as a gate. Each Subject declares instead a string-literal identity that survives
+minification, and that identity must exist on the composition path alone: a literal that also
+appears in a QA-only route or in preset data stays present after the Subject is removed from
+the scene, which is a green check standing over the exact defect the check exists to prevent.
+The check therefore ships with a negative control — removing one Subject from the scene
+assembly must turn it red — and that demonstration is evidence the ticket owes, not an
+assumption about the key.
 
 The check measures reachability, not correctness. A Subject can be reachable and still wrong;
 this replaces "did anyone place it", not the T29 gates.
