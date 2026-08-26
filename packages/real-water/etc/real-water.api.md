@@ -5,6 +5,26 @@
 ```ts
 
 // @public
+export const ARTISTIC_CONTROL_DESCRIPTORS: readonly ArtisticControlDescriptor[];
+
+// @public
+export const ARTISTIC_CONTROL_KEYS: readonly (keyof ArtisticControls)[];
+
+// @public
+export interface ArtisticControlDescriptor {
+    readonly description: string;
+    readonly group: ArtisticControlGroup;
+    readonly key: keyof ArtisticControls;
+    readonly label: string;
+    readonly max: number;
+    readonly min: number;
+    readonly step: number;
+}
+
+// @public
+export type ArtisticControlGroup = "sea-character" | "surface-optics" | "whitewater" | "underwater";
+
+// @public
 export interface ArtisticControls {
     readonly choppiness: number;
     readonly crestGlow: number;
@@ -13,12 +33,19 @@ export interface ArtisticControls {
     readonly depthSeeThrough: number;
     readonly directionality: number;
     readonly environmentReflection: number;
+    readonly foamPersistence: number;
     readonly grazingReflection: number;
     readonly inWaterGlow: number;
     readonly microDetail: number;
     readonly swellDrama: number;
     readonly timeScale: number;
+    readonly underwaterColor: number;
+    readonly underwaterExposure: number;
+    readonly underwaterHaze: number;
+    readonly underwaterLightShafts: number;
+    readonly underwaterTurbidity: number;
     readonly waveStrength: number;
+    readonly whitecapAmount: number;
 }
 
 // @public
@@ -48,6 +75,254 @@ export interface ArtisticControlUpdateReceipt {
 export function assertHostPresentationAdapter(presentation: HostPresentationAdapter): HostPresentationAdapter;
 
 // @public
+export const BODY_PHYSICS_FIXED_TICK_HZ: 60;
+
+// @public
+export interface BodyAttachment {
+    // (undocumented)
+    detach(): void;
+    // (undocumented)
+    readonly id: number;
+    // (undocumented)
+    inspect(): BodyAttachmentSnapshot;
+    // (undocumented)
+    readonly shape: InteractionShape;
+    // (undocumented)
+    readonly sockets: readonly BodyInteractionSocket[];
+}
+
+// @public
+export interface BodyAttachmentOptions {
+    readonly interactionSourceId?: number;
+    // (undocumented)
+    readonly physics: BodyPhysicsAdapter;
+    // (undocumented)
+    readonly shape: InteractionShape;
+    // (undocumented)
+    readonly sockets?: readonly BodyInteractionSocket[];
+}
+
+// @public
+export interface BodyAttachmentSnapshot {
+    // (undocumented)
+    readonly attached: boolean;
+    // (undocumented)
+    readonly fixedStepCount: number;
+    // (undocumented)
+    readonly lastFixedStepTick: number | null;
+    // (undocumented)
+    readonly lastWakeReceipt: BodyWakeUpdateReceipt | null;
+    // (undocumented)
+    readonly lastWaterLoad: BodyWaterLoad | null;
+    // (undocumented)
+    readonly queryPointCount: number;
+}
+
+// @public
+export interface BodyEffectSocket {
+    // (undocumented)
+    readonly direction: BodyPhysicsVector3;
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly kind: "bow" | "stern" | "propeller" | "wake";
+    // (undocumented)
+    readonly position: BodyPhysicsVector3;
+    // (undocumented)
+    readonly priority: number;
+    // (undocumented)
+    readonly radius: number;
+    // (undocumented)
+    readonly strength: number;
+}
+
+// @public
+export interface BodyInteractionAnchorSocket {
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly kind: "interaction-anchor";
+    // (undocumented)
+    readonly position: BodyPhysicsVector3;
+}
+
+// @public (undocumented)
+export type BodyInteractionSocket = BodyInteractionAnchorSocket | BodyEffectSocket;
+
+// @public
+export type BodyInteractionSocketKind = "bow" | "stern" | "propeller" | "wake" | "interaction-anchor";
+
+// @public
+export interface BodyPhysicsAdapter {
+    // (undocumented)
+    applyWaterLoad(load: BodyWaterLoad): void;
+    // (undocumented)
+    bind(route: BodyPhysicsFixedStepRoute): BodyPhysicsBinding;
+    // (undocumented)
+    snapshot(): BodyPhysicsState;
+}
+
+// @public
+export type BodyPhysicsAdapterOptions = BodyPhysicsAdapter;
+
+// @public
+export interface BodyPhysicsBinding {
+    // (undocumented)
+    dispose(): void;
+}
+
+// @public
+export interface BodyPhysicsFixedStepRoute {
+    // (undocumented)
+    beforeIntegrate(): BodyWaterLoad;
+}
+
+// @public
+export interface BodyPhysicsPose {
+    // (undocumented)
+    readonly position: BodyPhysicsVector3;
+    // (undocumented)
+    readonly rotation: BodyPhysicsQuaternion;
+}
+
+// @public
+export interface BodyPhysicsQuaternion extends BodyPhysicsVector3 {
+    // (undocumented)
+    readonly w: number;
+}
+
+// @public
+export interface BodyPhysicsState {
+    // (undocumented)
+    readonly angularVelocity: BodyPhysicsVector3;
+    // (undocumented)
+    readonly linearVelocity: BodyPhysicsVector3;
+    // (undocumented)
+    readonly mass: number;
+    // (undocumented)
+    readonly position: BodyPhysicsVector3;
+    // (undocumented)
+    readonly rotation: BodyPhysicsQuaternion;
+}
+
+// @public
+export interface BodyPhysicsVector3 {
+    // (undocumented)
+    readonly x: number;
+    // (undocumented)
+    readonly y: number;
+    // (undocumented)
+    readonly z: number;
+}
+
+// @public
+export interface BodyWakeSourceIdentity {
+    // (undocumented)
+    readonly attachmentId: number;
+    // (undocumented)
+    readonly socketId: string;
+    // (undocumented)
+    readonly socketKind: BodyEffectSocket["kind"];
+}
+
+// @public
+export interface BodyWakeUpdateReceipt {
+    // (undocumented)
+    readonly activeBodyWakeCount: number;
+    // (undocumented)
+    readonly activeDisturbanceCount: number;
+    // (undocumented)
+    readonly displacedBodyWakeSources: readonly BodyWakeSourceIdentity[];
+    // (undocumented)
+    readonly displacedDisturbanceIds: readonly number[];
+    // (undocumented)
+    readonly droppedSocketIds: readonly string[];
+    // (undocumented)
+    readonly emittedSocketIds: readonly string[];
+    // (undocumented)
+    readonly tick: number;
+}
+
+// @public
+export interface BodyWaterLoad {
+    // (undocumented)
+    readonly force: BodyPhysicsVector3;
+    // (undocumented)
+    readonly queryControlRevision: number;
+    // (undocumented)
+    readonly querySnapshotAge: 0 | 1;
+    // (undocumented)
+    readonly queryTick: number;
+    // (undocumented)
+    readonly torque: BodyPhysicsVector3;
+}
+
+// @public
+export interface BoxInteractionShape {
+    // (undocumented)
+    readonly halfExtents: BodyPhysicsVector3;
+    // (undocumented)
+    readonly kind: "box";
+}
+
+// @public
+export interface CapsuleInteractionShape {
+    // (undocumented)
+    readonly halfHeight: number;
+    // (undocumented)
+    readonly kind: "capsule";
+    // (undocumented)
+    readonly radius: number;
+}
+
+// @public
+export interface CompoundInteractionShape {
+    // (undocumented)
+    readonly children: readonly CompoundInteractionShapeChild[];
+    // (undocumented)
+    readonly kind: "compound";
+}
+
+// @public
+export interface CompoundInteractionShapeChild {
+    // (undocumented)
+    readonly position: BodyPhysicsVector3;
+    // (undocumented)
+    readonly rotation: BodyPhysicsQuaternion;
+    // (undocumented)
+    readonly shape: PrimitiveInteractionShape;
+}
+
+// @public
+export interface ConvexHullInteractionShape {
+    // (undocumented)
+    readonly kind: "convex-hull";
+    // (undocumented)
+    readonly vertices: readonly BodyPhysicsVector3[];
+}
+
+// @public
+export function createAuthoredEnvironmentPreset(id: string, snapshot: EnvironmentPresetSnapshot): EnvironmentPreset;
+
+// @public
+export function createAuthoredShowcasePreset(authoring: ShowcasePresetAuthoring): ShowcasePreset;
+
+// @public
+export function createAuthoredWaterPreset(id: WaterPresetId, artisticControls: ArtisticControls): WaterPreset;
+
+// @public
+export function createBlueNoonEnvironmentPreset(): EnvironmentPreset;
+
+// @public
+export function createBodyPhysicsAdapter(options: BodyPhysicsAdapterOptions): BodyPhysicsAdapter;
+
+// @public
+export function createCalmSunriseEnvironmentPreset(): EnvironmentPreset;
+
+// @public
+export function createMemoryBodyPhysicsAdapter(options: MemoryBodyPhysicsAdapterOptions): MemoryBodyPhysicsAdapter;
+
+// @public
 export function createMemoryHostLifecycleAdapter(options: MemoryHostLifecycleAdapterOptions): HostLifecycleAdapter;
 
 // @public
@@ -57,13 +332,22 @@ export function createMinimalWaterPrewarmManifest(profile?: QualityProfile, draw
 export function createMinimalWaterQualityProfile(id?: MinimalWaterQualityProfileId): QualityProfile;
 
 // @public
-export function createStaticHostEnvironmentAdapter(reflection: HostEnvironmentReflectionResource, state: HostEnvironmentState): HostEnvironmentAdapter;
+export function createReferenceEnvironmentPreset(): EnvironmentPreset;
+
+// @public
+export function createReferenceShowcasePreset(): ShowcasePreset;
+
+// @public
+export function createStaticHostEnvironmentAdapter(reflection: HostEnvironmentReflectionResource, lighting: HostEnvironmentState, weather?: HostEnvironmentWeatherState, atmosphere?: HostEnvironmentAtmosphereState): HostEnvironmentAdapter;
 
 // @public
 export function createStaticHostPresentationAdapter(): HostPresentationAdapter;
 
 // @public
 export function createStaticHostSimulationAdapter(): HostSimulationAdapter;
+
+// @public
+export function createStormFrontEnvironmentPreset(): EnvironmentPreset;
 
 // @public
 export function createSupportedHostEnvironmentRadianceBytes(): Uint8Array;
@@ -76,6 +360,53 @@ export function createThreeHostLifecycleAdapter(options: ThreeHostLifecycleAdapt
 
 // @public
 export function createWaterPreset(id?: WaterPresetId): WaterPreset;
+
+// @public
+export interface CurrentPresetImport {
+    // (undocumented)
+    readonly preset: PresetDocument;
+    // (undocumented)
+    readonly sourceVersion: number;
+    // (undocumented)
+    readonly status: "current";
+}
+
+// @public
+export interface DirectionalWakeDisturbanceBatch {
+    // (undocumented)
+    readonly amplitudes: Float32Array;
+    // (undocumented)
+    readonly count: number;
+    // (undocumented)
+    readonly directions: Float32Array;
+    // (undocumented)
+    readonly ids: Uint32Array;
+    // (undocumented)
+    readonly kind: "directional-wake";
+    // (undocumented)
+    readonly positions: Float32Array;
+    // (undocumented)
+    readonly priorities: Uint8Array;
+    // (undocumented)
+    readonly radii: Float32Array;
+}
+
+// @public
+export type DisturbanceBatch = RadialImpactDisturbanceBatch | DirectionalWakeDisturbanceBatch | HeroBreakerDisturbanceBatch;
+
+// @public
+export interface DisturbanceSubmissionReceipt {
+    // (undocumented)
+    readonly acceptedDisturbanceIds: readonly number[];
+    // (undocumented)
+    readonly activeDisturbanceCount: number;
+    // (undocumented)
+    readonly displacedBodyWakeSources: readonly BodyWakeSourceIdentity[];
+    // (undocumented)
+    readonly droppedDisturbanceIds: readonly number[];
+    // (undocumented)
+    readonly tick: number;
+}
 
 // @public
 export interface EffectVariantSelection {
@@ -96,6 +427,79 @@ export interface EffectVariantSelectionReceipt {
 }
 
 // @public
+export const ENVIRONMENT_PRESET_SCHEMA: "real-water/environment-preset";
+
+// @public
+export const ENVIRONMENT_PRESET_VERSION: 2;
+
+// @public
+export interface EnvironmentPreset extends EnvironmentPresetSnapshot {
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly presetHash: string;
+    // (undocumented)
+    readonly schema: typeof ENVIRONMENT_PRESET_SCHEMA;
+    // (undocumented)
+    readonly version: typeof ENVIRONMENT_PRESET_VERSION;
+}
+
+// @public
+export interface EnvironmentPresetAtmosphere {
+    // (undocumented)
+    readonly cloudCoverage: number;
+    // (undocumented)
+    readonly cloudShadowStrength: number;
+    // (undocumented)
+    readonly horizonHaze: number;
+    // (undocumented)
+    readonly lightningIntensity: number;
+    // (undocumented)
+    readonly stormAerosolIntensity: number;
+}
+
+// @public
+export interface EnvironmentPresetIdentity {
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly presetHash: string;
+    // (undocumented)
+    readonly schema: typeof ENVIRONMENT_PRESET_SCHEMA;
+    // (undocumented)
+    readonly version: typeof ENVIRONMENT_PRESET_VERSION;
+}
+
+// @public
+export function environmentPresetIdentity(preset: EnvironmentPreset): EnvironmentPresetIdentity;
+
+// @public
+export interface EnvironmentPresetSnapshot {
+    // (undocumented)
+    readonly atmosphere: EnvironmentPresetAtmosphere;
+    // (undocumented)
+    readonly lighting: HostEnvironmentState;
+    // (undocumented)
+    readonly reflection: HostEnvironmentReflectionDescriptor;
+    // (undocumented)
+    readonly weather: EnvironmentPresetWeather;
+}
+
+// @public
+export interface EnvironmentPresetWeather {
+    // (undocumented)
+    readonly gustStrength: number;
+    // (undocumented)
+    readonly rainIntensity: number;
+    // (undocumented)
+    readonly windDirectionX: number;
+    // (undocumented)
+    readonly windDirectionZ: number;
+    // (undocumented)
+    readonly windStrength: number;
+}
+
+// @public
 export interface ErrorStartupSnapshot {
     // (undocumented)
     readonly error: RealWaterStartupError;
@@ -110,9 +514,71 @@ export interface ErrorStartupSnapshot {
 }
 
 // @public
+export function exportPresetJson(preset: PresetDocument): string;
+
+// @public
 export interface GameplayCapabilities {
     // (undocumented)
+    readonly bodyInteraction: GameplayCapabilitiesBodyInteraction;
+    // (undocumented)
+    readonly interactionField: GameplayCapabilitiesInteractionField;
+    // (undocumented)
+    readonly maxActiveDisturbances: 128;
+    // (undocumented)
+    readonly maxActiveHeroBreakers: 8;
+    // (undocumented)
+    readonly maxAttachedBodies: 32;
+    // (undocumented)
     readonly maxQueryPointsPerTick: 2_048;
+}
+
+// @public
+export interface GameplayCapabilitiesBodyInteraction {
+    // (undocumented)
+    readonly fixedTickHz: 60;
+    // (undocumented)
+    readonly generatedDisturbanceKinds: readonly [
+    "directional-wake",
+    "propeller-wash"
+    ];
+    // (undocumented)
+    readonly maxConvexHullVertices: 64;
+    // (undocumented)
+    readonly maxShapeSamplesPerBody: 32;
+    // (undocumented)
+    readonly maxSocketsPerBody: 8;
+    // (undocumented)
+    readonly shapeKinds: readonly [
+    "sphere",
+    "box",
+    "capsule",
+    "convex-hull",
+    "compound"
+    ];
+    // (undocumented)
+    readonly socketKinds: readonly [
+    "bow",
+    "stern",
+    "propeller",
+    "wake",
+    "interaction-anchor"
+    ];
+}
+
+// @public
+export interface GameplayCapabilitiesInteractionField {
+    // (undocumented)
+    readonly disturbanceKinds: readonly [
+    "radial-impact",
+    "directional-wake",
+    "hero-breaker"
+    ];
+    // (undocumented)
+    readonly edgeFadeMetres: 8;
+    // (undocumented)
+    readonly maxSnapshotAgeTicks: 1;
+    // (undocumented)
+    readonly radiusMetres: 48;
 }
 
 // @public
@@ -135,12 +601,28 @@ export interface GameplayQueryResults {
     readonly heights: Float32Array;
     // (undocumented)
     readonly normals: Float32Array;
-    // (undocumented)
     readonly snapshotAges: Uint8Array;
     // (undocumented)
     readonly ticks: Float64Array;
     // (undocumented)
     readonly velocities: Float32Array;
+}
+
+// @public
+export interface HeroBreakerDisturbanceBatch {
+    readonly amplitudes: Float32Array;
+    // (undocumented)
+    readonly count: number;
+    readonly directions: Float32Array;
+    readonly foamAmounts: Float32Array;
+    readonly ids: Uint32Array;
+    // (undocumented)
+    readonly kind: "hero-breaker";
+    readonly lifetimeTicks: Uint16Array;
+    readonly positions: Float32Array;
+    readonly priorities: Uint8Array;
+    readonly radii: Float32Array;
+    readonly sprayAmounts: Float32Array;
 }
 
 // @public
@@ -151,9 +633,23 @@ export interface HostEnvironmentAdapter {
     // (undocumented)
     readonly reflection: HostEnvironmentReflectionDescriptor;
     // (undocumented)
-    snapshot(): HostEnvironmentState;
+    snapshot(): HostEnvironmentSnapshot;
     // (undocumented)
     readonly texture: HostTexture | null;
+}
+
+// @public
+export interface HostEnvironmentAtmosphereState {
+    // (undocumented)
+    readonly cloudCoverage: number;
+    // (undocumented)
+    readonly cloudShadowStrength: number;
+    // (undocumented)
+    readonly horizonHaze: number;
+    // (undocumented)
+    readonly lightningIntensity: number;
+    // (undocumented)
+    readonly stormAerosolIntensity: number;
 }
 
 // @public
@@ -187,6 +683,16 @@ export interface HostEnvironmentReflectionResource extends HostEnvironmentReflec
 export type HostEnvironmentReflectionType = "equirect";
 
 // @public
+export interface HostEnvironmentSnapshot {
+    // (undocumented)
+    readonly atmosphere: HostEnvironmentAtmosphereState;
+    // (undocumented)
+    readonly lighting: HostEnvironmentState;
+    // (undocumented)
+    readonly weather: HostEnvironmentWeatherState;
+}
+
+// @public
 export interface HostEnvironmentState {
     // (undocumented)
     readonly environmentIntensity: number;
@@ -206,6 +712,20 @@ export interface HostEnvironmentState {
     readonly sunDirectionZ: number;
     // (undocumented)
     readonly sunIntensity: number;
+}
+
+// @public
+export interface HostEnvironmentWeatherState {
+    // (undocumented)
+    readonly gustStrength: number;
+    // (undocumented)
+    readonly rainIntensity: number;
+    // (undocumented)
+    readonly windDirectionX: number;
+    // (undocumented)
+    readonly windDirectionZ: number;
+    // (undocumented)
+    readonly windStrength: number;
 }
 
 // @public
@@ -321,6 +841,8 @@ export interface HostSimulationState {
     // (undocumented)
     readonly paused: boolean;
     // (undocumented)
+    readonly seaLevelMetres: number;
+    // (undocumented)
     readonly seed: number;
     // (undocumented)
     readonly simulationResetRevision: number;
@@ -331,12 +853,36 @@ export interface HostSimulationState {
 }
 
 // @public
-export type HostTemporalResetReason = "simulation-reset" | "camera-cut" | "origin-shift" | "sea-state-cut";
+export type HostTemporalResetReason = "simulation-reset" | "camera-cut" | "origin-shift" | "sea-state-cut" | "waterline-crossing";
 
 // @public
 export interface HostTexture {
     readonly isTexture: boolean;
 }
+
+// @public
+export function importPresetJson(rawJson: string): PresetImportResult;
+
+// @public
+export interface InteractionAnchor {
+    // (undocumented)
+    readonly x: number;
+    // (undocumented)
+    readonly z: number;
+}
+
+// @public
+export interface InteractionAnchorUpdateReceipt {
+    // (undocumented)
+    readonly anchor: InteractionAnchor;
+    // (undocumented)
+    readonly changed: boolean;
+    // (undocumented)
+    readonly revision: number;
+}
+
+// @public
+export type InteractionShape = PrimitiveInteractionShape | CompoundInteractionShape;
 
 // @public
 export interface LoadingPresenterAdapter {
@@ -363,7 +909,42 @@ export interface LongSuspensionInvalidation {
 }
 
 // @public
+export const MAX_ACTIVE_DISTURBANCES: 128;
+
+// @public
+export const MAX_ACTIVE_HERO_BREAKERS: 8;
+
+// @public
+export const MAX_ATTACHED_BODIES: 32;
+
+// @public (undocumented)
+export const MAX_BODY_INTERACTION_SOCKETS: 8;
+
+// @public (undocumented)
+export const MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN: 32;
+
+// @public (undocumented)
+export const MAX_CONVEX_HULL_VERTICES: 64;
+
+// @public
 export const MAX_GAMEPLAY_QUERY_POINTS: 2048;
+
+// @public
+export const MAX_SECONDARY_PARTICLES: 131072;
+
+// @public
+export interface MemoryBodyPhysicsAdapter extends BodyPhysicsAdapter {
+    // (undocumented)
+    integrateFixedStep(): BodyPhysicsState;
+    // (undocumented)
+    interpolate(alpha: number): BodyPhysicsPose;
+}
+
+// @public
+export interface MemoryBodyPhysicsAdapterOptions {
+    // (undocumented)
+    readonly initialState: BodyPhysicsState;
+}
 
 // @public
 export interface MemoryHostLifecycleAdapterOptions {
@@ -403,6 +984,28 @@ export type MemoryHostScenario = Readonly<{
 }>;
 
 // @public
+export interface MigratedPresetImport {
+    // (undocumented)
+    readonly preset: PresetDocument;
+    // (undocumented)
+    readonly sourceVersion: number;
+    // (undocumented)
+    readonly status: "migrated";
+}
+
+// @public
+export function migrateEnvironmentPreset(candidate: unknown): EnvironmentPreset;
+
+// @public
+export function migrateQualityProfile(candidate: unknown): QualityProfile;
+
+// @public
+export function migrateShowcasePreset(candidate: unknown): ShowcasePreset;
+
+// @public
+export function migrateWaterPreset(candidate: unknown): WaterPreset;
+
+// @public
 export interface MinimalWaterGeometrySegments {
     // (undocumented)
     readonly heightSegments: number;
@@ -414,13 +1017,39 @@ export interface MinimalWaterGeometrySegments {
 export type MinimalWaterQualityProfileId = "minimal" | "minimal-high-detail";
 
 // @public
+export function normalizeEnvironmentPreset(candidate: EnvironmentPreset): EnvironmentPreset;
+
+// @public
+export function normalizePreset(candidate: unknown): PresetDocument;
+
+// @public
+export function normalizeQualityProfile(candidate: QualityProfile): QualityProfile;
+
+// @public
+export function normalizeShowcasePreset(candidate: ShowcasePreset): ShowcasePreset;
+
+// @public
+export function normalizeWaterPreset(candidate: WaterPreset): WaterPreset;
+
+// @public
 export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
     // (undocumented)
+    readonly activeBodyWakeCount: number;
+    // (undocumented)
+    readonly activeDisturbanceCount: number;
+    readonly activeHeroBreakerCount: number;
+    // (undocumented)
     readonly artisticControls: ArtisticControls;
+    // (undocumented)
+    readonly attachedBodyCount: number;
     // (undocumented)
     readonly cameraCutRevision: number;
     // (undocumented)
     readonly controlRevision: number;
+    // (undocumented)
+    readonly interactionAnchor: InteractionAnchor;
+    // (undocumented)
+    readonly interactionAnchorRevision: number;
     // (undocumented)
     readonly originRevision: number;
     // (undocumented)
@@ -461,10 +1090,19 @@ export interface PreparingStartupSnapshot {
 }
 
 // @public
+export type PresetDocument = WaterPreset | EnvironmentPreset | QualityProfile | ShowcasePreset;
+
+// @public
+export type PresetImportResult = CurrentPresetImport | MigratedPresetImport | RecoveryPresetImport;
+
+// @public
+export type PresetRecoveryReason = "invalid-json" | "unknown-schema" | "invalid-preset" | "unsupported-version" | "future-version";
+
+// @public
 export const PREWARM_MANIFEST_SCHEMA: "real-water/prewarm";
 
 // @public
-export const PREWARM_MANIFEST_VERSION: 3;
+export const PREWARM_MANIFEST_VERSION: 12;
 
 // @public
 export interface PrewarmDeclaration {
@@ -540,15 +1178,24 @@ export interface PrewarmManifestIdentity {
 }
 
 // @public
+export type PrimitiveInteractionShape = SphereInteractionShape | BoxInteractionShape | CapsuleInteractionShape | ConvexHullInteractionShape;
+
+// @public
 export const QUALITY_PROFILE_SCHEMA: "real-water/quality-profile";
 
 // @public
-export const QUALITY_PROFILE_VERSION: 5;
+export const QUALITY_PROFILE_VERSION: 15;
 
 // @public
 export interface QualityProfile {
     // (undocumented)
+    readonly bodyCoupling: QualityProfileBodyCoupling;
+    // (undocumented)
     readonly id: MinimalWaterQualityProfileId;
+    // (undocumented)
+    readonly interaction: QualityProfileInteraction;
+    // (undocumented)
+    readonly postTraaComposition: QualityProfilePostTraaComposition;
     // (undocumented)
     readonly profileHash: string;
     // (undocumented)
@@ -556,11 +1203,35 @@ export interface QualityProfile {
     // (undocumented)
     readonly schema: typeof QUALITY_PROFILE_SCHEMA;
     // (undocumented)
+    readonly secondaryParticles: QualityProfileSecondaryParticles;
+    // (undocumented)
+    readonly stormFront: QualityProfileStormFront;
+    // (undocumented)
     readonly surface: QualityProfileSurface;
     // (undocumented)
     readonly temporal: QualityProfileTemporal;
     // (undocumented)
+    readonly underwater: QualityProfileUnderwaterVolume;
+    // (undocumented)
     readonly version: typeof QUALITY_PROFILE_VERSION;
+    // (undocumented)
+    readonly whitecaps: QualityProfileSpectralWhitecaps;
+}
+
+// @public
+export interface QualityProfileBodyCoupling {
+    // (undocumented)
+    readonly fixedTickHz: 60;
+    // (undocumented)
+    readonly maxAttachedBodies: 32;
+    // (undocumented)
+    readonly maxConvexHullVertices: 64;
+    // (undocumented)
+    readonly maxShapeSamplesPerBody: 32;
+    // (undocumented)
+    readonly maxSocketsPerBody: 8;
+    // (undocumented)
+    readonly socketRoute: "stable-slot-upsert";
 }
 
 // @public
@@ -573,6 +1244,98 @@ export interface QualityProfileIdentity {
     readonly schema: typeof QUALITY_PROFILE_SCHEMA;
     // (undocumented)
     readonly version: typeof QUALITY_PROFILE_VERSION;
+}
+
+// @public
+export function qualityProfileIdentity(profile: QualityProfile): QualityProfileIdentity;
+
+// @public
+export interface QualityProfileInteraction {
+    // (undocumented)
+    readonly anchorCount: 1;
+    // (undocumented)
+    readonly field: QualityProfileInteractionField;
+}
+
+// @public
+export interface QualityProfileInteractionField {
+    // (undocumented)
+    readonly directionalWakeRoute: "analytic-uniform-array";
+    // (undocumented)
+    readonly edgeFadeMetres: 8;
+    // (undocumented)
+    readonly heroBreakerRoute: "art-directed-overturning-uniform-array";
+    // (undocumented)
+    readonly maxActiveDisturbances: 128;
+    // (undocumented)
+    readonly maxActiveHeroBreakers: 8;
+    // (undocumented)
+    readonly maxSnapshotAgeTicks: 1;
+    // (undocumented)
+    readonly radialImpactRoute: "analytic-uniform-array";
+    // (undocumented)
+    readonly radiusMetres: 48;
+    // (undocumented)
+    readonly snapshotBanks: 2;
+}
+
+// @public
+export interface QualityProfileLensWetness {
+    // (undocumented)
+    readonly after: "storm-atmosphere";
+    // (undocumented)
+    readonly diagnosticsFormat: "rgba16float";
+    // (undocumented)
+    readonly mode: "bounded-emergence-decay";
+    // (undocumented)
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly samples: 0;
+    // (undocumented)
+    readonly stageId: "lens-wetness";
+    // (undocumented)
+    readonly trigger: "waterline-emergence-impulse";
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
+}
+
+// @public
+export interface QualityProfilePostTraaComposition {
+    // (undocumented)
+    readonly accumulationFormat: "rgba16float";
+    // (undocumented)
+    readonly finalColorFormat: "rgba8unorm-srgb";
+    // (undocumented)
+    readonly lensWetness: QualityProfileLensWetness;
+    // (undocumented)
+    readonly mode: "ordered-declarative-stages";
+    // (undocumented)
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly samples: 0;
+    // (undocumented)
+    readonly stages: readonly [
+    QualityProfilePostTraaStage & {
+        readonly id: "secondary-particles";
+        readonly after: "traa";
+    },
+    QualityProfilePostTraaStage & {
+        readonly id: "storm-atmosphere";
+        readonly after: "secondary-particles";
+    },
+    QualityProfilePostTraaStage & {
+        readonly id: "lens-wetness";
+        readonly after: "storm-atmosphere";
+    }
+    ];
+}
+
+// @public
+export interface QualityProfilePostTraaStage {
+    // (undocumented)
+    readonly after: "traa" | "secondary-particles" | "storm-atmosphere";
+    // (undocumented)
+    readonly id: "secondary-particles" | "storm-atmosphere" | "lens-wetness";
 }
 
 // @public
@@ -660,7 +1423,8 @@ export interface QualityProfileReflectionSsrHistory {
     "simulation-reset",
     "camera-cut",
     "origin-shift",
-    "sea-state-cut"
+    "sea-state-cut",
+    "waterline-crossing"
     ];
     // (undocumented)
     readonly resetVelocityFormat: "rg16float";
@@ -668,6 +1432,130 @@ export interface QualityProfileReflectionSsrHistory {
     readonly resolveFormat: "rgba16float";
     // (undocumented)
     readonly updateCadence: "host-present";
+}
+
+// @public
+export interface QualityProfileSecondaryParticleConsumer {
+    // (undocumented)
+    readonly consumerId: "spray-droplet-mist" | "underwater-suspended-particles" | "subsurface-foam-bubble-cloud" | "rising-bubbles";
+    // (undocumented)
+    readonly contributionReference: "manifest-output-drawing-buffer";
+    // (undocumented)
+    readonly maximumRequestCount: 65_536 | 49_152 | 24_576 | 8_192;
+    // (undocumented)
+    readonly minimumRetainedSlots: 2_048 | 1_024 | 256;
+    // (undocumented)
+    readonly pressureReentryPolicy: "after-shared-cooldown" | "forbidden-until-absent";
+    // (undocumented)
+    readonly softRequestCeiling: 32_768 | 24_576 | 12_288 | 4_096;
+}
+
+// @public
+export interface QualityProfileSecondaryParticles {
+    // (undocumented)
+    readonly capacity: 131_072;
+    // (undocumented)
+    readonly consumers: readonly [
+    QualityProfileSecondaryParticleConsumer,
+    QualityProfileSecondaryParticleConsumer,
+    QualityProfileSecondaryParticleConsumer,
+    QualityProfileSecondaryParticleConsumer
+    ];
+    // (undocumented)
+    readonly contribution: {
+        readonly projectedAreaReference: "manifest-output-drawing-buffer";
+        readonly screenAreaDivisor: 3_600;
+        readonly formula: "saturating-pixel-energy";
+        readonly quantization: "q16-unorm-round-nearest";
+    };
+    // (undocumented)
+    readonly hysteresis: {
+        readonly mode: "incumbent-bonus-residence-cooldown";
+        readonly retainedContributionBonusQ16: 4_096;
+        readonly minimumResidenceTicks: 4;
+        readonly reentryCooldownTicks: 4;
+    };
+    // (undocumented)
+    readonly maximumCandidateCount: 147_456;
+    // (undocumented)
+    readonly mode: "shared-global-contribution-pool";
+    // (undocumented)
+    readonly payloadOwnership: "consumer";
+    // (undocumented)
+    readonly renderPhaseKnowledge: "none";
+    // (undocumented)
+    readonly selection: "q16-global-contribution-radix";
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
+}
+
+// @public
+export interface QualityProfileSpectralWhitecaps {
+    // (undocumented)
+    readonly captureFormat: "rgba16float";
+    // (undocumented)
+    readonly captureResolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly diffusionTaps: 3;
+    // (undocumented)
+    readonly fieldFormat: "rgba16float";
+    // (undocumented)
+    readonly fieldResolution: 128 | 256;
+    // (undocumented)
+    readonly fixedTickHz: 60;
+    readonly foamTimelineCapacityTicks: 128;
+    // (undocumented)
+    readonly localHistoryBanks: 2;
+    // (undocumented)
+    readonly maxLocalSources: 128;
+    // (undocumented)
+    readonly mode: "unified-source-ping-pong";
+    // (undocumented)
+    readonly resetDomains: readonly [
+    "simulation-reset",
+    "seed-change",
+    "tick-rewind",
+    "time-rewind",
+    "sea-state-cut"
+    ];
+    // (undocumented)
+    readonly sourceLayout: "whitecap-wake-impact-hero-combined";
+    // (undocumented)
+    readonly stageLayout: "generation-history-advection-decay";
+    // (undocumented)
+    readonly tileSizeMetres: 256;
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
+}
+
+// @public
+export interface QualityProfileStormFront {
+    // (undocumented)
+    readonly cloudAndLightning: {
+        readonly illuminationRoute: "coherent-glint-foam-reflection-atmosphere";
+        readonly atmosphereStageId: "storm-atmosphere";
+    };
+    // (undocumented)
+    readonly diagnostics: {
+        readonly resolutionPolicy: "drawing-buffer-exact";
+        readonly format: "rgba16float";
+        readonly samples: 0;
+    };
+    // (undocumented)
+    readonly mode: "prepared-deterministic-route";
+    // (undocumented)
+    readonly rain: {
+        readonly surfaceRoute: "additive-spectral-ripples";
+        readonly secondaryParticleConsumerId: "spray-droplet-mist";
+        readonly maximumCandidateCount: 8_192;
+    };
+    // (undocumented)
+    readonly stormAerosol: {
+        readonly secondaryParticleConsumerId: "spray-droplet-mist";
+        readonly maximumCandidateCount: 8_192;
+    };
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
 }
 
 // @public
@@ -694,6 +1582,101 @@ export interface QualityProfileTemporal {
     readonly taau: false;
     // (undocumented)
     readonly updateCadence: "host-present";
+}
+
+// @public
+export interface QualityProfileUnderwaterCaustics {
+    // (undocumented)
+    readonly composition: "post-ssr-pre-traa";
+    // (undocumented)
+    readonly diagnosticsFormat: "rgba16float";
+    // (undocumented)
+    readonly localSurfaceFieldFormat: "rgba16float";
+    // (undocumented)
+    readonly localSurfaceFieldLayout: "height-slope-x-slope-z-vertical-velocity";
+    // (undocumented)
+    readonly localSurfaceFieldResolutionPolicy: "match-unified-foam-field";
+    // (undocumented)
+    readonly localSurfaceFieldUpdateCadence: "host-fixed-tick";
+    // (undocumented)
+    readonly maxLocalSurfaceSnapshotAgeTicks: 1;
+    // (undocumented)
+    readonly maxReceiverDistanceMetres: 48;
+    // (undocumented)
+    readonly mode: "prepared-surface-visible-receivers";
+    // (undocumented)
+    readonly receiverNormalMinY: 0.05;
+    // (undocumented)
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly samples: 0;
+    // (undocumented)
+    readonly updateCadence: "host-present";
+}
+
+// @public
+export interface QualityProfileUnderwaterTracers {
+    // (undocumented)
+    readonly accumulationFormat: "rgba16float";
+    // (undocumented)
+    readonly bubbleCloudConsumerId: "subsurface-foam-bubble-cloud";
+    // (undocumented)
+    readonly composition: "pre-traa";
+    // (undocumented)
+    readonly depthRoute: "soft-scene-depth";
+    // (undocumented)
+    readonly mode: "shared-pool-depth-aware";
+    // (undocumented)
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly risingBubbleConsumerId: "rising-bubbles";
+    // (undocumented)
+    readonly samples: 0;
+    // (undocumented)
+    readonly suspendedConsumerId: "underwater-suspended-particles";
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
+}
+
+// @public
+export interface QualityProfileUnderwaterVolume {
+    // (undocumented)
+    readonly caustics: QualityProfileUnderwaterCaustics;
+    // (undocumented)
+    readonly colorFormat: "rgba16float";
+    // (undocumented)
+    readonly composition: "post-ssr-pre-traa";
+    // (undocumented)
+    readonly diagnosticsFormat: "rgba16float";
+    // (undocumented)
+    readonly maxDistanceMetres: 96;
+    // (undocumented)
+    readonly mode: "depth-aware-post-volume";
+    // (undocumented)
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    // (undocumented)
+    readonly samples: 0;
+    // (undocumented)
+    readonly shadowRoute: "screen-space-depth-occlusion";
+    // (undocumented)
+    readonly shaftRoute: "deterministic-epipolar";
+    // (undocumented)
+    readonly tracers: QualityProfileUnderwaterTracers;
+    // (undocumented)
+    readonly updateCadence: "host-present";
+}
+
+// @public
+export interface RadialImpactDisturbanceBatch {
+    readonly amplitudes: Float32Array;
+    // (undocumented)
+    readonly count: number;
+    readonly ids: Uint32Array;
+    // (undocumented)
+    readonly kind: "radial-impact";
+    readonly positions: Float32Array;
+    readonly priorities: Uint8Array;
+    readonly radii: Float32Array;
 }
 
 // @public
@@ -746,11 +1729,17 @@ export interface RealWaterLease extends RealWaterRuntime {
 // @public
 export interface RealWaterRuntime {
     // (undocumented)
+    attachBody(options: BodyAttachmentOptions): BodyAttachment;
+    // (undocumented)
     inspectRuntime(): OpenWaterRuntimeSnapshot;
     // (undocumented)
     queryGameplay(batch: GameplayQueryBatch): GameplayQueryResults;
     // (undocumented)
+    submitDisturbances(batch: DisturbanceBatch): DisturbanceSubmissionReceipt;
+    // (undocumented)
     updateArtisticControls(controls: ArtisticControls, options?: ArtisticControlUpdateOptions): ArtisticControlUpdateReceipt;
+    // (undocumented)
+    updateInteractionAnchor(anchor: InteractionAnchor): InteractionAnchorUpdateReceipt;
 }
 
 // @public
@@ -808,15 +1797,65 @@ export interface RealWaterStartupErrorInit {
 }
 
 // @public
+export interface RecoveryPresetImport {
+    // (undocumented)
+    readonly detectedSchema?: string;
+    // (undocumented)
+    readonly detectedVersion?: number;
+    // (undocumented)
+    readonly rawJson: string;
+    // (undocumented)
+    readonly reason: PresetRecoveryReason;
+    // (undocumented)
+    readonly status: "recovery";
+}
+
+// @public
+export const REFERENCE_SHOWCASE_SEED: 1592590373;
+
+// @public
 export interface RenderingCapabilities {
     // (undocumented)
     readonly backend: "core-webgpu";
     // (undocumented)
+    readonly postTraaComposition: RenderingCapabilitiesPostTraaComposition;
+    // (undocumented)
     readonly reflection: RenderingCapabilitiesReflection;
+    // (undocumented)
+    readonly secondaryParticles: RenderingCapabilitiesSecondaryParticles;
+    // (undocumented)
+    readonly stormFront: RenderingCapabilitiesStormFront;
     // (undocumented)
     readonly temporal: RenderingCapabilitiesTemporal;
     // (undocumented)
     readonly timestampQuery: boolean;
+}
+
+// @public
+export interface RenderingCapabilitiesPostTraaComposition {
+    // (undocumented)
+    readonly accumulationFormat: "rgba16float";
+    // (undocumented)
+    readonly finalColorFormat: "rgba8unorm-srgb";
+    // (undocumented)
+    readonly height: number;
+    // (undocumented)
+    readonly stages: readonly [
+        {
+        readonly id: "secondary-particles";
+        readonly after: "traa";
+    },
+        {
+        readonly id: "storm-atmosphere";
+        readonly after: "secondary-particles";
+    },
+        {
+        readonly id: "lens-wetness";
+        readonly after: "storm-atmosphere";
+    }
+    ];
+    // (undocumented)
+    readonly width: number;
 }
 
 // @public
@@ -901,7 +1940,8 @@ export interface RenderingCapabilitiesReflectionSsrHistory {
     "simulation-reset",
     "camera-cut",
     "origin-shift",
-    "sea-state-cut"
+    "sea-state-cut",
+    "waterline-crossing"
     ];
     // (undocumented)
     readonly resetVelocityFormat: "rg16float";
@@ -911,6 +1951,95 @@ export interface RenderingCapabilitiesReflectionSsrHistory {
     readonly updateCadence: "host-present";
     // (undocumented)
     readonly width: number;
+}
+
+// @public
+export interface RenderingCapabilitiesSecondaryParticles {
+    // (undocumented)
+    readonly capacity: 131_072;
+    // (undocumented)
+    readonly consumers: readonly [
+        {
+        readonly consumerId: "spray-droplet-mist";
+        readonly maximumRequestCount: 65_536;
+        readonly softRequestCeiling: 32_768;
+        readonly minimumRetainedSlots: 2_048;
+        readonly pressureReentryPolicy: "after-shared-cooldown";
+    },
+        {
+        readonly consumerId: "underwater-suspended-particles";
+        readonly maximumRequestCount: 49_152;
+        readonly softRequestCeiling: 24_576;
+        readonly minimumRetainedSlots: 2_048;
+        readonly pressureReentryPolicy: "after-shared-cooldown";
+    },
+        {
+        readonly consumerId: "subsurface-foam-bubble-cloud";
+        readonly maximumRequestCount: 24_576;
+        readonly softRequestCeiling: 12_288;
+        readonly minimumRetainedSlots: 1_024;
+        readonly pressureReentryPolicy: "after-shared-cooldown";
+    },
+        {
+        readonly consumerId: "rising-bubbles";
+        readonly maximumRequestCount: 8_192;
+        readonly softRequestCeiling: 4_096;
+        readonly minimumRetainedSlots: 256;
+        readonly pressureReentryPolicy: "forbidden-until-absent";
+    }
+    ];
+    // (undocumented)
+    readonly contributionReference: {
+        readonly width: number;
+        readonly height: number;
+        readonly space: "output-drawing-buffer";
+        readonly screenAreaDivisor: 3_600;
+        readonly quantization: "q16-unorm-round-nearest";
+    };
+    // (undocumented)
+    readonly hysteresis: {
+        readonly retainedContributionBonusQ16: 4_096;
+        readonly minimumResidenceTicks: 4;
+        readonly reentryCooldownTicks: 4;
+    };
+    // (undocumented)
+    readonly maximumCandidateCount: 147_456;
+    // (undocumented)
+    readonly renderPhaseKnowledge: "none";
+    // (undocumented)
+    readonly selection: "q16-global-contribution-radix";
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
+}
+
+// @public
+export interface RenderingCapabilitiesStormFront {
+    // (undocumented)
+    readonly cloudAndLightning: {
+        readonly illuminationRoute: "coherent-glint-foam-reflection-atmosphere";
+        readonly atmosphereStageId: "storm-atmosphere";
+    };
+    // (undocumented)
+    readonly diagnostics: {
+        readonly resolutionPolicy: "drawing-buffer-exact";
+        readonly format: "rgba16float";
+        readonly samples: 0;
+    };
+    // (undocumented)
+    readonly mode: "prepared-deterministic-route";
+    // (undocumented)
+    readonly rain: {
+        readonly surfaceRoute: "additive-spectral-ripples";
+        readonly secondaryParticleConsumerId: "spray-droplet-mist";
+        readonly maximumCandidateCount: 8_192;
+    };
+    // (undocumented)
+    readonly stormAerosol: {
+        readonly secondaryParticleConsumerId: "spray-droplet-mist";
+        readonly maximumCandidateCount: 8_192;
+    };
+    // (undocumented)
+    readonly updateCadence: "host-fixed-tick";
 }
 
 // @public
@@ -941,7 +2070,143 @@ export interface RenderingCapabilitiesTemporal {
 export type RuntimeDiagnostics = StartupDiagnostics;
 
 // @public
-export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "GAMEPLAY_QUERY_CAPACITY_EXCEEDED" | "RUNTIME_INVALIDATED";
+export type RuntimeErrorCode = "EFFECT_NOT_PREWARMED" | "BODY_CAPACITY_EXCEEDED" | "BODY_ROUTE_TICK_REPEATED" | "INTERACTION_ANCHOR_CAPACITY_EXCEEDED" | "INTERACTION_ANCHOR_OWNED_BY_BODY" | "GAMEPLAY_QUERY_CAPACITY_EXCEEDED" | "RUNTIME_INVALIDATED";
+
+// @public
+export const SHOWCASE_PRESET_SCHEMA: "real-water/showcase-preset";
+
+// @public
+export const SHOWCASE_PRESET_VERSION: 3;
+
+// @public
+export interface ShowcaseBodyKeyframe {
+    // (undocumented)
+    readonly bodyId: string;
+    // (undocumented)
+    readonly steering: number;
+    // (undocumented)
+    readonly throttle: number;
+    // (undocumented)
+    readonly tick: number;
+}
+
+// @public
+export interface ShowcaseCameraKeyframe {
+    // (undocumented)
+    readonly position: ShowcaseVector3;
+    // (undocumented)
+    readonly target: ShowcaseVector3;
+    // (undocumented)
+    readonly tick: number;
+    // (undocumented)
+    readonly verticalFovDegrees: number;
+}
+
+// @public
+export interface ShowcaseCapturePoint {
+    // (undocumented)
+    readonly captureNames: readonly string[];
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly tick: number;
+}
+
+// @public
+export interface ShowcaseEventKeyframe {
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly tick: number;
+}
+
+// @public
+export interface ShowcaseLookKeyframe {
+    // (undocumented)
+    readonly environmentPreset: EnvironmentPresetIdentity;
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly tick: number;
+    // (undocumented)
+    readonly waterPreset: WaterPresetIdentity;
+}
+
+// @public
+export interface ShowcasePreset extends ShowcasePresetAuthoring {
+    // (undocumented)
+    readonly presetHash: string;
+    // (undocumented)
+    readonly schema: typeof SHOWCASE_PRESET_SCHEMA;
+    // (undocumented)
+    readonly version: typeof SHOWCASE_PRESET_VERSION;
+}
+
+// @public
+export interface ShowcasePresetAuthoring {
+    // (undocumented)
+    readonly bodyTimeline: readonly ShowcaseBodyKeyframe[];
+    // (undocumented)
+    readonly cameraTimeline: readonly ShowcaseCameraKeyframe[];
+    // (undocumented)
+    readonly captureTimeline: readonly ShowcaseCapturePoint[];
+    // (undocumented)
+    readonly durationTicks: number;
+    // (undocumented)
+    readonly environmentPreset: EnvironmentPresetIdentity;
+    // (undocumented)
+    readonly eventTimeline: readonly ShowcaseEventKeyframe[];
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly lookTimeline: readonly ShowcaseLookKeyframe[];
+    // (undocumented)
+    readonly qualityProfile: QualityProfileIdentity;
+    // (undocumented)
+    readonly seed: number;
+    // (undocumented)
+    readonly stormFront: ShowcaseStormFrontSegment;
+    // (undocumented)
+    readonly waterPreset: WaterPresetIdentity;
+}
+
+// @public
+export interface ShowcasePresetIdentity {
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly presetHash: string;
+    // (undocumented)
+    readonly schema: typeof SHOWCASE_PRESET_SCHEMA;
+    // (undocumented)
+    readonly version: typeof SHOWCASE_PRESET_VERSION;
+}
+
+// @public
+export function showcasePresetIdentity(preset: ShowcasePreset): ShowcasePresetIdentity;
+
+// @public
+export interface ShowcaseStormFrontSegment {
+    // (undocumented)
+    readonly environmentPreset: EnvironmentPresetIdentity;
+    // (undocumented)
+    readonly eventId: string;
+    // (undocumented)
+    readonly heroBreakerEventId: string;
+    // (undocumented)
+    readonly waterPreset: WaterPresetIdentity;
+}
+
+// @public
+export type ShowcaseVector3 = readonly [number, number, number];
+
+// @public
+export interface SphereInteractionShape {
+    // (undocumented)
+    readonly kind: "sphere";
+    // (undocumented)
+    readonly radius: number;
+}
 
 // @public
 export type StartupDiagnostics = Readonly<Record<string, string | number | boolean | null>>;
@@ -1014,7 +2279,7 @@ export interface ThreeHostScene {
 export const WATER_PRESET_SCHEMA: "real-water/water-preset";
 
 // @public
-export const WATER_PRESET_VERSION: 2;
+export const WATER_PRESET_VERSION: 5;
 
 // @public
 export interface WaterPreset {
@@ -1044,6 +2309,9 @@ export interface WaterPresetIdentity {
     // (undocumented)
     readonly version: typeof WATER_PRESET_VERSION;
 }
+
+// @public
+export function waterPresetIdentity(preset: WaterPreset): WaterPresetIdentity;
 
 // @public
 export interface WebGPUDeviceLoss {

@@ -15,3 +15,7 @@ This is a single-context repo: read the root `CONTEXT.md` and relevant ADRs unde
 ### Browser work
 
 Browser tests, agent QA, screenshots, page data, Chrome diagnostics, and Native certification use distinct evidence classes. Route each task with `docs/agents/browser-tooling.md`.
+
+### Orchestration
+
+Planning, implementing, and reviewing run as separate sessions in separate roles. Before starting a ticket, handing one off, or merging a branch, see `docs/agents/orchestration.md`.

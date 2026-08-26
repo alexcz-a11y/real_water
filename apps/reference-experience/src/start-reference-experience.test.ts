@@ -1,12 +1,23 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  REFERENCE_SHOWCASE_SEED,
   createMemoryHostLifecycleAdapter,
+  createMinimalWaterQualityProfile,
   createStaticHostPresentationAdapter,
   createStaticHostSimulationAdapter,
+  createWaterPreset,
 } from "real-water";
 import { createReferenceEnvironmentAdapter } from "./reference-optical-inputs.js";
 import { createReferenceHostSimulationController } from "./reference-simulation-controller.js";
-import { startReferenceExperience } from "./start-reference-experience.js";
+import {
+  createLocalPresetLibrary,
+  createMemoryLocalPresetStorage,
+  type LocalPresetLibrary,
+} from "./local-preset-library.js";
+import {
+  startReferenceExperience,
+  type StartReferenceExperienceOptions,
+} from "./start-reference-experience.js";
 
 const INITIAL = Object.freeze({
   drawingBufferWidth: 320,
@@ -21,6 +32,106 @@ let currentSession: ReturnType<typeof startReferenceExperience> | null = null;
 let mount: {
   querySelector(selector: string): { dataset?: DOMStringMap } | null;
 };
+
+describe("ReferenceExperienceSession.presets", () => {
+  afterEach(async () => {
+    await currentSession?.dispose();
+    currentSession = null;
+  });
+
+  it("exposes the injected local authoring library through the production session seam", () => {
+    const presets = createLocalPresetLibrary({
+      storage: createMemoryLocalPresetStorage(),
+      builtIns: [],
+    });
+    const session = startSession(presets);
+
+    expect(session.presets).toBe(presets);
+    const saved = session.presets.save({
+      displayName: "Session storm",
+      preset: createWaterPreset("storm"),
+    });
+    expect(session.presets.get(saved.recordId)).toEqual(saved);
+  });
+});
+
+describe("ReferenceExperienceSession.applyQualityProfile", () => {
+  afterEach(async () => {
+    await currentSession?.dispose();
+    currentSession = null;
+  });
+
+  it("re-enters the Loading Experience when the same Quality Profile is applied", async () => {
+    const session = startSession();
+    await waitForReady(session);
+    const before = session.snapshot();
+
+    const applying = session.applyQualityProfile(
+      createMinimalWaterQualityProfile("minimal"),
+    );
+
+    expect(session.snapshot().state).toBe("loading");
+    expect(mount.querySelector("[data-testid='reference-stage']")).toBeNull();
+    expect(
+      mount.querySelector("[data-testid='loading-experience']"),
+    ).not.toBeNull();
+
+    await applying;
+    await waitForReady(session);
+    const after = session.snapshot();
+    expect(after.generation).toBe(before.generation + 1);
+    expect(after.manifestHash).toBe(before.manifestHash);
+  });
+
+  it("disposes the ready-stage decoration before structural preparation replaces the stage", async () => {
+    installMinimalDocument();
+    mount = document.createElement("div") as unknown as typeof mount;
+    document.body.append(mount as unknown as Node);
+    const decorationDisposals: Array<ReturnType<typeof vi.fn>> = [];
+    const session = startReferenceExperience(mount as unknown as Element, {
+      initialDrawingBuffer: {
+        width: INITIAL.drawingBufferWidth,
+        height: INITIAL.drawingBufferHeight,
+      },
+      createHostAttempt: () => ({
+        host: createMemoryHostLifecycleAdapter({
+          simulation: createStaticHostSimulationAdapter(),
+          environment: createReferenceEnvironmentAdapter(),
+          presentation: createStaticHostPresentationAdapter(),
+          stepDelayMs: 0,
+        }),
+        createReadyStage: () => {
+          const stage = document.createElement("main");
+          stage.dataset.testid = "reference-stage";
+          return stage;
+        },
+        decorateReadyStage: () => {
+          const dispose = vi.fn();
+          decorationDisposals.push(dispose);
+          return { dispose };
+        },
+        dispose() {},
+      }),
+      presetLibrary: createLocalPresetLibrary({
+        storage: createMemoryLocalPresetStorage(),
+      }),
+      revealDelayFrames: 1,
+    });
+    currentSession = session;
+    await waitForReady(session);
+
+    const applying = session.applyQualityProfile(
+      createMinimalWaterQualityProfile("minimal-high-detail"),
+    );
+
+    expect(decorationDisposals).toHaveLength(1);
+    expect(decorationDisposals[0]).toHaveBeenCalledTimes(1);
+    expect(mount.querySelector("[data-testid='reference-stage']")).toBeNull();
+    await applying;
+    await waitForReady(session);
+    expect(decorationDisposals).toHaveLength(2);
+  });
+});
 
 describe("ReferenceExperienceSession.applyViewport", () => {
   afterEach(async () => {
@@ -84,6 +195,102 @@ describe("ReferenceExperienceSession.applyViewport", () => {
     expect(after.viewport).toEqual(NEXT);
     expect(after.manifestHash).not.toBe(before.manifestHash);
   });
+
+  it("retires an in-flight viewport attempt before creating the latest", async () => {
+    const events: string[] = [];
+    let attemptNumber = 0;
+    let releaseSecondPreparation = (): void => {};
+    const secondPreparationGate = new Promise<void>((resolve) => {
+      releaseSecondPreparation = resolve;
+    });
+    let markSecondPrepared = (): void => {};
+    const secondPrepared = new Promise<void>((resolve) => {
+      markSecondPrepared = resolve;
+    });
+    const session = startSessionWithHostAttempt(() => {
+      const currentAttempt = (attemptNumber += 1);
+      events.push(`create-${String(currentAttempt)}`);
+      const baseHost = createMemoryHostLifecycleAdapter({
+        simulation: createStaticHostSimulationAdapter(),
+        environment: createReferenceEnvironmentAdapter(),
+        presentation: createStaticHostPresentationAdapter(),
+        stepDelayMs: 0,
+      });
+      return {
+        host: {
+          async prepare(request) {
+            if (currentAttempt !== 2) {
+              return baseHost.prepare(request);
+            }
+            request.signal.addEventListener(
+              "abort",
+              () => {
+                events.push("cancel-2");
+              },
+              { once: true },
+            );
+            const result = await baseHost.prepare(request);
+            markSecondPrepared();
+            await secondPreparationGate;
+            events.push("raw-settle-2");
+            if (result.status !== "ready") {
+              return result;
+            }
+            return {
+              ...result,
+              lease: {
+                ...result.lease,
+                async dispose() {
+                  events.push("release-2");
+                  await result.lease.dispose();
+                },
+              },
+            };
+          },
+        },
+        createReadyStage: () => {
+          const stage = document.createElement("main");
+          stage.dataset.testid = "reference-stage";
+          return stage;
+        },
+        dispose() {
+          events.push(`dispose-${String(currentAttempt)}`);
+        },
+      };
+    });
+    await waitForReady(session);
+
+    const first = session.applyViewport({
+      drawingBufferWidth: 400,
+      drawingBufferHeight: 200,
+    });
+    await secondPrepared;
+    let second = Promise.resolve();
+    try {
+      expect(session.snapshot().generation).toBe(2);
+      second = session.applyViewport(NEXT);
+      expect(events).toContain("cancel-2");
+      expect(events).not.toContain("create-3");
+    } finally {
+      releaseSecondPreparation();
+    }
+
+    await first;
+    await second;
+    await waitForReady(session);
+    const lifecycle = [
+      "create-2",
+      "cancel-2",
+      "raw-settle-2",
+      "release-2",
+      "dispose-2",
+      "create-3",
+    ];
+    expect(events.filter((event) => lifecycle.includes(event))).toEqual(
+      lifecycle,
+    );
+    expect(session.snapshot().viewport).toEqual(NEXT);
+  });
 });
 
 describe("ReferenceExperienceSession.reportPresentationFailure", () => {
@@ -134,7 +341,7 @@ describe("ReferenceExperienceSession.reportPresentationFailure", () => {
     ).not.toBeNull();
   });
 
-  it("becomes ready with the Reference Host Simulation at seed 0", async () => {
+  it("becomes ready with the Reference Showcase seed", async () => {
     const simulation = createReferenceHostSimulationController();
     installMinimalDocument();
     mount = document.createElement("div") as unknown as typeof mount;
@@ -160,17 +367,21 @@ describe("ReferenceExperienceSession.reportPresentationFailure", () => {
           void drawingBuffer;
         },
       }),
+      presetLibrary: createLocalPresetLibrary({
+        storage: createMemoryLocalPresetStorage(),
+      }),
       revealDelayFrames: 1,
     });
     currentSession = session;
     await waitForReady(session);
     expect(simulation.snapshot()).toEqual({
-      seed: 0,
+      seed: REFERENCE_SHOWCASE_SEED,
       tick: 0,
       timeSeconds: 0,
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
   });
@@ -191,16 +402,13 @@ describe("ReferenceExperienceSession.reportPresentationFailure", () => {
   });
 });
 
-function startSession() {
-  installMinimalDocument();
-  mount = document.createElement("div") as unknown as typeof mount;
-  document.body.append(mount as unknown as Node);
-  const session = startReferenceExperience(mount as unknown as Element, {
-    initialDrawingBuffer: {
-      width: INITIAL.drawingBufferWidth,
-      height: INITIAL.drawingBufferHeight,
-    },
-    createHostAttempt: (drawingBuffer) => ({
+function startSession(
+  presetLibrary: LocalPresetLibrary = createLocalPresetLibrary({
+    storage: createMemoryLocalPresetStorage(),
+  }),
+) {
+  return startSessionWithHostAttempt(
+    (drawingBuffer) => ({
       host: createMemoryHostLifecycleAdapter({
         simulation: createStaticHostSimulationAdapter(),
         environment: createReferenceEnvironmentAdapter(),
@@ -216,6 +424,26 @@ function startSession() {
         void drawingBuffer;
       },
     }),
+    presetLibrary,
+  );
+}
+
+function startSessionWithHostAttempt(
+  createHostAttempt: StartReferenceExperienceOptions["createHostAttempt"],
+  presetLibrary: LocalPresetLibrary = createLocalPresetLibrary({
+    storage: createMemoryLocalPresetStorage(),
+  }),
+) {
+  installMinimalDocument();
+  mount = document.createElement("div") as unknown as typeof mount;
+  document.body.append(mount as unknown as Node);
+  const session = startReferenceExperience(mount as unknown as Element, {
+    initialDrawingBuffer: {
+      width: INITIAL.drawingBufferWidth,
+      height: INITIAL.drawingBufferHeight,
+    },
+    createHostAttempt,
+    presetLibrary,
     revealDelayFrames: 1,
   });
   currentSession = session;

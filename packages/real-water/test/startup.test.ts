@@ -69,6 +69,7 @@ const TEST_REFLECTION_CAPABILITIES = Object.freeze({
         "camera-cut",
         "origin-shift",
         "sea-state-cut",
+        "waterline-crossing",
       ] as const),
       updateCadence: "host-present" as const,
     }),
@@ -84,13 +85,147 @@ const TEST_REFLECTION_CAPABILITIES = Object.freeze({
     }),
   }),
 });
+const TEST_GAMEPLAY_CAPABILITIES = Object.freeze({
+  maxAttachedBodies: 32 as const,
+  maxQueryPointsPerTick: 2_048 as const,
+  maxActiveDisturbances: 128 as const,
+  maxActiveHeroBreakers: 8 as const,
+  interactionField: Object.freeze({
+    radiusMetres: 48 as const,
+    edgeFadeMetres: 8 as const,
+    maxSnapshotAgeTicks: 1 as const,
+    disturbanceKinds: Object.freeze([
+      "radial-impact",
+      "directional-wake",
+      "hero-breaker",
+    ] as const),
+  }),
+  bodyInteraction: Object.freeze({
+    fixedTickHz: 60 as const,
+    maxShapeSamplesPerBody: 32 as const,
+    maxConvexHullVertices: 64 as const,
+    maxSocketsPerBody: 8 as const,
+    shapeKinds: Object.freeze([
+      "sphere",
+      "box",
+      "capsule",
+      "convex-hull",
+      "compound",
+    ] as const),
+    socketKinds: Object.freeze([
+      "bow",
+      "stern",
+      "propeller",
+      "wake",
+      "interaction-anchor",
+    ] as const),
+    generatedDisturbanceKinds: Object.freeze([
+      "directional-wake",
+      "propeller-wash",
+    ] as const),
+  }),
+});
+const TEST_SECONDARY_PARTICLE_CAPABILITIES = Object.freeze({
+  capacity: 131_072 as const,
+  maximumCandidateCount: 147_456 as const,
+  contributionReference: Object.freeze({
+    width: 320,
+    height: 180,
+    space: "output-drawing-buffer" as const,
+    screenAreaDivisor: 3_600 as const,
+    quantization: "q16-unorm-round-nearest" as const,
+  }),
+  hysteresis: Object.freeze({
+    retainedContributionBonusQ16: 4_096 as const,
+    minimumResidenceTicks: 4 as const,
+    reentryCooldownTicks: 4 as const,
+  }),
+  consumers: Object.freeze([
+    Object.freeze({
+      consumerId: "spray-droplet-mist" as const,
+      maximumRequestCount: 65_536 as const,
+      softRequestCeiling: 32_768 as const,
+      minimumRetainedSlots: 2_048 as const,
+      pressureReentryPolicy: "after-shared-cooldown" as const,
+    }),
+    Object.freeze({
+      consumerId: "underwater-suspended-particles" as const,
+      maximumRequestCount: 49_152 as const,
+      softRequestCeiling: 24_576 as const,
+      minimumRetainedSlots: 2_048 as const,
+      pressureReentryPolicy: "after-shared-cooldown" as const,
+    }),
+    Object.freeze({
+      consumerId: "subsurface-foam-bubble-cloud" as const,
+      maximumRequestCount: 24_576 as const,
+      softRequestCeiling: 12_288 as const,
+      minimumRetainedSlots: 1_024 as const,
+      pressureReentryPolicy: "after-shared-cooldown" as const,
+    }),
+    Object.freeze({
+      consumerId: "rising-bubbles" as const,
+      maximumRequestCount: 8_192 as const,
+      softRequestCeiling: 4_096 as const,
+      minimumRetainedSlots: 256 as const,
+      pressureReentryPolicy: "forbidden-until-absent" as const,
+    }),
+  ] as const),
+  selection: "q16-global-contribution-radix" as const,
+  updateCadence: "host-fixed-tick" as const,
+  renderPhaseKnowledge: "none" as const,
+});
+const TEST_POST_TRAA_CAPABILITIES = Object.freeze({
+  width: 320,
+  height: 180,
+  stages: Object.freeze([
+    Object.freeze({
+      id: "secondary-particles" as const,
+      after: "traa" as const,
+    }),
+    Object.freeze({
+      id: "storm-atmosphere" as const,
+      after: "secondary-particles" as const,
+    }),
+    Object.freeze({
+      id: "lens-wetness" as const,
+      after: "storm-atmosphere" as const,
+    }),
+  ] as const),
+  accumulationFormat: "rgba16float" as const,
+  finalColorFormat: "rgba8unorm-srgb" as const,
+});
+const TEST_STORM_FRONT_CAPABILITIES = Object.freeze({
+  mode: "prepared-deterministic-route" as const,
+  updateCadence: "host-fixed-tick" as const,
+  rain: Object.freeze({
+    surfaceRoute: "additive-spectral-ripples" as const,
+    secondaryParticleConsumerId: "spray-droplet-mist" as const,
+    maximumCandidateCount: 8_192 as const,
+  }),
+  stormAerosol: Object.freeze({
+    secondaryParticleConsumerId: "spray-droplet-mist" as const,
+    maximumCandidateCount: 8_192 as const,
+  }),
+  cloudAndLightning: Object.freeze({
+    illuminationRoute: "coherent-glint-foam-reflection-atmosphere" as const,
+    atmosphereStageId: "storm-atmosphere" as const,
+  }),
+  diagnostics: Object.freeze({
+    resolutionPolicy: "drawing-buffer-exact" as const,
+    format: "rgba16float" as const,
+    samples: 0 as const,
+  }),
+});
 const TEST_CAPABILITIES = Object.freeze({
-  gameplay: Object.freeze({ maxQueryPointsPerTick: 2_048 as const }),
+  gameplay: TEST_GAMEPLAY_CAPABILITIES,
   rendering: Object.freeze({
     backend: "core-webgpu" as const,
     timestampQuery: false,
     temporal: TEST_TEMPORAL_CAPABILITIES,
     reflection: TEST_REFLECTION_CAPABILITIES,
+    secondaryParticles: TEST_SECONDARY_PARTICLE_CAPABILITIES,
+    stormFront: TEST_STORM_FRONT_CAPABILITIES,
+    postTraaComposition: TEST_POST_TRAA_CAPABILITIES,
   }),
 });
 const NEVER_INVALIDATED = new Promise<never>(() => {});
@@ -125,12 +260,15 @@ describe("prepareRealWater", () => {
     const lease = await run.ready;
 
     expect(lease.capabilities).toEqual({
-      gameplay: { maxQueryPointsPerTick: 2_048 },
+      gameplay: TEST_GAMEPLAY_CAPABILITIES,
       rendering: {
         backend: "core-webgpu",
         timestampQuery: true,
         temporal: TEST_TEMPORAL_CAPABILITIES,
         reflection: TEST_REFLECTION_CAPABILITIES,
+        secondaryParticles: TEST_SECONDARY_PARTICLE_CAPABILITIES,
+        stormFront: TEST_STORM_FRONT_CAPABILITIES,
+        postTraaComposition: TEST_POST_TRAA_CAPABILITIES,
       },
     });
     expect(Object.isFrozen(lease.capabilities)).toBe(true);
@@ -343,15 +481,15 @@ describe("prepareRealWater", () => {
     });
     const lease = await run.ready;
     const preparedSelection = {
-      effectId: "minimal-water-surface",
-      variantId: "basic",
+      effectId: "hero-breaker",
+      variantId: "art-directed-overturning",
     };
     lease.selectEffectVariant(preparedSelection);
 
     let failure: unknown;
     try {
       lease.selectEffectVariant({
-        effectId: "minimal-water-surface",
+        effectId: "hero-breaker",
         variantId: "undeclared",
       });
     } catch (cause) {
@@ -362,13 +500,13 @@ describe("prepareRealWater", () => {
       name: "RealWaterRuntimeError",
       code: "EFFECT_NOT_PREWARMED",
       diagnostics: {
-        effectId: "minimal-water-surface",
+        effectId: "hero-breaker",
         manifestHash: manifest.manifestHash,
         variantId: "undeclared",
       },
       diagnosticText:
         "EFFECT_NOT_PREWARMED: The requested effect variant was not prepared by this lease.\n" +
-        "effectId: minimal-water-surface\n" +
+        "effectId: hero-breaker\n" +
         `manifestHash: ${manifest.manifestHash}\n` +
         "variantId: undeclared",
     });
@@ -723,12 +861,12 @@ describe("prepareRealWater", () => {
     );
     expect(lease.manifest).toEqual({
       schema: "real-water/prewarm",
-      version: 3,
+      version: 12,
       id: manifest.id,
       manifestHash: manifest.manifestHash,
       qualityProfile: {
         schema: "real-water/quality-profile",
-        version: 5,
+        version: 15,
         id: "minimal",
         profileHash: manifest.qualityProfile.profileHash,
       },
@@ -738,6 +876,54 @@ describe("prepareRealWater", () => {
         {
           effectId: "minimal-water-surface",
           variantId: "basic",
+        },
+        {
+          effectId: "unified-foam",
+          variantId: "source-resolved-persistent",
+        },
+        {
+          effectId: "underwater-volume",
+          variantId: "depth-aware",
+        },
+        {
+          effectId: "secondary-particles",
+          variantId: "bounded-post-traa",
+        },
+        {
+          effectId: "underwater-caustics",
+          variantId: "prepared-surface-visible-receivers",
+        },
+        {
+          effectId: "underwater-particles",
+          variantId: "deterministic-depth-aware",
+        },
+        {
+          effectId: "underwater-bubbles",
+          variantId: "cloud-and-rising-depth-aware",
+        },
+        {
+          effectId: "lens-wetness",
+          variantId: "bounded-emergence-decay",
+        },
+        {
+          effectId: "hero-breaker",
+          variantId: "art-directed-overturning",
+        },
+        {
+          effectId: "rain",
+          variantId: "additive-ripples-and-shared-spray",
+        },
+        {
+          effectId: "storm-aerosol",
+          variantId: "shared-spray-post-traa-atmosphere",
+        },
+        {
+          effectId: "cloud-shadow",
+          variantId: "coherent-optical-atmosphere-modulation",
+        },
+        {
+          effectId: "lightning",
+          variantId: "fixed-tick-coherent-transient",
         },
       ],
     });
@@ -918,7 +1104,7 @@ describe("prepareRealWater", () => {
       status: "failed",
       progress: {
         completedWork: 4,
-        totalWork: 57,
+        totalWork: 140,
       },
     });
   });
@@ -1586,7 +1772,7 @@ describe("prepareRealWater", () => {
 
     expect(Object.isFrozen(manifest)).toBe(true);
     expect(Object.isFrozen(manifest.drawingBuffer)).toBe(true);
-    expect(manifest.version).toBe(3);
+    expect(manifest.version).toBe(12);
     expect(manifest.drawingBuffer).toEqual({ width: 320, height: 180 });
     expect(Object.isFrozen(manifest.declarations)).toBe(true);
     expect(Object.isFrozen(first)).toBe(true);
@@ -1597,12 +1783,59 @@ describe("prepareRealWater", () => {
       "water-scene-depth",
       "water-render-target",
       "water-clipmap",
+      "water-local-interaction-field",
+      "water-local-interaction-buffers",
+      "water-local-interaction-radial-impact-route",
+      "water-local-interaction-directional-wake-route",
+      "water-hero-breaker-state",
+      "water-hero-breaker-deformation-route",
+      "water-hero-breaker-foam-route",
+      "water-hero-breaker-spray-route",
+      "water-hero-breaker-foam-diagnostics-target",
+      "water-hero-breaker-foam-diagnostics-route",
+      "water-hero-breaker-foam-probe",
+      "water-storm-front-state",
+      "water-storm-rain-ripple-route",
+      "water-storm-rain-spray-route",
+      "water-storm-aerosol-route",
+      "water-storm-cloud-shadow-route",
+      "water-storm-lightning-route",
+      "water-storm-atmosphere-target",
+      "water-storm-atmosphere-stage-route",
+      "water-storm-diagnostics-target",
+      "water-storm-diagnostics-route",
+      "water-storm-probe",
+      "water-body-socket-emission-route",
       "water-spectral-band-swell",
       "water-spectral-band-wind",
       "water-spectral-band-chop",
       "water-spectral-band-ripple",
+      "water-whitecap-field-a",
+      "water-whitecap-field-b",
+      "water-whitecap-reset-route",
+      "water-whitecap-generation-route",
+      "water-whitecap-history",
+      "water-whitecap-advection-route",
+      "water-whitecap-diffusion-route",
+      "water-whitecap-decay-route",
+      "water-whitecap-stage-target",
+      "water-whitecap-stage-route",
+      "water-whitecap-probe",
+      "water-foam-local-field-a",
+      "water-foam-local-field-b",
+      "water-underwater-caustics-local-surface-field",
+      "water-foam-source-history",
+      "water-foam-local-advection-route",
+      "water-foam-local-resolve-route",
+      "water-foam-source-identity-target",
+      "water-foam-source-identity-route",
+      "water-foam-source-identity-probe",
       "water-material",
       "water-optical-route",
+      "water-waterline-state",
+      "water-underside-optical-route",
+      "water-waterline-history-reset-route",
+      "water-lens-wetness-transition",
       "water-planar-reflection-target",
       "water-planar-reflection-route",
       "water-planar-environment-fallback",
@@ -1630,12 +1863,34 @@ describe("prepareRealWater", () => {
       "water-ssr-history-reset-velocity-target",
       "water-ssr-history-reset-velocity-route",
       "water-ssr-history-probe",
+      "water-underwater-volume-target",
+      "water-underwater-volume-route",
+      "water-underwater-depth-composition-route",
+      "water-underwater-sun-shaft-shadow-route",
+      "water-underwater-diagnostics-target",
+      "water-underwater-diagnostics-route",
+      "water-underwater-probe",
+      "water-underwater-caustics-receiver-route",
+      "water-underwater-caustics-diagnostics-target",
+      "water-underwater-caustics-diagnostics-route",
+      "water-underwater-caustics-probe",
+      "water-underwater-particle-candidate-state",
+      "water-underwater-particle-allocation-routes",
+      "water-underwater-suspended-particle-target",
+      "water-underwater-suspended-particle-route",
+      "water-underwater-bubble-target",
+      "water-underwater-bubble-route",
+      "water-underwater-tracer-composite-target",
+      "water-underwater-tracer-composite-route",
+      "water-underwater-tracer-probe",
       "water-render-route",
       "water-procedural-motion",
       "water-motion-vectors",
       "water-inverse-linear-depth",
       "water-view-normal",
       "water-optical-factors-target",
+      "water-history-rejection-target",
+      "water-history-rejection-route",
       "water-optical-diagnostics-a",
       "water-optical-diagnostics-b",
       "water-final-color-target",
@@ -1643,6 +1898,20 @@ describe("prepareRealWater", () => {
       "water-stock-traa-history",
       "water-traa-resolve-jitter",
       "water-traa-reset-route",
+      "water-secondary-particle-pool",
+      "water-secondary-particle-allocation-route",
+      "water-post-traa-composition-plan",
+      "water-traa-resolved-target",
+      "water-secondary-particle-accumulation-target",
+      "water-secondary-particle-composite-target",
+      "water-secondary-particle-stage-route",
+      "water-secondary-particle-composite-route",
+      "water-secondary-particle-diagnostics-route",
+      "water-secondary-particle-probe",
+      "water-lens-wetness-diagnostics-target",
+      "water-lens-wetness-stage-route",
+      "water-lens-wetness-diagnostics-route",
+      "water-lens-wetness-probe",
       "water-current-color-conversion",
       "water-named-output-routes",
       "water-hidden-stabilization",

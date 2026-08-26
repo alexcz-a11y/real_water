@@ -2,17 +2,33 @@ export {
   QUALITY_PROFILE_SCHEMA,
   QUALITY_PROFILE_VERSION,
   createMinimalWaterQualityProfile,
+  migrateQualityProfile,
+  normalizeQualityProfile,
+  qualityProfileIdentity,
 } from "./quality-profile.js";
 export type {
   MinimalWaterGeometrySegments,
   MinimalWaterQualityProfileId,
   QualityProfile,
+  QualityProfileBodyCoupling,
   QualityProfileIdentity,
+  QualityProfileInteraction,
+  QualityProfileInteractionField,
   QualityProfileReflection,
   QualityProfileReflectionSsr,
   QualityProfileReflectionSsrHistory,
+  QualityProfileSpectralWhitecaps,
+  QualityProfileStormFront,
+  QualityProfileSecondaryParticleConsumer,
+  QualityProfileSecondaryParticles,
+  QualityProfilePostTraaStage,
+  QualityProfilePostTraaComposition,
   QualityProfileSurface,
   QualityProfileTemporal,
+  QualityProfileUnderwaterCaustics,
+  QualityProfileUnderwaterTracers,
+  QualityProfileUnderwaterVolume,
+  QualityProfileLensWetness,
 } from "./quality-profile.js";
 
 export {
@@ -31,15 +47,26 @@ export type {
 
 export type {
   GameplayCapabilities,
+  GameplayCapabilitiesBodyInteraction,
+  GameplayCapabilitiesInteractionField,
   RealWaterCapabilities,
   RenderingCapabilities,
   RenderingCapabilitiesReflection,
   RenderingCapabilitiesReflectionSsr,
   RenderingCapabilitiesReflectionSsrBlur,
   RenderingCapabilitiesReflectionSsrHistory,
+  RenderingCapabilitiesSecondaryParticles,
+  RenderingCapabilitiesStormFront,
+  RenderingCapabilitiesPostTraaComposition,
   RenderingCapabilitiesTemporal,
 } from "./capabilities.js";
-export { MAX_GAMEPLAY_QUERY_POINTS } from "./capabilities.js";
+export {
+  MAX_ATTACHED_BODIES,
+  MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
+  MAX_GAMEPLAY_QUERY_POINTS,
+  MAX_SECONDARY_PARTICLES,
+} from "./capabilities.js";
 
 export { RealWaterRuntimeError, RealWaterStartupError } from "./errors.js";
 export type {
@@ -54,19 +81,76 @@ export type {
   StartupPhase,
 } from "./errors.js";
 
-export { createStaticHostSimulationAdapter } from "./runtime.js";
+export {
+  ARTISTIC_CONTROL_DESCRIPTORS,
+  ARTISTIC_CONTROL_KEYS,
+  createStaticHostSimulationAdapter,
+} from "./runtime.js";
 export type {
+  ArtisticControlDescriptor,
+  ArtisticControlGroup,
   ArtisticControls,
   ArtisticControlTransition,
   ArtisticControlUpdateOptions,
   ArtisticControlUpdateReceipt,
   GameplayQueryBatch,
   GameplayQueryResults,
+  HeroBreakerDisturbanceBatch,
+  DisturbanceBatch,
+  DisturbanceSubmissionReceipt,
+  DirectionalWakeDisturbanceBatch,
   HostSimulationAdapter,
   HostSimulationState,
+  InteractionAnchor,
+  InteractionAnchorUpdateReceipt,
   OpenWaterRuntimeSnapshot,
+  RadialImpactDisturbanceBatch,
   RealWaterRuntime,
 } from "./runtime.js";
+
+export {
+  MAX_BODY_INTERACTION_SOCKETS,
+  MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN,
+  MAX_CONVEX_HULL_VERTICES,
+  createBodyPhysicsAdapter,
+} from "./body-physics.js";
+export type {
+  BodyEffectSocket,
+  BodyAttachment,
+  BodyAttachmentOptions,
+  BodyAttachmentSnapshot,
+  BodyPhysicsAdapter,
+  BodyPhysicsAdapterOptions,
+  BodyPhysicsBinding,
+  BodyPhysicsFixedStepRoute,
+  BodyPhysicsPose,
+  BodyPhysicsQuaternion,
+  BodyPhysicsState,
+  BodyPhysicsVector3,
+  BodyInteractionAnchorSocket,
+  BodyInteractionSocket,
+  BodyInteractionSocketKind,
+  BodyWaterLoad,
+  BodyWakeUpdateReceipt,
+  BodyWakeSourceIdentity,
+  BoxInteractionShape,
+  CapsuleInteractionShape,
+  CompoundInteractionShape,
+  CompoundInteractionShapeChild,
+  ConvexHullInteractionShape,
+  InteractionShape,
+  PrimitiveInteractionShape,
+  SphereInteractionShape,
+} from "./body-physics.js";
+
+export {
+  BODY_PHYSICS_FIXED_TICK_HZ,
+  createMemoryBodyPhysicsAdapter,
+} from "./memory-body-physics.js";
+export type {
+  MemoryBodyPhysicsAdapter,
+  MemoryBodyPhysicsAdapterOptions,
+} from "./memory-body-physics.js";
 
 export {
   assertHostPresentationAdapter,
@@ -95,24 +179,88 @@ export {
 } from "./environment.js";
 export type {
   HostEnvironmentAdapter,
+  HostEnvironmentAtmosphereState,
   HostEnvironmentColorSpace,
   HostEnvironmentReflectionDescriptor,
   HostEnvironmentReflectionResource,
   HostEnvironmentReflectionType,
+  HostEnvironmentSnapshot,
   HostEnvironmentState,
+  HostEnvironmentWeatherState,
   HostTexture,
 } from "./environment.js";
 
 export {
   WATER_PRESET_SCHEMA,
   WATER_PRESET_VERSION,
+  createAuthoredWaterPreset,
   createWaterPreset,
+  migrateWaterPreset,
+  normalizeWaterPreset,
+  waterPresetIdentity,
 } from "./water-preset.js";
 export type {
   WaterPreset,
   WaterPresetId,
   WaterPresetIdentity,
 } from "./water-preset.js";
+
+export {
+  ENVIRONMENT_PRESET_SCHEMA,
+  ENVIRONMENT_PRESET_VERSION,
+  createAuthoredEnvironmentPreset,
+  createBlueNoonEnvironmentPreset,
+  createCalmSunriseEnvironmentPreset,
+  createReferenceEnvironmentPreset,
+  createStormFrontEnvironmentPreset,
+  environmentPresetIdentity,
+  migrateEnvironmentPreset,
+  normalizeEnvironmentPreset,
+} from "./environment-preset.js";
+export type {
+  EnvironmentPreset,
+  EnvironmentPresetAtmosphere,
+  EnvironmentPresetIdentity,
+  EnvironmentPresetSnapshot,
+  EnvironmentPresetWeather,
+} from "./environment-preset.js";
+
+export {
+  REFERENCE_SHOWCASE_SEED,
+  SHOWCASE_PRESET_SCHEMA,
+  SHOWCASE_PRESET_VERSION,
+  createAuthoredShowcasePreset,
+  createReferenceShowcasePreset,
+  migrateShowcasePreset,
+  normalizeShowcasePreset,
+  showcasePresetIdentity,
+} from "./showcase-preset.js";
+export type {
+  ShowcaseBodyKeyframe,
+  ShowcaseCameraKeyframe,
+  ShowcaseCapturePoint,
+  ShowcaseEventKeyframe,
+  ShowcaseLookKeyframe,
+  ShowcasePreset,
+  ShowcasePresetAuthoring,
+  ShowcasePresetIdentity,
+  ShowcaseStormFrontSegment,
+  ShowcaseVector3,
+} from "./showcase-preset.js";
+
+export {
+  exportPresetJson,
+  importPresetJson,
+  normalizePreset,
+} from "./preset-codec.js";
+export type {
+  CurrentPresetImport,
+  MigratedPresetImport,
+  PresetDocument,
+  PresetImportResult,
+  PresetRecoveryReason,
+  RecoveryPresetImport,
+} from "./preset-codec.js";
 
 export { createMemoryHostLifecycleAdapter } from "./memory-host.js";
 export type {

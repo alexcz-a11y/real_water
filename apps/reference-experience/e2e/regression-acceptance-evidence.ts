@@ -43,7 +43,7 @@ export {
 export const REGRESSION_ACCEPTANCE_EVIDENCE_CLASS = "Regression acceptance";
 export const REGRESSION_ACCEPTANCE_SCHEMA =
   "real-water/regression-acceptance" as const;
-export const REGRESSION_ACCEPTANCE_VERSION = 2 as const;
+export const REGRESSION_ACCEPTANCE_VERSION = 3 as const;
 export const REGRESSION_ACCEPTANCE_RELATIVE_DIRECTORY =
   "test-results/regression-acceptance";
 
@@ -191,6 +191,13 @@ const ARTISTIC_CONTROL_KEYS = [
   "depthColoring",
   "inWaterGlow",
   "crestGlow",
+  "whitecapAmount",
+  "foamPersistence",
+  "underwaterHaze",
+  "underwaterTurbidity",
+  "underwaterLightShafts",
+  "underwaterColor",
+  "underwaterExposure",
 ] as const;
 const LIGHTING_KEYS = [
   "sunDirectionX",
@@ -283,6 +290,7 @@ const REGRESSION_ACCEPTANCE_KEYS = [
   "powerState",
   "lowPowerMode",
   "screenshotProfile",
+  "seaLevelMetres",
   "seed",
   "tick",
   "camera",
@@ -932,7 +940,7 @@ export function readRegressionAcceptanceEvidence(
 ): Readonly<Record<string, unknown>> {
   if (!isRecord(value) || !hasExactKeys(value, REGRESSION_ACCEPTANCE_KEYS)) {
     throw new TypeError(
-      "Regression acceptance evidence must use the exact version-2 contract.",
+      "Regression acceptance evidence must use the exact version-3 contract.",
     );
   }
   if (
@@ -940,7 +948,7 @@ export function readRegressionAcceptanceEvidence(
     value.version !== REGRESSION_ACCEPTANCE_VERSION
   ) {
     throw new TypeError(
-      "Regression acceptance evidence must use schema real-water/regression-acceptance version 2.",
+      "Regression acceptance evidence must use schema real-water/regression-acceptance version 3.",
     );
   }
   if (value.evidenceClass !== REGRESSION_ACCEPTANCE_EVIDENCE_CLASS) {
@@ -949,6 +957,14 @@ export function readRegressionAcceptanceEvidence(
     );
   }
   assertNoRawCapturePayload(value);
+  if (
+    typeof value.seaLevelMetres !== "number" ||
+    !Number.isFinite(value.seaLevelMetres)
+  ) {
+    throw new RangeError(
+      "Regression acceptance seaLevelMetres must be finite.",
+    );
+  }
   const coreIdentity = readQaBoundCoreManifestIdentity(
     isRecord(value.coreManifest) ? value.coreManifest.identity : undefined,
   );
@@ -960,7 +976,7 @@ export function readRegressionAcceptanceEvidence(
       "Regression acceptance coreManifest.hash disagrees with the Core identity.",
     );
   }
-  const qaPrewarm = readQaPrewarmV6(value.qaPrewarmManifest, coreIdentity);
+  const qaPrewarm = readQaPrewarmV16(value.qaPrewarmManifest, coreIdentity);
   const temporalPolicy = readReadyCapabilities(
     qaPrewarm.capabilities,
     createMinimalWaterQualityProfile(coreIdentity.qualityProfile.id),
@@ -1496,7 +1512,7 @@ function readCamera(value: unknown, label: string): QaCameraV1 {
 function readArtisticControls(value: unknown): ArtisticControls {
   if (!isRecord(value) || !hasExactKeys(value, ARTISTIC_CONTROL_KEYS)) {
     throw new TypeError(
-      "Artistic controls must use the exact 13-key contract.",
+      "Artistic controls must use the exact 20-key contract.",
     );
   }
   const controls: Record<string, number> = {};
@@ -1665,12 +1681,12 @@ function evaluateMetricPolicy(
   return true;
 }
 
-function readQaPrewarmV6(
+function readQaPrewarmV16(
   value: unknown,
   coreIdentity: QaBoundCoreManifestIdentity,
 ): QaFramePrewarmReceipt {
   if (!isRecord(value) || !hasExactKeys(value, QA_PREWARM_KEYS)) {
-    throw new TypeError("Regression acceptance requires QA prewarm v7.");
+    throw new TypeError("Regression acceptance requires QA prewarm v16.");
   }
   if (
     !isRecord(value.manifest) ||
@@ -1678,7 +1694,7 @@ function readQaPrewarmV6(
     value.manifest.version !== QA_FRAME_PREWARM_MANIFEST.version ||
     value.manifest.id !== QA_FRAME_PREWARM_MANIFEST.id
   ) {
-    throw new Error("Regression acceptance requires QA prewarm v7.");
+    throw new Error("Regression acceptance requires QA prewarm v16.");
   }
   if (
     canonicalJson(value.manifest.captures) !==
@@ -1687,11 +1703,11 @@ function readQaPrewarmV6(
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.coreDeclarations)
   ) {
     throw new Error(
-      "Regression acceptance requires the exact QA v7 23-name capture mapping.",
+      "Regression acceptance requires the exact QA v16 45-name capture mapping.",
     );
   }
-  if (QA_FRAME_PREWARM_MANIFEST.captures.length !== 23) {
-    throw new Error("QA v7 capture contract must name exactly 23 outputs.");
+  if (QA_FRAME_PREWARM_MANIFEST.captures.length !== 45) {
+    throw new Error("QA v16 capture contract must name exactly 45 outputs.");
   }
   const core = readQaBoundCoreManifestIdentity(value.core);
   if (core.manifestHash !== coreIdentity.manifestHash) {

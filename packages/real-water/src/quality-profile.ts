@@ -1,4 +1,17 @@
 import { hasExactKeys, isRecord } from "./internal/record-validation.js";
+import {
+  INTERACTION_FIELD_EDGE_FADE_METRES,
+  INTERACTION_FIELD_RADIUS_METRES,
+  MAX_ATTACHED_BODIES,
+  MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
+  MAX_SECONDARY_PARTICLES,
+} from "./capabilities.js";
+import {
+  MAX_BODY_INTERACTION_SOCKETS,
+  MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN,
+  MAX_CONVEX_HULL_VERTICES,
+} from "./body-physics.js";
 
 /**
  * The discriminator for supported Quality Profiles.
@@ -12,7 +25,7 @@ export const QUALITY_PROFILE_SCHEMA = "real-water/quality-profile" as const;
  *
  * @public
  */
-export const QUALITY_PROFILE_VERSION = 5 as const;
+export const QUALITY_PROFILE_VERSION = 15 as const;
 
 /**
  * Built-in structural configurations for the minimal-water surface.
@@ -38,6 +51,48 @@ export interface MinimalWaterGeometrySegments {
  */
 export interface QualityProfileSurface {
   readonly geometry: MinimalWaterGeometrySegments;
+}
+
+/**
+ * Fixed local interaction field and bounded Disturbance layout.
+ *
+ * @public
+ */
+export interface QualityProfileInteractionField {
+  readonly radiusMetres: 48;
+  readonly edgeFadeMetres: 8;
+  readonly maxActiveDisturbances: 128;
+  readonly snapshotBanks: 2;
+  readonly maxSnapshotAgeTicks: 1;
+  readonly radialImpactRoute: "analytic-uniform-array";
+  readonly directionalWakeRoute: "analytic-uniform-array";
+  readonly maxActiveHeroBreakers: 8;
+  readonly heroBreakerRoute: "art-directed-overturning-uniform-array";
+}
+
+/**
+ * Structural policy for the one prepared Interaction Anchor.
+ *
+ * @public
+ */
+export interface QualityProfileInteraction {
+  readonly anchorCount: 1;
+  readonly field: QualityProfileInteractionField;
+}
+
+/**
+ * Bounded structural policy for fixed-step Body coupling and authored sockets.
+ * Per-Body Interaction Shapes and socket poses remain runtime attachment data.
+ *
+ * @public
+ */
+export interface QualityProfileBodyCoupling {
+  readonly fixedTickHz: 60;
+  readonly maxAttachedBodies: 32;
+  readonly maxShapeSamplesPerBody: 32;
+  readonly maxConvexHullVertices: 64;
+  readonly maxSocketsPerBody: 8;
+  readonly socketRoute: "stable-slot-upsert";
 }
 
 /**
@@ -79,6 +134,7 @@ export interface QualityProfileReflectionSsrHistory {
     "camera-cut",
     "origin-shift",
     "sea-state-cut",
+    "waterline-crossing",
   ];
   readonly updateCadence: "host-present";
 }
@@ -134,6 +190,248 @@ export interface QualityProfileReflection {
 }
 
 /**
+ * Structural unified foam field and diagnostic policy. The public `whitecaps`
+ * key and type name remain stable while spectral whitecaps, local wakes, and
+ * local impacts share one source-resolved persistent field. Amount and
+ * persistence remain hot Artistic Controls and are deliberately absent here.
+ *
+ * @public
+ */
+export interface QualityProfileSpectralWhitecaps {
+  readonly mode: "unified-source-ping-pong";
+  readonly fixedTickHz: 60;
+  readonly fieldResolution: 128 | 256;
+  readonly tileSizeMetres: 256;
+  readonly fieldFormat: "rgba16float";
+  readonly stageLayout: "generation-history-advection-decay";
+  readonly sourceLayout: "whitecap-wake-impact-hero-combined";
+  readonly localHistoryBanks: 2;
+  readonly maxLocalSources: 128;
+  /** Preallocated fixed-tick CPU journal of controls plus interaction state. */
+  readonly foamTimelineCapacityTicks: 128;
+  readonly diffusionTaps: 3;
+  readonly updateCadence: "host-fixed-tick";
+  readonly captureResolutionPolicy: "drawing-buffer-exact";
+  readonly captureFormat: "rgba16float";
+  readonly resetDomains: readonly [
+    "simulation-reset",
+    "seed-change",
+    "tick-rewind",
+    "time-rewind",
+    "sea-state-cut",
+  ];
+}
+
+/**
+ * Bounded dynamic caustics projected from the prepared water surface onto
+ * visible underwater receivers. Pure presentation coefficients remain outside
+ * this structural contract.
+ *
+ * @public
+ */
+export interface QualityProfileUnderwaterCaustics {
+  readonly mode: "prepared-surface-visible-receivers";
+  readonly composition: "post-ssr-pre-traa";
+  readonly resolutionPolicy: "drawing-buffer-exact";
+  readonly diagnosticsFormat: "rgba16float";
+  readonly samples: 0;
+  readonly localSurfaceFieldFormat: "rgba16float";
+  readonly localSurfaceFieldLayout: "height-slope-x-slope-z-vertical-velocity";
+  readonly localSurfaceFieldResolutionPolicy: "match-unified-foam-field";
+  readonly localSurfaceFieldUpdateCadence: "host-fixed-tick";
+  readonly maxLocalSurfaceSnapshotAgeTicks: 1;
+  readonly maxReceiverDistanceMetres: 48;
+  readonly receiverNormalMinY: 0.05;
+  readonly updateCadence: "host-present";
+}
+
+/**
+ * Pre-TRAA depth-aware rendering for the three underwater consumers already
+ * declared by the shared secondary-particle pool.
+ *
+ * @public
+ */
+export interface QualityProfileUnderwaterTracers {
+  readonly mode: "shared-pool-depth-aware";
+  readonly composition: "pre-traa";
+  readonly resolutionPolicy: "drawing-buffer-exact";
+  readonly accumulationFormat: "rgba16float";
+  readonly samples: 0;
+  readonly depthRoute: "soft-scene-depth";
+  readonly suspendedConsumerId: "underwater-suspended-particles";
+  readonly bubbleCloudConsumerId: "subsurface-foam-bubble-cloud";
+  readonly risingBubbleConsumerId: "rising-bubbles";
+  readonly updateCadence: "host-fixed-tick";
+}
+
+/**
+ * Fixed full-frame underwater composition prepared before visibility. Haze,
+ * turbidity, shaft strength, color, and exposure remain hot Artistic Controls.
+ *
+ * @public
+ */
+export interface QualityProfileUnderwaterVolume {
+  readonly mode: "depth-aware-post-volume";
+  readonly composition: "post-ssr-pre-traa";
+  readonly resolutionPolicy: "drawing-buffer-exact";
+  readonly colorFormat: "rgba16float";
+  readonly diagnosticsFormat: "rgba16float";
+  readonly samples: 0;
+  readonly maxDistanceMetres: 96;
+  readonly shadowRoute: "screen-space-depth-occlusion";
+  readonly shaftRoute: "deterministic-epipolar";
+  readonly updateCadence: "host-present";
+  readonly caustics: QualityProfileUnderwaterCaustics;
+  readonly tracers: QualityProfileUnderwaterTracers;
+}
+
+/**
+ * One structurally declared consumer of the shared secondary-particle pool.
+ * Contribution construction and payload remain consumer-owned.
+ *
+ * @public
+ */
+export interface QualityProfileSecondaryParticleConsumer {
+  readonly consumerId:
+    | "spray-droplet-mist"
+    | "underwater-suspended-particles"
+    | "subsurface-foam-bubble-cloud"
+    | "rising-bubbles";
+  readonly maximumRequestCount: 65_536 | 49_152 | 24_576 | 8_192;
+  readonly softRequestCeiling: 32_768 | 24_576 | 12_288 | 4_096;
+  readonly minimumRetainedSlots: 2_048 | 1_024 | 256;
+  readonly contributionReference: "manifest-output-drawing-buffer";
+  readonly pressureReentryPolicy:
+    "after-shared-cooldown" | "forbidden-until-absent";
+}
+
+/**
+ * Fixed render-stage-agnostic allocation policy for the global 131,072-slot
+ * secondary-particle pool. Consumers submit final Q16 contribution; the pool
+ * does not know depth, motion, payload, or pre/post-TRAA render timing.
+ *
+ * @public
+ */
+export interface QualityProfileSecondaryParticles {
+  readonly mode: "shared-global-contribution-pool";
+  readonly capacity: 131_072;
+  readonly maximumCandidateCount: 147_456;
+  readonly selection: "q16-global-contribution-radix";
+  readonly contribution: {
+    /**
+     * Consumers convert projected area to the Manifest output drawing buffer,
+     * then submit roundQ16(1 - exp(-(areaPx * opacity * contrast *
+     * depthVisibility) / (width * height / 3600))).
+     */
+    readonly projectedAreaReference: "manifest-output-drawing-buffer";
+    readonly screenAreaDivisor: 3_600;
+    readonly formula: "saturating-pixel-energy";
+    readonly quantization: "q16-unorm-round-nearest";
+  };
+  readonly hysteresis: {
+    readonly mode: "incumbent-bonus-residence-cooldown";
+    readonly retainedContributionBonusQ16: 4_096;
+    readonly minimumResidenceTicks: 4;
+    readonly reentryCooldownTicks: 4;
+  };
+  readonly consumers: readonly [
+    QualityProfileSecondaryParticleConsumer,
+    QualityProfileSecondaryParticleConsumer,
+    QualityProfileSecondaryParticleConsumer,
+    QualityProfileSecondaryParticleConsumer,
+  ];
+  readonly updateCadence: "host-fixed-tick";
+  readonly payloadOwnership: "consumer";
+  readonly renderPhaseKnowledge: "none";
+}
+
+/**
+ * Prepared deterministic Storm Front route. Weather remains explicit Host
+ * environment input; this policy only fixes how the prepared route consumes
+ * it across the ocean, shared particle pool, optics, and atmosphere.
+ *
+ * @public
+ */
+export interface QualityProfileStormFront {
+  readonly mode: "prepared-deterministic-route";
+  readonly updateCadence: "host-fixed-tick";
+  readonly rain: {
+    readonly surfaceRoute: "additive-spectral-ripples";
+    readonly secondaryParticleConsumerId: "spray-droplet-mist";
+    readonly maximumCandidateCount: 8_192;
+  };
+  readonly stormAerosol: {
+    readonly secondaryParticleConsumerId: "spray-droplet-mist";
+    readonly maximumCandidateCount: 8_192;
+  };
+  readonly cloudAndLightning: {
+    readonly illuminationRoute: "coherent-glint-foam-reflection-atmosphere";
+    readonly atmosphereStageId: "storm-atmosphere";
+  };
+  readonly diagnostics: {
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    readonly format: "rgba16float";
+    readonly samples: 0;
+  };
+}
+
+/**
+ * One construction-time stage in the ordered post-TRAA composition plan.
+ *
+ * @public
+ */
+export interface QualityProfilePostTraaStage {
+  readonly id: "secondary-particles" | "storm-atmosphere" | "lens-wetness";
+  readonly after: "traa" | "secondary-particles" | "storm-atmosphere";
+}
+
+/**
+ * Bounded output-resolution lens wetness driven only by emergence impulses.
+ * Presentation coefficients remain private implementation constants.
+ *
+ * @public
+ */
+export interface QualityProfileLensWetness {
+  readonly mode: "bounded-emergence-decay";
+  readonly stageId: "lens-wetness";
+  readonly after: "storm-atmosphere";
+  readonly resolutionPolicy: "drawing-buffer-exact";
+  readonly diagnosticsFormat: "rgba16float";
+  readonly samples: 0;
+  readonly trigger: "waterline-emergence-impulse";
+  readonly updateCadence: "host-fixed-tick";
+}
+
+/**
+ * Fixed drawing-buffer-exact composition stages after TRAA and before Host
+ * presentation. Runtime registration is deliberately absent.
+ *
+ * @public
+ */
+export interface QualityProfilePostTraaComposition {
+  readonly mode: "ordered-declarative-stages";
+  readonly resolutionPolicy: "drawing-buffer-exact";
+  readonly accumulationFormat: "rgba16float";
+  readonly finalColorFormat: "rgba8unorm-srgb";
+  readonly samples: 0;
+  readonly stages: readonly [
+    QualityProfilePostTraaStage & {
+      readonly id: "secondary-particles";
+      readonly after: "traa";
+    },
+    QualityProfilePostTraaStage & {
+      readonly id: "storm-atmosphere";
+      readonly after: "secondary-particles";
+    },
+    QualityProfilePostTraaStage & {
+      readonly id: "lens-wetness";
+      readonly after: "storm-atmosphere";
+    },
+  ];
+  readonly lensWetness: QualityProfileLensWetness;
+}
+
+/**
  * A closed, versioned structural configuration prepared by the Readiness Gate.
  *
  * @public
@@ -144,8 +442,15 @@ export interface QualityProfile {
   readonly id: MinimalWaterQualityProfileId;
   readonly profileHash: string;
   readonly surface: QualityProfileSurface;
+  readonly interaction: QualityProfileInteraction;
+  readonly bodyCoupling: QualityProfileBodyCoupling;
   readonly temporal: QualityProfileTemporal;
   readonly reflection: QualityProfileReflection;
+  readonly whitecaps: QualityProfileSpectralWhitecaps;
+  readonly secondaryParticles: QualityProfileSecondaryParticles;
+  readonly underwater: QualityProfileUnderwaterVolume;
+  readonly stormFront: QualityProfileStormFront;
+  readonly postTraaComposition: QualityProfilePostTraaComposition;
 }
 
 /**
@@ -160,10 +465,18 @@ export interface QualityProfileIdentity {
   readonly profileHash: string;
 }
 
-interface SupportedQualityProfile {
+// Every committed snapshot predating the spectral whitecap field is described
+// by geometry identity alone. Keeping that the narrow type -- rather than
+// making whitecapFieldResolution optional -- is what stops `undefined` from
+// reaching the current profile's whitecaps.fieldResolution.
+interface LegacyQualityProfileSnapshot {
   readonly profileHash: string;
   readonly widthSegments: number;
   readonly heightSegments: number;
+}
+
+interface SupportedQualityProfile extends LegacyQualityProfileSnapshot {
+  readonly whitecapFieldResolution: 128 | 256;
 }
 
 export const CURRENT_FRAME_SSR_HISTORY_POLICY: QualityProfileReflectionSsrHistory =
@@ -183,6 +496,7 @@ export const CURRENT_FRAME_SSR_HISTORY_POLICY: QualityProfileReflectionSsrHistor
       "camera-cut",
       "origin-shift",
       "sea-state-cut",
+      "waterline-crossing",
     ] as const),
     updateCadence: "host-present",
   });
@@ -214,7 +528,9 @@ export const CURRENT_FRAME_SSR_POLICY: QualityProfileReflectionSsr =
 
 // Each static hash is the SHA-256 digest of the profile's canonical JSON,
 // excluding profileHash and preserving the public field order:
-// schema, version, id, surface, temporal, reflection.
+// schema, version, id, surface, interaction, bodyCoupling, temporal,
+// reflection, whitecaps, secondaryParticles, underwater, stormFront,
+// postTraaComposition.
 const NATIVE_TEMPORAL: QualityProfileTemporal = Object.freeze({
   mode: "TRAA",
   renderScale: 1,
@@ -236,22 +552,806 @@ const NATIVE_REFLECTION: QualityProfileReflection = Object.freeze({
   }),
   ssr: CURRENT_FRAME_SSR_POLICY,
 });
+const NATIVE_UNDERWATER: QualityProfileUnderwaterVolume = Object.freeze({
+  mode: "depth-aware-post-volume",
+  composition: "post-ssr-pre-traa",
+  resolutionPolicy: "drawing-buffer-exact",
+  colorFormat: "rgba16float",
+  diagnosticsFormat: "rgba16float",
+  samples: 0,
+  maxDistanceMetres: 96,
+  shadowRoute: "screen-space-depth-occlusion",
+  shaftRoute: "deterministic-epipolar",
+  updateCadence: "host-present",
+  caustics: Object.freeze({
+    mode: "prepared-surface-visible-receivers",
+    composition: "post-ssr-pre-traa",
+    resolutionPolicy: "drawing-buffer-exact",
+    diagnosticsFormat: "rgba16float",
+    samples: 0,
+    localSurfaceFieldFormat: "rgba16float",
+    localSurfaceFieldLayout: "height-slope-x-slope-z-vertical-velocity",
+    localSurfaceFieldResolutionPolicy: "match-unified-foam-field",
+    localSurfaceFieldUpdateCadence: "host-fixed-tick",
+    maxLocalSurfaceSnapshotAgeTicks: 1,
+    maxReceiverDistanceMetres: 48,
+    receiverNormalMinY: 0.05,
+    updateCadence: "host-present",
+  }),
+  tracers: Object.freeze({
+    mode: "shared-pool-depth-aware",
+    composition: "pre-traa",
+    resolutionPolicy: "drawing-buffer-exact",
+    accumulationFormat: "rgba16float",
+    samples: 0,
+    depthRoute: "soft-scene-depth",
+    suspendedConsumerId: "underwater-suspended-particles",
+    bubbleCloudConsumerId: "subsurface-foam-bubble-cloud",
+    risingBubbleConsumerId: "rising-bubbles",
+    updateCadence: "host-fixed-tick",
+  }),
+});
+// Declaration order is stable identity evidence, not allocation priority. The
+// allocator canonicalizes by consumerId before global contribution selection.
+const NATIVE_SECONDARY_PARTICLE_CONSUMERS = Object.freeze([
+  Object.freeze({
+    consumerId: "spray-droplet-mist",
+    maximumRequestCount: 65_536,
+    softRequestCeiling: 32_768,
+    minimumRetainedSlots: 2_048,
+    contributionReference: "manifest-output-drawing-buffer",
+    pressureReentryPolicy: "after-shared-cooldown",
+  }),
+  Object.freeze({
+    consumerId: "underwater-suspended-particles",
+    maximumRequestCount: 49_152,
+    softRequestCeiling: 24_576,
+    minimumRetainedSlots: 2_048,
+    contributionReference: "manifest-output-drawing-buffer",
+    pressureReentryPolicy: "after-shared-cooldown",
+  }),
+  Object.freeze({
+    consumerId: "subsurface-foam-bubble-cloud",
+    maximumRequestCount: 24_576,
+    softRequestCeiling: 12_288,
+    minimumRetainedSlots: 1_024,
+    contributionReference: "manifest-output-drawing-buffer",
+    pressureReentryPolicy: "after-shared-cooldown",
+  }),
+  Object.freeze({
+    consumerId: "rising-bubbles",
+    maximumRequestCount: 8_192,
+    softRequestCeiling: 4_096,
+    minimumRetainedSlots: 256,
+    contributionReference: "manifest-output-drawing-buffer",
+    pressureReentryPolicy: "forbidden-until-absent",
+  }),
+] as const);
+const NATIVE_SECONDARY_PARTICLES: QualityProfileSecondaryParticles =
+  Object.freeze({
+    mode: "shared-global-contribution-pool",
+    capacity: MAX_SECONDARY_PARTICLES,
+    maximumCandidateCount: 147_456,
+    selection: "q16-global-contribution-radix",
+    contribution: Object.freeze({
+      projectedAreaReference: "manifest-output-drawing-buffer",
+      screenAreaDivisor: 3_600,
+      formula: "saturating-pixel-energy",
+      quantization: "q16-unorm-round-nearest",
+    }),
+    hysteresis: Object.freeze({
+      mode: "incumbent-bonus-residence-cooldown",
+      retainedContributionBonusQ16: 4_096,
+      minimumResidenceTicks: 4,
+      reentryCooldownTicks: 4,
+    }),
+    consumers: NATIVE_SECONDARY_PARTICLE_CONSUMERS,
+    updateCadence: "host-fixed-tick",
+    payloadOwnership: "consumer",
+    renderPhaseKnowledge: "none",
+  });
+const NATIVE_STORM_FRONT: QualityProfileStormFront = Object.freeze({
+  mode: "prepared-deterministic-route",
+  updateCadence: "host-fixed-tick",
+  rain: Object.freeze({
+    surfaceRoute: "additive-spectral-ripples",
+    secondaryParticleConsumerId: "spray-droplet-mist",
+    maximumCandidateCount: 8_192,
+  }),
+  stormAerosol: Object.freeze({
+    secondaryParticleConsumerId: "spray-droplet-mist",
+    maximumCandidateCount: 8_192,
+  }),
+  cloudAndLightning: Object.freeze({
+    illuminationRoute: "coherent-glint-foam-reflection-atmosphere",
+    atmosphereStageId: "storm-atmosphere",
+  }),
+  diagnostics: Object.freeze({
+    resolutionPolicy: "drawing-buffer-exact",
+    format: "rgba16float",
+    samples: 0,
+  }),
+});
+const NATIVE_POST_TRAA_COMPOSITION: QualityProfilePostTraaComposition =
+  Object.freeze({
+    mode: "ordered-declarative-stages",
+    resolutionPolicy: "drawing-buffer-exact",
+    accumulationFormat: "rgba16float",
+    finalColorFormat: "rgba8unorm-srgb",
+    samples: 0,
+    stages: Object.freeze([
+      Object.freeze({ id: "secondary-particles", after: "traa" }),
+      Object.freeze({
+        id: "storm-atmosphere",
+        after: "secondary-particles",
+      }),
+      Object.freeze({ id: "lens-wetness", after: "storm-atmosphere" }),
+    ] as const),
+    lensWetness: Object.freeze({
+      mode: "bounded-emergence-decay",
+      stageId: "lens-wetness",
+      after: "storm-atmosphere",
+      resolutionPolicy: "drawing-buffer-exact",
+      diagnosticsFormat: "rgba16float",
+      samples: 0,
+      trigger: "waterline-emergence-impulse",
+      updateCadence: "host-fixed-tick",
+    }),
+  });
+// "waterline-crossing" is deliberately absent here. Whitecap foam is simulated
+// in the wave field, so its history only has to be dropped when that field is
+// discontinuous — a reset, a reseed, a rewind, a sea-state cut. A waterline
+// crossing is a presentation-side, view-dependent event: the camera moves
+// through the surface while the field itself keeps evolving. Adding it would
+// silently throw away converged foam every time the camera dips, so do not add
+// it here "for consistency" with the SSR history reset domains, which are
+// view-dependent and therefore do list it.
+const SPECTRAL_WHITECAP_RESET_DOMAINS = Object.freeze([
+  "simulation-reset",
+  "seed-change",
+  "tick-rewind",
+  "time-rewind",
+  "sea-state-cut",
+] as const);
 const SUPPORTED_QUALITY_PROFILES: Readonly<
   Record<MinimalWaterQualityProfileId, SupportedQualityProfile>
 > = Object.freeze({
   "minimal": Object.freeze({
     profileHash:
-      "sha256:9a75bfe19d0e81f51ee19908ce547b5a7abd49ab01dbe00feb234e3c95d23ec0",
+      "sha256:d50cc4c4bc0d234eded25f194afa7f4ee80620cf817324f34409d2daaa7504e5",
+    widthSegments: 128,
+    heightSegments: 128,
+    whitecapFieldResolution: 128,
+  }),
+  "minimal-high-detail": Object.freeze({
+    profileHash:
+      "sha256:ccc8509117556f87706d9ef8113ece239d5b1de3bd30f392632d9005a49ad987",
+    widthSegments: 256,
+    heightSegments: 256,
+    whitecapFieldResolution: 256,
+  }),
+});
+
+// Version 1 was committed with two different geometry layouts before the
+// schema acquired temporal and reflection policies. Both exact payloads remain
+// recoverable; their hashes are not aliases for partially matching data.
+const LEGACY_V1_QUALITY_PROFILES: readonly Readonly<
+  Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
+>[] = Object.freeze([
+  Object.freeze({
+    "minimal": Object.freeze({
+      profileHash:
+        "sha256:869ac714e56e70d4ffb37b75ff85432accba3caa2feb62946dc341eca66735ec",
+      widthSegments: 1,
+      heightSegments: 1,
+    }),
+    "minimal-high-detail": Object.freeze({
+      profileHash:
+        "sha256:e76e54fc9cb01a477c3006634c5a1cf99bd96e605c6355ed2859241bcd2e6201",
+      widthSegments: 2,
+      heightSegments: 2,
+    }),
+  }),
+  Object.freeze({
+    "minimal": Object.freeze({
+      profileHash:
+        "sha256:10dcb2e1e7b9e4cf47a49e6805329fd9a9906c198537934603b65a219c4f1f86",
+      widthSegments: 128,
+      heightSegments: 128,
+    }),
+    "minimal-high-detail": Object.freeze({
+      profileHash:
+        "sha256:a528f78e921767962db0afcf519aed7dbfed894e54284fcb7b2c7d21e93e1d0b",
+      widthSegments: 256,
+      heightSegments: 256,
+    }),
+  }),
+]);
+const LEGACY_V2_QUALITY_PROFILES: Readonly<
+  Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
+> = Object.freeze({
+  "minimal": Object.freeze({
+    profileHash:
+      "sha256:647ceaf12d769ddc4a95414593ca23131f3ec9a516a32341517609d4788cbc73",
     widthSegments: 128,
     heightSegments: 128,
   }),
   "minimal-high-detail": Object.freeze({
     profileHash:
-      "sha256:04b1d29617d1d2dd50f9d0f5b4f5dcd6ab6012cde62ae7e36ab0bba7be3061d8",
+      "sha256:975a61a72c43c660866970618ee747db41fab60cd54d6cce6654edd7376b8ba3",
     widthSegments: 256,
     heightSegments: 256,
   }),
 });
+// A legacy variant states the whole contract it was committed under, never
+// borrowing the current one. `absentKeys` covers fields the current schema has
+// and this shape did not; `absentSsrHistoryKeys` does the same one level down;
+// `ssrHistoryResetDomains` covers a field both shapes have but whose VALUE
+// changed. Existence and value are two halves of the same question, so they sit
+// together.
+//
+// The lists below are deliberately their own literals rather than references to
+// the current policy. Sharing the constant is exactly how a rung silently
+// starts demanding a contract written after it: the next reset domain added to
+// the current policy would propagate into every historical entry and each one
+// would begin rejecting the payload it exists to recover.
+type QualityProfileKey = (typeof QUALITY_PROFILE_KEYS)[number];
+type SsrHistoryKey = (typeof SSR_HISTORY_KEYS)[number];
+type InteractionFieldKey = (typeof INTERACTION_FIELD_KEYS)[number];
+
+const PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS = Object.freeze([
+  "maxActiveHeroBreakers",
+  "heroBreakerRoute",
+] as const);
+
+interface LegacyQualityProfileVariant {
+  readonly absentKeys: readonly QualityProfileKey[];
+  readonly absentSsrHistoryKeys: readonly SsrHistoryKey[];
+  // The interaction field grows too. #25 added directionalWakeRoute, so every
+  // variant committed before it carries an interaction field one key short,
+  // and says so here rather than being matched against today's field.
+  readonly absentInteractionFieldKeys: readonly InteractionFieldKey[];
+  readonly ssrHistoryResetDomains: readonly string[];
+  // Every committed whitecap-bearing legacy shape used the original spectral
+  // layout. This flag keeps those exact key/value contracts recoverable after
+  // version 10 expands the stable `whitecaps` key into the unified field.
+  readonly legacySpectralWhitecaps?: true;
+  // Version 13 carries the complete unified field, but predates the Hero
+  // Breaker source channel. Preserve its exact source layout independently of
+  // the current profile.
+  readonly whitecapSourceLayout?: "whitecap-wake-impact-combined";
+  // Version 13 is the first legacy rung whose underwater and post-TRAA
+  // structures already match the current complete T22 shape.
+  readonly completeT22?: true;
+  readonly profiles: Readonly<
+    Record<MinimalWaterQualityProfileId, LegacyQualityProfileSnapshot>
+  >;
+}
+
+// Everything committed before the waterline carries these four, in this order.
+const LEGACY_SSR_HISTORY_RESET_DOMAINS = Object.freeze([
+  "simulation-reset",
+  "camera-cut",
+  "origin-shift",
+  "sea-state-cut",
+] as const);
+
+// #31 shipped a version 6 that already carried the waterline domain. Its own
+// literal, for the same reason the list above is its own: a variant is matched
+// against the contract it was committed under, never against the current one.
+const WATERLINE_SSR_HISTORY_RESET_DOMAINS = Object.freeze([
+  "simulation-reset",
+  "camera-cut",
+  "origin-shift",
+  "sea-state-cut",
+  "waterline-crossing",
+] as const);
+
+// Version 5 was committed twice: once before the SSR history carried a
+// resetVelocityFormat, and once after. Neither knew about `interaction` or
+// `whitecaps`, so both cover the field order schema, version, id, surface,
+// temporal, reflection.
+const LEGACY_V5_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "interaction",
+        "bodyCoupling",
+        "whitecaps",
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+      ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:9a75bfe19d0e81f51ee19908ce547b5a7abd49ab01dbe00feb234e3c95d23ec0",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:04b1d29617d1d2dd50f9d0f5b4f5dcd6ab6012cde62ae7e36ab0bba7be3061d8",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "interaction",
+        "bodyCoupling",
+        "whitecaps",
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze(["resetVelocityFormat"] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+      ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:3ec933fa8238e5bfd50608dc451d8354374c8337e49c793f191a3ad86cdf67b2",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:d61edd12017f4b8adfe9878fa2c116fd9831b1681ce8b52c5e474e012ad94886",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
+// Version 6 was committed more than once, in more than one shape, on branches
+// developed in parallel: one added `interaction`, another added `whitecaps`.
+// Every exact payload remains recoverable, and no hash is an alias for
+// another's partially matching data. Version 7 is the first version that
+// carries both fields, which is why it exists at all.
+// Version 7 carried interaction and whitecaps but predates the waterline: its
+// SSR history reset domains stop at sea-state-cut. Version 8 is the first that
+// also resets on a waterline crossing, and version 9 the first that carries
+// Body coupling and a directional wake route.
+//
+// Version 10 was committed twice, in two shapes, on branches developed in
+// parallel: this branch's 10 was version 9 plus the underwater volume and still
+// carried the spectral-only whitecap field, and #27's 10 was version 9 plus the
+// unified foam field and never saw the underwater volume. Version 11 is the
+// first that carries both. Version 11 is the merged shape immediately before
+// the shared secondary-particle pool and ordered post-TRAA plan. Version 12 is
+// #28's committed pool and post-TRAA shape; version 13 adds the complete T22
+// underwater tracer: bounded caustics, three underwater particle consumers,
+// and lens wetness. Version 14 adds the bounded Hero Breaker interaction and
+// its fourth unified-foam source. Version 15 adds the complete Storm Front
+// route and inserts its atmosphere stage between secondary particles and lens
+// wetness.
+// The discarded pre-rebase caustics v12 never entered history and is not a
+// legacy rung.
+const LEGACY_V14_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([] as const),
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      completeT22: true,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:9fb629031064c5718584b77355748965e9cfafe11cba7e3f4675eedf715cd684",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:9780385fa033a0aeb2ad9de04ad04d6d5635398377da6b4000541044120f650b",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
+const LEGACY_V13_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([
+        "maxActiveHeroBreakers",
+        "heroBreakerRoute",
+      ] as const),
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      whitecapSourceLayout: "whitecap-wake-impact-combined",
+      completeT22: true,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:fe3581f672279216b2fe41dd658b7ae47140a58fb555badf2f1b05477781f663",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:e21f2d7c73e0efec73e8e01b21bfcd52ba7d059c5fb857bc73fee3d11bc89148",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
+const LEGACY_V12_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      whitecapSourceLayout: "whitecap-wake-impact-combined",
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:a9ea5e4aaf2d703f7e2ad85fb8e89afd9289c0ad9ae2a157f0d4f67044d74539",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:6498d05bd7491015c457d6183b90654c1df14e81352c1da13e8de34d6f9285a4",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
+const LEGACY_V11_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "secondaryParticles",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      whitecapSourceLayout: "whitecap-wake-impact-combined",
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:6f6ccb6262b8b3239dcfbcfc80dd3322ca75408260ea947cdd5892a16a8ef908",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:e1e1c7af79374e668a1f82c4b5c742d42e5009f5162389d8f3dc0ead9978d5a9",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
+const LEGACY_V10_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "secondaryParticles",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      legacySpectralWhitecaps: true,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:ab07356cb71f4cdf9dabad49af2c9aa1c89ee2405588830c4c3493d1fe7280a4",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:294f30cbd88b56da8b81cf5e8201fd2ea250faf0f25a35f869820cf87b9f2742",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+    // #27's version 10: the unified foam field, and no underwater volume.
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      whitecapSourceLayout: "whitecap-wake-impact-combined",
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:47475f80673e8e4c942b567715e0e3d36dedf0d6d1320e83825dc866fefacd93",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:a8ce0bc38f028341be0567b0e467355f1b0bc74d4abe3f2043c59e28a2dbc239",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
+// Version 9 was committed twice, in two shapes, on branches developed in
+// parallel, exactly as versions 6 and 7 were: #25's 9 added bodyCoupling and a
+// directional wake route to version 8, and #32's 9 added the underwater volume
+// to the same version 8. Neither saw the other's field. Version 10 is the first
+// that carries both.
+const LEGACY_V9_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      legacySpectralWhitecaps: true,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:6a3385d04d854e423957d290f562696ce4041c0ad1eb38e3f26fc9306a950978",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:3ef8c9bbcb9e5895de1a42425aa67ce69ed171c037ce29f21f82cefae398f637",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+    // #32's version 9: the underwater volume, and neither bodyCoupling nor the
+    // directional wake route.
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "bodyCoupling",
+        "secondaryParticles",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([
+        "directionalWakeRoute",
+        "maxActiveHeroBreakers",
+        "heroBreakerRoute",
+      ] as const),
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      legacySpectralWhitecaps: true,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:9ec18552c76f5c2df7da7798b9d18148f27d247b97fff2b252742a321daa1bed",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:98d424b79e24f5b785e9305eb7f50e83057a30ce3d37d50c90e1ce8dd72954b3",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
+// Version 8 was committed once, on this branch, before #25 arrived. It is the
+// only shape that carries every field except bodyCoupling and still resets on a
+// waterline crossing.
+const LEGACY_V8_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "bodyCoupling",
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([
+        "directionalWakeRoute",
+        "maxActiveHeroBreakers",
+        "heroBreakerRoute",
+      ] as const),
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      legacySpectralWhitecaps: true,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:b2e727a8016dbac41a2ea1036275f10c344cffc82b2a10bea2c4bc4807bc651d",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:a760008c06d5c27ea2cd42f986aff9272f7eaf184e97c6aab6bedf1d73f96bcd",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
+// Version 7, like version 6, was committed twice in two shapes on branches
+// developed in parallel. This branch's 7 added whitecaps to version 6's
+// interaction; #25's 7 added bodyCoupling and a directional wake route to the
+// same version 6 and never saw whitecaps at all. Same number, two payloads,
+// both recoverable.
+const LEGACY_V7_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "bodyCoupling",
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([
+        "directionalWakeRoute",
+        "maxActiveHeroBreakers",
+        "heroBreakerRoute",
+      ] as const),
+      ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+      legacySpectralWhitecaps: true,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:f896b4033ed12264eabcc4e88fc2f41cdbd9e8a2d2a70698b296683b586d3c3f",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:d33533c3f740eb2d9ef0d4a516f8e242ce22ca83ce90f38fb72f74e57c9738b3",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+    // #25's version 7: interaction with a directional wake route, plus
+    // bodyCoupling, and no whitecaps.
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "whitecaps",
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+      ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:1c11f4a6ae5099ee4ffe2610edc4c57fc546975fdb05a3a55ad4b662991db6a4",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:98911284133f9b9be6f93548f7726657c9f5164d4e241c08bab0ac440c04e67a",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
+
+const LEGACY_V6_QUALITY_PROFILES: readonly LegacyQualityProfileVariant[] =
+  Object.freeze([
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "bodyCoupling",
+        "whitecaps",
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: Object.freeze([
+        "directionalWakeRoute",
+        "maxActiveHeroBreakers",
+        "heroBreakerRoute",
+      ] as const),
+      ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:c60b0a30fa310fbc1f21270c413a35b5b6265d6f157e5f41233be4b8042d8ec5",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:4cba756cba61d7f4e071605c4d6939c1ba76b2cab0ef500bcf5ed1be7404d7f4",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "interaction",
+        "bodyCoupling",
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+      ssrHistoryResetDomains: LEGACY_SSR_HISTORY_RESET_DOMAINS,
+      legacySpectralWhitecaps: true,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:e89f6484cb983b184dee0ee46a77f8f05561b97df2a37c4686525b73b53eda28",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:008a6a813e5e048fca87cce20a13ea7c1a2187a146a4fda7e2a441f4e7d71a37",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+    // The third version 6, from #31. It added no field -- its key set matches
+    // version 5 -- and is a distinct shape only because it added
+    // waterline-crossing to the reset domains, which moved the hash.
+    Object.freeze({
+      absentKeys: Object.freeze([
+        "interaction",
+        "bodyCoupling",
+        "whitecaps",
+        "secondaryParticles",
+        "underwater",
+        "postTraaComposition",
+      ] as const),
+      absentSsrHistoryKeys: Object.freeze([] as const),
+      absentInteractionFieldKeys: PRE_HERO_BREAKER_INTERACTION_FIELD_KEYS,
+      ssrHistoryResetDomains: WATERLINE_SSR_HISTORY_RESET_DOMAINS,
+      profiles: Object.freeze({
+        "minimal": Object.freeze({
+          profileHash:
+            "sha256:e09b96aea95dcf7f52f3220a07ec83a90f29f59c978814b5e107f86098e892c2",
+          widthSegments: 128,
+          heightSegments: 128,
+        }),
+        "minimal-high-detail": Object.freeze({
+          profileHash:
+            "sha256:cb9323969633c4f8a5d6e44dfe9baf84bd3b61923dbc884e65f704e4d7e3b772",
+          widthSegments: 256,
+          heightSegments: 256,
+        }),
+      }),
+    }),
+  ]);
 
 const QUALITY_PROFILE_KEYS = [
   "schema",
@@ -259,8 +1359,224 @@ const QUALITY_PROFILE_KEYS = [
   "id",
   "profileHash",
   "surface",
+  "interaction",
+  "bodyCoupling",
   "temporal",
   "reflection",
+  "whitecaps",
+  "secondaryParticles",
+  "underwater",
+  "stormFront",
+  "postTraaComposition",
+] as const;
+const SPECTRAL_WHITECAP_KEYS = [
+  "mode",
+  "fixedTickHz",
+  "fieldResolution",
+  "tileSizeMetres",
+  "fieldFormat",
+  "stageLayout",
+  "sourceLayout",
+  "localHistoryBanks",
+  "maxLocalSources",
+  "foamTimelineCapacityTicks",
+  "diffusionTaps",
+  "updateCadence",
+  "captureResolutionPolicy",
+  "captureFormat",
+  "resetDomains",
+] as const;
+const LEGACY_SPECTRAL_WHITECAP_KEYS = [
+  "mode",
+  "fixedTickHz",
+  "fieldResolution",
+  "tileSizeMetres",
+  "fieldFormat",
+  "stageLayout",
+  "diffusionTaps",
+  "updateCadence",
+  "captureResolutionPolicy",
+  "captureFormat",
+  "resetDomains",
+] as const;
+const UNDERWATER_KEYS = [
+  "mode",
+  "composition",
+  "resolutionPolicy",
+  "colorFormat",
+  "diagnosticsFormat",
+  "samples",
+  "maxDistanceMetres",
+  "shadowRoute",
+  "shaftRoute",
+  "updateCadence",
+  "caustics",
+  "tracers",
+] as const;
+const LEGACY_UNDERWATER_KEYS = [
+  "mode",
+  "composition",
+  "resolutionPolicy",
+  "colorFormat",
+  "diagnosticsFormat",
+  "samples",
+  "maxDistanceMetres",
+  "shadowRoute",
+  "shaftRoute",
+  "updateCadence",
+] as const;
+const UNDERWATER_CAUSTICS_KEYS = [
+  "mode",
+  "composition",
+  "resolutionPolicy",
+  "diagnosticsFormat",
+  "samples",
+  "localSurfaceFieldFormat",
+  "localSurfaceFieldLayout",
+  "localSurfaceFieldResolutionPolicy",
+  "localSurfaceFieldUpdateCadence",
+  "maxLocalSurfaceSnapshotAgeTicks",
+  "maxReceiverDistanceMetres",
+  "receiverNormalMinY",
+  "updateCadence",
+] as const;
+const UNDERWATER_TRACER_KEYS = [
+  "mode",
+  "composition",
+  "resolutionPolicy",
+  "accumulationFormat",
+  "samples",
+  "depthRoute",
+  "suspendedConsumerId",
+  "bubbleCloudConsumerId",
+  "risingBubbleConsumerId",
+  "updateCadence",
+] as const;
+const SECONDARY_PARTICLE_KEYS = [
+  "mode",
+  "capacity",
+  "maximumCandidateCount",
+  "selection",
+  "contribution",
+  "hysteresis",
+  "consumers",
+  "updateCadence",
+  "payloadOwnership",
+  "renderPhaseKnowledge",
+] as const;
+const SECONDARY_PARTICLE_CONTRIBUTION_KEYS = [
+  "projectedAreaReference",
+  "screenAreaDivisor",
+  "formula",
+  "quantization",
+] as const;
+const SECONDARY_PARTICLE_HYSTERESIS_KEYS = [
+  "mode",
+  "retainedContributionBonusQ16",
+  "minimumResidenceTicks",
+  "reentryCooldownTicks",
+] as const;
+const SECONDARY_PARTICLE_CONSUMER_KEYS = [
+  "consumerId",
+  "maximumRequestCount",
+  "softRequestCeiling",
+  "minimumRetainedSlots",
+  "contributionReference",
+  "pressureReentryPolicy",
+] as const;
+const STORM_FRONT_KEYS = [
+  "mode",
+  "updateCadence",
+  "rain",
+  "stormAerosol",
+  "cloudAndLightning",
+  "diagnostics",
+] as const;
+const STORM_FRONT_RAIN_KEYS = [
+  "surfaceRoute",
+  "secondaryParticleConsumerId",
+  "maximumCandidateCount",
+] as const;
+const STORM_FRONT_AEROSOL_KEYS = [
+  "secondaryParticleConsumerId",
+  "maximumCandidateCount",
+] as const;
+const STORM_FRONT_CLOUD_LIGHTNING_KEYS = [
+  "illuminationRoute",
+  "atmosphereStageId",
+] as const;
+const STORM_FRONT_DIAGNOSTICS_KEYS = [
+  "resolutionPolicy",
+  "format",
+  "samples",
+] as const;
+const POST_TRAA_COMPOSITION_KEYS = [
+  "mode",
+  "resolutionPolicy",
+  "accumulationFormat",
+  "finalColorFormat",
+  "samples",
+  "stages",
+  "lensWetness",
+] as const;
+const LEGACY_POST_TRAA_COMPOSITION_KEYS = [
+  "mode",
+  "resolutionPolicy",
+  "accumulationFormat",
+  "finalColorFormat",
+  "samples",
+  "stages",
+] as const;
+const POST_TRAA_STAGE_KEYS = ["id", "after"] as const;
+const LENS_WETNESS_KEYS = [
+  "mode",
+  "stageId",
+  "after",
+  "resolutionPolicy",
+  "diagnosticsFormat",
+  "samples",
+  "trigger",
+  "updateCadence",
+] as const;
+const INTERACTION_KEYS = ["anchorCount", "field"] as const;
+const INTERACTION_FIELD_KEYS = [
+  "radiusMetres",
+  "edgeFadeMetres",
+  "maxActiveDisturbances",
+  "snapshotBanks",
+  "maxSnapshotAgeTicks",
+  "radialImpactRoute",
+  "directionalWakeRoute",
+  "maxActiveHeroBreakers",
+  "heroBreakerRoute",
+] as const;
+const BODY_COUPLING_KEYS = [
+  "fixedTickHz",
+  "maxAttachedBodies",
+  "maxShapeSamplesPerBody",
+  "maxConvexHullVertices",
+  "maxSocketsPerBody",
+  "socketRoute",
+] as const;
+const LEGACY_V1_QUALITY_PROFILE_KEYS = [
+  "schema",
+  "version",
+  "id",
+  "profileHash",
+  "surface",
+] as const;
+const LEGACY_V2_QUALITY_PROFILE_KEYS = [
+  ...LEGACY_V1_QUALITY_PROFILE_KEYS,
+  "temporal",
+] as const;
+const LEGACY_V2_TEMPORAL_KEYS = [
+  "mode",
+  "renderScale",
+  "resolutionPolicy",
+  "taau",
+  "dynamicResolution",
+  "frameGeneration",
+  "msaaSamples",
 ] as const;
 const TEMPORAL_KEYS = [
   "mode",
@@ -340,13 +1656,58 @@ export function createMinimalWaterQualityProfile(
         heightSegments: supported.heightSegments,
       },
     },
+    interaction: {
+      anchorCount: 1,
+      field: {
+        radiusMetres: INTERACTION_FIELD_RADIUS_METRES,
+        edgeFadeMetres: INTERACTION_FIELD_EDGE_FADE_METRES,
+        maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+        snapshotBanks: 2,
+        maxSnapshotAgeTicks: 1,
+        radialImpactRoute: "analytic-uniform-array",
+        directionalWakeRoute: "analytic-uniform-array",
+        maxActiveHeroBreakers: MAX_ACTIVE_HERO_BREAKERS,
+        heroBreakerRoute: "art-directed-overturning-uniform-array",
+      },
+    },
+    bodyCoupling: {
+      fixedTickHz: 60,
+      maxAttachedBodies: MAX_ATTACHED_BODIES,
+      maxShapeSamplesPerBody: MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN,
+      maxConvexHullVertices: MAX_CONVEX_HULL_VERTICES,
+      maxSocketsPerBody: MAX_BODY_INTERACTION_SOCKETS,
+      socketRoute: "stable-slot-upsert",
+    },
     temporal: NATIVE_TEMPORAL,
     reflection: NATIVE_REFLECTION,
+    whitecaps: {
+      mode: "unified-source-ping-pong",
+      fixedTickHz: 60,
+      fieldResolution: supported.whitecapFieldResolution,
+      tileSizeMetres: 256,
+      fieldFormat: "rgba16float",
+      stageLayout: "generation-history-advection-decay",
+      sourceLayout: "whitecap-wake-impact-hero-combined",
+      localHistoryBanks: 2,
+      maxLocalSources: MAX_ACTIVE_DISTURBANCES,
+      foamTimelineCapacityTicks: 128,
+      diffusionTaps: 3,
+      updateCadence: "host-fixed-tick",
+      captureResolutionPolicy: "drawing-buffer-exact",
+      captureFormat: "rgba16float",
+      resetDomains: SPECTRAL_WHITECAP_RESET_DOMAINS,
+    },
+    secondaryParticles: NATIVE_SECONDARY_PARTICLES,
+    underwater: NATIVE_UNDERWATER,
+    stormFront: NATIVE_STORM_FRONT,
+    postTraaComposition: NATIVE_POST_TRAA_COMPOSITION,
   });
 }
 
 /**
  * Validates and freezes a supported Quality Profile.
+ *
+ * @public
  */
 export function normalizeQualityProfile(
   candidate: QualityProfile,
@@ -376,6 +1737,41 @@ export function normalizeQualityProfile(
       supported.surface.geometry.widthSegments ||
     value.surface.geometry.heightSegments !==
       supported.surface.geometry.heightSegments ||
+    !isRecord(value.interaction) ||
+    !hasExactKeys(value.interaction, INTERACTION_KEYS) ||
+    value.interaction.anchorCount !== supported.interaction.anchorCount ||
+    !isRecord(value.interaction.field) ||
+    !hasExactKeys(value.interaction.field, INTERACTION_FIELD_KEYS) ||
+    value.interaction.field.radiusMetres !==
+      supported.interaction.field.radiusMetres ||
+    value.interaction.field.edgeFadeMetres !==
+      supported.interaction.field.edgeFadeMetres ||
+    value.interaction.field.maxActiveDisturbances !==
+      supported.interaction.field.maxActiveDisturbances ||
+    value.interaction.field.snapshotBanks !==
+      supported.interaction.field.snapshotBanks ||
+    value.interaction.field.maxSnapshotAgeTicks !==
+      supported.interaction.field.maxSnapshotAgeTicks ||
+    value.interaction.field.radialImpactRoute !==
+      supported.interaction.field.radialImpactRoute ||
+    value.interaction.field.directionalWakeRoute !==
+      supported.interaction.field.directionalWakeRoute ||
+    value.interaction.field.maxActiveHeroBreakers !==
+      supported.interaction.field.maxActiveHeroBreakers ||
+    value.interaction.field.heroBreakerRoute !==
+      supported.interaction.field.heroBreakerRoute ||
+    !isRecord(value.bodyCoupling) ||
+    !hasExactKeys(value.bodyCoupling, BODY_COUPLING_KEYS) ||
+    value.bodyCoupling.fixedTickHz !== supported.bodyCoupling.fixedTickHz ||
+    value.bodyCoupling.maxAttachedBodies !==
+      supported.bodyCoupling.maxAttachedBodies ||
+    value.bodyCoupling.maxShapeSamplesPerBody !==
+      supported.bodyCoupling.maxShapeSamplesPerBody ||
+    value.bodyCoupling.maxConvexHullVertices !==
+      supported.bodyCoupling.maxConvexHullVertices ||
+    value.bodyCoupling.maxSocketsPerBody !==
+      supported.bodyCoupling.maxSocketsPerBody ||
+    value.bodyCoupling.socketRoute !== supported.bodyCoupling.socketRoute ||
     !isRecord(value.temporal) ||
     !hasExactKeys(value.temporal, TEMPORAL_KEYS) ||
     value.temporal.mode !== supported.temporal.mode ||
@@ -402,7 +1798,18 @@ export function normalizeQualityProfile(
       supported.reflection.planar.resolutionPolicy ||
     value.reflection.planar.format !== supported.reflection.planar.format ||
     value.reflection.planar.samples !== supported.reflection.planar.samples ||
-    !isSupportedSsrPolicy(value.reflection.ssr, supported.reflection.ssr)
+    !isSupportedSsrPolicy(value.reflection.ssr, supported.reflection.ssr) ||
+    !isSupportedSpectralWhitecaps(value.whitecaps, supported.whitecaps) ||
+    !isSupportedSecondaryParticles(
+      value.secondaryParticles,
+      supported.secondaryParticles,
+    ) ||
+    !isSupportedUnderwaterVolume(value.underwater, supported.underwater) ||
+    !isSupportedStormFront(value.stormFront, supported.stormFront) ||
+    !isSupportedPostTraaComposition(
+      value.postTraaComposition,
+      supported.postTraaComposition,
+    )
   ) {
     throw new TypeError(
       "The Quality Profile does not match a supported structural configuration.",
@@ -412,8 +1819,459 @@ export function normalizeQualityProfile(
   return supported;
 }
 
+function isSupportedStormFront(
+  value: unknown,
+  supported: QualityProfileStormFront,
+): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, STORM_FRONT_KEYS) &&
+    value.mode === supported.mode &&
+    value.updateCadence === supported.updateCadence &&
+    isRecord(value.rain) &&
+    hasExactKeys(value.rain, STORM_FRONT_RAIN_KEYS) &&
+    value.rain.surfaceRoute === supported.rain.surfaceRoute &&
+    value.rain.secondaryParticleConsumerId ===
+      supported.rain.secondaryParticleConsumerId &&
+    value.rain.maximumCandidateCount === supported.rain.maximumCandidateCount &&
+    isRecord(value.stormAerosol) &&
+    hasExactKeys(value.stormAerosol, STORM_FRONT_AEROSOL_KEYS) &&
+    value.stormAerosol.secondaryParticleConsumerId ===
+      supported.stormAerosol.secondaryParticleConsumerId &&
+    value.stormAerosol.maximumCandidateCount ===
+      supported.stormAerosol.maximumCandidateCount &&
+    isRecord(value.cloudAndLightning) &&
+    hasExactKeys(value.cloudAndLightning, STORM_FRONT_CLOUD_LIGHTNING_KEYS) &&
+    value.cloudAndLightning.illuminationRoute ===
+      supported.cloudAndLightning.illuminationRoute &&
+    value.cloudAndLightning.atmosphereStageId ===
+      supported.cloudAndLightning.atmosphereStageId &&
+    isRecord(value.diagnostics) &&
+    hasExactKeys(value.diagnostics, STORM_FRONT_DIAGNOSTICS_KEYS) &&
+    value.diagnostics.resolutionPolicy ===
+      supported.diagnostics.resolutionPolicy &&
+    value.diagnostics.format === supported.diagnostics.format &&
+    value.diagnostics.samples === supported.diagnostics.samples
+  );
+}
+
+function isSupportedSecondaryParticles(
+  value: unknown,
+  supported: QualityProfileSecondaryParticles,
+): boolean {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, SECONDARY_PARTICLE_KEYS) ||
+    !isRecord(value.contribution) ||
+    !hasExactKeys(value.contribution, SECONDARY_PARTICLE_CONTRIBUTION_KEYS) ||
+    !isRecord(value.hysteresis) ||
+    !hasExactKeys(value.hysteresis, SECONDARY_PARTICLE_HYSTERESIS_KEYS) ||
+    !Array.isArray(value.consumers) ||
+    value.consumers.length !== supported.consumers.length
+  ) {
+    return false;
+  }
+  const consumers = value.consumers as unknown[];
+  const consumersMatch = supported.consumers.every((consumer, index) => {
+    const candidate = consumers[index];
+    return (
+      isRecord(candidate) &&
+      hasExactKeys(candidate, SECONDARY_PARTICLE_CONSUMER_KEYS) &&
+      candidate.consumerId === consumer.consumerId &&
+      candidate.maximumRequestCount === consumer.maximumRequestCount &&
+      candidate.softRequestCeiling === consumer.softRequestCeiling &&
+      candidate.minimumRetainedSlots === consumer.minimumRetainedSlots &&
+      candidate.contributionReference === consumer.contributionReference &&
+      candidate.pressureReentryPolicy === consumer.pressureReentryPolicy
+    );
+  });
+  return (
+    consumersMatch &&
+    value.mode === supported.mode &&
+    value.capacity === supported.capacity &&
+    value.maximumCandidateCount === supported.maximumCandidateCount &&
+    value.selection === supported.selection &&
+    value.contribution.projectedAreaReference ===
+      supported.contribution.projectedAreaReference &&
+    value.contribution.screenAreaDivisor ===
+      supported.contribution.screenAreaDivisor &&
+    value.contribution.formula === supported.contribution.formula &&
+    value.contribution.quantization === supported.contribution.quantization &&
+    value.hysteresis.mode === supported.hysteresis.mode &&
+    value.hysteresis.retainedContributionBonusQ16 ===
+      supported.hysteresis.retainedContributionBonusQ16 &&
+    value.hysteresis.minimumResidenceTicks ===
+      supported.hysteresis.minimumResidenceTicks &&
+    value.hysteresis.reentryCooldownTicks ===
+      supported.hysteresis.reentryCooldownTicks &&
+    value.updateCadence === supported.updateCadence &&
+    value.payloadOwnership === supported.payloadOwnership &&
+    value.renderPhaseKnowledge === supported.renderPhaseKnowledge
+  );
+}
+
+function isSupportedPostTraaComposition(
+  value: unknown,
+  supported: QualityProfilePostTraaComposition,
+): boolean {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, POST_TRAA_COMPOSITION_KEYS) ||
+    !Array.isArray(value.stages) ||
+    value.stages.length !== supported.stages.length ||
+    !isRecord(value.lensWetness) ||
+    !hasExactKeys(value.lensWetness, LENS_WETNESS_KEYS)
+  ) {
+    return false;
+  }
+  const stages = value.stages as unknown[];
+  const stagesMatch = supported.stages.every((stage, index) => {
+    const candidate = stages[index];
+    return (
+      isRecord(candidate) &&
+      hasExactKeys(candidate, POST_TRAA_STAGE_KEYS) &&
+      candidate.id === stage.id &&
+      candidate.after === stage.after
+    );
+  });
+  return (
+    stagesMatch &&
+    value.mode === supported.mode &&
+    value.resolutionPolicy === supported.resolutionPolicy &&
+    value.accumulationFormat === supported.accumulationFormat &&
+    value.finalColorFormat === supported.finalColorFormat &&
+    value.samples === supported.samples &&
+    value.lensWetness.mode === supported.lensWetness.mode &&
+    value.lensWetness.stageId === supported.lensWetness.stageId &&
+    value.lensWetness.after === supported.lensWetness.after &&
+    value.lensWetness.resolutionPolicy ===
+      supported.lensWetness.resolutionPolicy &&
+    value.lensWetness.diagnosticsFormat ===
+      supported.lensWetness.diagnosticsFormat &&
+    value.lensWetness.samples === supported.lensWetness.samples &&
+    value.lensWetness.trigger === supported.lensWetness.trigger &&
+    value.lensWetness.updateCadence === supported.lensWetness.updateCadence
+  );
+}
+
+function matchesLegacyPostTraaComposition(value: unknown): boolean {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, LEGACY_POST_TRAA_COMPOSITION_KEYS) ||
+    !Array.isArray(value.stages) ||
+    value.stages.length !== 1
+  ) {
+    return false;
+  }
+  const stage = value.stages[0];
+  return (
+    isRecord(stage) &&
+    hasExactKeys(stage, POST_TRAA_STAGE_KEYS) &&
+    stage.id === "secondary-particles" &&
+    stage.after === "traa" &&
+    value.mode === "ordered-declarative-stages" &&
+    value.resolutionPolicy === "drawing-buffer-exact" &&
+    value.accumulationFormat === "rgba16float" &&
+    value.finalColorFormat === "rgba8unorm-srgb" &&
+    value.samples === 0
+  );
+}
+
+function matchesCompleteT22PostTraaComposition(value: unknown): boolean {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, POST_TRAA_COMPOSITION_KEYS) ||
+    !Array.isArray(value.stages) ||
+    value.stages.length !== 2 ||
+    !isRecord(value.lensWetness) ||
+    !hasExactKeys(value.lensWetness, LENS_WETNESS_KEYS)
+  ) {
+    return false;
+  }
+  const [secondaryParticles, lensWetness] = value.stages;
+  return (
+    isRecord(secondaryParticles) &&
+    hasExactKeys(secondaryParticles, POST_TRAA_STAGE_KEYS) &&
+    secondaryParticles.id === "secondary-particles" &&
+    secondaryParticles.after === "traa" &&
+    isRecord(lensWetness) &&
+    hasExactKeys(lensWetness, POST_TRAA_STAGE_KEYS) &&
+    lensWetness.id === "lens-wetness" &&
+    lensWetness.after === "secondary-particles" &&
+    value.mode === "ordered-declarative-stages" &&
+    value.resolutionPolicy === "drawing-buffer-exact" &&
+    value.accumulationFormat === "rgba16float" &&
+    value.finalColorFormat === "rgba8unorm-srgb" &&
+    value.samples === 0 &&
+    value.lensWetness.mode === "bounded-emergence-decay" &&
+    value.lensWetness.stageId === "lens-wetness" &&
+    value.lensWetness.after === "secondary-particles" &&
+    value.lensWetness.resolutionPolicy === "drawing-buffer-exact" &&
+    value.lensWetness.diagnosticsFormat === "rgba16float" &&
+    value.lensWetness.samples === 0 &&
+    value.lensWetness.trigger === "waterline-emergence-impulse" &&
+    value.lensWetness.updateCadence === "host-fixed-tick"
+  );
+}
+
+function isSupportedUnderwaterVolume(
+  value: unknown,
+  supported: QualityProfileUnderwaterVolume,
+): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, UNDERWATER_KEYS) &&
+    value.mode === supported.mode &&
+    value.composition === supported.composition &&
+    value.resolutionPolicy === supported.resolutionPolicy &&
+    value.colorFormat === supported.colorFormat &&
+    value.diagnosticsFormat === supported.diagnosticsFormat &&
+    value.samples === supported.samples &&
+    value.maxDistanceMetres === supported.maxDistanceMetres &&
+    value.shadowRoute === supported.shadowRoute &&
+    value.shaftRoute === supported.shaftRoute &&
+    value.updateCadence === supported.updateCadence &&
+    isSupportedUnderwaterCaustics(value.caustics, supported.caustics) &&
+    isSupportedUnderwaterTracers(value.tracers, supported.tracers)
+  );
+}
+
+function isSupportedUnderwaterCaustics(
+  value: unknown,
+  supported: QualityProfileUnderwaterCaustics,
+): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, UNDERWATER_CAUSTICS_KEYS) &&
+    value.mode === supported.mode &&
+    value.composition === supported.composition &&
+    value.resolutionPolicy === supported.resolutionPolicy &&
+    value.diagnosticsFormat === supported.diagnosticsFormat &&
+    value.samples === supported.samples &&
+    value.localSurfaceFieldFormat === supported.localSurfaceFieldFormat &&
+    value.localSurfaceFieldLayout === supported.localSurfaceFieldLayout &&
+    value.localSurfaceFieldResolutionPolicy ===
+      supported.localSurfaceFieldResolutionPolicy &&
+    value.localSurfaceFieldUpdateCadence ===
+      supported.localSurfaceFieldUpdateCadence &&
+    value.maxLocalSurfaceSnapshotAgeTicks ===
+      supported.maxLocalSurfaceSnapshotAgeTicks &&
+    value.maxReceiverDistanceMetres === supported.maxReceiverDistanceMetres &&
+    value.receiverNormalMinY === supported.receiverNormalMinY &&
+    value.updateCadence === supported.updateCadence
+  );
+}
+
+function isSupportedUnderwaterTracers(
+  value: unknown,
+  supported: QualityProfileUnderwaterTracers,
+): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, UNDERWATER_TRACER_KEYS) &&
+    value.mode === supported.mode &&
+    value.composition === supported.composition &&
+    value.resolutionPolicy === supported.resolutionPolicy &&
+    value.accumulationFormat === supported.accumulationFormat &&
+    value.samples === supported.samples &&
+    value.depthRoute === supported.depthRoute &&
+    value.suspendedConsumerId === supported.suspendedConsumerId &&
+    value.bubbleCloudConsumerId === supported.bubbleCloudConsumerId &&
+    value.risingBubbleConsumerId === supported.risingBubbleConsumerId &&
+    value.updateCadence === supported.updateCadence
+  );
+}
+
+function matchesLegacyUnderwaterVolume(
+  value: unknown,
+  supported: QualityProfileUnderwaterVolume,
+): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, LEGACY_UNDERWATER_KEYS) &&
+    value.mode === supported.mode &&
+    value.composition === supported.composition &&
+    value.resolutionPolicy === supported.resolutionPolicy &&
+    value.colorFormat === supported.colorFormat &&
+    value.diagnosticsFormat === supported.diagnosticsFormat &&
+    value.samples === supported.samples &&
+    value.maxDistanceMetres === supported.maxDistanceMetres &&
+    value.shadowRoute === supported.shadowRoute &&
+    value.shaftRoute === supported.shaftRoute &&
+    value.updateCadence === supported.updateCadence
+  );
+}
+
+function isSupportedSpectralWhitecaps(
+  value: unknown,
+  supported: QualityProfileSpectralWhitecaps,
+  legacySourceLayout?: "whitecap-wake-impact-combined",
+): boolean {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, SPECTRAL_WHITECAP_KEYS) ||
+    !Array.isArray(value.resetDomains) ||
+    value.resetDomains.length !== supported.resetDomains.length
+  ) {
+    return false;
+  }
+  for (let index = 0; index < supported.resetDomains.length; index += 1) {
+    if (value.resetDomains[index] !== supported.resetDomains[index]) {
+      return false;
+    }
+  }
+  return (
+    value.mode === supported.mode &&
+    value.fixedTickHz === supported.fixedTickHz &&
+    value.fieldResolution === supported.fieldResolution &&
+    value.tileSizeMetres === supported.tileSizeMetres &&
+    value.fieldFormat === supported.fieldFormat &&
+    value.stageLayout === supported.stageLayout &&
+    value.sourceLayout === (legacySourceLayout ?? supported.sourceLayout) &&
+    value.localHistoryBanks === supported.localHistoryBanks &&
+    value.maxLocalSources === supported.maxLocalSources &&
+    value.foamTimelineCapacityTicks === supported.foamTimelineCapacityTicks &&
+    value.diffusionTaps === supported.diffusionTaps &&
+    value.updateCadence === supported.updateCadence &&
+    value.captureResolutionPolicy === supported.captureResolutionPolicy &&
+    value.captureFormat === supported.captureFormat
+  );
+}
+
+/**
+ * Migrates a previously committed Quality Profile into the current schema.
+ *
+ * @public
+ */
+export function migrateQualityProfile(candidate: unknown): QualityProfile {
+  if (isRecord(candidate) && candidate.version === QUALITY_PROFILE_VERSION) {
+    try {
+      return normalizeQualityProfile(candidate as unknown as QualityProfile);
+    } catch {
+      throw new TypeError("The Quality Profile cannot be migrated.");
+    }
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 14 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV14Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 13 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV13Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 12 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV12Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 11 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV11Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 10 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV10Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 9 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV9Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 8 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV8Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 7 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV7Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 6 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV6Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
+    candidate.version === 5 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV5Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
+    hasExactKeys(candidate, LEGACY_V1_QUALITY_PROFILE_KEYS) &&
+    candidate.schema === QUALITY_PROFILE_SCHEMA &&
+    candidate.version === 1 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacyV1Profile(candidate, candidate.id)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  if (
+    isRecord(candidate) &&
+    hasExactKeys(candidate, LEGACY_V2_QUALITY_PROFILE_KEYS) &&
+    candidate.schema === QUALITY_PROFILE_SCHEMA &&
+    candidate.version === 2 &&
+    isSupportedProfileId(candidate.id) &&
+    matchesLegacySurface(candidate, LEGACY_V2_QUALITY_PROFILES[candidate.id]) &&
+    matchesLegacyV2Temporal(candidate.temporal)
+  ) {
+    return createMinimalWaterQualityProfile(candidate.id);
+  }
+
+  throw new TypeError("The Quality Profile cannot be migrated.");
+}
+
 /**
  * Returns the immutable identity of a normalized Quality Profile.
+ *
+ * @public
  */
 export function qualityProfileIdentity(
   profile: QualityProfile,
@@ -469,6 +2327,394 @@ function isSupportedSsrHistory(
   );
 }
 
+function matchesLegacySurface(
+  value: Record<string, unknown>,
+  supported: LegacyQualityProfileSnapshot,
+): boolean {
+  return (
+    value.profileHash === supported.profileHash &&
+    isRecord(value.surface) &&
+    hasExactKeys(value.surface, ["geometry"]) &&
+    isRecord(value.surface.geometry) &&
+    hasExactKeys(value.surface.geometry, ["widthSegments", "heightSegments"]) &&
+    value.surface.geometry.widthSegments === supported.widthSegments &&
+    value.surface.geometry.heightSegments === supported.heightSegments
+  );
+}
+
+function matchesLegacyV1Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V1_QUALITY_PROFILES.some((variant) =>
+    matchesLegacySurface(value, variant[id]),
+  );
+}
+
+function matchesLegacyV2Temporal(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, LEGACY_V2_TEMPORAL_KEYS) &&
+    value.mode === "TRAA" &&
+    value.renderScale === 1 &&
+    value.resolutionPolicy === "drawing-buffer-exact" &&
+    value.taau === false &&
+    value.dynamicResolution === false &&
+    value.frameGeneration === false &&
+    value.msaaSamples === 0
+  );
+}
+
+function matchesLegacyV7Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V7_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
+function matchesLegacyV8Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V8_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
+function matchesLegacyV9Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V9_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
+function matchesLegacyV10Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V10_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
+function matchesLegacyV11Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V11_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
+function matchesLegacyV12Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V12_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
+function matchesLegacyV13Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V13_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
+function matchesLegacyV14Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V14_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
+function matchesLegacyV6Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V6_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
+function matchesLegacyVariant(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+  variant: LegacyQualityProfileVariant,
+): boolean {
+  const carriesInteraction = !variant.absentKeys.includes("interaction");
+  const carriesBodyCoupling = !variant.absentKeys.includes("bodyCoupling");
+  const carriesWhitecaps = !variant.absentKeys.includes("whitecaps");
+  const carriesSecondaryParticles =
+    !variant.absentKeys.includes("secondaryParticles");
+  const carriesUnderwater = !variant.absentKeys.includes("underwater");
+  const carriesPostTraaComposition = !variant.absentKeys.includes(
+    "postTraaComposition",
+  );
+  const supported = createMinimalWaterQualityProfile(id);
+  return (
+    hasExactKeys(
+      value,
+      QUALITY_PROFILE_KEYS.filter(
+        (key) => key !== "stormFront" && !variant.absentKeys.includes(key),
+      ),
+    ) &&
+    value.schema === QUALITY_PROFILE_SCHEMA &&
+    matchesLegacySurface(value, variant.profiles[id]) &&
+    matchesCurrentTemporal(value.temporal) &&
+    matchesVariantReflection(value.reflection, variant) &&
+    (!carriesInteraction ||
+      matchesVariantInteraction(value.interaction, id, variant)) &&
+    (!carriesBodyCoupling ||
+      matchesVariantBodyCoupling(value.bodyCoupling, id)) &&
+    // A variant that carries a policy has its policy checked, not just its key
+    // set. Without these, a legacy payload could name bodyCoupling, whitecaps
+    // or underwater and put anything inside them and still migrate.
+    (!carriesWhitecaps ||
+      (variant.legacySpectralWhitecaps === true
+        ? matchesLegacySpectralWhitecaps(value.whitecaps, id)
+        : isSupportedSpectralWhitecaps(
+            value.whitecaps,
+            supported.whitecaps,
+            variant.whitecapSourceLayout,
+          ))) &&
+    (!carriesSecondaryParticles ||
+      isSupportedSecondaryParticles(
+        value.secondaryParticles,
+        supported.secondaryParticles,
+      )) &&
+    (!carriesUnderwater ||
+      (variant.completeT22 === true
+        ? isSupportedUnderwaterVolume(value.underwater, supported.underwater)
+        : matchesLegacyUnderwaterVolume(
+            value.underwater,
+            supported.underwater,
+          ))) &&
+    (!carriesPostTraaComposition ||
+      (variant.completeT22 === true
+        ? matchesCompleteT22PostTraaComposition(value.postTraaComposition)
+        : matchesLegacyPostTraaComposition(value.postTraaComposition)))
+  );
+}
+
+function matchesVariantBodyCoupling(
+  value: unknown,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  const supported = createMinimalWaterQualityProfile(id).bodyCoupling;
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, BODY_COUPLING_KEYS) &&
+    value.fixedTickHz === supported.fixedTickHz &&
+    value.maxAttachedBodies === supported.maxAttachedBodies &&
+    value.maxShapeSamplesPerBody === supported.maxShapeSamplesPerBody &&
+    value.maxConvexHullVertices === supported.maxConvexHullVertices &&
+    value.maxSocketsPerBody === supported.maxSocketsPerBody &&
+    value.socketRoute === supported.socketRoute
+  );
+}
+
+function matchesLegacySpectralWhitecaps(
+  value: unknown,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  const supported = createMinimalWaterQualityProfile(id).whitecaps;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, LEGACY_SPECTRAL_WHITECAP_KEYS) ||
+    !Array.isArray(value.resetDomains) ||
+    value.resetDomains.length !== supported.resetDomains.length
+  ) {
+    return false;
+  }
+  for (let index = 0; index < supported.resetDomains.length; index += 1) {
+    if (value.resetDomains[index] !== supported.resetDomains[index]) {
+      return false;
+    }
+  }
+  return (
+    value.mode === "spectral-ping-pong" &&
+    value.fixedTickHz === supported.fixedTickHz &&
+    value.fieldResolution === supported.fieldResolution &&
+    value.tileSizeMetres === supported.tileSizeMetres &&
+    value.fieldFormat === supported.fieldFormat &&
+    value.stageLayout === supported.stageLayout &&
+    value.diffusionTaps === supported.diffusionTaps &&
+    value.updateCadence === supported.updateCadence &&
+    value.captureResolutionPolicy === supported.captureResolutionPolicy &&
+    value.captureFormat === supported.captureFormat
+  );
+}
+
+// Every value the interaction policy carries is unchanged across the versions
+// that carry it, so the current profile is the comparand for those. Which keys
+// the field is allowed to have is not: a variant committed before
+// directionalWakeRoute must be matched against the field it had, so the key set
+// comes from the variant and only the values come from today.
+function matchesVariantInteraction(
+  value: unknown,
+  id: MinimalWaterQualityProfileId,
+  variant: LegacyQualityProfileVariant,
+): boolean {
+  const supported = createMinimalWaterQualityProfile(id).interaction;
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, INTERACTION_KEYS) &&
+    value.anchorCount === supported.anchorCount &&
+    isRecord(value.field) &&
+    hasExactKeys(
+      value.field,
+      INTERACTION_FIELD_KEYS.filter(
+        (key) => !variant.absentInteractionFieldKeys.includes(key),
+      ),
+    ) &&
+    value.field.radiusMetres === supported.field.radiusMetres &&
+    value.field.edgeFadeMetres === supported.field.edgeFadeMetres &&
+    value.field.maxActiveDisturbances ===
+      supported.field.maxActiveDisturbances &&
+    value.field.snapshotBanks === supported.field.snapshotBanks &&
+    value.field.maxSnapshotAgeTicks === supported.field.maxSnapshotAgeTicks &&
+    value.field.radialImpactRoute === supported.field.radialImpactRoute &&
+    (variant.absentInteractionFieldKeys.includes("directionalWakeRoute") ||
+      value.field.directionalWakeRoute ===
+        supported.field.directionalWakeRoute) &&
+    (variant.absentInteractionFieldKeys.includes("maxActiveHeroBreakers") ||
+      value.field.maxActiveHeroBreakers ===
+        supported.field.maxActiveHeroBreakers) &&
+    (variant.absentInteractionFieldKeys.includes("heroBreakerRoute") ||
+      value.field.heroBreakerRoute === supported.field.heroBreakerRoute)
+  );
+}
+
+function matchesLegacyV5Profile(
+  value: Record<string, unknown>,
+  id: MinimalWaterQualityProfileId,
+): boolean {
+  return LEGACY_V5_QUALITY_PROFILES.some((variant) =>
+    matchesLegacyVariant(value, id, variant),
+  );
+}
+
+function matchesVariantReflection(
+  value: unknown,
+  variant: LegacyQualityProfileVariant,
+): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, REFLECTION_KEYS) &&
+    isRecord(value.environment) &&
+    hasExactKeys(value.environment, ["source"]) &&
+    value.environment.source === NATIVE_REFLECTION.environment.source &&
+    isRecord(value.planar) &&
+    hasExactKeys(value.planar, ["resolutionPolicy", "format", "samples"]) &&
+    value.planar.resolutionPolicy ===
+      NATIVE_REFLECTION.planar.resolutionPolicy &&
+    value.planar.format === NATIVE_REFLECTION.planar.format &&
+    value.planar.samples === NATIVE_REFLECTION.planar.samples &&
+    matchesVariantSsr(value.ssr, variant)
+  );
+}
+
+function matchesVariantSsr(
+  value: unknown,
+  variant: LegacyQualityProfileVariant,
+): boolean {
+  const supported = NATIVE_REFLECTION.ssr;
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, SSR_KEYS) &&
+    matchesVariantSsrHistory(value.history, variant) &&
+    value.mode === supported.mode &&
+    value.updateCadence === supported.updateCadence &&
+    value.stochastic === supported.stochastic &&
+    value.reflectNonMetals === supported.reflectNonMetals &&
+    value.binaryRefine === supported.binaryRefine &&
+    value.quality === supported.quality &&
+    value.maxDistance === supported.maxDistance &&
+    value.thickness === supported.thickness &&
+    value.resolutionPolicy === supported.resolutionPolicy &&
+    value.resolutionScale === supported.resolutionScale &&
+    value.samples === supported.samples &&
+    value.rawFormat === supported.rawFormat &&
+    value.compositeFormat === supported.compositeFormat &&
+    value.blurFormat === supported.blurFormat &&
+    value.blurResolutionPolicy === supported.blurResolutionPolicy &&
+    value.mipCount === supported.mipCount &&
+    value.blurQuality === supported.blurQuality &&
+    value.blurRoute === supported.blurRoute &&
+    value.screenEdgeFade === supported.screenEdgeFade &&
+    value.roughnessCutoff === supported.roughnessCutoff
+  );
+}
+
+function matchesVariantSsrHistory(
+  value: unknown,
+  variant: LegacyQualityProfileVariant,
+): boolean {
+  const supported = NATIVE_REFLECTION.ssr.history;
+  const expectedKeys = SSR_HISTORY_KEYS.filter(
+    (key) => !variant.absentSsrHistoryKeys.includes(key),
+  );
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, expectedKeys) ||
+    !matchesResetDomains(value.resetDomains, variant.ssrHistoryResetDomains)
+  ) {
+    return false;
+  }
+  const carriesResetVelocityFormat = !variant.absentSsrHistoryKeys.includes(
+    "resetVelocityFormat",
+  );
+  return (
+    value.mode === supported.mode &&
+    value.accumulate === supported.accumulate &&
+    value.hitPointReprojection === supported.hitPointReprojection &&
+    value.maxFrames === supported.maxFrames &&
+    value.historyFormat === supported.historyFormat &&
+    value.resolveFormat === supported.resolveFormat &&
+    value.inputFormat === supported.inputFormat &&
+    value.captureFormat === supported.captureFormat &&
+    value.normalFormat === supported.normalFormat &&
+    value.updateCadence === supported.updateCadence &&
+    (!carriesResetVelocityFormat ||
+      value.resetVelocityFormat === supported.resetVelocityFormat)
+  );
+}
+
+function matchesCurrentTemporal(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, TEMPORAL_KEYS) &&
+    value.mode === NATIVE_TEMPORAL.mode &&
+    value.renderScale === NATIVE_TEMPORAL.renderScale &&
+    value.resolutionPolicy === NATIVE_TEMPORAL.resolutionPolicy &&
+    value.taau === NATIVE_TEMPORAL.taau &&
+    value.dynamicResolution === NATIVE_TEMPORAL.dynamicResolution &&
+    value.frameGeneration === NATIVE_TEMPORAL.frameGeneration &&
+    value.msaaSamples === NATIVE_TEMPORAL.msaaSamples &&
+    value.updateCadence === NATIVE_TEMPORAL.updateCadence
+  );
+}
+
+function matchesResetDomains(
+  value: unknown,
+  supported: readonly string[],
+): boolean {
+  if (!Array.isArray(value) || value.length !== supported.length) {
+    return false;
+  }
+  return supported.every((domain, index) => value[index] === domain);
+}
+
 function isSupportedSsrPolicy(
   value: unknown,
   supported: QualityProfileReflectionSsr,
@@ -508,6 +2754,11 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
       ...profile.surface,
       geometry: Object.freeze({ ...profile.surface.geometry }),
     }),
+    interaction: Object.freeze({
+      anchorCount: profile.interaction.anchorCount,
+      field: Object.freeze({ ...profile.interaction.field }),
+    }),
+    bodyCoupling: Object.freeze({ ...profile.bodyCoupling }),
     temporal: Object.freeze({ ...profile.temporal }),
     reflection: Object.freeze({
       environment: Object.freeze({ ...profile.reflection.environment }),
@@ -516,13 +2767,59 @@ function freezeQualityProfile(profile: QualityProfile): QualityProfile {
         ...profile.reflection.ssr,
         history: Object.freeze({
           ...profile.reflection.ssr.history,
+          // Copied, never re-listed. Re-typing the domains here would make this
+          // function a second declaration of the policy that has to be kept in
+          // step with the first by hand, and a frozen profile that quietly
+          // disagrees with its own type is not something any assertion in this
+          // package can see: normalizeQualityProfile compares against another
+          // profile frozen by this same function, and profileHash is a literal.
           resetDomains: Object.freeze([
-            "simulation-reset",
-            "camera-cut",
-            "origin-shift",
-            "sea-state-cut",
-          ] as const),
+            ...profile.reflection.ssr.history.resetDomains,
+          ]) as QualityProfileReflectionSsrHistory["resetDomains"],
         }),
+      }),
+    }),
+    whitecaps: Object.freeze({
+      ...profile.whitecaps,
+      resetDomains: Object.freeze([
+        ...profile.whitecaps.resetDomains,
+      ]) as QualityProfileSpectralWhitecaps["resetDomains"],
+    }),
+    secondaryParticles: Object.freeze({
+      ...profile.secondaryParticles,
+      contribution: Object.freeze({
+        ...profile.secondaryParticles.contribution,
+      }),
+      hysteresis: Object.freeze({ ...profile.secondaryParticles.hysteresis }),
+      consumers: Object.freeze(
+        profile.secondaryParticles.consumers.map((consumer) =>
+          Object.freeze({ ...consumer }),
+        ),
+      ) as QualityProfileSecondaryParticles["consumers"],
+    }),
+    underwater: Object.freeze({
+      ...profile.underwater,
+      caustics: Object.freeze({ ...profile.underwater.caustics }),
+      tracers: Object.freeze({ ...profile.underwater.tracers }),
+    }),
+    stormFront: Object.freeze({
+      ...profile.stormFront,
+      rain: Object.freeze({ ...profile.stormFront.rain }),
+      stormAerosol: Object.freeze({ ...profile.stormFront.stormAerosol }),
+      cloudAndLightning: Object.freeze({
+        ...profile.stormFront.cloudAndLightning,
+      }),
+      diagnostics: Object.freeze({ ...profile.stormFront.diagnostics }),
+    }),
+    postTraaComposition: Object.freeze({
+      ...profile.postTraaComposition,
+      stages: Object.freeze(
+        profile.postTraaComposition.stages.map((stage) =>
+          Object.freeze({ ...stage }),
+        ),
+      ) as QualityProfilePostTraaComposition["stages"],
+      lensWetness: Object.freeze({
+        ...profile.postTraaComposition.lensWetness,
       }),
     }),
   });

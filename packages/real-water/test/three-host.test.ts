@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ClampToEdgeWrapping,
+  DataUtils,
   DataTexture,
   LinearSRGBColorSpace,
   Mesh,
@@ -93,6 +94,7 @@ const CORE_READY_REFLECTION = Object.freeze({
         "camera-cut",
         "origin-shift",
         "sea-state-cut",
+        "waterline-crossing",
       ] as const),
       updateCadence: "host-present" as const,
     }),
@@ -106,6 +108,28 @@ const CORE_READY_REFLECTION = Object.freeze({
       blurQuality: 2 as const,
       enabled: true as const,
     }),
+  }),
+});
+const CORE_READY_STORM_FRONT = Object.freeze({
+  mode: "prepared-deterministic-route" as const,
+  updateCadence: "host-fixed-tick" as const,
+  rain: Object.freeze({
+    surfaceRoute: "additive-spectral-ripples" as const,
+    secondaryParticleConsumerId: "spray-droplet-mist" as const,
+    maximumCandidateCount: 8_192 as const,
+  }),
+  stormAerosol: Object.freeze({
+    secondaryParticleConsumerId: "spray-droplet-mist" as const,
+    maximumCandidateCount: 8_192 as const,
+  }),
+  cloudAndLightning: Object.freeze({
+    illuminationRoute: "coherent-glint-foam-reflection-atmosphere" as const,
+    atmosphereStageId: "storm-atmosphere" as const,
+  }),
+  diagnostics: Object.freeze({
+    resolutionPolicy: "drawing-buffer-exact" as const,
+    format: "rgba16float" as const,
+    samples: 0 as const,
   }),
 });
 
@@ -213,6 +237,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -275,17 +300,108 @@ describe("createThreeHostLifecycleAdapter", () => {
       loading.snapshots.at(-1)?.status === "preparing"
         ? loading.snapshots.at(-1)?.progress.completedWork
         : undefined,
-    ).toBe(0);
+    ).toBe(14);
     releaseWarmup?.(Uint8Array.from([0, 96, 160, 255]));
     const lease = await run.ready;
 
     expect(lease.capabilities).toEqual({
-      gameplay: { maxQueryPointsPerTick: 2_048 },
+      gameplay: {
+        maxAttachedBodies: 32,
+        maxQueryPointsPerTick: 2_048,
+        maxActiveDisturbances: 128,
+        maxActiveHeroBreakers: 8,
+        interactionField: {
+          radiusMetres: 48,
+          edgeFadeMetres: 8,
+          maxSnapshotAgeTicks: 1,
+          disturbanceKinds: [
+            "radial-impact",
+            "directional-wake",
+            "hero-breaker",
+          ],
+        },
+        bodyInteraction: {
+          fixedTickHz: 60,
+          maxShapeSamplesPerBody: 32,
+          maxConvexHullVertices: 64,
+          maxSocketsPerBody: 8,
+          shapeKinds: ["sphere", "box", "capsule", "convex-hull", "compound"],
+          socketKinds: [
+            "bow",
+            "stern",
+            "propeller",
+            "wake",
+            "interaction-anchor",
+          ],
+          generatedDisturbanceKinds: ["directional-wake", "propeller-wash"],
+        },
+      },
       rendering: {
         backend: "core-webgpu",
         timestampQuery: true,
         temporal: CORE_READY_TEMPORAL,
         reflection: CORE_READY_REFLECTION,
+        secondaryParticles: {
+          capacity: 131_072,
+          maximumCandidateCount: 147_456,
+          contributionReference: {
+            width: 320,
+            height: 180,
+            space: "output-drawing-buffer",
+            screenAreaDivisor: 3_600,
+            quantization: "q16-unorm-round-nearest",
+          },
+          hysteresis: {
+            retainedContributionBonusQ16: 4_096,
+            minimumResidenceTicks: 4,
+            reentryCooldownTicks: 4,
+          },
+          consumers: [
+            {
+              consumerId: "spray-droplet-mist",
+              maximumRequestCount: 65_536,
+              softRequestCeiling: 32_768,
+              minimumRetainedSlots: 2_048,
+              pressureReentryPolicy: "after-shared-cooldown",
+            },
+            {
+              consumerId: "underwater-suspended-particles",
+              maximumRequestCount: 49_152,
+              softRequestCeiling: 24_576,
+              minimumRetainedSlots: 2_048,
+              pressureReentryPolicy: "after-shared-cooldown",
+            },
+            {
+              consumerId: "subsurface-foam-bubble-cloud",
+              maximumRequestCount: 24_576,
+              softRequestCeiling: 12_288,
+              minimumRetainedSlots: 1_024,
+              pressureReentryPolicy: "after-shared-cooldown",
+            },
+            {
+              consumerId: "rising-bubbles",
+              maximumRequestCount: 8_192,
+              softRequestCeiling: 4_096,
+              minimumRetainedSlots: 256,
+              pressureReentryPolicy: "forbidden-until-absent",
+            },
+          ],
+          selection: "q16-global-contribution-radix",
+          updateCadence: "host-fixed-tick",
+          renderPhaseKnowledge: "none",
+        },
+        stormFront: CORE_READY_STORM_FRONT,
+        postTraaComposition: {
+          width: 320,
+          height: 180,
+          stages: [
+            { id: "secondary-particles", after: "traa" },
+            { id: "storm-atmosphere", after: "secondary-particles" },
+            { id: "lens-wetness", after: "storm-atmosphere" },
+          ],
+          accumulationFormat: "rgba16float",
+          finalColorFormat: "rgba8unorm-srgb",
+        },
       },
     });
     expect(Object.isFrozen(lease.capabilities.rendering.temporal)).toBe(true);
@@ -294,23 +410,47 @@ describe("createThreeHostLifecycleAdapter", () => {
     }).toThrow(TypeError);
     expect(renderer.init).toHaveBeenCalledTimes(1);
     expect(renderer.onDeviceLost).not.toBe(previousOnDeviceLost);
-    expect(renderer.initTexture).toHaveBeenCalledTimes(3);
+    expect(renderer.initTexture).toHaveBeenCalledTimes(8);
+    expect(renderer.computeAsync).toHaveBeenCalledTimes(12);
     expect(renderer.compileAsync).toHaveBeenCalledWith(scene, camera);
     expect(
       renderer.compileAsync.mock.calls.some((call) => call[1] !== camera),
     ).toBe(true);
-    expect(renderer.render).toHaveBeenCalledTimes(128);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
+    expect(renderer.render).toHaveBeenCalledTimes(234);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(57);
     const readbackTargets = renderer.readRenderTargetPixelsAsync.mock.calls.map(
       (call) =>
         call[0] as { texture?: { name?: string }; textures?: unknown[] },
     );
-    expect(readbackTargets[0]?.texture?.name).toBe("Real Water final color");
-    expect(readbackTargets[1]?.texture?.name).toBe("Real Water current color");
+    expect(readbackTargets[0]?.texture?.name).toBe(
+      "Real Water secondary particle composite",
+    );
+    expect(readbackTargets[1]?.texture?.name).toBe(
+      "Real Water secondary particle accumulation",
+    );
     expect(readbackTargets[2]?.texture?.name).toBe(
+      "Real Water Storm Front atmosphere color",
+    );
+    expect(readbackTargets[3]?.texture?.name).toBe(
+      "Real Water Storm Front atmosphere diagnostics",
+    );
+    expect(readbackTargets[4]?.texture?.name).toBe("Real Water final color");
+    expect(readbackTargets[5]?.texture?.name).toBe(
+      "Real Water lens-wetness diagnostics",
+    );
+    expect(readbackTargets[6]?.texture?.name).toBe("Real Water current color");
+    expect(readbackTargets[7]?.texture?.name).toBe(
+      "Real Water history rejection",
+    );
+    expect(readbackTargets[8]?.texture?.name).toBe(
       "Real Water inverse linear depth",
     );
-    expect(readbackTargets[26]?.texture?.name).toBe("Real Water final color");
+    expect(readbackTargets.map((target) => target.texture?.name)).toContain(
+      "Real Water Hero Breaker foam identity",
+    );
+    expect(readbackTargets.at(-1)?.texture?.name).toBe(
+      "Real Water final color",
+    );
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -403,7 +543,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     );
     expect(queryResults.foam[0]).toBe(geometryBefore.foam);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(57);
     expect(camera.aspect).toBe(1.777);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
@@ -462,6 +602,80 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(renderer.onDeviceLost).toBe(hostReplacementOnDeviceLost);
   });
 
+  it("cancellation waits for an in-flight compile before partial resource disposal", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+    const renderer = createPrewarmRenderer();
+    let releaseCompile!: () => void;
+    const pendingCompile = new Promise<void>((resolve) => {
+      releaseCompile = resolve;
+    });
+    renderer.compileAsync.mockImplementationOnce(() => pendingCompile);
+    const rawHost = createThreeHostLifecycleAdapter({
+      renderer,
+      scene,
+      camera,
+    });
+    let rawPreparation: ReturnType<typeof rawHost.prepare> | undefined;
+    const host = Object.freeze({
+      prepare(request: Parameters<typeof rawHost.prepare>[0]) {
+        rawPreparation = rawHost.prepare(request);
+        return rawPreparation;
+      },
+    });
+    const run = prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: new RecordingLoadingPresenter(),
+      host,
+    });
+    let promptTimeout: ReturnType<typeof setTimeout> | undefined;
+    let rawOutcome:
+      | Readonly<{ status: "ready" }>
+      | Readonly<{ status: "failed"; error: unknown }>
+      | undefined;
+
+    try {
+      await vi.waitFor(() => {
+        expect(renderer.compileAsync).toHaveBeenCalledTimes(1);
+      });
+      const preparingPlane = scene.getObjectByName("Real Water clipmap");
+      expect(preparingPlane).toBeDefined();
+
+      expect.soft(run.cancel("Cancelled during Three compile.")).toBe(true);
+      const promptOutcome = await Promise.race([
+        run.ready.then(
+          () => ({ status: "ready" as const }),
+          (error: unknown) => ({ status: "failed" as const, error }),
+        ),
+        new Promise<Readonly<{ status: "timeout" }>>((resolve) => {
+          promptTimeout = setTimeout(() => resolve({ status: "timeout" }), 100);
+        }),
+      ]);
+      expect.soft(promptOutcome).toMatchObject({
+        status: "failed",
+        error: {
+          code: "PREPARATION_CANCELLED",
+          message: "Cancelled during Three compile.",
+        },
+      });
+      expect.soft(scene.children).toContain(preparingPlane);
+    } finally {
+      if (promptTimeout !== undefined) {
+        clearTimeout(promptTimeout);
+      }
+      releaseCompile();
+      if (rawPreparation !== undefined) {
+        rawOutcome = await rawPreparation.then(
+          () => ({ status: "ready" as const }),
+          (error: unknown) => ({ status: "failed" as const, error }),
+        );
+      }
+    }
+
+    expect(rawOutcome).toMatchObject({ status: "failed" });
+    expect(scene.children).toHaveLength(0);
+  });
+
   it("rejects a drawing-buffer mismatch before compile or water allocation", async () => {
     const scene = new Scene();
     const camera = new PerspectiveCamera(50, 1, 0.1, 100);
@@ -473,6 +687,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -589,6 +804,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -639,7 +855,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     const texture = environment.texture as DataTexture;
     const expectedBytes = createSupportedHostEnvironmentRadianceBytes();
     expect(renderer.initTexture).toHaveBeenCalledWith(environment.texture);
-    expect(renderer.initTexture).toHaveBeenCalledTimes(3);
+    expect(renderer.initTexture).toHaveBeenCalledTimes(8);
     expect(Array.from(texture.image.data)).toEqual(Array.from(expectedBytes));
     expect(texture.name).toBe("test-environment-radiance");
     expect(texture.wrapS).toBe(RepeatWrapping);
@@ -670,6 +886,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -816,6 +1033,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -872,7 +1090,7 @@ describe("createThreeHostLifecycleAdapter", () => {
 
     lighting.sunIntensity = 0;
     lighting.environmentIntensity = 0.25;
-    expect(environment.snapshot()).toMatchObject({
+    expect(environment.snapshot().lighting).toMatchObject({
       sunIntensity: 0,
       environmentIntensity: 0.25,
     });
@@ -922,6 +1140,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -980,7 +1199,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     });
     expect(scene.children).toHaveLength(0);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(13);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(28);
     expect(renderer.dispose).not.toHaveBeenCalled();
   });
 
@@ -1198,6 +1417,7 @@ describe("createThreeHostLifecycleAdapter", () => {
         },
       },
       compileAsync: vi.fn(async () => {}),
+      computeAsync: vi.fn(async () => {}),
       clear: vi.fn(),
       contextNode: null,
       coordinateSystem: 2_001,
@@ -1358,12 +1578,54 @@ describe("createThreeHostLifecycleAdapter", () => {
 
     expect(lease).not.toHaveProperty("present");
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
-    expect(renderer.render).toHaveBeenCalledTimes(128);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(57);
+    expect(renderer.render).toHaveBeenCalledTimes(234);
     expect(presentation.route).toBeDefined();
+    const renderTargetsAtReady = renderer.setRenderTarget.mock.calls.length;
 
     const first = readHostPresentedFrame(await presentation.present());
     const second = readHostPresentedFrame(await presentation.present());
+    const readyFrameTargetNames = renderer.setRenderTarget.mock.calls
+      .slice(renderTargetsAtReady)
+      .map((call) =>
+        String(
+          (call[0] as { readonly texture?: { readonly name?: string } } | null)
+            ?.texture?.name ?? "canvas",
+        ),
+      );
+    expect(readyFrameTargetNames).toContain(
+      "Real Water underwater volume color",
+    );
+    const traaResolvedIndex = readyFrameTargetNames.indexOf(
+      "Real Water TRAA resolved color",
+    );
+    const secondaryAccumulationIndex = readyFrameTargetNames.indexOf(
+      "Real Water secondary particle accumulation",
+      traaResolvedIndex + 1,
+    );
+    const stormAtmosphereIndex = readyFrameTargetNames.indexOf(
+      "Real Water Storm Front atmosphere color",
+      secondaryAccumulationIndex + 1,
+    );
+    const finalColorIndex = readyFrameTargetNames.indexOf(
+      "Real Water final color",
+      stormAtmosphereIndex + 1,
+    );
+    const presentationIndex = readyFrameTargetNames.indexOf(
+      "canvas",
+      finalColorIndex + 1,
+    );
+    expect(traaResolvedIndex).toBeGreaterThanOrEqual(0);
+    expect(secondaryAccumulationIndex).toBeGreaterThan(traaResolvedIndex);
+    expect(stormAtmosphereIndex).toBeGreaterThan(secondaryAccumulationIndex);
+    expect(finalColorIndex).toBeGreaterThan(stormAtmosphereIndex);
+    expect(presentationIndex).toBeGreaterThan(finalColorIndex);
+    expect(readyFrameTargetNames).not.toContain(
+      "Real Water underwater volume diagnostics",
+    );
+    expect(readyFrameTargetNames).not.toContain(
+      "Real Water underwater caustics diagnostics",
+    );
     expect(first).toMatchObject({
       presentationId: 1,
       manifestHash: manifest.manifestHash,
@@ -1385,7 +1647,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(second.temporal.historyEpoch).toBe(1);
     expect(second.temporal.resetReason).toBeNull();
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(57);
 
     simulation.assign({ tick: 8, timeSeconds: 8 / 60, paused: false });
     const continuousTick = readHostPresentedFrame(await presentation.present());
@@ -1496,7 +1758,7 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(queuedFirst.presentationId + 1).toBe(queuedSecond.presentationId);
 
     expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
-    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(27);
+    expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(57);
     expect(camera.view).toBeNull();
     expect(camera.projectionMatrix.equals(hostProjection)).toBe(true);
     expect(scene.children).toHaveLength(1);
@@ -1560,10 +1822,6 @@ describe("createThreeHostLifecycleAdapter", () => {
     const sizeCallsAtReady = renderer.getDrawingBufferSize.mock.calls.length;
     const first = presentation.present();
     const second = presentation.present();
-    await Promise.resolve();
-    expect(renderer.getDrawingBufferSize.mock.calls.length).toBe(
-      sizeCallsAtReady + 4,
-    );
     const [firstFrame, secondFrame] = await Promise.all([first, second]);
     expect(secondFrame.presentationId).toBe(firstFrame.presentationId + 1);
     expect(renderer.getDrawingBufferSize.mock.calls.length).toBe(
@@ -1691,12 +1949,10 @@ describe("createThreeHostLifecycleAdapter", () => {
     await disposeP;
     expect(order.includes("render")).toBe(true);
     expect(order.includes("dispose-start")).toBe(true);
-    expect(order.indexOf("render")).toBeLessThan(
-      order.indexOf("dispose-start"),
-    );
     expect(order.indexOf("dispose-start")).toBeLessThan(
-      order.lastIndexOf("destroy"),
+      order.indexOf("render"),
     );
+    expect(order.indexOf("render")).toBeLessThan(order.lastIndexOf("destroy"));
     expect(order.at(-1)).toBe("destroy");
     expect(scene.children).toHaveLength(0);
   });
@@ -1752,6 +2008,217 @@ describe("createThreeHostLifecycleAdapter", () => {
     await lease.dispose();
   });
 
+  it("resets waterline transition identity for deterministic same-lease replays", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    camera.position.set(0, 8, 0);
+    camera.updateMatrixWorld(true);
+    const simulation = createMutableSimulationAdapter();
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        simulation,
+        presentation,
+      }),
+    }).ready;
+    const query = {
+      count: 1,
+      positions: new Float32Array([0, 0, 0]),
+      results: {
+        heights: new Float32Array(1),
+        normals: new Float32Array(3),
+        velocities: new Float32Array(3),
+        foam: new Float32Array(1),
+        ticks: new Float64Array(1),
+        controlRevisions: new Float64Array(1),
+        snapshotAges: new Uint8Array(1),
+      },
+    };
+    const surfaceHeight = lease.queryGameplay(query).heights[0] ?? 0;
+    const diagnostics = readHostDiagnosticsRoute(
+      presentation.route as HostPresentationRoute,
+    );
+    const presentAt = async (offsetMetres: number) => {
+      camera.position.y = surfaceHeight + offsetMetres;
+      camera.updateMatrixWorld(true);
+      return readHostDiagnosticsPresentedFrame(
+        await diagnostics.present({ outputs: [] }),
+      );
+    };
+    const path = [0.5, 0.05, -0.5, -0.05, 0.5, 0.05, -0.5] as const;
+    const runPath = async (simulationResetRevision: number) => {
+      simulation.assign({ simulationResetRevision });
+      const resetFrame = await presentAt(0.5);
+      const frames = [];
+      for (const offsetMetres of path) {
+        frames.push(await presentAt(offsetMetres));
+      }
+      return { resetFrame, frames };
+    };
+
+    const first = await runPath(1);
+    const replay = await runPath(2);
+    expect(replay.resetFrame).toMatchObject({
+      temporal: { resetReason: "simulation-reset", resetFrame: true },
+      waterline: {
+        classification: "above",
+        lensWetnessImpulse: false,
+        transitionRevision: 0,
+      },
+    });
+    expect(
+      first.frames.map((frame) => frame.waterline.transitionRevision),
+    ).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(
+      replay.frames.map((frame) => frame.waterline.transitionRevision),
+    ).toEqual(first.frames.map((frame) => frame.waterline.transitionRevision));
+    expect(
+      replay.frames.map((frame) => frame.waterline.lensWetnessImpulse),
+    ).toEqual(first.frames.map((frame) => frame.waterline.lensWetnessImpulse));
+    presentation.incrementCameraCut();
+    const teleportedAbove = await presentAt(0.5);
+    expect(teleportedAbove).toMatchObject({
+      temporal: { resetReason: "camera-cut", resetFrame: true },
+      waterline: {
+        classification: "above",
+        lensWetnessImpulse: true,
+        transitionRevision: 7,
+      },
+    });
+
+    await lease.dispose();
+  });
+
+  it("classifies a stable waterline and resets shared history once per crossing state", async () => {
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    camera.position.set(0, 8, 0);
+    camera.updateMatrixWorld(true);
+    const simulation = createMutableSimulationAdapter();
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        simulation,
+        presentation,
+      }),
+    }).ready;
+    const query = {
+      count: 1,
+      positions: new Float32Array([0, 0, 0]),
+      results: {
+        heights: new Float32Array(1),
+        normals: new Float32Array(3),
+        velocities: new Float32Array(3),
+        foam: new Float32Array(1),
+        ticks: new Float64Array(1),
+        controlRevisions: new Float64Array(1),
+        snapshotAges: new Uint8Array(1),
+      },
+    };
+    const surfaceHeight = lease.queryGameplay(query).heights[0] ?? 0;
+    const diagnostics = readHostDiagnosticsRoute(
+      presentation.route as HostPresentationRoute,
+    );
+    const presentAt = async (offsetMetres: number) => {
+      camera.position.y = surfaceHeight + offsetMetres;
+      camera.updateMatrixWorld(true);
+      return readHostDiagnosticsPresentedFrame(
+        await diagnostics.present({
+          outputs: ["waterline", "history-rejection"],
+        }),
+      );
+    };
+
+    const above = await presentAt(0.5);
+    expect(above.waterline).toMatchObject({
+      classification: "above",
+      transitionRevision: 0,
+      lensWetnessImpulse: false,
+    });
+    expect(above.waterline.submersion).toBe(0);
+    expect(above.temporal).toEqual({
+      historyEpoch: 1,
+      resetReason: null,
+      resetFrame: false,
+    });
+
+    const crossing = await presentAt(0.05);
+    expect(crossing.waterline).toMatchObject({
+      classification: "crossing",
+      transitionRevision: 1,
+      lensWetnessImpulse: false,
+    });
+    expect(crossing.waterline.submersion).toBeGreaterThan(0);
+    expect(crossing.waterline.submersion).toBeLessThan(1);
+    expect(crossing.temporal).toEqual({
+      historyEpoch: 2,
+      resetReason: "waterline-crossing",
+      resetFrame: true,
+    });
+
+    const crossingJitter = await presentAt(0.07);
+    expect(crossingJitter.waterline.classification).toBe("crossing");
+    expect(crossingJitter.waterline.transitionRevision).toBe(1);
+    expect(crossingJitter.temporal).toEqual({
+      historyEpoch: 2,
+      resetReason: null,
+      resetFrame: false,
+    });
+
+    const below = await presentAt(-0.5);
+    expect(below.waterline).toMatchObject({
+      classification: "below",
+      transitionRevision: 2,
+      lensWetnessImpulse: false,
+      submersion: 1,
+    });
+    expect(below.temporal).toEqual({
+      historyEpoch: 3,
+      resetReason: "waterline-crossing",
+      resetFrame: true,
+    });
+
+    const stableBelow = await presentAt(-0.4);
+    expect(stableBelow.waterline.classification).toBe("below");
+    expect(stableBelow.waterline.transitionRevision).toBe(2);
+    expect(stableBelow.temporal.resetFrame).toBe(false);
+
+    const emerging = await presentAt(-0.05);
+    expect(emerging.waterline).toMatchObject({
+      classification: "crossing",
+      transitionRevision: 3,
+      lensWetnessImpulse: true,
+    });
+    expect(emerging.temporal.resetReason).toBe("waterline-crossing");
+
+    const dry = await presentAt(0.5);
+    expect(dry.waterline).toMatchObject({
+      classification: "above",
+      transitionRevision: 4,
+      lensWetnessImpulse: false,
+      submersion: 0,
+    });
+    expect(dry.temporal).toEqual({
+      historyEpoch: 5,
+      resetReason: "waterline-crossing",
+      resetFrame: true,
+    });
+
+    await lease.dispose();
+  });
+
   it("presents diagnostics outputs from the bound Core route without a second scene render", async () => {
     const scene = new Scene();
     const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
@@ -1789,6 +2256,12 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(empty.probeCount).toBe(probeAtReady);
     expect(empty.compileCount).toBe(compileAtReady);
     expect(empty.sceneRenderCount).toBeGreaterThan(0);
+    const sprayReceipt = empty.secondaryParticles.consumers.find(
+      ({ consumerId }) => consumerId === "spray-droplet-mist",
+    );
+    expect(sprayReceipt?.requested).toBeGreaterThan(0);
+    expect(sprayReceipt?.retained).toBeGreaterThan(0);
+    expect(sprayReceipt?.contributionMaximumQ16).toBeGreaterThan(0);
     expect(renderer.compileAsync).toHaveBeenCalledTimes(compileAtReady);
     expect(renderer.readRenderTargetPixelsAsync).toHaveBeenCalledTimes(
       probeAtReady,
@@ -1842,20 +2315,246 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(resetFrame.outputs[0]?.data[0]).toBe(0.25);
     expect(resetFrame.outputs[0]?.data[1]).toBe(-0.125);
 
+    const renderTargetsBeforeCaustics =
+      renderer.setRenderTarget.mock.calls.length;
+    const causticsOnly = readHostDiagnosticsPresentedFrame(
+      await diagnostics.present({ outputs: ["underwater-caustics"] }),
+    );
+    const causticsTargetNames = renderer.setRenderTarget.mock.calls
+      .slice(renderTargetsBeforeCaustics)
+      .map((call) =>
+        String(
+          (call[0] as { readonly texture?: { readonly name?: string } } | null)
+            ?.texture?.name ?? "canvas",
+        ),
+      );
+    expect(causticsOnly.outputs).toHaveLength(1);
+    expect(causticsOnly.outputs[0]).toMatchObject({
+      name: "underwater-caustics",
+      format: "r32float-underwater-caustics",
+    });
+    expect(causticsOnly.diagnosticReadbackCount).toBe(
+      resetFrame.diagnosticReadbackCount + 1,
+    );
+    expect(causticsTargetNames).toContain(
+      "Real Water underwater caustics diagnostics",
+    );
+    expect(causticsTargetNames).not.toContain(
+      "Real Water underwater volume diagnostics",
+    );
+
+    const renderTargetsBeforeVolume =
+      renderer.setRenderTarget.mock.calls.length;
+    const volumeOnly = readHostDiagnosticsPresentedFrame(
+      await diagnostics.present({ outputs: ["underwater-transmittance"] }),
+    );
+    const volumeTargetNames = renderer.setRenderTarget.mock.calls
+      .slice(renderTargetsBeforeVolume)
+      .map((call) =>
+        String(
+          (call[0] as { readonly texture?: { readonly name?: string } } | null)
+            ?.texture?.name ?? "canvas",
+        ),
+      );
+    expect(volumeOnly.outputs).toHaveLength(1);
+    expect(volumeOnly.outputs[0]).toMatchObject({
+      name: "underwater-transmittance",
+      format: "r32float-underwater-volume",
+    });
+    expect(volumeOnly.diagnosticReadbackCount).toBe(
+      causticsOnly.diagnosticReadbackCount + 1,
+    );
+    expect(volumeTargetNames).toContain(
+      "Real Water underwater volume diagnostics",
+    );
+    expect(volumeTargetNames).not.toContain(
+      "Real Water underwater caustics diagnostics",
+    );
+    expect(volumeTargetNames).not.toContain(
+      "Real Water Hero Breaker foam identity",
+    );
+
     await expect(
       diagnostics.present({
         outputs: ["final-color", "final-color"],
       }),
     ).rejects.toThrowError(/unique/i);
 
+    const renderTargetsBeforeAllCaptures =
+      renderer.setRenderTarget.mock.calls.length;
     const all = readHostDiagnosticsPresentedFrame(
       await diagnostics.present({
         outputs: [...DIAGNOSTICS_CAPTURE_NAMES],
       }),
     );
-    expect(all.outputs).toHaveLength(23);
-    expect(all.diagnosticReadbackCount).toBe(27);
-    expect(all.sceneRenderCount).toBe(resetFrame.sceneRenderCount + 1);
+    expect(all.outputs).toHaveLength(45);
+    expect(all.diagnosticReadbackCount).toBe(44);
+    expect(all.sceneRenderCount).toBe(resetFrame.sceneRenderCount + 3);
+    expect(
+      all.outputs.find(({ name }) => name === "underwater-caustics"),
+    ).toMatchObject({
+      name: "underwater-caustics",
+      format: "r32float-underwater-caustics",
+      width: all.width,
+      height: all.height,
+      data: expect.any(Float32Array),
+    });
+    expect(
+      all.outputs.find(({ name }) => name === "underwater-particles"),
+    ).toMatchObject({
+      name: "underwater-particles",
+      format: "r32float-underwater-particles",
+      data: expect.any(Float32Array),
+    });
+    expect(
+      all.outputs.find(({ name }) => name === "underwater-bubbles"),
+    ).toMatchObject({
+      name: "underwater-bubbles",
+      format: "r32float-underwater-bubbles",
+      data: expect.any(Float32Array),
+    });
+    expect(
+      all.outputs.find(({ name }) => name === "lens-wetness"),
+    ).toMatchObject({
+      name: "lens-wetness",
+      format: "r32float-lens-wetness",
+      data: expect.any(Float32Array),
+    });
+    expect(
+      all.outputs.find(({ name }) => name === "hero-breaker-foam"),
+    ).toMatchObject({
+      name: "hero-breaker-foam",
+      format: "r32float-hero-breaker-foam",
+      data: expect.any(Float32Array),
+    });
+    for (const name of [
+      "storm-rain-ripples",
+      "storm-aerosol",
+      "storm-cloud-shadow",
+      "storm-lightning",
+    ] as const) {
+      expect(all.outputs.find((output) => output.name === name)).toMatchObject({
+        name,
+        format: "r32float-storm-front",
+        data: expect.any(Float32Array),
+      });
+    }
+    expect(
+      renderer.setRenderTarget.mock.calls
+        .slice(renderTargetsBeforeAllCaptures)
+        .map((call) =>
+          String(
+            (
+              call[0] as {
+                readonly texture?: { readonly name?: string };
+              } | null
+            )?.texture?.name ?? "canvas",
+          ),
+        ),
+    ).toContain("Real Water underwater volume diagnostics");
+    expect(
+      renderer.setRenderTarget.mock.calls
+        .slice(renderTargetsBeforeAllCaptures)
+        .map((call) =>
+          String(
+            (
+              call[0] as {
+                readonly texture?: { readonly name?: string };
+              } | null
+            )?.texture?.name ?? "canvas",
+          ),
+        ),
+    ).toContain("Real Water underwater caustics diagnostics");
+    expect(
+      renderer.setRenderTarget.mock.calls
+        .slice(renderTargetsBeforeAllCaptures)
+        .map((call) =>
+          String(
+            (
+              call[0] as {
+                readonly texture?: { readonly name?: string };
+              } | null
+            )?.texture?.name ?? "canvas",
+          ),
+        ),
+    ).toContain("Real Water Hero Breaker foam identity");
+    expect(
+      renderer.setRenderTarget.mock.calls
+        .slice(renderTargetsBeforeAllCaptures)
+        .map((call) =>
+          String(
+            (
+              call[0] as {
+                readonly texture?: { readonly name?: string };
+              } | null
+            )?.texture?.name ?? "canvas",
+          ),
+        ),
+    ).toContain("Real Water Storm Front atmosphere diagnostics");
+
+    let cumulativeReadbacks = all.diagnosticReadbackCount;
+    for (const [name, format, targetName] of [
+      [
+        "underwater-particles",
+        "r32float-underwater-particles",
+        "Real Water underwater suspended particles",
+      ],
+      [
+        "underwater-bubbles",
+        "r32float-underwater-bubbles",
+        "Real Water underwater bubbles",
+      ],
+      [
+        "lens-wetness",
+        "r32float-lens-wetness",
+        "Real Water lens-wetness diagnostics",
+      ],
+      [
+        "hero-breaker-foam",
+        "r32float-hero-breaker-foam",
+        "Real Water Hero Breaker foam identity",
+      ],
+      [
+        "storm-rain-ripples",
+        "r32float-storm-front",
+        "Real Water Storm Front atmosphere diagnostics",
+      ],
+      [
+        "storm-aerosol",
+        "r32float-storm-front",
+        "Real Water Storm Front atmosphere diagnostics",
+      ],
+      [
+        "storm-cloud-shadow",
+        "r32float-storm-front",
+        "Real Water Storm Front atmosphere diagnostics",
+      ],
+      [
+        "storm-lightning",
+        "r32float-storm-front",
+        "Real Water Storm Front atmosphere diagnostics",
+      ],
+    ] as const) {
+      const readbacksBefore =
+        renderer.readRenderTargetPixelsAsync.mock.calls.length;
+      const only = readHostDiagnosticsPresentedFrame(
+        await diagnostics.present({ outputs: [name] }),
+      );
+      cumulativeReadbacks += 1;
+      expect(only.outputs).toHaveLength(1);
+      expect(only.outputs[0]).toMatchObject({ name, format });
+      expect(only.diagnosticReadbackCount).toBe(cumulativeReadbacks);
+      expect(
+        String(
+          (
+            renderer.readRenderTargetPixelsAsync.mock.calls[
+              readbacksBefore
+            ]?.[0] as
+              { readonly texture?: { readonly name?: string } } | undefined
+          )?.texture?.name ?? "",
+        ),
+      ).toBe(targetName);
+    }
 
     await lease.dispose();
     await expect(diagnostics.present({ outputs: [] })).rejects.toThrow(
@@ -2210,6 +2909,42 @@ describe("createThreeHostLifecycleAdapter", () => {
     expect(camera.projectionMatrix.equals(projectionAfterReady)).toBe(true);
     expect(camera.projectionMatrixInverse.equals(inverseAfterReady)).toBe(true);
     expect(camera.parent).toBe(parent);
+    await lease.dispose();
+  });
+
+  it("mirrors the planar camera around the authoritative Host sea level", async () => {
+    const scene = new Scene();
+    scene.add(new Mesh());
+    const camera = new PerspectiveCamera(50, 1.777, 0.1, 100);
+    camera.position.set(0, 12, 8);
+    camera.lookAt(0, 5, 0);
+    camera.updateMatrixWorld(true);
+    const simulation = createMutableSimulationAdapter();
+    simulation.assign({ seaLevelMetres: 5 });
+    const presentation = createCapturingPresentationAdapter();
+    const renderer = createPrewarmRenderer();
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createThreeHostLifecycleAdapter({
+        renderer,
+        scene,
+        camera,
+        simulation,
+        presentation,
+      }),
+    }).ready;
+    const preparedPlanarCamera = renderer.compileAsync.mock.calls.find(
+      ([usedScene, usedCamera]) => usedScene === scene && usedCamera !== camera,
+    )?.[1] as PerspectiveCamera | undefined;
+    expect(preparedPlanarCamera?.position.y).toBeCloseTo(-2);
+
+    renderer.render.mockClear();
+    await presentation.present();
+    const readyPlanarCamera = renderer.render.mock.calls.find(
+      ([usedScene, usedCamera]) => usedScene === scene && usedCamera !== camera,
+    )?.[1] as PerspectiveCamera | undefined;
+    expect(readyPlanarCamera?.position.y).toBeCloseTo(-2);
     await lease.dispose();
   });
 
@@ -3095,6 +3830,7 @@ function createPrewarmRenderer() {
       },
     },
     compileAsync: vi.fn(async () => {}),
+    computeAsync: vi.fn(async () => {}),
     clear: vi.fn(),
     contextNode: null,
     coordinateSystem: 2_001,
@@ -3165,6 +3901,12 @@ function mockPresentationReadback(
   if (name.includes("view normal")) {
     return new Uint16Array(pixels * 4);
   }
+  if (name.includes("spectral whitecap stages")) {
+    return new Uint16Array(pixels * 4);
+  }
+  if (name.includes("unified foam sources")) {
+    return new Uint16Array(pixels * 4);
+  }
   if (
     name.includes("SSR raw") ||
     name.includes("SSR composite") ||
@@ -3183,6 +3925,25 @@ function mockPresentationReadback(
     return data;
   }
   if (name.includes("optical factors")) {
+    const data = new Uint16Array(pixels * 4);
+    const one = DataUtils.toHalfFloat(1);
+    for (let pixel = 0; pixel < pixels; pixel += 1) {
+      data[pixel * 4 + 3] = one;
+    }
+    return data;
+  }
+  if (name.includes("underwater volume diagnostics")) {
+    return new Uint16Array(pixels * 4);
+  }
+  if (
+    name.includes("secondary particle accumulation") ||
+    name.includes("underwater caustics diagnostics") ||
+    name.includes("underwater suspended particles") ||
+    name.includes("underwater bubbles") ||
+    name.includes("lens-wetness diagnostics") ||
+    name.includes("Storm Front atmosphere diagnostics") ||
+    name.includes("Hero Breaker foam identity")
+  ) {
     return new Uint16Array(pixels * 4);
   }
   if (name.includes("diagnostics")) {
@@ -3201,6 +3962,7 @@ function createMutableSimulationAdapter(): HostSimulationAdapter & {
     paused: true,
     originX: 0,
     originZ: 0,
+    seaLevelMetres: 0,
     simulationResetRevision: 0,
   };
   return {

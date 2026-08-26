@@ -20,7 +20,6 @@ import {
 
 export const REAL_WATER_CLIPMAP_NAME = "Real Water clipmap";
 export const PLANAR_REFLECTION_TEXTURE_NAME = "Real Water planar reflection";
-export const PLANAR_REFLECTION_PLANE_Y = 0;
 export const PLANAR_REFLECTION_SAMPLES = 0;
 export const PLANAR_REFLECTION_FORMAT = "rgba8unorm-srgb" as const;
 
@@ -39,8 +38,15 @@ export interface PlanarReflectionPass {
     renderer: Renderer,
     scene: Scene,
     hostCamera: PerspectiveCamera,
+    planeY: number,
   ): Promise<void>;
-  render(renderer: Renderer, scene: Scene, hostCamera: PerspectiveCamera): void;
+  render(
+    renderer: Renderer,
+    scene: Scene,
+    hostCamera: PerspectiveCamera,
+    planeY: number,
+    enabled?: boolean,
+  ): void;
   dispose(): void;
 }
 
@@ -212,7 +218,7 @@ export function createPlanarReflectionPass(
     bindWaterMesh(mesh) {
       waterMesh = mesh;
     },
-    async prime(renderer, scene, camera) {
+    async prime(renderer, scene, camera, planeY) {
       assertReady();
       if (typeof renderer.compileAsync !== "function") {
         throw new TypeError(
@@ -221,7 +227,7 @@ export function createPlanarReflectionPass(
       }
       const actualView = createHorizontalPlanarReflectionView({
         coordinateSystem: "webgpu",
-        planeY: PLANAR_REFLECTION_PLANE_Y,
+        planeY,
         camera: {
           ...readWorldPerspectiveCamera(camera),
           projectionMatrix: camera.projectionMatrix.toArray(),
@@ -231,9 +237,9 @@ export function createPlanarReflectionPass(
         ? actualView
         : createHorizontalPlanarReflectionView({
             coordinateSystem: "webgpu",
-            planeY: PLANAR_REFLECTION_PLANE_Y,
+            planeY,
             camera: {
-              ...forcedFacingWorldCamera(camera),
+              ...forcedFacingWorldCamera(camera, planeY),
               projectionMatrix: camera.projectionMatrix.toArray(),
             },
           });
@@ -247,11 +253,18 @@ export function createPlanarReflectionPass(
         }
       });
     },
-    render(renderer, scene, camera) {
+    render(renderer, scene, camera, planeY, enabled = true) {
       assertReady();
+      if (!enabled) {
+        hasOutput.value = 0;
+        withBorrowedHostState(renderer, scene, camera, () => {
+          renderer.clear();
+        });
+        return;
+      }
       const view = createHorizontalPlanarReflectionView({
         coordinateSystem: "webgpu",
-        planeY: PLANAR_REFLECTION_PLANE_Y,
+        planeY,
         camera: {
           ...readWorldPerspectiveCamera(camera),
           projectionMatrix: camera.projectionMatrix.toArray(),
@@ -297,13 +310,16 @@ function readWorldPerspectiveCamera(camera: PerspectiveCamera): {
   };
 }
 
-function forcedFacingWorldCamera(camera: PerspectiveCamera): {
+function forcedFacingWorldCamera(
+  camera: PerspectiveCamera,
+  planeY: number,
+): {
   readonly position: readonly [number, number, number];
   readonly target: readonly [number, number, number];
   readonly up: readonly [number, number, number];
 } {
   return liftWorldPerspectiveCameraAboveHorizontalPlane(
     readWorldPerspectiveCamera(camera),
-    PLANAR_REFLECTION_PLANE_Y,
+    planeY,
   );
 }

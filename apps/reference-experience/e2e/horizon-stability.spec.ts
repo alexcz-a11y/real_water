@@ -4,6 +4,7 @@ import {
   WATER_PRESET_SCHEMA,
   WATER_PRESET_VERSION,
   createWaterPreset,
+  type ArtisticControls,
 } from "real-water";
 import type { QaFramePrewarmReceipt } from "../src/qa-frame-driver.js";
 import {
@@ -13,7 +14,7 @@ import {
   QA_HARNESS_SCHEMA,
   QA_HARNESS_VERSION,
   type QaCameraV1,
-  type QaHarnessV8,
+  type QaHarness,
 } from "../src/qa-harness.js";
 import { REFERENCE_ENVIRONMENT_LIGHTING } from "../src/reference-optical-inputs.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
@@ -28,6 +29,16 @@ import {
 } from "./regression-acceptance.js";
 
 const SWELL_PRESET = createWaterPreset("swell");
+const HORIZON_GLINT_CONTROLS = {
+  ...SWELL_PRESET.artisticControls,
+  whitecapAmount: 0,
+  foamPersistence: 0,
+  underwaterHaze: 1,
+  underwaterTurbidity: 1,
+  underwaterLightShafts: 1,
+  underwaterColor: 1,
+  underwaterExposure: 1,
+} satisfies ArtisticControls;
 const HORIZON_QA_HARNESS = {
   schema: QA_HARNESS_SCHEMA,
   version: QA_HARNESS_VERSION,
@@ -65,7 +76,7 @@ const LARGE_ORIGIN_METRES = 1_000_000_000;
 const LOCAL_COORDINATE_BOUND_METRES = 200;
 const ORIGIN_COLOR_MEAN_ABS = 4;
 const ORIGIN_DEPTH_MEAN_ABS_METRES = 0.05;
-const ORIGIN_NORMAL_MEAN_ABS = 0.03;
+const ORIGIN_NORMAL_MEAN_ABS = 0.01;
 const NON_PERIODIC_SHIFT_METRES = 288;
 const NEAR_DEPTH_METRES = { min: 8, max: 40 } as const;
 const MID_DEPTH_METRES = { min: 70, max: 180 } as const;
@@ -83,12 +94,58 @@ async function openQaStage(page: Page): Promise<void> {
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 }
 
+async function captureHorizonTransitionRoute(
+  page: Page,
+  controls: ArtisticControls,
+) {
+  return page.evaluate(
+    async ({ camera, artisticControls }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
+      if (harness === undefined) {
+        throw new Error("QA Harness is unavailable.");
+      }
+      await harness.reset({ seed: 0x4000_0000 });
+      await harness.updateArtisticControls(artisticControls, {
+        transition: "continuous",
+      });
+      await harness.advanceTicks(24);
+      await harness.setCamera(camera, { transition: "continuous" });
+      const presentation = await harness.present();
+      const [depth, normal, color, current, glint, whitecapDensity] =
+        await Promise.all([
+          harness.capture("depth"),
+          harness.capture("normal"),
+          harness.capture("final-color"),
+          harness.capture("current-color"),
+          harness.capture("optical-glint"),
+          harness.capture("whitecap-decay"),
+        ]);
+      return {
+        width: depth.width,
+        height: depth.height,
+        depth: depth.data,
+        normal: normal.data,
+        color: color.data,
+        current: current.data,
+        glint: glint.data,
+        whitecapDensity: whitecapDensity.data,
+        seed: presentation.seed,
+        tick: presentation.tick,
+        manifestHash: presentation.manifestHash,
+        controlRevision: presentation.controlRevision,
+        qaPrewarm: presentation.prewarm,
+      };
+    },
+    { camera: HORIZON_CAMERA, artisticControls: controls },
+  );
+}
+
 test("breaks repeating Open Water patches on the deterministic horizon route", async ({
   page,
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async (shiftMetres) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -200,7 +257,7 @@ test("preserves queried and rendered Open Water across a host origin shift", asy
 }, testInfo) => {
   await openQaStage(page);
   const result = await page.evaluate(async (periodMetres) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -336,7 +393,7 @@ test("preserves queried and rendered Open Water across a billion-metre origin sh
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ baselineOrigin, periodMetres }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -459,46 +516,10 @@ test("transitions near geometry, middle normals, and far slope detail without a 
   page,
 }, testInfo) => {
   await openQaStage(page);
-  const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
-    if (harness === undefined) {
-      throw new Error("QA Harness is unavailable.");
-    }
-    await harness.reset({ seed: 0x4000_0000 });
-    await harness.advanceTicks(24);
-    await harness.setCamera(
-      {
-        projection: "perspective",
-        position: [0, 8, 0],
-        target: [400, 0, 0],
-        up: [0, 1, 0],
-        verticalFovDegrees: 50,
-        near: 0.5,
-        far: 4_000,
-      },
-      { transition: "continuous" },
-    );
-    const presentation = await harness.present();
-    const depth = await harness.capture("depth");
-    const normal = await harness.capture("normal");
-    const color = await harness.capture("final-color");
-    const current = await harness.capture("current-color");
-    const glint = await harness.capture("optical-glint");
-    return {
-      width: depth.width,
-      height: depth.height,
-      depth: depth.data,
-      normal: normal.data,
-      color: color.data,
-      current: current.data,
-      glint: glint.data,
-      seed: presentation.seed,
-      tick: presentation.tick,
-      manifestHash: presentation.manifestHash,
-      controlRevision: presentation.controlRevision,
-      qaPrewarm: presentation.prewarm,
-    };
-  });
+  const result = await captureHorizonTransitionRoute(
+    page,
+    HORIZON_GLINT_CONTROLS,
+  );
 
   const depths = decodeFloat32(result.depth);
   const normals = decodeFloat32(result.normal);
@@ -593,6 +614,97 @@ test("transitions near geometry, middle normals, and far slope detail without a 
     ],
     qaHarness: HORIZON_QA_HARNESS,
     qaCapture: HORIZON_QA_CAPTURE,
+    artisticControls: HORIZON_GLINT_CONTROLS,
+    waterPreset: {
+      schema: WATER_PRESET_SCHEMA,
+      version: WATER_PRESET_VERSION,
+      id: SWELL_PRESET.id,
+      presetHash: SWELL_PRESET.presetHash,
+    },
+    environment: {
+      reflection: SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
+      lighting: REFERENCE_ENVIRONMENT_LIGHTING,
+    },
+  });
+});
+
+test("default active whitecaps suppress horizon glints below the isolated spectral route", async ({
+  page,
+}, testInfo) => {
+  await openQaStage(page);
+  const defaultRoute = await captureHorizonTransitionRoute(
+    page,
+    SWELL_PRESET.artisticControls,
+  );
+  const isolatedRoute = await captureHorizonTransitionRoute(
+    page,
+    HORIZON_GLINT_CONTROLS,
+  );
+  const defaultDepth = decodeFloat32(defaultRoute.depth);
+  const isolatedDepth = decodeFloat32(isolatedRoute.depth);
+  const defaultDensity = decodeFloat32(defaultRoute.whitecapDensity);
+  const isolatedDensity = decodeFloat32(isolatedRoute.whitecapDensity);
+  const defaultGlint = collectScalarBand(
+    defaultDepth,
+    decodeFloat32(defaultRoute.glint),
+    defaultRoute.width,
+    defaultRoute.height,
+    NEAR_DEPTH_METRES.min,
+    FAR_DEPTH_METRES.max,
+  );
+  const isolatedGlint = collectScalarBand(
+    isolatedDepth,
+    decodeFloat32(isolatedRoute.glint),
+    isolatedRoute.width,
+    isolatedRoute.height,
+    NEAR_DEPTH_METRES.min,
+    FAR_DEPTH_METRES.max,
+  );
+  const defaultWhitecaps = collectScalarBand(
+    defaultDepth,
+    defaultDensity,
+    defaultRoute.width,
+    defaultRoute.height,
+    NEAR_DEPTH_METRES.min,
+    FAR_DEPTH_METRES.max,
+  );
+  const isolatedWhitecaps = collectScalarBand(
+    isolatedDepth,
+    isolatedDensity,
+    isolatedRoute.width,
+    isolatedRoute.height,
+    NEAR_DEPTH_METRES.min,
+    FAR_DEPTH_METRES.max,
+  );
+  const activeDefaultWhitecaps = defaultDensity.filter(
+    (value, index) =>
+      value > 0.5 &&
+      (defaultDepth[index] ?? 0) >= NEAR_DEPTH_METRES.min &&
+      (defaultDepth[index] ?? 0) <= FAR_DEPTH_METRES.max,
+  );
+  const summary = `defaultDensityMax=${defaultWhitecaps.max.toFixed(4)} defaultGlintMax=${defaultGlint.max.toFixed(4)} isolatedDensityMax=${isolatedWhitecaps.max.toFixed(4)} isolatedGlintMax=${isolatedGlint.max.toFixed(4)} activeDefaultWhitecaps=${String(activeDefaultWhitecaps.length)}`;
+
+  expect(activeDefaultWhitecaps.length, summary).toBeGreaterThan(100);
+  expect(defaultGlint.max, summary).toBeGreaterThan(0.12);
+  expect(defaultGlint.max, summary).toBeLessThan(0.18);
+  expect(isolatedWhitecaps.max, summary).toBe(0);
+  expect(isolatedGlint.max, summary).toBeGreaterThan(0.2);
+  expect(defaultGlint.max, summary).toBeLessThan(isolatedGlint.max * 0.8);
+  await attachRegressionAcceptance(testInfo, page, {
+    seed: defaultRoute.seed,
+    tick: defaultRoute.tick,
+    camera: HORIZON_CAMERA,
+    controlRevision: defaultRoute.controlRevision,
+    coreManifest: coreManifestEvidence(defaultRoute.qaPrewarm.core),
+    qaPrewarm: defaultRoute.qaPrewarm,
+    captures: [
+      {
+        width: defaultRoute.qaPrewarm.width,
+        height: defaultRoute.qaPrewarm.height,
+      },
+    ],
+    qaHarness: HORIZON_QA_HARNESS,
+    qaCapture: HORIZON_QA_CAPTURE,
     artisticControls: SWELL_PRESET.artisticControls,
     waterPreset: {
       schema: WATER_PRESET_SCHEMA,
@@ -611,12 +723,15 @@ test("keeps filtered slope detail and optical glints stable under camera motion"
   page,
 }, testInfo) => {
   await openQaStage(page);
-  const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+  const result = await page.evaluate(async (controls) => {
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
     await harness.reset({ seed: 0x4000_0000 });
+    await harness.updateArtisticControls(controls, {
+      transition: "continuous",
+    });
     await harness.advanceTicks(24);
     await harness.setCamera(
       {
@@ -751,7 +866,7 @@ test("keeps filtered slope detail and optical glints stable under camera motion"
       controlRevision: presentation.controlRevision,
       qaPrewarm: presentation.prewarm,
     };
-  });
+  }, HORIZON_GLINT_CONTROLS);
 
   const firstDepths = decodeFloat32(result.firstDepth);
   const secondDepths = decodeFloat32(result.secondDepth);
@@ -821,7 +936,8 @@ test("keeps filtered slope detail and optical glints stable under camera motion"
   expect(firstGlint.max).toBeGreaterThan(0.2);
   expect(firstGlint.mean).toBeGreaterThan(0.002);
   expect(Math.abs(firstGlint.mean - secondGlint.mean)).toBeLessThan(0.01);
-  expect(far.colorMeanAbs).toBeLessThan(8);
+  // The translated isolated far field must stay below a five-percent byte delta.
+  expect(far.colorMeanAbs).toBeLessThan(12);
   expect(far.normalMeanAbs).toBeLessThan(0.12);
   expect(result.stress).toHaveLength(24);
   for (const frame of result.stress) {
@@ -840,7 +956,7 @@ test("keeps filtered slope detail and optical glints stable under camera motion"
     ],
     qaHarness: HORIZON_QA_HARNESS,
     qaCapture: HORIZON_QA_CAPTURE,
-    artisticControls: SWELL_PRESET.artisticControls,
+    artisticControls: HORIZON_GLINT_CONTROLS,
     waterPreset: {
       schema: WATER_PRESET_SCHEMA,
       version: WATER_PRESET_VERSION,

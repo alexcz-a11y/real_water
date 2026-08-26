@@ -5,11 +5,20 @@ export interface QaHostSimulationController extends HostSimulationAdapter {
   reset(seed: number): HostSimulationState;
   advance(ticks: number): HostSimulationState;
   setOrigin(originX: number, originZ: number): HostSimulationState;
+  setSeaLevel(seaLevelMetres: number): HostSimulationState;
 }
 
-export function createQaHostSimulationController(): QaHostSimulationController {
+export interface QaHostSimulationControllerOptions {
+  readonly integrateFixedStep?: () => void;
+  readonly afterFixedStep?: (state: HostSimulationState) => void;
+  readonly reset?: () => void;
+}
+
+export function createQaHostSimulationController(
+  options: QaHostSimulationControllerOptions = {},
+): QaHostSimulationController {
   let simulationResetRevision = 0;
-  let state = freezeState(0, 0, 0, 0, simulationResetRevision);
+  let state = freezeState(0, 0, 0, 0, 0, simulationResetRevision);
   return Object.freeze({
     snapshot: () => state,
     reset(seed: number): HostSimulationState {
@@ -19,7 +28,8 @@ export function createQaHostSimulationController(): QaHostSimulationController {
         );
       }
       simulationResetRevision += 1;
-      state = freezeState(seed, 0, 0, 0, simulationResetRevision);
+      state = freezeState(seed, 0, 0, 0, 0, simulationResetRevision);
+      options.reset?.();
       return state;
     },
     advance(ticks: number): HostSimulationState {
@@ -32,13 +42,20 @@ export function createQaHostSimulationController(): QaHostSimulationController {
           "QA simulation tick advances must be non-negative safe integers.",
         );
       }
-      state = freezeState(
-        state.seed,
-        state.tick + ticks,
-        state.originX,
-        state.originZ,
-        simulationResetRevision,
-      );
+      // One tick at a time, so #25's Body integrator runs once per fixed step
+      // rather than once per batch, and #31's sea level rides along unchanged.
+      for (let advanced = 0; advanced < ticks; advanced += 1) {
+        options.integrateFixedStep?.();
+        state = freezeState(
+          state.seed,
+          state.tick + 1,
+          state.originX,
+          state.originZ,
+          state.seaLevelMetres,
+          simulationResetRevision,
+        );
+        options.afterFixedStep?.(state);
+      }
       return state;
     },
     setOrigin(originX: number, originZ: number): HostSimulationState {
@@ -50,6 +67,21 @@ export function createQaHostSimulationController(): QaHostSimulationController {
         state.tick,
         originX,
         originZ,
+        state.seaLevelMetres,
+        simulationResetRevision,
+      );
+      return state;
+    },
+    setSeaLevel(seaLevelMetres: number): HostSimulationState {
+      if (!Number.isFinite(seaLevelMetres)) {
+        throw new RangeError("QA sea level must be finite metres.");
+      }
+      state = freezeState(
+        state.seed,
+        state.tick,
+        state.originX,
+        state.originZ,
+        seaLevelMetres,
         simulationResetRevision,
       );
       return state;
@@ -62,6 +94,7 @@ function freezeState(
   tick: number,
   originX: number,
   originZ: number,
+  seaLevelMetres: number,
   simulationResetRevision: number,
 ): HostSimulationState {
   return Object.freeze({
@@ -71,6 +104,7 @@ function freezeState(
     paused: false,
     originX,
     originZ,
+    seaLevelMetres,
     simulationResetRevision,
   });
 }

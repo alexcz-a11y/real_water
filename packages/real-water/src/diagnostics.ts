@@ -27,7 +27,7 @@ export type {
 } from "./presentation.js";
 
 /**
- * The twenty-three named diagnostic outputs. Names and CPU shapes match the QA
+ * The forty-five named diagnostic outputs. Names and CPU shapes match the QA
  * capture contract. Planar color and target-alpha occupancy are their own
  * prepared target. `planar-confidence` is reserved for a future screen-space
  * mask and is not a current capture. Current-frame SSR hit (stock raw
@@ -45,6 +45,13 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
   "depth",
   "normal",
   "motion-vector",
+  "whitecap-generation",
+  "whitecap-history",
+  "whitecap-advection",
+  "whitecap-decay",
+  "foam-source-identity",
+  "waterline",
+  "history-rejection",
   "optical-fresnel",
   "optical-thickness",
   "optical-scattering",
@@ -52,6 +59,14 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
   "optical-crest-transmission",
   "optical-transmittance",
   "optical-glint",
+  "underwater-transmittance",
+  "underwater-scattering",
+  "underwater-light-shafts",
+  "underwater-shadow",
+  "underwater-caustics",
+  "underwater-particles",
+  "underwater-bubbles",
+  "lens-wetness",
   "planar-color",
   "planar-target-alpha",
   "ssr-hit",
@@ -63,10 +78,17 @@ export const DIAGNOSTICS_CAPTURE_NAMES = Object.freeze([
   "ssr-history-color",
   "ssr-history-frame-weight",
   "ssr-history-input-color",
+  "secondary-particle-contribution",
+  "secondary-particle-overdraw",
+  "hero-breaker-foam",
+  "storm-rain-ripples",
+  "storm-aerosol",
+  "storm-cloud-shadow",
+  "storm-lightning",
 ] as const);
 
 /**
- * One of the twenty-three named diagnostic CPU outputs.
+ * One of the forty-five named diagnostic CPU outputs.
  *
  * @public
  */
@@ -103,6 +125,41 @@ export const DIAGNOSTICS_CAPTURE_SHAPES = Object.freeze({
     elementType: "float32" as const,
     components: 2 as const,
   }),
+  "whitecap-generation": Object.freeze({
+    format: "r32float-whitecap-stage" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "whitecap-history": Object.freeze({
+    format: "r32float-whitecap-stage" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "whitecap-advection": Object.freeze({
+    format: "r32float-whitecap-stage" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "whitecap-decay": Object.freeze({
+    format: "r32float-whitecap-stage" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "foam-source-identity": Object.freeze({
+    format: "rgba32float-foam-source-identity" as const,
+    elementType: "float32" as const,
+    components: 4 as const,
+  }),
+  "waterline": Object.freeze({
+    format: "r32float-waterline-coverage" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "history-rejection": Object.freeze({
+    format: "r32float-history-rejection" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
   "optical-fresnel": Object.freeze({
     format: "r32float-optical" as const,
     elementType: "float32" as const,
@@ -135,6 +192,46 @@ export const DIAGNOSTICS_CAPTURE_SHAPES = Object.freeze({
   }),
   "optical-glint": Object.freeze({
     format: "r32float-optical" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-transmittance": Object.freeze({
+    format: "r32float-underwater-volume" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-scattering": Object.freeze({
+    format: "r32float-underwater-volume" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-light-shafts": Object.freeze({
+    format: "r32float-underwater-volume" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-shadow": Object.freeze({
+    format: "r32float-underwater-volume" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-caustics": Object.freeze({
+    format: "r32float-underwater-caustics" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-particles": Object.freeze({
+    format: "r32float-underwater-particles" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "underwater-bubbles": Object.freeze({
+    format: "r32float-underwater-bubbles" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "lens-wetness": Object.freeze({
+    format: "r32float-lens-wetness" as const,
     elementType: "float32" as const,
     components: 1 as const,
   }),
@@ -193,9 +290,52 @@ export const DIAGNOSTICS_CAPTURE_SHAPES = Object.freeze({
     elementType: "float32" as const,
     components: 3 as const,
   }),
+  "secondary-particle-contribution": Object.freeze({
+    format: "r32float-secondary-particle-contribution" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "secondary-particle-overdraw": Object.freeze({
+    format: "r32float-secondary-particle-overdraw" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "hero-breaker-foam": Object.freeze({
+    format: "r32float-hero-breaker-foam" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "storm-rain-ripples": Object.freeze({
+    format: "r32float-storm-front" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "storm-aerosol": Object.freeze({
+    format: "r32float-storm-front" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "storm-cloud-shadow": Object.freeze({
+    format: "r32float-storm-front" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
+  "storm-lightning": Object.freeze({
+    format: "r32float-storm-front" as const,
+    elementType: "float32" as const,
+    components: 1 as const,
+  }),
 });
 
 const CAPTURE_NAME_SET = new Set<string>(DIAGNOSTICS_CAPTURE_NAMES);
+const DIAGNOSTICS_CAPTURE_KEYS = [
+  "name",
+  "format",
+  "width",
+  "height",
+  "origin",
+  "data",
+] as const;
 const HOST_DIAGNOSTICS_PRESENT_REQUEST_KEYS = ["outputs"] as const;
 const HOST_DIAGNOSTICS_PRESENTED_FRAME_KEYS = [
   "presentationId",
@@ -209,6 +349,8 @@ const HOST_DIAGNOSTICS_PRESENTED_FRAME_KEYS = [
   "cameraCutRevision",
   "seaStateCutRevision",
   "temporal",
+  "waterline",
+  "secondaryParticles",
   "outputs",
   "compileCount",
   "probeCount",
@@ -216,6 +358,56 @@ const HOST_DIAGNOSTICS_PRESENTED_FRAME_KEYS = [
   "sceneRenderCount",
   "width",
   "height",
+] as const;
+const DIAGNOSTICS_WATERLINE_KEYS = [
+  "classification",
+  "seaLevelMetres",
+  "surfaceHeightMetres",
+  "signedDistanceMetres",
+  "submersion",
+  "transitionRevision",
+  "lensWetnessImpulse",
+] as const;
+const DIAGNOSTICS_WATERLINE_CLASSIFICATIONS = [
+  "above",
+  "crossing",
+  "below",
+] as const;
+const SECONDARY_PARTICLE_DROP_REASON_KEYS = [
+  "invisibleOrOccluded",
+  "globalContributionPressure",
+  "reentryCooldown",
+  "lifecycleReentryForbidden",
+] as const;
+const SECONDARY_PARTICLE_RECEIPT_KEYS = [
+  "requested",
+  "retained",
+  "thinned",
+  "invisibleOrOccluded",
+  "reentryCooldown",
+  "lifecycleReentryForbidden",
+  "retainedByFloor",
+  "retainedByGlobalCompetition",
+  "retainedIncumbents",
+  "requestedAboveSoftCeiling",
+  "overSubscribed",
+  "contributionMinimumQ16",
+  "contributionMaximumQ16",
+  "dropReasons",
+] as const;
+const SECONDARY_PARTICLE_CONSUMER_KEYS = [
+  "consumerId",
+  "maximumRequestCount",
+  "minimumRetainedSlots",
+  "softRequestCeiling",
+  "pressureReentryPolicy",
+  ...SECONDARY_PARTICLE_RECEIPT_KEYS,
+] as const;
+const SECONDARY_PARTICLES_KEYS = [
+  "capacity",
+  "maximumCandidateCount",
+  ...SECONDARY_PARTICLE_RECEIPT_KEYS,
+  "consumers",
 ] as const;
 
 /**
@@ -317,6 +509,72 @@ export interface DiagnosticsMotionVectorCapture extends DiagnosticsCaptureBase {
 }
 
 /**
+ * One scalar stage of the deterministic spectral-whitecap reconstruction.
+ *
+ * @public
+ */
+export interface DiagnosticsWhitecapStageCapture extends DiagnosticsCaptureBase {
+  /** Whitecap stage capture name. */
+  readonly name:
+    | "whitecap-generation"
+    | "whitecap-history"
+    | "whitecap-advection"
+    | "whitecap-decay";
+  /** Packed scalar whitecap density format. */
+  readonly format: "r32float-whitecap-stage";
+  /** Tightly packed scalar density samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Canonical anchor-local contribution map and saturating union of the unified
+ * foam field. Unlike screen-space stage captures, this map covers the prepared
+ * 96-metre Interaction Field directly and is independent of camera jitter.
+ *
+ * @public
+ */
+export interface DiagnosticsFoamSourceIdentityCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "foam-source-identity";
+  /** Packed RGBA source-identity format. */
+  readonly format: "rgba32float-foam-source-identity";
+  /**
+   * Tightly packed anchor-local samples: R = spectral whitecap, G = vessel wake
+   * or propeller wash, B = local impact, A = saturating union.
+   */
+  readonly data: Float32Array;
+}
+
+/**
+ * Waterline coverage read from the prepared water-only attachment channel.
+ *
+ * @public
+ */
+export interface DiagnosticsWaterlineCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "waterline";
+  /** Packed waterline coverage format. */
+  readonly format: "r32float-waterline-coverage";
+  /** Tightly packed waterline coverage samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Full-frame shared-domain TRAA and SSR reset rejection for the presented
+ * frame. Stock per-pixel depth and disocclusion heuristics remain internal.
+ *
+ * @public
+ */
+export interface DiagnosticsHistoryRejectionCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "history-rejection";
+  /** Packed temporal rejection format. */
+  readonly format: "r32float-history-rejection";
+  /** Tightly packed temporal rejection samples. */
+  readonly data: Float32Array;
+}
+
+/**
  * Optical scalar AOV readback.
  *
  * @public
@@ -337,6 +595,81 @@ export interface DiagnosticsOpticalScalarCapture extends DiagnosticsCaptureBase 
   /** Packed optical scalar format. */
   readonly format: "r32float-optical";
   /** Tightly packed scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * One scalar channel unpacked from the prepared underwater diagnostics target.
+ *
+ * @public
+ */
+export interface DiagnosticsUnderwaterVolumeCapture extends DiagnosticsCaptureBase {
+  /** Underwater volume capture name. */
+  readonly name:
+    | "underwater-transmittance"
+    | "underwater-scattering"
+    | "underwater-light-shafts"
+    | "underwater-shadow";
+  /** Packed scalar underwater volume format. */
+  readonly format: "r32float-underwater-volume";
+  /** Tightly packed scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Bounded dynamic caustic contribution on visible underwater receivers.
+ * This remains distinct from the prepared underwater-volume channel pack.
+ *
+ * @public
+ */
+export interface DiagnosticsUnderwaterCausticsCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "underwater-caustics";
+  /** Packed normalized scalar caustics format. */
+  readonly format: "r32float-underwater-caustics";
+  /** Tightly packed finite normalized scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Normalized suspended-particle contribution on visible underwater receivers.
+ *
+ * @public
+ */
+export interface DiagnosticsUnderwaterParticlesCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "underwater-particles";
+  /** Packed normalized scalar particle format. */
+  readonly format: "r32float-underwater-particles";
+  /** Tightly packed finite normalized scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Normalized subsurface-foam, bubble-cloud, and rising-bubble contribution.
+ *
+ * @public
+ */
+export interface DiagnosticsUnderwaterBubblesCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "underwater-bubbles";
+  /** Packed normalized scalar bubble format. */
+  readonly format: "r32float-underwater-bubbles";
+  /** Tightly packed finite normalized scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Normalized post-TRAA lens-wetness coverage.
+ *
+ * @public
+ */
+export interface DiagnosticsLensWetnessCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "lens-wetness";
+  /** Packed normalized scalar lens-wetness format. */
+  readonly format: "r32float-lens-wetness";
+  /** Tightly packed finite normalized scalar samples. */
   readonly data: Float32Array;
 }
 
@@ -446,6 +779,69 @@ export interface DiagnosticsSsrHistoryInputColorCapture extends DiagnosticsCaptu
 }
 
 /**
+ * Output-resolution scalar contribution submitted to the shared secondary-
+ * particle allocator.
+ *
+ * @public
+ */
+export interface DiagnosticsSecondaryParticleContributionCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "secondary-particle-contribution";
+  /** Packed scalar contribution format. */
+  readonly format: "r32float-secondary-particle-contribution";
+  /** Tightly packed scalar contribution samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Output-resolution secondary-particle overdraw estimate.
+ *
+ * @public
+ */
+export interface DiagnosticsSecondaryParticleOverdrawCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "secondary-particle-overdraw";
+  /** Packed scalar overdraw format. */
+  readonly format: "r32float-secondary-particle-overdraw";
+  /** Tightly packed scalar overdraw samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Output-resolution scalar contribution from the dedicated Hero Breaker foam
+ * route.
+ *
+ * @public
+ */
+export interface DiagnosticsHeroBreakerFoamCapture extends DiagnosticsCaptureBase {
+  /** Capture name. */
+  readonly name: "hero-breaker-foam";
+  /** Packed normalized scalar Hero Breaker foam format. */
+  readonly format: "r32float-hero-breaker-foam";
+  /** Tightly packed finite normalized scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
+ * Output-resolution normalized scalar contribution from one Storm Front
+ * effect route.
+ *
+ * @public
+ */
+export interface DiagnosticsStormFrontCapture extends DiagnosticsCaptureBase {
+  /** Storm Front capture name. */
+  readonly name:
+    | "storm-rain-ripples"
+    | "storm-aerosol"
+    | "storm-cloud-shadow"
+    | "storm-lightning";
+  /** Packed normalized scalar Storm Front format. */
+  readonly format: "r32float-storm-front";
+  /** Tightly packed finite normalized scalar samples. */
+  readonly data: Float32Array;
+}
+
+/**
  * Frozen CPU DTO for one named diagnostic output. No GPU object types.
  *
  * @public
@@ -464,7 +860,20 @@ export type DiagnosticsCapture =
   | DiagnosticsDepthCapture
   | DiagnosticsNormalCapture
   | DiagnosticsMotionVectorCapture
-  | DiagnosticsOpticalScalarCapture;
+  | DiagnosticsWhitecapStageCapture
+  | DiagnosticsFoamSourceIdentityCapture
+  | DiagnosticsWaterlineCapture
+  | DiagnosticsHistoryRejectionCapture
+  | DiagnosticsOpticalScalarCapture
+  | DiagnosticsUnderwaterVolumeCapture
+  | DiagnosticsUnderwaterCausticsCapture
+  | DiagnosticsUnderwaterParticlesCapture
+  | DiagnosticsUnderwaterBubblesCapture
+  | DiagnosticsLensWetnessCapture
+  | DiagnosticsSecondaryParticleContributionCapture
+  | DiagnosticsSecondaryParticleOverdrawCapture
+  | DiagnosticsHeroBreakerFoamCapture
+  | DiagnosticsStormFrontCapture;
 
 /**
  * Diagnostics present request. The exact key is `outputs`. Named outputs must
@@ -479,21 +888,137 @@ export interface HostDiagnosticsPresentRequest {
 }
 
 /**
+ * Stable camera-medium classification and deterministic transition handoff for
+ * one presented Open Water frame.
+ *
+ * @public
+ */
+export interface DiagnosticsWaterlineState {
+  /** Stable camera-medium classification. */
+  readonly classification: "above" | "crossing" | "below";
+  /** Authoritative Host mean sea level for the single Open Water Domain. */
+  readonly seaLevelMetres: number;
+  /** Seed-matched Open Water surface height at the camera XZ position. */
+  readonly surfaceHeightMetres: number;
+  /** Camera world Y minus the seed-matched surface height. */
+  readonly signedDistanceMetres: number;
+  /** Continuous optical blend: 0 above, 1 below. */
+  readonly submersion: number;
+  /** Monotonic revision incremented once per successful classification change. */
+  readonly transitionRevision: number;
+  /** One-frame handoff for the post-TRAA lens-wetness composition route. */
+  readonly lensWetnessImpulse: boolean;
+}
+
+/**
+ * Named secondary-particle discard counts. Counts, rather than a bitmask or
+ * strings, keep the diagnostics receipt allocation-free and inspectable.
+ *
+ * @public
+ */
+export interface DiagnosticsSecondaryParticleDropReasons {
+  /** Candidates with no visible output contribution. */
+  readonly invisibleOrOccluded: number;
+  /** Visible candidates removed by global contribution pressure. */
+  readonly globalContributionPressure: number;
+  /** Visible candidates rejected during their reentry cooldown. */
+  readonly reentryCooldown: number;
+  /** Visible candidates whose current lifecycle cannot reenter after pressure removal. */
+  readonly lifecycleReentryForbidden: number;
+}
+
+/**
+ * Shared retained/drop accounting emitted by both global and per-consumer
+ * secondary-particle receipts.
+ *
+ * @public
+ */
+export interface DiagnosticsSecondaryParticleReceipt {
+  /** Candidates submitted for this allocation epoch. */
+  readonly requested: number;
+  /** Candidates retained after global arbitration. */
+  readonly retained: number;
+  /** Visible candidates removed by global contribution pressure. */
+  readonly thinned: number;
+  /** Candidates with zero visible output contribution. */
+  readonly invisibleOrOccluded: number;
+  /** Candidates rejected during their reentry cooldown. */
+  readonly reentryCooldown: number;
+  /** Candidates whose current lifecycle cannot reenter after pressure removal. */
+  readonly lifecycleReentryForbidden: number;
+  /** Retained candidates protected by the consumer survival floor. */
+  readonly retainedByFloor: number;
+  /** Retained candidates selected by global contribution competition. */
+  readonly retainedByGlobalCompetition: number;
+  /** Retained incumbents protected by minimum residence. */
+  readonly retainedIncumbents: number;
+  /** Requests above declared consumer soft ceilings. */
+  readonly requestedAboveSoftCeiling: number;
+  /** Whether this receipt observed an oversubscribed request. */
+  readonly overSubscribed: boolean;
+  /** Lowest submitted visible contribution, or null when none was visible. */
+  readonly contributionMinimumQ16: number | null;
+  /** Highest submitted visible contribution, or null when none was visible. */
+  readonly contributionMaximumQ16: number | null;
+  /** Named discard counts for this receipt. */
+  readonly dropReasons: DiagnosticsSecondaryParticleDropReasons;
+}
+
+/**
+ * Frozen planning declaration and receipt for one secondary-particle
+ * consumer. Future consumers use their own stable string identifier.
+ *
+ * @public
+ */
+export interface DiagnosticsSecondaryParticleConsumer extends DiagnosticsSecondaryParticleReceipt {
+  /** Stable consumer identifier. */
+  readonly consumerId: string;
+  /** Construction-time maximum candidate request. */
+  readonly maximumRequestCount: number;
+  /** Construction-time survival floor. */
+  readonly minimumRetainedSlots: number;
+  /** Construction-time request level above which pressure is expected. */
+  readonly softRequestCeiling: number;
+  /** Whether pressure removal permits this stable key to reenter later. */
+  readonly pressureReentryPolicy:
+    "after-shared-cooldown" | "forbidden-until-absent";
+}
+
+/**
+ * Frozen, exact diagnostics receipt for the render-phase-neutral shared
+ * secondary-particle allocator.
+ *
+ * @public
+ */
+export interface DiagnosticsSecondaryParticles extends DiagnosticsSecondaryParticleReceipt {
+  /** Fixed global capacity mandated by the prepared route. */
+  readonly capacity: 131_072;
+  /** Total construction-time candidate capacity across consumers. */
+  readonly maximumCandidateCount: number;
+  /** Per-consumer planning declarations and allocation receipts. */
+  readonly consumers: readonly DiagnosticsSecondaryParticleConsumer[];
+}
+
+/**
  * One diagnostics present: the root receipt plus named CPU outputs and
  * truthful readiness counters.
  *
  * @public
  */
 export interface HostDiagnosticsPresentedFrame extends HostPresentedFrame {
+  /** Stable waterline state associated with this presented frame. */
+  readonly waterline: DiagnosticsWaterlineState;
+  /** Shared secondary-particle allocation receipt. */
+  readonly secondaryParticles: DiagnosticsSecondaryParticles;
   /** Named CPU outputs in request order. */
   readonly outputs: readonly DiagnosticsCapture[];
-  /** Material compile count observed for this present. */
+  /** Cumulative material compile count through this present. */
   readonly compileCount: number;
-  /** Probe count observed for this present. */
+  /** Cumulative readiness-probe count through this present. */
   readonly probeCount: number;
-  /** Number of diagnostic readbacks performed for this present. */
+  /** Cumulative diagnostic readback count through this present. */
   readonly diagnosticReadbackCount: number;
-  /** Host scene renders performed for this present. */
+  /** Cumulative Host scene-render count through this present. */
   readonly sceneRenderCount: number;
   /** Drawing-buffer width of the presented frame. */
   readonly width: number;
@@ -516,7 +1041,7 @@ export interface HostDiagnosticsRoute {
 }
 
 /**
- * Confirms `value` is one of the twenty-three diagnostic capture names.
+ * Confirms `value` is one of the forty-five diagnostic capture names.
  *
  * @public
  */
@@ -630,8 +1155,14 @@ export function readHostDiagnosticsPresentedFrame(
   const outputs = frame.outputs.map((output) =>
     readDiagnosticsCapture(output, receipt.presentationId, width, height),
   );
+  const waterline = readDiagnosticsWaterlineState(frame.waterline);
+  const secondaryParticles = readDiagnosticsSecondaryParticles(
+    frame.secondaryParticles,
+  );
   return Object.freeze({
     ...receipt,
+    waterline,
+    secondaryParticles,
     outputs: Object.freeze(outputs),
     compileCount: readNonNegativeSafeInteger(
       frame.compileCount,
@@ -654,13 +1185,81 @@ export function readHostDiagnosticsPresentedFrame(
   });
 }
 
+function readDiagnosticsWaterlineState(
+  value: DiagnosticsWaterlineState,
+): DiagnosticsWaterlineState {
+  if (!isRecord(value) || !hasExactKeys(value, DIAGNOSTICS_WATERLINE_KEYS)) {
+    throw new TypeError(
+      "Host diagnostics waterline state must use the exact receipt contract.",
+    );
+  }
+  if (
+    typeof value.classification !== "string" ||
+    !(DIAGNOSTICS_WATERLINE_CLASSIFICATIONS as readonly string[]).includes(
+      value.classification,
+    )
+  ) {
+    throw new TypeError(
+      "Host diagnostics waterline classification must be above, crossing, or below.",
+    );
+  }
+  if (
+    !Number.isFinite(value.seaLevelMetres) ||
+    !Number.isFinite(value.surfaceHeightMetres) ||
+    !Number.isFinite(value.signedDistanceMetres)
+  ) {
+    throw new RangeError(
+      "Host diagnostics waterline heights must be finite metres.",
+    );
+  }
+  if (
+    !Number.isFinite(value.submersion) ||
+    value.submersion < 0 ||
+    value.submersion > 1
+  ) {
+    throw new RangeError(
+      "Host diagnostics waterline submersion must be inside [0, 1].",
+    );
+  }
+  if (typeof value.lensWetnessImpulse !== "boolean") {
+    throw new TypeError(
+      "Host diagnostics lens wetness impulse must be boolean.",
+    );
+  }
+  return Object.freeze({
+    classification: value.classification,
+    seaLevelMetres: value.seaLevelMetres,
+    surfaceHeightMetres: value.surfaceHeightMetres,
+    signedDistanceMetres: value.signedDistanceMetres,
+    submersion: value.submersion,
+    transitionRevision: readNonNegativeSafeInteger(
+      value.transitionRevision,
+      "Host diagnostics waterline transitionRevision",
+    ),
+    lensWetnessImpulse: value.lensWetnessImpulse,
+  });
+}
+
 function readDiagnosticsCapture(
   value: DiagnosticsCapture,
   presentationId: number,
   width: number,
   height: number,
 ): DiagnosticsCapture {
-  if (!isRecord(value) || !isDiagnosticsCaptureName(value.name)) {
+  if (
+    isRecord(value) &&
+    isNormalizedEffectCaptureName(value.name) &&
+    !hasExactKeys(value, DIAGNOSTICS_CAPTURE_KEYS)
+  ) {
+    throw new TypeError(
+      `Host diagnostics output ${value.name} must use the exact name, format, width, height, origin, and data keys.`,
+    );
+  }
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, DIAGNOSTICS_CAPTURE_KEYS) ||
+    !isDiagnosticsCaptureName(value.name)
+  ) {
     throw new TypeError("Host diagnostics output must use a supported name.");
   }
   if (value.origin !== "top-left") {
@@ -687,15 +1286,427 @@ function readDiagnosticsCapture(
         `Host diagnostics output ${value.name} must be packed Uint8 data.`,
       );
     }
-  } else if (
-    !(value.data instanceof Float32Array) ||
-    value.data.length !== expectedLength
-  ) {
-    throw new TypeError(
-      `Host diagnostics output ${value.name} must be packed Float32 data.`,
-    );
+  } else {
+    if (
+      !(value.data instanceof Float32Array) ||
+      value.data.length !== expectedLength
+    ) {
+      throw new TypeError(
+        `Host diagnostics output ${value.name} must be packed Float32 data.`,
+      );
+    }
+    if (
+      isNormalizedEffectCaptureName(value.name) &&
+      value.data.some(
+        (sample) => !Number.isFinite(sample) || sample < 0 || sample > 1,
+      )
+    ) {
+      throw new RangeError(
+        `Host diagnostics output ${value.name} must contain finite normalized scalar data.`,
+      );
+    }
   }
   return Object.freeze({ ...value, data: value.data }) as DiagnosticsCapture;
+}
+
+function isNormalizedEffectCaptureName(
+  value: unknown,
+): value is
+  | "underwater-caustics"
+  | "underwater-particles"
+  | "underwater-bubbles"
+  | "lens-wetness"
+  | "hero-breaker-foam"
+  | "storm-rain-ripples"
+  | "storm-aerosol"
+  | "storm-cloud-shadow"
+  | "storm-lightning" {
+  return (
+    value === "underwater-caustics" ||
+    value === "underwater-particles" ||
+    value === "underwater-bubbles" ||
+    value === "lens-wetness" ||
+    value === "hero-breaker-foam" ||
+    value === "storm-rain-ripples" ||
+    value === "storm-aerosol" ||
+    value === "storm-cloud-shadow" ||
+    value === "storm-lightning"
+  );
+}
+
+function readDiagnosticsSecondaryParticles(
+  value: DiagnosticsSecondaryParticles,
+): DiagnosticsSecondaryParticles {
+  if (!isRecord(value) || !hasExactKeys(value, SECONDARY_PARTICLES_KEYS)) {
+    throw new TypeError(
+      "Host diagnostics secondaryParticles must use the exact receipt contract.",
+    );
+  }
+  if (value.capacity !== 131_072) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles capacity must be 131072.",
+    );
+  }
+  const maximumCandidateCount = readNonNegativeSafeInteger(
+    value.maximumCandidateCount,
+    "Host diagnostics secondaryParticles maximumCandidateCount",
+  );
+  if (!Array.isArray(value.consumers)) {
+    throw new TypeError(
+      "Host diagnostics secondaryParticles consumers must be an array.",
+    );
+  }
+  const consumers = value.consumers.map((consumer) =>
+    readDiagnosticsSecondaryParticleConsumer(consumer),
+  );
+  const consumerIds = new Set(consumers.map((consumer) => consumer.consumerId));
+  if (consumerIds.size !== consumers.length) {
+    throw new TypeError(
+      "Host diagnostics secondaryParticles consumerId values must be unique.",
+    );
+  }
+  const receipt = readDiagnosticsSecondaryParticleReceipt(
+    value,
+    "Host diagnostics secondaryParticles",
+  );
+  if (receipt.requested > maximumCandidateCount) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles requested cannot exceed maximumCandidateCount.",
+    );
+  }
+  if (receipt.retained > value.capacity) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles retained cannot exceed capacity.",
+    );
+  }
+  if (receipt.overSubscribed !== receipt.thinned > 0) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles overSubscribed must reflect global contribution pressure.",
+    );
+  }
+  assertSecondaryParticleConsumerTotals(receipt, consumers);
+  const declaredMaximum = consumers.reduce(
+    (total, consumer) => total + consumer.maximumRequestCount,
+    0,
+  );
+  if (
+    !Number.isSafeInteger(declaredMaximum) ||
+    declaredMaximum !== maximumCandidateCount
+  ) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles maximumCandidateCount must equal the declared consumer maxima.",
+    );
+  }
+  return Object.freeze({
+    capacity: 131_072,
+    maximumCandidateCount,
+    ...receipt,
+    consumers: Object.freeze(consumers),
+  });
+}
+
+function readDiagnosticsSecondaryParticleConsumer(
+  value: DiagnosticsSecondaryParticleConsumer,
+): DiagnosticsSecondaryParticleConsumer {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, SECONDARY_PARTICLE_CONSUMER_KEYS)
+  ) {
+    throw new TypeError(
+      "Host diagnostics secondary-particle consumer must use the exact receipt contract.",
+    );
+  }
+  if (
+    typeof value.consumerId !== "string" ||
+    value.consumerId.length === 0 ||
+    value.consumerId !== value.consumerId.trim() ||
+    value.consumerId !== value.consumerId.normalize("NFC")
+  ) {
+    throw new TypeError(
+      "Host diagnostics secondary-particle consumerId must be a canonical non-empty string.",
+    );
+  }
+  const maximumRequestCount = readNonNegativeSafeInteger(
+    value.maximumRequestCount,
+    `Host diagnostics secondary-particle consumer ${value.consumerId} maximumRequestCount`,
+  );
+  const minimumRetainedSlots = readNonNegativeSafeInteger(
+    value.minimumRetainedSlots,
+    `Host diagnostics secondary-particle consumer ${value.consumerId} minimumRetainedSlots`,
+  );
+  const softRequestCeiling = readNonNegativeSafeInteger(
+    value.softRequestCeiling,
+    `Host diagnostics secondary-particle consumer ${value.consumerId} softRequestCeiling`,
+  );
+  if (
+    minimumRetainedSlots > maximumRequestCount ||
+    softRequestCeiling > maximumRequestCount
+  ) {
+    throw new RangeError(
+      "Host diagnostics secondary-particle consumer plan counts cannot exceed maximumRequestCount.",
+    );
+  }
+  if (
+    value.pressureReentryPolicy !== "after-shared-cooldown" &&
+    value.pressureReentryPolicy !== "forbidden-until-absent"
+  ) {
+    throw new TypeError(
+      "Host diagnostics secondary-particle consumer pressureReentryPolicy must be after-shared-cooldown or forbidden-until-absent.",
+    );
+  }
+  const receipt = readDiagnosticsSecondaryParticleReceipt(
+    value,
+    `Host diagnostics secondary-particle consumer ${value.consumerId}`,
+  );
+  if (receipt.requested > maximumRequestCount) {
+    throw new RangeError(
+      "Host diagnostics secondary-particle consumer requested cannot exceed maximumRequestCount.",
+    );
+  }
+  if (
+    receipt.requestedAboveSoftCeiling !==
+    Math.max(0, receipt.requested - softRequestCeiling)
+  ) {
+    throw new RangeError(
+      "Host diagnostics secondary-particle consumer requestedAboveSoftCeiling must reflect its plan.",
+    );
+  }
+  if (receipt.overSubscribed !== receipt.requested > softRequestCeiling) {
+    throw new RangeError(
+      "Host diagnostics secondary-particle consumer overSubscribed must reflect its softRequestCeiling.",
+    );
+  }
+  return Object.freeze({
+    consumerId: value.consumerId,
+    maximumRequestCount,
+    minimumRetainedSlots,
+    softRequestCeiling,
+    pressureReentryPolicy: value.pressureReentryPolicy,
+    ...receipt,
+  });
+}
+
+function readDiagnosticsSecondaryParticleReceipt(
+  value: DiagnosticsSecondaryParticleReceipt,
+  label: string,
+): DiagnosticsSecondaryParticleReceipt {
+  const requested = readNonNegativeSafeInteger(
+    value.requested,
+    `${label} requested`,
+  );
+  const retained = readNonNegativeSafeInteger(
+    value.retained,
+    `${label} retained`,
+  );
+  const thinned = readNonNegativeSafeInteger(value.thinned, `${label} thinned`);
+  const invisibleOrOccluded = readNonNegativeSafeInteger(
+    value.invisibleOrOccluded,
+    `${label} invisibleOrOccluded`,
+  );
+  const reentryCooldown = readNonNegativeSafeInteger(
+    value.reentryCooldown,
+    `${label} reentryCooldown`,
+  );
+  const lifecycleReentryForbidden = readNonNegativeSafeInteger(
+    value.lifecycleReentryForbidden,
+    `${label} lifecycleReentryForbidden`,
+  );
+  const retainedByFloor = readNonNegativeSafeInteger(
+    value.retainedByFloor,
+    `${label} retainedByFloor`,
+  );
+  const retainedByGlobalCompetition = readNonNegativeSafeInteger(
+    value.retainedByGlobalCompetition,
+    `${label} retainedByGlobalCompetition`,
+  );
+  const retainedIncumbents = readNonNegativeSafeInteger(
+    value.retainedIncumbents,
+    `${label} retainedIncumbents`,
+  );
+  const requestedAboveSoftCeiling = readNonNegativeSafeInteger(
+    value.requestedAboveSoftCeiling,
+    `${label} requestedAboveSoftCeiling`,
+  );
+  if (typeof value.overSubscribed !== "boolean") {
+    throw new TypeError(`${label} overSubscribed must be boolean.`);
+  }
+  if (
+    requested !==
+    retained +
+      thinned +
+      invisibleOrOccluded +
+      reentryCooldown +
+      lifecycleReentryForbidden
+  ) {
+    throw new RangeError(
+      `${label} requested must equal retained + thinned + invisibleOrOccluded + reentryCooldown + lifecycleReentryForbidden.`,
+    );
+  }
+  if (
+    retained !==
+    retainedByFloor + retainedByGlobalCompetition + retainedIncumbents
+  ) {
+    throw new RangeError(
+      `${label} retained must equal retainedByFloor + retainedByGlobalCompetition + retainedIncumbents.`,
+    );
+  }
+  const contributionMinimumQ16 = readNullableQ16(
+    value.contributionMinimumQ16,
+    `${label} contributionMinimumQ16`,
+  );
+  const contributionMaximumQ16 = readNullableQ16(
+    value.contributionMaximumQ16,
+    `${label} contributionMaximumQ16`,
+  );
+  if (
+    (contributionMinimumQ16 === null) !== (contributionMaximumQ16 === null) ||
+    (contributionMinimumQ16 !== null &&
+      contributionMaximumQ16 !== null &&
+      contributionMinimumQ16 > contributionMaximumQ16)
+  ) {
+    throw new RangeError(
+      `${label} contribution Q16 range must be an ordered pair or both null.`,
+    );
+  }
+  const visibleCount =
+    retained + thinned + reentryCooldown + lifecycleReentryForbidden;
+  if ((visibleCount === 0) !== (contributionMinimumQ16 === null)) {
+    throw new RangeError(
+      `${label} contribution Q16 range must be null exactly when no visible candidates were submitted.`,
+    );
+  }
+  const dropReasons = readDiagnosticsSecondaryParticleDropReasons(
+    value.dropReasons,
+    label,
+  );
+  if (
+    dropReasons.invisibleOrOccluded !== invisibleOrOccluded ||
+    dropReasons.globalContributionPressure !== thinned ||
+    dropReasons.reentryCooldown !== reentryCooldown ||
+    dropReasons.lifecycleReentryForbidden !== lifecycleReentryForbidden
+  ) {
+    throw new RangeError(
+      `${label} named dropReasons must match the corresponding receipt counts.`,
+    );
+  }
+  return Object.freeze({
+    requested,
+    retained,
+    thinned,
+    invisibleOrOccluded,
+    reentryCooldown,
+    lifecycleReentryForbidden,
+    retainedByFloor,
+    retainedByGlobalCompetition,
+    retainedIncumbents,
+    requestedAboveSoftCeiling,
+    overSubscribed: value.overSubscribed,
+    contributionMinimumQ16,
+    contributionMaximumQ16,
+    dropReasons,
+  });
+}
+
+function readDiagnosticsSecondaryParticleDropReasons(
+  value: DiagnosticsSecondaryParticleDropReasons,
+  label: string,
+): DiagnosticsSecondaryParticleDropReasons {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, SECONDARY_PARTICLE_DROP_REASON_KEYS)
+  ) {
+    throw new TypeError(`${label} dropReasons must use the exact contract.`);
+  }
+  return Object.freeze({
+    invisibleOrOccluded: readNonNegativeSafeInteger(
+      value.invisibleOrOccluded,
+      `${label} dropReasons invisibleOrOccluded`,
+    ),
+    globalContributionPressure: readNonNegativeSafeInteger(
+      value.globalContributionPressure,
+      `${label} dropReasons globalContributionPressure`,
+    ),
+    reentryCooldown: readNonNegativeSafeInteger(
+      value.reentryCooldown,
+      `${label} dropReasons reentryCooldown`,
+    ),
+    lifecycleReentryForbidden: readNonNegativeSafeInteger(
+      value.lifecycleReentryForbidden,
+      `${label} dropReasons lifecycleReentryForbidden`,
+    ),
+  });
+}
+
+function assertSecondaryParticleConsumerTotals(
+  receipt: DiagnosticsSecondaryParticleReceipt,
+  consumers: readonly DiagnosticsSecondaryParticleConsumer[],
+): void {
+  const total = (field: keyof DiagnosticsSecondaryParticleReceipt): number =>
+    consumers.reduce((sum, consumer) => {
+      const value = consumer[field];
+      return sum + (typeof value === "number" ? value : 0);
+    }, 0);
+  for (const field of [
+    "requested",
+    "retained",
+    "thinned",
+    "invisibleOrOccluded",
+    "reentryCooldown",
+    "lifecycleReentryForbidden",
+    "retainedByFloor",
+    "retainedByGlobalCompetition",
+    "retainedIncumbents",
+    "requestedAboveSoftCeiling",
+  ] as const) {
+    if (receipt[field] !== total(field)) {
+      throw new RangeError(
+        `Host diagnostics secondaryParticles ${field} must equal the consumer total.`,
+      );
+    }
+  }
+  const ranges = consumers.filter(
+    (consumer) => consumer.contributionMinimumQ16 !== null,
+  );
+  const expectedMinimum =
+    ranges.length === 0
+      ? null
+      : Math.min(
+          ...ranges.map((consumer) => consumer.contributionMinimumQ16 ?? 0),
+        );
+  const expectedMaximum =
+    ranges.length === 0
+      ? null
+      : Math.max(
+          ...ranges.map((consumer) => consumer.contributionMaximumQ16 ?? 0),
+        );
+  if (
+    receipt.contributionMinimumQ16 !== expectedMinimum ||
+    receipt.contributionMaximumQ16 !== expectedMaximum
+  ) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles contribution Q16 range must span the consumer ranges.",
+    );
+  }
+  if (
+    receipt.dropReasons.invisibleOrOccluded !== total("invisibleOrOccluded") ||
+    receipt.dropReasons.globalContributionPressure !== total("thinned") ||
+    receipt.dropReasons.reentryCooldown !== total("reentryCooldown") ||
+    receipt.dropReasons.lifecycleReentryForbidden !==
+      total("lifecycleReentryForbidden")
+  ) {
+    throw new RangeError(
+      "Host diagnostics secondaryParticles dropReasons must equal the consumer totals.",
+    );
+  }
+}
+
+function readNullableQ16(value: unknown, label: string): number | null {
+  if (value === null) return null;
+  const accepted = readNonNegativeSafeInteger(value, label);
+  if (accepted > 65_535) {
+    throw new RangeError(`${label} must be inside [0, 65535] or null.`);
+  }
+  return accepted;
 }
 
 function readNonNegativeSafeInteger(value: unknown, label: string): number {

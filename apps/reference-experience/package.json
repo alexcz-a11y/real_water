@@ -9,6 +9,8 @@
     "typecheck": "tsc --noEmit --project tsconfig.json"
   },
   "dependencies": {
-    "real-water": "workspace:*"
+    "@tweakpane/core": "2.0.5",
+    "real-water": "workspace:*",
+    "tweakpane": "4.0.5"
   }
 }

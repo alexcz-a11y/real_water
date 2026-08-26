@@ -3,6 +3,7 @@ import type {
   PrewarmManifest,
   RealWaterCapabilities,
 } from "real-water";
+import { PREWARM_MANIFEST_VERSION } from "real-water";
 import {
   createQaBoundCoreManifestIdentity,
   readReadyCapabilities,
@@ -11,6 +12,8 @@ import {
 export type { QaBoundCoreManifestIdentity } from "./qa-bound-core-identity.js";
 import {
   readHostDiagnosticsPresentedFrame,
+  type DiagnosticsSecondaryParticles,
+  type DiagnosticsWaterlineState,
   type HostDiagnosticsPresentedFrame,
   type HostDiagnosticsRoute,
 } from "real-water/diagnostics";
@@ -29,6 +32,13 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
   "depth": "water-inverse-linear-depth",
   "normal": "water-view-normal",
   "motion-vector": "water-motion-vectors",
+  "whitecap-generation": "water-whitecap-stage-target",
+  "whitecap-history": "water-whitecap-stage-target",
+  "whitecap-advection": "water-whitecap-stage-target",
+  "whitecap-decay": "water-whitecap-stage-target",
+  "foam-source-identity": "water-foam-source-identity-target",
+  "waterline": "water-optical-factors-target",
+  "history-rejection": "water-history-rejection-target",
   "optical-fresnel": "water-optical-factors-target",
   "optical-thickness": "water-optical-factors-target",
   "optical-scattering": "water-optical-diagnostics-b",
@@ -36,6 +46,14 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
   "optical-crest-transmission": "water-optical-diagnostics-a",
   "optical-transmittance": "water-optical-diagnostics-a",
   "optical-glint": "water-optical-factors-target",
+  "underwater-transmittance": "water-underwater-diagnostics-target",
+  "underwater-scattering": "water-underwater-diagnostics-target",
+  "underwater-light-shafts": "water-underwater-diagnostics-target",
+  "underwater-shadow": "water-underwater-diagnostics-target",
+  "underwater-caustics": "water-underwater-caustics-diagnostics-target",
+  "underwater-particles": "water-underwater-suspended-particle-target",
+  "underwater-bubbles": "water-underwater-bubble-target",
+  "lens-wetness": "water-lens-wetness-diagnostics-target",
   "planar-color": "water-planar-reflection-target",
   "planar-target-alpha": "water-planar-reflection-target",
   "ssr-hit": "water-ssr-raw-target",
@@ -47,11 +65,19 @@ export const QA_TO_CORE_DECLARATION_IDS = Object.freeze({
   "ssr-history-color": "water-ssr-history-resolved-capture-target",
   "ssr-history-frame-weight": "water-ssr-history-resolved-capture-target",
   "ssr-history-input-color": "water-ssr-history-beauty-target",
+  "secondary-particle-contribution":
+    "water-secondary-particle-accumulation-target",
+  "secondary-particle-overdraw": "water-secondary-particle-accumulation-target",
+  "hero-breaker-foam": "water-hero-breaker-foam-diagnostics-target",
+  "storm-rain-ripples": "water-storm-diagnostics-target",
+  "storm-aerosol": "water-storm-diagnostics-target",
+  "storm-cloud-shadow": "water-storm-diagnostics-target",
+  "storm-lightning": "water-storm-diagnostics-target",
 } as const);
 
 export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
   schema: "real-water/qa-frame-prewarm" as const,
-  version: 7 as const,
+  version: 16 as const,
   id: "reference-qa-frame" as const,
   captures: Object.freeze([
     Object.freeze({
@@ -73,6 +99,34 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
     Object.freeze({
       name: "motion-vector" as const,
       preparedFormat: "rg16float-ndc" as const,
+    }),
+    Object.freeze({
+      name: "whitecap-generation" as const,
+      preparedFormat: "rgba16float-whitecap-stages" as const,
+    }),
+    Object.freeze({
+      name: "whitecap-history" as const,
+      preparedFormat: "rgba16float-whitecap-stages" as const,
+    }),
+    Object.freeze({
+      name: "whitecap-advection" as const,
+      preparedFormat: "rgba16float-whitecap-stages" as const,
+    }),
+    Object.freeze({
+      name: "whitecap-decay" as const,
+      preparedFormat: "rgba16float-whitecap-stages" as const,
+    }),
+    Object.freeze({
+      name: "foam-source-identity" as const,
+      preparedFormat: "rgba16float-foam-source-identity" as const,
+    }),
+    Object.freeze({
+      name: "waterline" as const,
+      preparedFormat: "rgba16float-waterline-coverage" as const,
+    }),
+    Object.freeze({
+      name: "history-rejection" as const,
+      preparedFormat: "rgba8unorm-history-rejection" as const,
     }),
     Object.freeze({
       name: "optical-fresnel" as const,
@@ -101,6 +155,38 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
     Object.freeze({
       name: "optical-glint" as const,
       preparedFormat: "rgba16float-optical-factors" as const,
+    }),
+    Object.freeze({
+      name: "underwater-transmittance" as const,
+      preparedFormat: "rgba16float-underwater-volume-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "underwater-scattering" as const,
+      preparedFormat: "rgba16float-underwater-volume-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "underwater-light-shafts" as const,
+      preparedFormat: "rgba16float-underwater-volume-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "underwater-shadow" as const,
+      preparedFormat: "rgba16float-underwater-volume-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "underwater-caustics" as const,
+      preparedFormat: "rgba16float-underwater-caustics-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "underwater-particles" as const,
+      preparedFormat: "rgba16float-underwater-suspended-particles" as const,
+    }),
+    Object.freeze({
+      name: "underwater-bubbles" as const,
+      preparedFormat: "rgba16float-underwater-bubbles" as const,
+    }),
+    Object.freeze({
+      name: "lens-wetness" as const,
+      preparedFormat: "rgba16float-lens-wetness-diagnostics" as const,
     }),
     Object.freeze({
       name: "planar-color" as const,
@@ -145,6 +231,34 @@ export const QA_FRAME_PREWARM_MANIFEST = Object.freeze({
     Object.freeze({
       name: "ssr-history-input-color" as const,
       preparedFormat: "rgba16float-ssr-history-beauty" as const,
+    }),
+    Object.freeze({
+      name: "secondary-particle-contribution" as const,
+      preparedFormat: "rgba16float-secondary-particle-accumulation" as const,
+    }),
+    Object.freeze({
+      name: "secondary-particle-overdraw" as const,
+      preparedFormat: "rgba16float-secondary-particle-accumulation" as const,
+    }),
+    Object.freeze({
+      name: "hero-breaker-foam" as const,
+      preparedFormat: "r32float-hero-breaker-foam" as const,
+    }),
+    Object.freeze({
+      name: "storm-rain-ripples" as const,
+      preparedFormat: "rgba16float-storm-front-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "storm-aerosol" as const,
+      preparedFormat: "rgba16float-storm-front-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "storm-cloud-shadow" as const,
+      preparedFormat: "rgba16float-storm-front-diagnostics" as const,
+    }),
+    Object.freeze({
+      name: "storm-lightning" as const,
+      preparedFormat: "rgba16float-storm-front-diagnostics" as const,
     }),
   ]),
   coreDeclarations: QA_TO_CORE_DECLARATION_IDS,
@@ -194,6 +308,38 @@ export interface QaFrameDriverMotionVectorCapture extends QaFrameDriverCaptureBa
   readonly data: Float32Array;
 }
 
+export interface QaFrameDriverWhitecapStageCapture extends QaFrameDriverCaptureBase {
+  readonly name:
+    | "whitecap-generation"
+    | "whitecap-history"
+    | "whitecap-advection"
+    | "whitecap-decay";
+  readonly format: "r32float-whitecap-stage";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverFoamSourceIdentityCapture extends QaFrameDriverCaptureBase {
+  readonly name: "foam-source-identity";
+  readonly format: "rgba32float-foam-source-identity";
+  /**
+   * R = spectral whitecap, G = wake or propeller wash, B = impact,
+   * A = saturating union.
+   */
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverWaterlineCapture extends QaFrameDriverCaptureBase {
+  readonly name: "waterline";
+  readonly format: "r32float-waterline-coverage";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverHistoryRejectionCapture extends QaFrameDriverCaptureBase {
+  readonly name: "history-rejection";
+  readonly format: "r32float-history-rejection";
+  readonly data: Float32Array;
+}
+
 export interface QaFrameDriverOpticalScalarCapture extends QaFrameDriverCaptureBase {
   readonly name:
     | "optical-fresnel"
@@ -207,6 +353,65 @@ export interface QaFrameDriverOpticalScalarCapture extends QaFrameDriverCaptureB
     | "ssr-hit"
     | "ssr-confidence";
   readonly format: "r32float-optical";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverUnderwaterVolumeCapture extends QaFrameDriverCaptureBase {
+  readonly name:
+    | "underwater-transmittance"
+    | "underwater-scattering"
+    | "underwater-light-shafts"
+    | "underwater-shadow";
+  readonly format: "r32float-underwater-volume";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverSecondaryParticleCapture extends QaFrameDriverCaptureBase {
+  readonly name:
+    "secondary-particle-contribution" | "secondary-particle-overdraw";
+  readonly format:
+    | "r32float-secondary-particle-contribution"
+    | "r32float-secondary-particle-overdraw";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverHeroBreakerFoamCapture extends QaFrameDriverCaptureBase {
+  readonly name: "hero-breaker-foam";
+  readonly format: "r32float-hero-breaker-foam";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverStormFrontCapture extends QaFrameDriverCaptureBase {
+  readonly name:
+    | "storm-rain-ripples"
+    | "storm-aerosol"
+    | "storm-cloud-shadow"
+    | "storm-lightning";
+  readonly format: "r32float-storm-front";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverUnderwaterCausticsCapture extends QaFrameDriverCaptureBase {
+  readonly name: "underwater-caustics";
+  readonly format: "r32float-underwater-caustics";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverUnderwaterParticlesCapture extends QaFrameDriverCaptureBase {
+  readonly name: "underwater-particles";
+  readonly format: "r32float-underwater-particles";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverUnderwaterBubblesCapture extends QaFrameDriverCaptureBase {
+  readonly name: "underwater-bubbles";
+  readonly format: "r32float-underwater-bubbles";
+  readonly data: Float32Array;
+}
+
+export interface QaFrameDriverLensWetnessCapture extends QaFrameDriverCaptureBase {
+  readonly name: "lens-wetness";
+  readonly format: "r32float-lens-wetness";
   readonly data: Float32Array;
 }
 
@@ -266,12 +471,25 @@ export type QaFrameDriverCapture =
   | QaFrameDriverDepthCapture
   | QaFrameDriverNormalCapture
   | QaFrameDriverMotionVectorCapture
-  | QaFrameDriverOpticalScalarCapture;
+  | QaFrameDriverWhitecapStageCapture
+  | QaFrameDriverFoamSourceIdentityCapture
+  | QaFrameDriverWaterlineCapture
+  | QaFrameDriverHistoryRejectionCapture
+  | QaFrameDriverOpticalScalarCapture
+  | QaFrameDriverUnderwaterVolumeCapture
+  | QaFrameDriverSecondaryParticleCapture
+  | QaFrameDriverUnderwaterCausticsCapture
+  | QaFrameDriverUnderwaterParticlesCapture
+  | QaFrameDriverUnderwaterBubblesCapture
+  | QaFrameDriverLensWetnessCapture
+  | QaFrameDriverHeroBreakerFoamCapture
+  | QaFrameDriverStormFrontCapture;
 
 export interface QaFrameDriverStateReceipt {
   readonly seed: number;
   readonly tick: number;
   readonly timeSeconds: number;
+  readonly seaLevelMetres: number;
   readonly simulationResetRevision: number;
 }
 
@@ -295,7 +513,11 @@ export interface QaFramePrewarmReceipt {
 }
 
 export type QaTemporalResetReason =
-  "qa-reset" | "camera-cut" | "origin-shift" | "sea-state-cut";
+  | "qa-reset"
+  | "camera-cut"
+  | "origin-shift"
+  | "sea-state-cut"
+  | "waterline-crossing";
 
 export interface QaTemporalReceipt {
   readonly historyEpoch: number;
@@ -314,6 +536,8 @@ export interface QaFrameDriverPresentedFrame extends QaFrameDriverStateReceipt {
   readonly probeCount: number;
   readonly prewarm: QaFramePrewarmReceipt;
   readonly captures: readonly QaFrameDriverCapture[];
+  readonly waterline: DiagnosticsWaterlineState;
+  readonly secondaryParticles: DiagnosticsSecondaryParticles;
   readonly temporal: QaTemporalReceipt;
 }
 
@@ -372,6 +596,7 @@ export function createQaFrameDriver(
           seed: state.seed,
           tick: state.tick,
           timeSeconds: state.timeSeconds,
+          seaLevelMetres: state.seaLevelMetres,
           simulationResetRevision: state.simulationResetRevision,
         });
       });
@@ -424,7 +649,7 @@ export function createBoundCoreDiagnosticsPrewarmReceipt(
 ): QaFramePrewarmReceipt {
   if (
     coreManifest.schema !== "real-water/prewarm" ||
-    coreManifest.version !== 3 ||
+    coreManifest.version !== PREWARM_MANIFEST_VERSION ||
     typeof coreManifest.id !== "string" ||
     typeof coreManifest.manifestHash !== "string" ||
     !Array.isArray(coreManifest.declarations)
@@ -522,6 +747,7 @@ function toQaPresentedFrame(
     seed: frame.seed,
     tick: frame.tick,
     timeSeconds: frame.timeSeconds,
+    seaLevelMetres: state.seaLevelMetres,
     presentationId: frame.presentationId,
     manifestHash: frame.manifestHash,
     simulationResetRevision: frame.simulationResetRevision,
@@ -535,6 +761,8 @@ function toQaPresentedFrame(
     captures: Object.freeze([
       ...frame.outputs,
     ]) as readonly QaFrameDriverCapture[],
+    waterline: frame.waterline,
+    secondaryParticles: frame.secondaryParticles,
     temporal: Object.freeze({
       historyEpoch: frame.temporal.historyEpoch,
       resetReason: mapQaTemporalResetReason(frame.temporal.resetReason),

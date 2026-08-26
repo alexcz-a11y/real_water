@@ -1,5 +1,100 @@
 import { hasExactKeys, isRecord } from "./internal/record-validation.js";
-import { ARTISTIC_CONTROL_KEYS, type ArtisticControls } from "./runtime.js";
+import { sha256Identifier } from "./internal/sha256.js";
+import type { ArtisticControls } from "./runtime.js";
+
+// Kept local so Water Preset construction never introduces a runtime cycle
+// through runtime.ts, which restores the default built-in preset at startup.
+const ARTISTIC_CONTROL_KEYS = [
+  "waveStrength",
+  "swellDrama",
+  "directionality",
+  "choppiness",
+  "crestSharpness",
+  "microDetail",
+  "timeScale",
+  "grazingReflection",
+  "environmentReflection",
+  "depthSeeThrough",
+  "depthColoring",
+  "inWaterGlow",
+  "crestGlow",
+  "whitecapAmount",
+  "foamPersistence",
+  "underwaterHaze",
+  "underwaterTurbidity",
+  "underwaterLightShafts",
+  "underwaterColor",
+  "underwaterExposure",
+] as const;
+
+const DEFAULT_UNDERWATER_ARTISTIC_CONTROLS = Object.freeze({
+  underwaterHaze: 1,
+  underwaterTurbidity: 1,
+  underwaterLightShafts: 1,
+  underwaterColor: 1,
+  underwaterExposure: 1,
+});
+
+// Version 4 predates the underwater-volume Artistic Controls.
+const LEGACY_V4_ARTISTIC_CONTROL_KEYS = [
+  "waveStrength",
+  "swellDrama",
+  "directionality",
+  "choppiness",
+  "crestSharpness",
+  "microDetail",
+  "timeScale",
+  "grazingReflection",
+  "environmentReflection",
+  "depthSeeThrough",
+  "depthColoring",
+  "inWaterGlow",
+  "crestGlow",
+  "whitecapAmount",
+  "foamPersistence",
+] as const;
+
+// Versions 1 through 3 also predate the spectral whitecap Artistic Controls.
+const LEGACY_PRE_WHITECAP_ARTISTIC_CONTROL_KEYS = [
+  "waveStrength",
+  "swellDrama",
+  "directionality",
+  "choppiness",
+  "crestSharpness",
+  "microDetail",
+  "timeScale",
+  "grazingReflection",
+  "environmentReflection",
+  "depthSeeThrough",
+  "depthColoring",
+  "inWaterGlow",
+  "crestGlow",
+] as const;
+
+const LEGACY_V1_ARTISTIC_CONTROL_KEYS = [
+  "waveStrength",
+  "swellDrama",
+  "directionality",
+  "choppiness",
+  "crestSharpness",
+  "microDetail",
+  "timeScale",
+] as const;
+
+type LegacyPreWhitecapArtisticControls = Omit<
+  LegacyV4ArtisticControls,
+  "whitecapAmount" | "foamPersistence"
+>;
+type UnderwaterArtisticControlKey =
+  | "underwaterHaze"
+  | "underwaterTurbidity"
+  | "underwaterLightShafts"
+  | "underwaterColor"
+  | "underwaterExposure";
+type LegacyV4ArtisticControls = Omit<
+  ArtisticControls,
+  UnderwaterArtisticControlKey
+>;
 
 /**
  * The discriminator for supported Water Presets.
@@ -13,7 +108,7 @@ export const WATER_PRESET_SCHEMA = "real-water/water-preset" as const;
  *
  * @public
  */
-export const WATER_PRESET_VERSION = 2 as const;
+export const WATER_PRESET_VERSION = 5 as const;
 
 /**
  * Built-in named sea characters stored as hot Artistic Controls.
@@ -47,19 +142,14 @@ export interface WaterPresetIdentity {
   readonly presetHash: string;
 }
 
-interface SupportedWaterPreset {
-  readonly presetHash: string;
+interface BuiltInWaterPreset {
   readonly artisticControls: ArtisticControls;
 }
 
-// Each static hash is the SHA-256 digest of the preset's canonical JSON,
-// excluding presetHash and preserving the public field order.
-const SUPPORTED_WATER_PRESETS: Readonly<
-  Record<WaterPresetId, SupportedWaterPreset>
+const BUILT_IN_WATER_PRESETS: Readonly<
+  Record<WaterPresetId, BuiltInWaterPreset>
 > = Object.freeze({
   calm: Object.freeze({
-    presetHash:
-      "sha256:7823cba17b46a26315541babfde3d3b7fda6a937794df7a32cbc3bf3d28df047",
     artisticControls: Object.freeze({
       waveStrength: 0.55,
       swellDrama: 0.35,
@@ -74,11 +164,16 @@ const SUPPORTED_WATER_PRESETS: Readonly<
       depthColoring: 0.4,
       inWaterGlow: 0.35,
       crestGlow: 0.25,
+      whitecapAmount: 0.25,
+      foamPersistence: 0.45,
+      underwaterHaze: 0.45,
+      underwaterTurbidity: 0.35,
+      underwaterLightShafts: 0.65,
+      underwaterColor: 0.7,
+      underwaterExposure: 1.15,
     }),
   }),
   swell: Object.freeze({
-    presetHash:
-      "sha256:667f6dd3b383cc3909b98829ba6979aa99fe31b47996f7e806e4768feccad37b",
     artisticControls: Object.freeze({
       waveStrength: 1,
       swellDrama: 1,
@@ -93,11 +188,16 @@ const SUPPORTED_WATER_PRESETS: Readonly<
       depthColoring: 1,
       inWaterGlow: 1,
       crestGlow: 1,
+      whitecapAmount: 1,
+      foamPersistence: 1,
+      underwaterHaze: 1,
+      underwaterTurbidity: 1,
+      underwaterLightShafts: 1,
+      underwaterColor: 1,
+      underwaterExposure: 1,
     }),
   }),
   storm: Object.freeze({
-    presetHash:
-      "sha256:85ff6bf8c652aaecb3d7aa3e3bf35c693264365c19cec1683c42fe2fb1164f9e",
     artisticControls: Object.freeze({
       waveStrength: 1.45,
       swellDrama: 1.6,
@@ -112,6 +212,13 @@ const SUPPORTED_WATER_PRESETS: Readonly<
       depthColoring: 1.55,
       inWaterGlow: 1.45,
       crestGlow: 1.6,
+      whitecapAmount: 1.65,
+      foamPersistence: 1.6,
+      underwaterHaze: 1.45,
+      underwaterTurbidity: 1.7,
+      underwaterLightShafts: 0.55,
+      underwaterColor: 1.35,
+      underwaterExposure: 0.8,
     }),
   }),
 });
@@ -126,23 +233,47 @@ export function createWaterPreset(id: WaterPresetId = "swell"): WaterPreset {
     throw new RangeError(`Unsupported Water Preset: ${id}`);
   }
 
-  const supported: SupportedWaterPreset | undefined =
-    SUPPORTED_WATER_PRESETS[id];
+  const supported: BuiltInWaterPreset | undefined = BUILT_IN_WATER_PRESETS[id];
   if (supported === undefined) {
     throw new RangeError(`Unsupported Water Preset: ${id}`);
   }
 
-  return freezeWaterPreset({
+  return createAuthoredWaterPreset(id, supported.artisticControls);
+}
+
+/**
+ * Creates a current Water Preset from a complete Artistic Control snapshot.
+ *
+ * @public
+ */
+export function createAuthoredWaterPreset(
+  id: WaterPresetId,
+  artisticControls: ArtisticControls,
+): WaterPreset {
+  if (!isSupportedPresetId(id)) {
+    throw new RangeError(`Unsupported Water Preset: ${id}`);
+  }
+
+  const presetWithoutHash = {
     schema: WATER_PRESET_SCHEMA,
     version: WATER_PRESET_VERSION,
     id,
-    presetHash: supported.presetHash,
-    artisticControls: supported.artisticControls,
+    artisticControls: readArtisticControls(artisticControls),
+  };
+  return freezeWaterPreset({
+    schema: presetWithoutHash.schema,
+    version: presetWithoutHash.version,
+    id: presetWithoutHash.id,
+    presetHash: sha256Identifier(JSON.stringify(presetWithoutHash)),
+    artisticControls: presetWithoutHash.artisticControls,
   });
 }
 
 /**
- * Validates and freezes a supported Water Preset.
+ * Validates the schema, controls, and content hash of a current Water Preset,
+ * then returns a deeply immutable copy.
+ *
+ * @public
  */
 export function normalizeWaterPreset(candidate: WaterPreset): WaterPreset {
   const value: unknown = candidate;
@@ -165,29 +296,61 @@ export function normalizeWaterPreset(candidate: WaterPreset): WaterPreset {
       "Water Preset version 1 does not include the required optical Artistic Controls.",
     );
   }
-
-  const supported = createWaterPreset(value.id);
-  const artisticControls = value.artisticControls;
-  if (
-    value.schema !== supported.schema ||
-    value.version !== supported.version ||
-    value.presetHash !== supported.presetHash ||
-    !isRecord(artisticControls) ||
-    !hasExactKeys(artisticControls, ARTISTIC_CONTROL_KEYS) ||
-    ARTISTIC_CONTROL_KEYS.some(
-      (key) => artisticControls[key] !== supported.artisticControls[key],
-    )
-  ) {
+  if (value.version === 2) {
     throw new TypeError(
-      "The Water Preset does not match a supported Artistic Control snapshot.",
+      "Water Preset version 2 does not include the required spectral whitecap Artistic Controls.",
     );
   }
 
-  return supported;
+  if (
+    value.schema !== WATER_PRESET_SCHEMA ||
+    value.version !== WATER_PRESET_VERSION
+  ) {
+    throw new TypeError("The Water Preset is not a current supported version.");
+  }
+
+  const normalized = createAuthoredWaterPreset(
+    value.id,
+    readArtisticControls(value.artisticControls),
+  );
+  if (value.presetHash !== normalized.presetHash) {
+    throw new TypeError("The Water Preset content hash does not match.");
+  }
+
+  return normalized;
+}
+
+/**
+ * Explicitly migrates a recognized Water Preset to the current version.
+ *
+ * @public
+ */
+export function migrateWaterPreset(candidate: unknown): WaterPreset {
+  if (!isRecord(candidate)) {
+    throw new TypeError("The Water Preset version cannot be migrated.");
+  }
+  if (candidate.version === WATER_PRESET_VERSION) {
+    return normalizeWaterPreset(candidate as unknown as WaterPreset);
+  }
+  if (candidate.version === 4) {
+    return migrateAuthoredWaterPresetV4(candidate);
+  }
+  if (candidate.version === 3) {
+    return migrateBuiltInWaterPresetV3(candidate);
+  }
+  if (candidate.version === 2) {
+    return migrateBuiltInWaterPresetV2(candidate);
+  }
+  if (candidate.version === 1) {
+    return migrateBuiltInWaterPresetV1(candidate);
+  }
+  throw new TypeError("The Water Preset version cannot be migrated.");
 }
 
 /**
  * Returns the immutable identity of a normalized Water Preset.
+ *
+ * @public
  */
 export function waterPresetIdentity(preset: WaterPreset): WaterPresetIdentity {
   const normalized = normalizeWaterPreset(preset);
@@ -204,6 +367,319 @@ function freezeWaterPreset(preset: WaterPreset): WaterPreset {
     ...preset,
     artisticControls: Object.freeze({ ...preset.artisticControls }),
   });
+}
+
+function copyArtisticControls(
+  artisticControls: ArtisticControls,
+): ArtisticControls {
+  return {
+    waveStrength: artisticControls.waveStrength,
+    swellDrama: artisticControls.swellDrama,
+    directionality: artisticControls.directionality,
+    choppiness: artisticControls.choppiness,
+    crestSharpness: artisticControls.crestSharpness,
+    microDetail: artisticControls.microDetail,
+    timeScale: artisticControls.timeScale,
+    grazingReflection: artisticControls.grazingReflection,
+    environmentReflection: artisticControls.environmentReflection,
+    depthSeeThrough: artisticControls.depthSeeThrough,
+    depthColoring: artisticControls.depthColoring,
+    inWaterGlow: artisticControls.inWaterGlow,
+    crestGlow: artisticControls.crestGlow,
+    whitecapAmount: artisticControls.whitecapAmount,
+    foamPersistence: artisticControls.foamPersistence,
+    underwaterHaze: artisticControls.underwaterHaze,
+    underwaterTurbidity: artisticControls.underwaterTurbidity,
+    underwaterLightShafts: artisticControls.underwaterLightShafts,
+    underwaterColor: artisticControls.underwaterColor,
+    underwaterExposure: artisticControls.underwaterExposure,
+  };
+}
+
+function readArtisticControls(candidate: unknown): ArtisticControls {
+  if (!isRecord(candidate) || !hasExactKeys(candidate, ARTISTIC_CONTROL_KEYS)) {
+    throw new TypeError(
+      "Artistic Controls must use the complete supported control set.",
+    );
+  }
+
+  assertControlRange(candidate.waveStrength, 0, 2, "waveStrength");
+  assertControlRange(candidate.swellDrama, 0, 2, "swellDrama");
+  assertControlRange(candidate.directionality, 0, 1, "directionality");
+  assertControlRange(candidate.choppiness, 0, 2, "choppiness");
+  assertControlRange(candidate.crestSharpness, 0, 2, "crestSharpness");
+  assertControlRange(candidate.microDetail, 0, 2, "microDetail");
+  assertControlRange(candidate.timeScale, 0, 2, "timeScale");
+  assertControlRange(candidate.grazingReflection, 0, 2, "grazingReflection");
+  assertControlRange(
+    candidate.environmentReflection,
+    0,
+    2,
+    "environmentReflection",
+  );
+  assertControlRange(candidate.depthSeeThrough, 0, 2, "depthSeeThrough");
+  assertControlRange(candidate.depthColoring, 0, 2, "depthColoring");
+  assertControlRange(candidate.inWaterGlow, 0, 2, "inWaterGlow");
+  assertControlRange(candidate.crestGlow, 0, 2, "crestGlow");
+  assertControlRange(candidate.whitecapAmount, 0, 2, "whitecapAmount");
+  assertControlRange(candidate.foamPersistence, 0, 2, "foamPersistence");
+  assertControlRange(candidate.underwaterHaze, 0, 2, "underwaterHaze");
+  assertControlRange(
+    candidate.underwaterTurbidity,
+    0,
+    2,
+    "underwaterTurbidity",
+  );
+  assertControlRange(
+    candidate.underwaterLightShafts,
+    0,
+    2,
+    "underwaterLightShafts",
+  );
+  assertControlRange(candidate.underwaterColor, 0, 2, "underwaterColor");
+  assertControlRange(candidate.underwaterExposure, 0, 2, "underwaterExposure");
+
+  return copyArtisticControls(candidate as unknown as ArtisticControls);
+}
+
+// A pre-whitecap snapshot carries thirteen controls, so the current reader's
+// exact-key check cannot be used directly. Range validation is still shared
+// with it by attaching the canonical default whitecap pair: createWaterPreset
+// defaults to "swell", whose whitecapAmount and foamPersistence are both 1.
+// That pair is then discarded -- the returned record, the content hash, and the
+// built-in comparison all stay on the thirteen controls actually committed, so
+// the migrated preset's whitecap values are its own, not a substituted default.
+function readLegacyPreWhitecapArtisticControls(
+  candidate: unknown,
+): LegacyPreWhitecapArtisticControls {
+  if (
+    !isRecord(candidate) ||
+    !hasExactKeys(candidate, LEGACY_PRE_WHITECAP_ARTISTIC_CONTROL_KEYS)
+  ) {
+    throw new TypeError(
+      "Artistic Controls must use the complete supported control set.",
+    );
+  }
+
+  const validated = readLegacyV4ArtisticControls({
+    ...candidate,
+    whitecapAmount: 1,
+    foamPersistence: 1,
+  });
+  const legacy: Partial<Record<string, number>> = {};
+  for (const key of LEGACY_PRE_WHITECAP_ARTISTIC_CONTROL_KEYS) {
+    legacy[key] = validated[key];
+  }
+  return legacy as LegacyPreWhitecapArtisticControls;
+}
+
+function readLegacyV4ArtisticControls(
+  candidate: unknown,
+): LegacyV4ArtisticControls {
+  if (
+    !isRecord(candidate) ||
+    !hasExactKeys(candidate, LEGACY_V4_ARTISTIC_CONTROL_KEYS)
+  ) {
+    throw new TypeError(
+      "Artistic Controls must use the complete supported control set.",
+    );
+  }
+
+  const validated = readArtisticControls({
+    ...candidate,
+    ...DEFAULT_UNDERWATER_ARTISTIC_CONTROLS,
+  });
+  const legacy: Partial<Record<keyof LegacyV4ArtisticControls, number>> = {};
+  for (const key of LEGACY_V4_ARTISTIC_CONTROL_KEYS) {
+    legacy[key] = validated[key];
+  }
+  return legacy as LegacyV4ArtisticControls;
+}
+
+function assertControlRange(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+  label: string,
+): asserts value is number {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < minimum ||
+    value > maximum
+  ) {
+    throw new RangeError(
+      `Artistic Control ${label} must be finite and between ${minimum} and ${maximum}.`,
+    );
+  }
+}
+
+function migrateAuthoredWaterPresetV4(candidate: Record<string, unknown>) {
+  if (
+    !hasExactKeys(candidate, [
+      "schema",
+      "version",
+      "id",
+      "presetHash",
+      "artisticControls",
+    ]) ||
+    candidate.schema !== WATER_PRESET_SCHEMA ||
+    candidate.version !== 4 ||
+    !isSupportedPresetId(candidate.id)
+  ) {
+    throw new TypeError("The Water Preset v4 snapshot cannot be migrated.");
+  }
+
+  const artisticControls = readLegacyV4ArtisticControls(
+    candidate.artisticControls,
+  );
+  const canonical = {
+    schema: WATER_PRESET_SCHEMA,
+    version: 4,
+    id: candidate.id,
+    artisticControls,
+  };
+  if (candidate.presetHash !== sha256Identifier(JSON.stringify(canonical))) {
+    throw new TypeError("The Water Preset v4 snapshot cannot be migrated.");
+  }
+
+  return createAuthoredWaterPreset(candidate.id, {
+    ...artisticControls,
+    ...DEFAULT_UNDERWATER_ARTISTIC_CONTROLS,
+  });
+}
+
+function migrateBuiltInWaterPresetV2(candidate: Record<string, unknown>) {
+  if (
+    !hasExactKeys(candidate, [
+      "schema",
+      "version",
+      "id",
+      "presetHash",
+      "artisticControls",
+    ]) ||
+    candidate.schema !== WATER_PRESET_SCHEMA ||
+    candidate.version !== 2 ||
+    !isSupportedPresetId(candidate.id)
+  ) {
+    throw new TypeError("The Water Preset v2 snapshot cannot be migrated.");
+  }
+
+  const artisticControls = readLegacyPreWhitecapArtisticControls(
+    candidate.artisticControls,
+  );
+  const supported = BUILT_IN_WATER_PRESETS[candidate.id].artisticControls;
+  const canonical = {
+    schema: WATER_PRESET_SCHEMA,
+    version: 2,
+    id: candidate.id,
+    artisticControls,
+  };
+  if (
+    candidate.presetHash !== sha256Identifier(JSON.stringify(canonical)) ||
+    LEGACY_PRE_WHITECAP_ARTISTIC_CONTROL_KEYS.some(
+      (key) => artisticControls[key] !== supported[key],
+    )
+  ) {
+    throw new TypeError("The Water Preset v2 snapshot cannot be migrated.");
+  }
+
+  return createWaterPreset(candidate.id);
+}
+
+// Version 3 was committed twice, in two different shapes, on two branches that
+// were developed in parallel: one derived presetHash at runtime over the
+// thirteen optical controls, the other added the two spectral whitecap
+// controls. Both exact payloads remain recoverable. Version 4 is the first
+// version that carries both, which is why it exists at all.
+function migrateBuiltInWaterPresetV3(candidate: Record<string, unknown>) {
+  if (
+    !hasExactKeys(candidate, [
+      "schema",
+      "version",
+      "id",
+      "presetHash",
+      "artisticControls",
+    ]) ||
+    candidate.schema !== WATER_PRESET_SCHEMA ||
+    candidate.version !== 3 ||
+    !isSupportedPresetId(candidate.id) ||
+    !isRecord(candidate.artisticControls)
+  ) {
+    throw new TypeError("The Water Preset v3 snapshot cannot be migrated.");
+  }
+
+  const supported = BUILT_IN_WATER_PRESETS[candidate.id].artisticControls;
+  const withWhitecaps = hasExactKeys(
+    candidate.artisticControls,
+    LEGACY_V4_ARTISTIC_CONTROL_KEYS,
+  );
+  const keys = withWhitecaps
+    ? LEGACY_V4_ARTISTIC_CONTROL_KEYS
+    : LEGACY_PRE_WHITECAP_ARTISTIC_CONTROL_KEYS;
+  const artisticControls: Record<string, number> = withWhitecaps
+    ? readLegacyV4ArtisticControls(candidate.artisticControls)
+    : readLegacyPreWhitecapArtisticControls(candidate.artisticControls);
+  const canonical = {
+    schema: WATER_PRESET_SCHEMA,
+    version: 3,
+    id: candidate.id,
+    artisticControls,
+  };
+  if (
+    candidate.presetHash !== sha256Identifier(JSON.stringify(canonical)) ||
+    keys.some((key) => artisticControls[key] !== supported[key])
+  ) {
+    throw new TypeError("The Water Preset v3 snapshot cannot be migrated.");
+  }
+
+  return createWaterPreset(candidate.id);
+}
+
+function migrateBuiltInWaterPresetV1(candidate: Record<string, unknown>) {
+  if (
+    !hasExactKeys(candidate, [
+      "schema",
+      "version",
+      "id",
+      "presetHash",
+      "artisticControls",
+    ]) ||
+    candidate.schema !== WATER_PRESET_SCHEMA ||
+    candidate.version !== 1 ||
+    !isSupportedPresetId(candidate.id) ||
+    !isRecord(candidate.artisticControls) ||
+    !hasExactKeys(candidate.artisticControls, LEGACY_V1_ARTISTIC_CONTROL_KEYS)
+  ) {
+    throw new TypeError("The Water Preset v1 snapshot cannot be migrated.");
+  }
+
+  const supported = BUILT_IN_WATER_PRESETS[candidate.id].artisticControls;
+  const artisticControls = {
+    waveStrength: candidate.artisticControls.waveStrength,
+    swellDrama: candidate.artisticControls.swellDrama,
+    directionality: candidate.artisticControls.directionality,
+    choppiness: candidate.artisticControls.choppiness,
+    crestSharpness: candidate.artisticControls.crestSharpness,
+    microDetail: candidate.artisticControls.microDetail,
+    timeScale: candidate.artisticControls.timeScale,
+  };
+  const canonical = {
+    schema: WATER_PRESET_SCHEMA,
+    version: 1,
+    id: candidate.id,
+    artisticControls,
+  };
+  if (
+    candidate.presetHash !== sha256Identifier(JSON.stringify(canonical)) ||
+    LEGACY_V1_ARTISTIC_CONTROL_KEYS.some(
+      (key) => artisticControls[key] !== supported[key],
+    )
+  ) {
+    throw new TypeError("The Water Preset v1 snapshot cannot be migrated.");
+  }
+
+  return createWaterPreset(candidate.id);
 }
 
 function isSupportedPresetId(value: unknown): value is WaterPresetId {

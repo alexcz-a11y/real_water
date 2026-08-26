@@ -16,6 +16,7 @@
     "./fast-pan.ts",
     "./frame-sampling.ts",
     "./glint.ts",
+    "./spray.ts",
     "./thin-detail.ts"
   ]
 }

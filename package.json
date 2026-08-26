@@ -2,7 +2,7 @@
   "name": "real-water-workspace",
   "version": "0.0.0",
   "private": true,
-  "description": "Real Water workspace and Reference Experience",
+  "description": "Real Water — a native Three.js WebGPU open-water runtime, its Reference Experience, and the workspace that verifies both.",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@11.22.0",
@@ -16,8 +16,9 @@
     "build": "tsc -b && vite build apps/reference-experience && node scripts/check-reference-production.mjs",
     "check:boundaries": "node scripts/check-core-boundaries.mjs",
     "check:licenses": "node scripts/check-license-inventory.mjs",
+    "check:profile-hashes": "tsc -b packages/real-water && node scripts/derive-quality-profile-hashes.mjs",
     "check:reference-production": "node scripts/check-reference-production.mjs",
-    "verify": "eslint . --max-warnings 0 && prettier --check . && tsc -b --pretty false && vite build apps/reference-experience && node scripts/check-reference-production.mjs && vitest run && playwright test && node scripts/package-smoke.mjs && api-extractor run --config packages/real-water/api-extractor.json && api-extractor run --config packages/real-water/api-extractor.diagnostics.json && node scripts/check-license-inventory.mjs && node scripts/check-core-boundaries.mjs",
+    "verify": "eslint . --max-warnings 0 && prettier --check . && tsc -b --pretty false && vite build apps/reference-experience && node scripts/check-reference-production.mjs && vitest run && playwright test && node scripts/package-smoke.mjs && api-extractor run --config packages/real-water/api-extractor.json && api-extractor run --config packages/real-water/api-extractor.diagnostics.json && node scripts/check-license-inventory.mjs && node scripts/check-core-boundaries.mjs && node scripts/derive-quality-profile-hashes.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
@@ -41,5 +42,14 @@
     "typescript-eslint": "8.67.0",
     "vite": "8.2.1",
     "vitest": "4.1.10"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexcz-a11y/real_water.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alexcz-a11y/real_water/issues"
+  },
+  "homepage": "https://github.com/alexcz-a11y/real_water#readme",
+  "author": "Real Water contributors"
 }

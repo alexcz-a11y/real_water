@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createMinimalWaterPrewarmManifest,
   createWaterPreset,
+  MAX_ATTACHED_BODIES,
   MAX_GAMEPLAY_QUERY_POINTS,
   SUPPORTED_HOST_ENVIRONMENT_REFLECTION,
   type RealWaterCapabilities,
@@ -120,6 +121,7 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
             "camera-cut",
             "origin-shift",
             "sea-state-cut",
+            "waterline-crossing",
           ],
           updateCadence: "host-present",
         },
@@ -135,9 +137,109 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
         },
       },
     },
+    secondaryParticles: {
+      capacity: 131_072,
+      maximumCandidateCount: 147_456,
+      contributionReference: {
+        width: 320,
+        height: 180,
+        space: "output-drawing-buffer",
+        screenAreaDivisor: 3_600,
+        quantization: "q16-unorm-round-nearest",
+      },
+      hysteresis: {
+        retainedContributionBonusQ16: 4_096,
+        minimumResidenceTicks: 4,
+        reentryCooldownTicks: 4,
+      },
+      consumers: [
+        {
+          consumerId: "spray-droplet-mist",
+          maximumRequestCount: 65_536,
+          softRequestCeiling: 32_768,
+          minimumRetainedSlots: 2_048,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "underwater-suspended-particles",
+          maximumRequestCount: 49_152,
+          softRequestCeiling: 24_576,
+          minimumRetainedSlots: 2_048,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "subsurface-foam-bubble-cloud",
+          maximumRequestCount: 24_576,
+          softRequestCeiling: 12_288,
+          minimumRetainedSlots: 1_024,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "rising-bubbles",
+          maximumRequestCount: 8_192,
+          softRequestCeiling: 4_096,
+          minimumRetainedSlots: 256,
+          pressureReentryPolicy: "forbidden-until-absent",
+        },
+      ],
+      selection: "q16-global-contribution-radix",
+      updateCadence: "host-fixed-tick",
+      renderPhaseKnowledge: "none",
+    },
+    stormFront: {
+      mode: "prepared-deterministic-route",
+      updateCadence: "host-fixed-tick",
+      rain: {
+        surfaceRoute: "additive-spectral-ripples",
+        secondaryParticleConsumerId: "spray-droplet-mist",
+        maximumCandidateCount: 8_192,
+      },
+      stormAerosol: {
+        secondaryParticleConsumerId: "spray-droplet-mist",
+        maximumCandidateCount: 8_192,
+      },
+      cloudAndLightning: {
+        illuminationRoute: "coherent-glint-foam-reflection-atmosphere",
+        atmosphereStageId: "storm-atmosphere",
+      },
+      diagnostics: {
+        resolutionPolicy: "drawing-buffer-exact",
+        format: "rgba16float",
+        samples: 0,
+      },
+    },
+    postTraaComposition: {
+      width: 320,
+      height: 180,
+      stages: [
+        { id: "secondary-particles", after: "traa" },
+        { id: "storm-atmosphere", after: "secondary-particles" },
+        { id: "lens-wetness", after: "storm-atmosphere" },
+      ],
+      accumulationFormat: "rgba16float",
+      finalColorFormat: "rgba8unorm-srgb",
+    },
   },
   gameplay: {
+    maxAttachedBodies: MAX_ATTACHED_BODIES,
     maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
+    maxActiveDisturbances: 128,
+    maxActiveHeroBreakers: 8,
+    interactionField: {
+      radiusMetres: 48,
+      edgeFadeMetres: 8,
+      maxSnapshotAgeTicks: 1,
+      disturbanceKinds: ["radial-impact", "directional-wake", "hero-breaker"],
+    },
+    bodyInteraction: {
+      fixedTickHz: 60,
+      maxShapeSamplesPerBody: 32,
+      maxConvexHullVertices: 64,
+      maxSocketsPerBody: 8,
+      shapeKinds: ["sphere", "box", "capsule", "convex-hull", "compound"],
+      socketKinds: ["bow", "stern", "propeller", "wake", "interaction-anchor"],
+      generatedDisturbanceKinds: ["directional-wake", "propeller-wash"],
+    },
   },
 };
 const DEVICE = {
@@ -855,7 +957,7 @@ describe("isolated presentation-frame evidence", () => {
   });
 });
 
-describe("Regression acceptance version-2 reader", () => {
+describe("Regression acceptance version-3 reader", () => {
   it("accepts the exact schema/version contract with actual capabilities and no raw captures", () => {
     const prewarm = createBoundCoreDiagnosticsPrewarmReceipt(
       CORE,
@@ -888,6 +990,7 @@ describe("Regression acceptance version-2 reader", () => {
       powerState: "ac",
       lowPowerMode: 0,
       screenshotProfile: screenshotProfile(),
+      seaLevelMetres: 0,
       seed: 0x4000_0000,
       tick: 24,
       camera: HORIZON,
@@ -904,13 +1007,71 @@ describe("Regression acceptance version-2 reader", () => {
       temporalStress: null,
     });
     expect(document.schema).toBe("real-water/regression-acceptance");
-    expect(document.version).toBe(2);
+    expect(document.version).toBe(3);
     expect(document.temporalPolicy).toEqual(
       prewarm.capabilities.rendering.temporal,
     );
     expect(document.qaPrewarmManifest).toMatchObject({
       capabilities: READY_CAPABILITIES,
+      manifest: {
+        version: 16,
+        captures: expect.arrayContaining([
+          {
+            name: "foam-source-identity",
+            preparedFormat: "rgba16float-foam-source-identity",
+          },
+          {
+            name: "underwater-caustics",
+            preparedFormat: "rgba16float-underwater-caustics-diagnostics",
+          },
+          {
+            name: "underwater-particles",
+            preparedFormat: "rgba16float-underwater-suspended-particles",
+          },
+          {
+            name: "underwater-bubbles",
+            preparedFormat: "rgba16float-underwater-bubbles",
+          },
+          {
+            name: "lens-wetness",
+            preparedFormat: "rgba16float-lens-wetness-diagnostics",
+          },
+          {
+            name: "hero-breaker-foam",
+            preparedFormat: "r32float-hero-breaker-foam",
+          },
+          {
+            name: "storm-rain-ripples",
+            preparedFormat: "rgba16float-storm-front-diagnostics",
+          },
+          {
+            name: "storm-aerosol",
+            preparedFormat: "rgba16float-storm-front-diagnostics",
+          },
+          {
+            name: "storm-cloud-shadow",
+            preparedFormat: "rgba16float-storm-front-diagnostics",
+          },
+          {
+            name: "storm-lightning",
+            preparedFormat: "rgba16float-storm-front-diagnostics",
+          },
+        ]),
+        coreDeclarations: expect.objectContaining({
+          "foam-source-identity": "water-foam-source-identity-target",
+          "underwater-caustics": "water-underwater-caustics-diagnostics-target",
+          "underwater-particles": "water-underwater-suspended-particle-target",
+          "underwater-bubbles": "water-underwater-bubble-target",
+          "lens-wetness": "water-lens-wetness-diagnostics-target",
+          "hero-breaker-foam": "water-hero-breaker-foam-diagnostics-target",
+          "storm-rain-ripples": "water-storm-diagnostics-target",
+          "storm-aerosol": "water-storm-diagnostics-target",
+          "storm-cloud-shadow": "water-storm-diagnostics-target",
+          "storm-lightning": "water-storm-diagnostics-target",
+        }),
+      },
     });
+    expect(document.qaPrewarmManifest?.manifest.captures).toHaveLength(45);
   });
 
   it("rejects raw base64 capture payloads and a forged schema", () => {
@@ -945,6 +1106,7 @@ describe("Regression acceptance version-2 reader", () => {
       powerState: "ac",
       lowPowerMode: 0,
       screenshotProfile: screenshotProfile(),
+      seaLevelMetres: 0,
       seed: 1,
       tick: 0,
       camera: HORIZON,
@@ -962,7 +1124,7 @@ describe("Regression acceptance version-2 reader", () => {
     };
     expect(() =>
       readRegressionAcceptanceEvidence({ ...base, version: 1 }),
-    ).toThrowError(/version 2/i);
+    ).toThrowError(/version 3/i);
     expect(() =>
       readRegressionAcceptanceEvidence({
         ...base,
@@ -1005,6 +1167,7 @@ describe("Regression acceptance version-2 reader", () => {
       powerState: "ac",
       lowPowerMode: 0,
       screenshotProfile: screenshotProfile(),
+      seaLevelMetres: 0,
       seed: 0x4000_0000,
       tick: 24,
       camera: HORIZON,
@@ -1078,6 +1241,7 @@ describe("Regression acceptance version-2 reader", () => {
       powerState: "ac",
       lowPowerMode: 0,
       screenshotProfile: screenshotProfile(),
+      seaLevelMetres: 0,
       seed: 0x4000_0000,
       tick: 24,
       camera: HORIZON,

@@ -4,12 +4,15 @@ import {
   createMinimalWaterPrewarmManifest,
   createStaticHostPresentationAdapter,
   createStaticHostSimulationAdapter,
+  MAX_ACTIVE_HERO_BREAKERS,
   prepareRealWater,
   type GameplayQueryResults,
+  type HeroBreakerDisturbanceBatch,
 } from "../src/index.js";
 import {
   createRealWaterRuntime,
   readHostSimulationState,
+  type RuntimeStateSink,
 } from "../src/runtime.js";
 import { createTestEnvironmentAdapter } from "./test-host-environment.js";
 
@@ -45,6 +48,7 @@ describe("ready Open Water runtime", () => {
       paused: true,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     expect(readHostSimulationState(adapter).simulationResetRevision).toBe(0);
@@ -57,6 +61,7 @@ describe("ready Open Water runtime", () => {
           paused: true,
           originX: 0,
           originZ: 0,
+          seaLevelMetres: 0,
           simulationResetRevision: -1,
         }),
       }),
@@ -74,9 +79,218 @@ describe("ready Open Water runtime", () => {
     }).ready;
 
     expect(lease.capabilities.gameplay).toEqual({
+      maxAttachedBodies: 32,
       maxQueryPointsPerTick: 2_048,
+      maxActiveDisturbances: 128,
+      maxActiveHeroBreakers: 8,
+      interactionField: {
+        radiusMetres: 48,
+        edgeFadeMetres: 8,
+        maxSnapshotAgeTicks: 1,
+        disturbanceKinds: ["radial-impact", "directional-wake", "hero-breaker"],
+      },
+      bodyInteraction: {
+        fixedTickHz: 60,
+        maxShapeSamplesPerBody: 32,
+        maxConvexHullVertices: 64,
+        maxSocketsPerBody: 8,
+        shapeKinds: ["sphere", "box", "capsule", "convex-hull", "compound"],
+        socketKinds: [
+          "bow",
+          "stern",
+          "propeller",
+          "wake",
+          "interaction-anchor",
+        ],
+        generatedDisturbanceKinds: ["directional-wake", "propeller-wash"],
+      },
     });
+    expect(MAX_ACTIVE_HERO_BREAKERS).toBe(8);
     expect(Object.isFrozen(lease.capabilities.gameplay)).toBe(true);
+    await lease.dispose();
+  });
+
+  it("validates the exact Hero Breaker batch before any runtime mutation", async () => {
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        simulation: STATIC_SIMULATION,
+        stepDelayMs: 0,
+      }),
+    }).ready;
+    const batch = heroBreakerBatch({ id: 29 });
+    const invalid = [
+      { ...batch, variant: "another-shape" },
+      { ...batch, directions: Float32Array.of(0, 1, 0) },
+      { ...batch, radii: Float32Array.of(0) },
+      { ...batch, amplitudes: Float32Array.of(-0.01) },
+      { ...batch, foamAmounts: Float32Array.of(1.01) },
+      { ...batch, sprayAmounts: Float32Array.of(-0.01) },
+      { ...batch, lifetimeTicks: Uint16Array.of(0) },
+      { ...batch, lifetimeTicks: Uint16Array.of(601) },
+      {
+        ...batch,
+        count: 2,
+        ids: Uint32Array.of(29, 30),
+        positions: new Float32Array(6),
+        directions: Float32Array.of(1, 0, 0, 1, 0, 0),
+        radii: Float32Array.of(8, 8),
+        amplitudes: Float32Array.of(1, 4.01),
+        foamAmounts: Float32Array.of(1, 1),
+        sprayAmounts: Float32Array.of(1, 1),
+        lifetimeTicks: Uint16Array.of(60, 60),
+        priorities: Uint8Array.of(1, 1),
+      },
+      {
+        ...batch,
+        count: 2,
+        ids: Uint32Array.of(29, 29),
+        positions: new Float32Array(6),
+        directions: Float32Array.of(1, 0, 0, 1, 0, 0),
+        radii: Float32Array.of(8, 8),
+        amplitudes: Float32Array.of(1, 1),
+        foamAmounts: Float32Array.of(1, 1),
+        sprayAmounts: Float32Array.of(1, 1),
+        lifetimeTicks: Uint16Array.of(60, 60),
+        priorities: Uint8Array.of(1, 1),
+      },
+    ];
+
+    for (const candidate of invalid) {
+      expect(() =>
+        lease.submitDisturbances(
+          candidate as unknown as HeroBreakerDisturbanceBatch,
+        ),
+      ).toThrow();
+      expect(lease.inspectRuntime()).toMatchObject({
+        activeDisturbanceCount: 0,
+        activeHeroBreakerCount: 0,
+      });
+    }
+    expect(() =>
+      lease.submitDisturbances({
+        ...batch,
+        directions: Float32Array.of(1, 0),
+      }),
+    ).toThrow(/Hero-breaker Disturbance directions buffer/i);
+    expect(() =>
+      lease.submitDisturbances({
+        ...batch,
+        kind: "unknown",
+      } as unknown as HeroBreakerDisturbanceBatch),
+    ).toThrow(/unsupported disturbance batch kind/i);
+    expect(lease.inspectRuntime()).toMatchObject({
+      activeDisturbanceCount: 0,
+      activeHeroBreakerCount: 0,
+    });
+
+    expect(lease.submitDisturbances(batch)).toMatchObject({
+      acceptedDisturbanceIds: [29],
+      droppedDisturbanceIds: [],
+      activeDisturbanceCount: 1,
+    });
+    expect(() => lease.submitDisturbances(batch)).toThrow(/already active/i);
+    expect(lease.inspectRuntime()).toMatchObject({
+      activeDisturbanceCount: 1,
+      activeHeroBreakerCount: 1,
+    });
+    await lease.dispose();
+  });
+
+  it("publishes fixed-tick Hero Breaker render inputs and legacy defaults", () => {
+    const state = Object.freeze({
+      seed: 0,
+      tick: 17,
+      timeSeconds: 999,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      seaLevelMetres: 0,
+      simulationResetRevision: 0,
+    });
+    let interaction: Parameters<RuntimeStateSink["synchronize"]>[1] | undefined;
+    const runtime = createRealWaterRuntime(
+      () => {},
+      { snapshot: () => state },
+      createStaticHostPresentationAdapter(),
+      {
+        synchronize(_snapshot, nextInteraction) {
+          interaction = nextInteraction;
+        },
+      },
+    );
+
+    runtime.submitDisturbances(heroBreakerBatch({ id: 81 }));
+    expect(interaction?.impacts[0]).toMatchObject({
+      kind: "hero-breaker",
+      startTimeSeconds: 999,
+      startTick: 17,
+      lifetimeTicks: 60,
+    });
+    expect(interaction?.impacts[0]?.foamAmount).toBeCloseTo(0.8, 6);
+    expect(interaction?.impacts[0]?.sprayAmount).toBeCloseTo(0.6, 6);
+    runtime.submitDisturbances({
+      kind: "radial-impact",
+      count: 1,
+      ids: Uint32Array.of(82),
+      positions: new Float32Array(3),
+      radii: Float32Array.of(8),
+      amplitudes: Float32Array.of(1),
+      priorities: Uint8Array.of(1),
+    });
+    expect(interaction?.impacts[1]).toMatchObject({
+      kind: "radial-impact",
+      startTick: 17,
+      lifetimeTicks: 120,
+      foamAmount: 1,
+      sprayAmount: 1,
+    });
+  });
+
+  it("keeps Gameplay Queries and snapshots coherent with Host sea level", async () => {
+    let seaLevelMetres = 0;
+    const simulation = {
+      snapshot: () => ({
+        seed: 0,
+        tick: 0,
+        timeSeconds: 0,
+        paused: false,
+        originX: 0,
+        originZ: 0,
+        seaLevelMetres,
+        simulationResetRevision: 0,
+      }),
+    };
+    const lease = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        simulation,
+        stepDelayMs: 0,
+      }),
+    }).ready;
+    const results: GameplayQueryResults = {
+      heights: new Float32Array(1),
+      normals: new Float32Array(3),
+      velocities: new Float32Array(3),
+      foam: new Float32Array(1),
+      ticks: new Float64Array(1),
+      controlRevisions: new Float64Array(1),
+      snapshotAges: new Uint8Array(1),
+    };
+    const query = () =>
+      lease.queryGameplay({
+        count: 1,
+        positions: new Float32Array(3),
+        results,
+      }).heights[0] ?? Number.NaN;
+
+    const baseline = query();
+    seaLevelMetres = 5;
+
+    expect(query()).toBeCloseTo(baseline + 5, 5);
+    expect(lease.inspectRuntime().seaLevelMetres).toBe(5);
     await lease.dispose();
   });
 
@@ -88,6 +302,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -129,7 +344,8 @@ describe("ready Open Water runtime", () => {
     expect(results.velocities[3]).toBe(0);
     expect(results.velocities[4]).toBeCloseTo(-1.611_797, 5);
     expect(results.velocities[5]).toBe(0);
-    expect([...results.foam]).toEqual([0, 0]);
+    expect(results.foam[0]).toBe(0);
+    expect(results.foam[1]).toBeCloseTo(0.68, 5);
     expect([...results.ticks]).toEqual([0, 0]);
     expect([...results.controlRevisions]).toEqual([0, 0]);
     expect([...results.snapshotAges]).toEqual([0, 0]);
@@ -181,6 +397,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     lease.queryGameplay({
@@ -192,6 +409,118 @@ describe("ready Open Water runtime", () => {
     expect(results.ticks[0]).toBe(60);
 
     await lease.dispose();
+  });
+
+  it("reports spectral foam with hot abundance and persistence", async () => {
+    const simulation = Object.freeze({
+      seed: 0x5eed_cafe,
+      tick: 90,
+      timeSeconds: 1.5,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      seaLevelMetres: 0,
+      simulationResetRevision: 0,
+    });
+    const runtime = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        simulation: { snapshot: () => simulation },
+        stepDelayMs: 0,
+      }),
+    }).ready;
+    const positions = createWhitecapProbePositions();
+    const pointCount = positions.length / 3;
+    const sample = (whitecapAmount: number, foamPersistence: number) => {
+      runtime.updateArtisticControls({
+        ...runtime.inspectRuntime().artisticControls,
+        whitecapAmount,
+        foamPersistence,
+      });
+      const results = createResults(pointCount, 0);
+      runtime.queryGameplay({ count: pointCount, positions, results });
+      return [...results.foam];
+    };
+
+    expect(sample(0, 2)).toEqual(new Array<number>(pointCount).fill(0));
+    const immediate = sample(2, 0);
+    const persistent = sample(2, 2);
+    const replay = sample(2, 2);
+
+    expect(Math.max(...immediate)).toBeGreaterThan(0);
+    expect(persistent.reduce((sum, value) => sum + value, 0)).toBeGreaterThan(
+      immediate.reduce((sum, value) => sum + value, 0),
+    );
+    expect(replay).toEqual(persistent);
+    await runtime.dispose();
+  });
+
+  it("clears spectral foam history on reset and replays the same fixed-tick recipe", async () => {
+    let simulation = Object.freeze({
+      seed: 0x5eed_cafe,
+      tick: 90,
+      timeSeconds: 1.5,
+      paused: false,
+      originX: 0,
+      originZ: 0,
+      seaLevelMetres: 0,
+      simulationResetRevision: 0,
+    });
+    const runtime = await prepareRealWater({
+      manifest: createMinimalWaterPrewarmManifest(),
+      loading: { present() {} },
+      host: createMemoryHostLifecycleAdapter({
+        simulation: { snapshot: () => simulation },
+        stepDelayMs: 0,
+      }),
+    }).ready;
+    runtime.updateArtisticControls({
+      ...runtime.inspectRuntime().artisticControls,
+      whitecapAmount: 2,
+      foamPersistence: 2,
+    });
+    const positions = createWhitecapProbePositions();
+    const sample = () => {
+      const results = createResults(positions.length / 3, 0);
+      runtime.queryGameplay({
+        count: positions.length / 3,
+        positions,
+        results,
+      });
+      return [...results.foam];
+    };
+
+    const first = sample();
+    simulation = Object.freeze({
+      ...simulation,
+      seaLevelMetres: 0,
+      simulationResetRevision: 1,
+    });
+    const reset = sample();
+
+    expect(reset.reduce((sum, value) => sum + value, 0)).toBeLessThan(
+      first.reduce((sum, value) => sum + value, 0),
+    );
+
+    simulation = Object.freeze({
+      ...simulation,
+      tick: 0,
+      timeSeconds: 0,
+      seaLevelMetres: 0,
+      simulationResetRevision: 2,
+    });
+    sample();
+    simulation = Object.freeze({
+      ...simulation,
+      tick: 90,
+      timeSeconds: 1.5,
+    });
+    const replay = sample();
+
+    expect(replay).toEqual(first);
+    expect(new Set(replay).size).toBeGreaterThan(1);
+    await runtime.dispose();
   });
 
   it("synchronizes the render sink only when Artistic Controls change", () => {
@@ -214,6 +543,48 @@ describe("ready Open Water runtime", () => {
     expect(sink.synchronize).toHaveBeenCalledTimes(1);
   });
 
+  it("updates underwater atmosphere through bounded hot Artistic Controls", () => {
+    const sink = { synchronize: vi.fn() };
+    const runtime = createRealWaterRuntime(
+      () => {},
+      STATIC_SIMULATION,
+      createStaticHostPresentationAdapter(),
+      sink,
+    );
+    const initial = runtime.inspectRuntime().artisticControls;
+    const underwater = {
+      ...initial,
+      underwaterHaze: 0.35,
+      underwaterTurbidity: 1.4,
+      underwaterLightShafts: 1.65,
+      underwaterColor: 0.8,
+      underwaterExposure: 1.2,
+    };
+
+    expect(runtime.updateArtisticControls(underwater)).toMatchObject({
+      artisticControls: underwater,
+      changed: true,
+      revision: 1,
+    });
+    expect(runtime.inspectRuntime().artisticControls).toEqual(underwater);
+    expect(sink.synchronize).toHaveBeenCalledTimes(1);
+
+    for (const key of [
+      "underwaterHaze",
+      "underwaterTurbidity",
+      "underwaterLightShafts",
+      "underwaterColor",
+      "underwaterExposure",
+    ] as const) {
+      expect(() =>
+        runtime.updateArtisticControls({
+          ...underwater,
+          [key]: 2.01,
+        }),
+      ).toThrowError(new RegExp(`${key} must be between 0 and 2`, "i"));
+    }
+  });
+
   it("fails before writes when a tick exceeds its prepared query capacity", async () => {
     let simulation = Object.freeze({
       seed: 0,
@@ -222,6 +593,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -269,6 +641,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     expect(() =>
@@ -287,6 +660,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     expect(() =>
@@ -367,6 +741,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -408,6 +783,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 40,
       originZ: -12,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const shifted = lease.inspectRuntime();
@@ -446,6 +822,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 40,
       originZ: -12,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     expect(lease.inspectRuntime()).toMatchObject({
@@ -465,6 +842,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -483,6 +861,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 96,
       originZ: -24,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const firstInspect = lease.inspectRuntime();
@@ -500,6 +879,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 96,
       originZ: -24,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     expect(lease.inspectRuntime().originRevision).toBe(1);
@@ -515,6 +895,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: baselineOrigin,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -543,6 +924,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: baselineOrigin + 96,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const shifted = lease.inspectRuntime();
@@ -639,6 +1021,7 @@ describe("ready Open Water runtime", () => {
       paused: false,
       originX: 0,
       originZ: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 0,
     });
     const lease = await prepareRealWater({
@@ -680,5 +1063,75 @@ function createResults(count: number, fill: number): GameplayQueryResults {
     ticks: new Float64Array(count).fill(fill),
     controlRevisions: new Float64Array(count).fill(fill),
     snapshotAges: new Uint8Array(count).fill(fill),
+  };
+}
+
+function createWhitecapProbePositions(): Float32Array {
+  return Float32Array.of(
+    -24,
+    0,
+    -16,
+    -12,
+    0,
+    -16,
+    0,
+    0,
+    -16,
+    12,
+    0,
+    -16,
+    24,
+    0,
+    -16,
+    -24,
+    0,
+    0,
+    -12,
+    0,
+    0,
+    0,
+    0,
+    0,
+    12,
+    0,
+    0,
+    24,
+    0,
+    0,
+    -24,
+    0,
+    16,
+    -12,
+    0,
+    16,
+    0,
+    0,
+    16,
+    12,
+    0,
+    16,
+    24,
+    0,
+    16,
+  );
+}
+
+function heroBreakerBatch(options: {
+  readonly id: number;
+  readonly priority?: number;
+  readonly lifetimeTicks?: number;
+}): HeroBreakerDisturbanceBatch {
+  return {
+    kind: "hero-breaker",
+    count: 1,
+    ids: Uint32Array.of(options.id),
+    positions: Float32Array.of(0, 0, 0),
+    directions: Float32Array.of(1, 0, 0),
+    radii: Float32Array.of(8),
+    amplitudes: Float32Array.of(2),
+    foamAmounts: Float32Array.of(0.8),
+    sprayAmounts: Float32Array.of(0.6),
+    lifetimeTicks: Uint16Array.of(options.lifetimeTicks ?? 60),
+    priorities: Uint8Array.of(options.priority ?? 128),
   };
 }

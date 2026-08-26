@@ -57,6 +57,7 @@ export interface RenderingCapabilitiesReflectionSsrHistory {
     "camera-cut",
     "origin-shift",
     "sea-state-cut",
+    "waterline-crossing",
   ];
   readonly updateCadence: "host-present";
 }
@@ -100,6 +101,115 @@ export interface RenderingCapabilitiesReflection {
 }
 
 /**
+ * Prepared shared secondary-particle allocation policy and every structurally
+ * declared consumer. Reference pixels always use this lease's physical output
+ * drawing buffer, independent of the consumer's later render phase.
+ *
+ * @public
+ */
+export interface RenderingCapabilitiesSecondaryParticles {
+  readonly capacity: 131_072;
+  readonly maximumCandidateCount: 147_456;
+  readonly contributionReference: {
+    readonly width: number;
+    readonly height: number;
+    readonly space: "output-drawing-buffer";
+    readonly screenAreaDivisor: 3_600;
+    readonly quantization: "q16-unorm-round-nearest";
+  };
+  readonly hysteresis: {
+    readonly retainedContributionBonusQ16: 4_096;
+    readonly minimumResidenceTicks: 4;
+    readonly reentryCooldownTicks: 4;
+  };
+  readonly consumers: readonly [
+    {
+      readonly consumerId: "spray-droplet-mist";
+      readonly maximumRequestCount: 65_536;
+      readonly softRequestCeiling: 32_768;
+      readonly minimumRetainedSlots: 2_048;
+      readonly pressureReentryPolicy: "after-shared-cooldown";
+    },
+    {
+      readonly consumerId: "underwater-suspended-particles";
+      readonly maximumRequestCount: 49_152;
+      readonly softRequestCeiling: 24_576;
+      readonly minimumRetainedSlots: 2_048;
+      readonly pressureReentryPolicy: "after-shared-cooldown";
+    },
+    {
+      readonly consumerId: "subsurface-foam-bubble-cloud";
+      readonly maximumRequestCount: 24_576;
+      readonly softRequestCeiling: 12_288;
+      readonly minimumRetainedSlots: 1_024;
+      readonly pressureReentryPolicy: "after-shared-cooldown";
+    },
+    {
+      readonly consumerId: "rising-bubbles";
+      readonly maximumRequestCount: 8_192;
+      readonly softRequestCeiling: 4_096;
+      readonly minimumRetainedSlots: 256;
+      readonly pressureReentryPolicy: "forbidden-until-absent";
+    },
+  ];
+  readonly selection: "q16-global-contribution-radix";
+  readonly updateCadence: "host-fixed-tick";
+  readonly renderPhaseKnowledge: "none";
+}
+
+/**
+ * Prepared deterministic Storm Front route proven by a ready lease.
+ *
+ * @public
+ */
+export interface RenderingCapabilitiesStormFront {
+  readonly mode: "prepared-deterministic-route";
+  readonly updateCadence: "host-fixed-tick";
+  readonly rain: {
+    readonly surfaceRoute: "additive-spectral-ripples";
+    readonly secondaryParticleConsumerId: "spray-droplet-mist";
+    readonly maximumCandidateCount: 8_192;
+  };
+  readonly stormAerosol: {
+    readonly secondaryParticleConsumerId: "spray-droplet-mist";
+    readonly maximumCandidateCount: 8_192;
+  };
+  readonly cloudAndLightning: {
+    readonly illuminationRoute: "coherent-glint-foam-reflection-atmosphere";
+    readonly atmosphereStageId: "storm-atmosphere";
+  };
+  readonly diagnostics: {
+    readonly resolutionPolicy: "drawing-buffer-exact";
+    readonly format: "rgba16float";
+    readonly samples: 0;
+  };
+}
+
+/**
+ * Prepared ordered drawing-buffer-exact stages after TRAA and before Host
+ * presentation.
+ *
+ * @public
+ */
+export interface RenderingCapabilitiesPostTraaComposition {
+  readonly width: number;
+  readonly height: number;
+  readonly stages: readonly [
+    { readonly id: "secondary-particles"; readonly after: "traa" },
+    {
+      readonly id: "storm-atmosphere";
+      readonly after: "secondary-particles";
+    },
+    {
+      readonly id: "lens-wetness";
+      readonly after: "storm-atmosphere";
+    },
+  ];
+  readonly accumulationFormat: "rgba16float";
+  readonly finalColorFormat: "rgba8unorm-srgb";
+}
+
+/**
  * Stable rendering capabilities exposed by a ready Real Water lease.
  *
  * @public
@@ -109,16 +219,77 @@ export interface RenderingCapabilities {
   readonly timestampQuery: boolean;
   readonly temporal: RenderingCapabilitiesTemporal;
   readonly reflection: RenderingCapabilitiesReflection;
+  readonly secondaryParticles: RenderingCapabilitiesSecondaryParticles;
+  readonly stormFront: RenderingCapabilitiesStormFront;
+  readonly postTraaComposition: RenderingCapabilitiesPostTraaComposition;
 }
 
 /**
- * Bounded hot-path capacities prepared for Gameplay Queries.
+ * Structural local interaction field prepared before the runtime becomes ready.
+ *
+ * @public
+ */
+export interface GameplayCapabilitiesInteractionField {
+  readonly radiusMetres: 48;
+  readonly edgeFadeMetres: 8;
+  readonly maxSnapshotAgeTicks: 1;
+  readonly disturbanceKinds: readonly [
+    "radial-impact",
+    "directional-wake",
+    "hero-breaker",
+  ];
+}
+
+/**
+ * Bounded compound-shape and authored-socket policy behind `attachBody`.
+ *
+ * @public
+ */
+export interface GameplayCapabilitiesBodyInteraction {
+  readonly fixedTickHz: 60;
+  readonly maxShapeSamplesPerBody: 32;
+  readonly maxConvexHullVertices: 64;
+  readonly maxSocketsPerBody: 8;
+  readonly shapeKinds: readonly [
+    "sphere",
+    "box",
+    "capsule",
+    "convex-hull",
+    "compound",
+  ];
+  readonly socketKinds: readonly [
+    "bow",
+    "stern",
+    "propeller",
+    "wake",
+    "interaction-anchor",
+  ];
+  readonly generatedDisturbanceKinds: readonly [
+    "directional-wake",
+    "propeller-wash",
+  ];
+}
+
+/**
+ * Bounded hot-path capacities prepared for gameplay commands and queries.
  *
  * @public
  */
 export interface GameplayCapabilities {
+  readonly maxAttachedBodies: 32;
   readonly maxQueryPointsPerTick: 2_048;
+  readonly maxActiveDisturbances: 128;
+  readonly maxActiveHeroBreakers: 8;
+  readonly interactionField: GameplayCapabilitiesInteractionField;
+  readonly bodyInteraction: GameplayCapabilitiesBodyInteraction;
 }
+
+/**
+ * Maximum Body attachments accepted by one ready runtime.
+ *
+ * @public
+ */
+export const MAX_ATTACHED_BODIES = 32 as const;
 
 /**
  * Maximum Gameplay Query points accepted by one ready-runtime tick.
@@ -126,6 +297,72 @@ export interface GameplayCapabilities {
  * @public
  */
 export const MAX_GAMEPLAY_QUERY_POINTS = 2_048 as const;
+
+/**
+ * Maximum active Disturbances retained by one prepared local interaction field.
+ *
+ * @public
+ */
+export const MAX_ACTIVE_DISTURBANCES = 128 as const;
+
+/**
+ * Maximum Hero Breakers retained inside the global Disturbance capacity.
+ *
+ * @public
+ */
+export const MAX_ACTIVE_HERO_BREAKERS = 8 as const;
+
+/**
+ * Global retained-slot capacity shared by every prepared secondary-particle
+ * consumer, independent of whether it later renders before or after TRAA.
+ *
+ * @public
+ */
+export const MAX_SECONDARY_PARTICLES = 131_072 as const;
+
+export const INTERACTION_FIELD_RADIUS_METRES = 48 as const;
+export const INTERACTION_FIELD_EDGE_FADE_METRES = 8 as const;
+
+const SUPPORTED_DISTURBANCE_KINDS = Object.freeze([
+  "radial-impact",
+  "directional-wake",
+  "hero-breaker",
+] as const);
+const INTERACTION_FIELD_CAPABILITIES: GameplayCapabilitiesInteractionField =
+  Object.freeze({
+    radiusMetres: INTERACTION_FIELD_RADIUS_METRES,
+    edgeFadeMetres: INTERACTION_FIELD_EDGE_FADE_METRES,
+    maxSnapshotAgeTicks: 1 as const,
+    disturbanceKinds: SUPPORTED_DISTURBANCE_KINDS,
+  });
+const SUPPORTED_INTERACTION_SHAPE_KINDS = Object.freeze([
+  "sphere",
+  "box",
+  "capsule",
+  "convex-hull",
+  "compound",
+] as const);
+const SUPPORTED_BODY_SOCKET_KINDS = Object.freeze([
+  "bow",
+  "stern",
+  "propeller",
+  "wake",
+  "interaction-anchor",
+] as const);
+const BODY_GENERATED_DISTURBANCE_KINDS = Object.freeze([
+  "directional-wake",
+  "propeller-wash",
+] as const);
+const BODY_INTERACTION_CAPABILITIES: GameplayCapabilitiesBodyInteraction =
+  Object.freeze({
+    fixedTickHz: 60,
+    maxShapeSamplesPerBody: MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN,
+    maxConvexHullVertices: MAX_CONVEX_HULL_VERTICES,
+    maxSocketsPerBody: MAX_BODY_INTERACTION_SOCKETS,
+    shapeKinds: SUPPORTED_INTERACTION_SHAPE_KINDS,
+    socketKinds: SUPPORTED_BODY_SOCKET_KINDS,
+    generatedDisturbanceKinds: BODY_GENERATED_DISTURBANCE_KINDS,
+  });
 
 const NATIVE_TEMPORAL_CAPABILITIES: RenderingCapabilitiesTemporal =
   Object.freeze({
@@ -145,6 +382,67 @@ const CURRENT_FRAME_SSR_MISS_FALLBACK_PRIORITY = Object.freeze([
   "planar",
   "host-adapter",
 ] as const);
+// Declaration order is stable identity evidence, not allocation priority. The
+// allocator canonicalizes by consumerId before global contribution selection.
+const SECONDARY_PARTICLE_CONSUMERS = Object.freeze([
+  Object.freeze({
+    consumerId: "spray-droplet-mist",
+    maximumRequestCount: 65_536,
+    softRequestCeiling: 32_768,
+    minimumRetainedSlots: 2_048,
+    pressureReentryPolicy: "after-shared-cooldown",
+  }),
+  Object.freeze({
+    consumerId: "underwater-suspended-particles",
+    maximumRequestCount: 49_152,
+    softRequestCeiling: 24_576,
+    minimumRetainedSlots: 2_048,
+    pressureReentryPolicy: "after-shared-cooldown",
+  }),
+  Object.freeze({
+    consumerId: "subsurface-foam-bubble-cloud",
+    maximumRequestCount: 24_576,
+    softRequestCeiling: 12_288,
+    minimumRetainedSlots: 1_024,
+    pressureReentryPolicy: "after-shared-cooldown",
+  }),
+  Object.freeze({
+    consumerId: "rising-bubbles",
+    maximumRequestCount: 8_192,
+    softRequestCeiling: 4_096,
+    minimumRetainedSlots: 256,
+    pressureReentryPolicy: "forbidden-until-absent",
+  }),
+] as const);
+const POST_TRAA_STAGES = Object.freeze([
+  Object.freeze({ id: "secondary-particles", after: "traa" }),
+  Object.freeze({ id: "storm-atmosphere", after: "secondary-particles" }),
+  Object.freeze({ id: "lens-wetness", after: "storm-atmosphere" }),
+] as const);
+const STORM_FRONT_CAPABILITIES: RenderingCapabilitiesStormFront = Object.freeze(
+  {
+    mode: "prepared-deterministic-route",
+    updateCadence: "host-fixed-tick",
+    rain: Object.freeze({
+      surfaceRoute: "additive-spectral-ripples",
+      secondaryParticleConsumerId: "spray-droplet-mist",
+      maximumCandidateCount: 8_192,
+    }),
+    stormAerosol: Object.freeze({
+      secondaryParticleConsumerId: "spray-droplet-mist",
+      maximumCandidateCount: 8_192,
+    }),
+    cloudAndLightning: Object.freeze({
+      illuminationRoute: "coherent-glint-foam-reflection-atmosphere",
+      atmosphereStageId: "storm-atmosphere",
+    }),
+    diagnostics: Object.freeze({
+      resolutionPolicy: "drawing-buffer-exact",
+      format: "rgba16float",
+      samples: 0,
+    }),
+  },
+);
 
 export function createCoreWebGPUCapabilities(
   timestampQuery: boolean,
@@ -162,7 +460,12 @@ export function createCoreWebGPUCapabilities(
   }
   return Object.freeze({
     gameplay: Object.freeze({
+      maxAttachedBodies: MAX_ATTACHED_BODIES,
       maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
+      maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+      maxActiveHeroBreakers: MAX_ACTIVE_HERO_BREAKERS,
+      interactionField: INTERACTION_FIELD_CAPABILITIES,
+      bodyInteraction: BODY_INTERACTION_CAPABILITIES,
     }),
     rendering: Object.freeze({
       backend: "core-webgpu" as const,
@@ -203,6 +506,7 @@ export function createCoreWebGPUCapabilities(
               "camera-cut",
               "origin-shift",
               "sea-state-cut",
+              "waterline-crossing",
             ] as const),
             updateCadence: "host-present" as const,
           }),
@@ -218,6 +522,34 @@ export function createCoreWebGPUCapabilities(
           }),
         }),
       }),
+      secondaryParticles: Object.freeze({
+        capacity: MAX_SECONDARY_PARTICLES,
+        maximumCandidateCount: 147_456 as const,
+        contributionReference: Object.freeze({
+          width: drawingBuffer.width,
+          height: drawingBuffer.height,
+          space: "output-drawing-buffer" as const,
+          screenAreaDivisor: 3_600 as const,
+          quantization: "q16-unorm-round-nearest" as const,
+        }),
+        hysteresis: Object.freeze({
+          retainedContributionBonusQ16: 4_096 as const,
+          minimumResidenceTicks: 4 as const,
+          reentryCooldownTicks: 4 as const,
+        }),
+        consumers: SECONDARY_PARTICLE_CONSUMERS,
+        selection: "q16-global-contribution-radix" as const,
+        updateCadence: "host-fixed-tick" as const,
+        renderPhaseKnowledge: "none" as const,
+      }),
+      stormFront: STORM_FRONT_CAPABILITIES,
+      postTraaComposition: Object.freeze({
+        width: drawingBuffer.width,
+        height: drawingBuffer.height,
+        stages: POST_TRAA_STAGES,
+        accumulationFormat: "rgba16float" as const,
+        finalColorFormat: "rgba8unorm-srgb" as const,
+      }),
     }),
   });
 }
@@ -231,3 +563,8 @@ export interface RealWaterCapabilities {
   readonly rendering: RenderingCapabilities;
   readonly gameplay: GameplayCapabilities;
 }
+import {
+  MAX_BODY_INTERACTION_SOCKETS,
+  MAX_COMPOUND_INTERACTION_SHAPE_CHILDREN,
+  MAX_CONVEX_HULL_VERTICES,
+} from "./body-physics.js";

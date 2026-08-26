@@ -6,11 +6,25 @@ import {
   type OriginRevisionTracker,
 } from "./internal/origin-revision-tracker.js";
 import { writeSpectralBandQueries } from "./internal/spectral-bands.js";
+import {
+  createLocalInteractionField,
+  type LocalInteractionRenderSnapshot,
+  type LocalInteractionField,
+  MAX_RADIAL_IMPACT_AMPLITUDE_METRES,
+  MAX_RADIAL_IMPACT_RADIUS_METRES,
+  MIN_RADIAL_IMPACT_RADIUS_METRES,
+} from "./internal/local-interaction.js";
 import { createWaterPreset } from "./water-preset.js";
 import {
   readHostPresentationState,
   type HostPresentationAdapter,
 } from "./presentation.js";
+import type {
+  BodyAttachment,
+  BodyAttachmentOptions,
+  BodyWakeSourceIdentity,
+} from "./body-physics.js";
+import { createBodyCoupling } from "./internal/body-coupling.js";
 
 /**
  * Hot, perceptual controls for the prepared four-band Open Water Domain.
@@ -44,23 +58,260 @@ export interface ArtisticControls {
   readonly inWaterGlow: number;
   /** How brightly thin crests transmit light. */
   readonly crestGlow: number;
+  /** How readily steep spectral crests generate persistent whitecaps. */
+  readonly whitecapAmount: number;
+  /** How long generated spectral foam remains visible as it moves and breaks up. */
+  readonly foamPersistence: number;
+  /** Density of the depth-aware underwater haze. */
+  readonly underwaterHaze: number;
+  /** How strongly the underwater volume absorbs and scatters distant light. */
+  readonly underwaterTurbidity: number;
+  /** Strength of art-directed, depth-shadowed underwater sun shafts. */
+  readonly underwaterLightShafts: number;
+  /** Strength of the authored underwater depth-color palette. */
+  readonly underwaterColor: number;
+  /** Linear exposure applied only while the camera is submerged. */
+  readonly underwaterExposure: number;
 }
 
-export const ARTISTIC_CONTROL_KEYS = [
-  "waveStrength",
-  "swellDrama",
-  "directionality",
-  "choppiness",
-  "crestSharpness",
-  "microDetail",
-  "timeScale",
-  "grazingReflection",
-  "environmentReflection",
-  "depthSeeThrough",
-  "depthColoring",
-  "inWaterGlow",
-  "crestGlow",
-] as const;
+/**
+ * UI-neutral grouping for the prepared Artistic Controls.
+ *
+ * @public
+ */
+export type ArtisticControlGroup =
+  "sea-character" | "surface-optics" | "whitewater" | "underwater";
+
+/**
+ * UI-neutral presentation and range metadata for one Artistic Control.
+ *
+ * @public
+ */
+export interface ArtisticControlDescriptor {
+  /** Artistic Control property updated through a complete snapshot. */
+  readonly key: keyof ArtisticControls;
+  /** Short perceptual name intended for a visible control label. */
+  readonly label: string;
+  /** Perceptual help text that does not claim a physical measurement. */
+  readonly description: string;
+  /** Stable authored grouping shared by control presenters. */
+  readonly group: ArtisticControlGroup;
+  /** Inclusive lower value accepted by the runtime. */
+  readonly min: number;
+  /** Inclusive upper value accepted by the runtime. */
+  readonly max: number;
+  /** Suggested input increment; values inside the range remain continuous. */
+  readonly step: number;
+}
+
+/**
+ * Authoritative presentation metadata and runtime ranges for Artistic Controls.
+ *
+ * @public
+ */
+export const ARTISTIC_CONTROL_DESCRIPTORS: readonly ArtisticControlDescriptor[] =
+  Object.freeze([
+    Object.freeze({
+      key: "waveStrength",
+      label: "Wave presence",
+      description:
+        "Sets the overall visual strength of the prepared sea, from still to bold.",
+      group: "sea-character",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "swellDrama",
+      label: "Swell drama",
+      description:
+        "Sets how much the longest swell band shapes the sea's drama.",
+      group: "sea-character",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "directionality",
+      label: "Directional focus",
+      description:
+        "Sets how strongly smaller wave bands follow the swell direction.",
+      group: "sea-character",
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "choppiness",
+      label: "Surface choppiness",
+      description: "Sets the visual strength of mid-scale surface chop.",
+      group: "sea-character",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "crestSharpness",
+      label: "Crest definition",
+      description:
+        "Sets how strongly every prepared wave band peaks at its crest.",
+      group: "sea-character",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "microDetail",
+      label: "Fine surface detail",
+      description: "Sets the visual strength of the finest ripple detail.",
+      group: "sea-character",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "timeScale",
+      label: "Motion pace",
+      description: "Sets how quickly all prepared wave bands move.",
+      group: "sea-character",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "grazingReflection",
+      label: "Grazing reflection",
+      description:
+        "Sets how strongly glancing views reflect the Host environment.",
+      group: "surface-optics",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "environmentReflection",
+      label: "Environment reflection",
+      description:
+        "Sets how strongly Host environment radiance appears on the surface.",
+      group: "surface-optics",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "depthSeeThrough",
+      label: "Depth clarity",
+      description:
+        "Sets how clearly the Host scene remains visible through the water.",
+      group: "surface-optics",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "depthColoring",
+      label: "Depth color",
+      description: "Sets how quickly water color builds with viewed depth.",
+      group: "surface-optics",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "inWaterGlow",
+      label: "In-water glow",
+      description: "Sets how much glow gathers through the water.",
+      group: "surface-optics",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "crestGlow",
+      label: "Crest glow",
+      description: "Sets how brightly thin crests transmit light.",
+      group: "surface-optics",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "whitecapAmount",
+      label: "Whitecap amount",
+      description: "Sets how readily steep crests form persistent whitecaps.",
+      group: "whitewater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "foamPersistence",
+      label: "Foam persistence",
+      description:
+        "Sets how long generated foam remains visible while moving and breaking up.",
+      group: "whitewater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "underwaterHaze",
+      label: "Underwater haze",
+      description: "Sets the density of depth-aware underwater haze.",
+      group: "underwater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "underwaterTurbidity",
+      label: "Underwater turbidity",
+      description:
+        "Sets how strongly distant underwater light is absorbed and scattered.",
+      group: "underwater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "underwaterLightShafts",
+      label: "Underwater light shafts",
+      description: "Sets the strength of depth-shadowed underwater sun shafts.",
+      group: "underwater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "underwaterColor",
+      label: "Underwater color",
+      description:
+        "Sets the strength of the authored underwater depth-color palette.",
+      group: "underwater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+    Object.freeze({
+      key: "underwaterExposure",
+      label: "Underwater exposure",
+      description: "Sets the exposure used only while the camera is submerged.",
+      group: "underwater",
+      min: 0,
+      max: 2,
+      step: 0.01,
+    }),
+  ]);
+
+/**
+ * Artistic Control keys in their authoritative presentation order.
+ *
+ * @public
+ */
+export const ARTISTIC_CONTROL_KEYS: readonly (keyof ArtisticControls)[] =
+  Object.freeze(
+    ARTISTIC_CONTROL_DESCRIPTORS.map((descriptor) => descriptor.key),
+  );
 
 const DEFAULT_ARTISTIC_CONTROLS: ArtisticControls =
   createWaterPreset("swell").artisticControls;
@@ -71,6 +322,7 @@ const DEFAULT_ARTISTIC_CONTROLS: ArtisticControls =
  * `originX` and `originZ` are the Host-owned floating-origin offset in metres.
  * Gameplay Query positions are in the current Host frame; the runtime evaluates
  * the Open Water Domain at `(x + originX, z + originZ)`.
+ * `seaLevelMetres` is the single horizontal Open Water Domain mean level.
  *
  * `simulationResetRevision` is a monotonic Host-authored reset hook. It starts
  * at 0 from adapter creation and increments on every explicit Host simulation
@@ -87,6 +339,7 @@ export interface HostSimulationState {
   readonly paused: boolean;
   readonly originX: number;
   readonly originZ: number;
+  readonly seaLevelMetres: number;
   readonly simulationResetRevision: number;
 }
 
@@ -108,7 +361,9 @@ export interface HostSimulationAdapter {
  * Spectral wave state, seed, tick, time, and Artistic Controls are retained
  * across origin shifts. `seaStateCutRevision` increments only on an explicit
  * sea-state cut. `cameraCutRevision` is read from the Host Presentation
- * Adapter and is not stored as runtime-owned durable state.
+ * Adapter and is not stored as runtime-owned durable state. The published
+ * Interaction Anchor is expressed in the current Host frame, so its XZ values
+ * rebase when the Host origin changes while its absolute focus stays fixed.
  *
  * @public
  */
@@ -118,6 +373,129 @@ export interface OpenWaterRuntimeSnapshot extends HostSimulationState {
   readonly originRevision: number;
   readonly seaStateCutRevision: number;
   readonly cameraCutRevision: number;
+  readonly interactionAnchor: InteractionAnchor;
+  readonly interactionAnchorRevision: number;
+  readonly activeDisturbanceCount: number;
+  /** Active Hero Breakers inside the global Disturbance population. */
+  readonly activeHeroBreakerCount: number;
+  readonly activeBodyWakeCount: number;
+  readonly attachedBodyCount: number;
+}
+
+/**
+ * Current Host-frame world-space XZ focus of the movable local interaction
+ * field. Like Gameplay Query positions, it is rebased by Host origin shifts.
+ *
+ * @public
+ */
+export interface InteractionAnchor {
+  readonly x: number;
+  readonly z: number;
+}
+
+/**
+ * Result of moving the one prepared Interaction Anchor.
+ *
+ * @public
+ */
+export interface InteractionAnchorUpdateReceipt {
+  readonly anchor: InteractionAnchor;
+  readonly changed: boolean;
+  readonly revision: number;
+}
+
+/**
+ * Caller-owned structure-of-arrays batch for radial-impact Disturbances.
+ *
+ * Positions are tightly packed XYZ triples in the current Host frame. Y is
+ * validated but does not move the horizontal Open Water surface.
+ *
+ * @public
+ */
+export interface RadialImpactDisturbanceBatch {
+  readonly kind: "radial-impact";
+  readonly count: number;
+  /** Caller identities, unique across this batch and all active Disturbances. */
+  readonly ids: Uint32Array;
+  /** Tightly packed XYZ centers in the current Host frame. */
+  readonly positions: Float32Array;
+  /** Per-impact radii in the inclusive range 0.0001 to 48 metres. */
+  readonly radii: Float32Array;
+  /** Signed peak displacement in the inclusive range -4 to 4 metres. */
+  readonly amplitudes: Float32Array;
+  /** Unsigned visual priority; overflow preserves older equal-priority input. */
+  readonly priorities: Uint8Array;
+}
+
+/**
+ * Caller-owned structure-of-arrays batch for transient directional wakes.
+ * Directions are normalized XYZ triples in the current Host frame; the local
+ * field uses their horizontal projection as the trailing axis.
+ *
+ * @public
+ */
+export interface DirectionalWakeDisturbanceBatch {
+  readonly kind: "directional-wake";
+  readonly count: number;
+  readonly ids: Uint32Array;
+  readonly positions: Float32Array;
+  readonly directions: Float32Array;
+  readonly radii: Float32Array;
+  readonly amplitudes: Float32Array;
+  readonly priorities: Uint8Array;
+}
+
+/**
+ * Caller-owned structure-of-arrays batch for authored Hero Breakers.
+ * Directions are normalized XYZ triples with a horizontal component. Lifetime
+ * uses fixed Host ticks and is independent of `timeSeconds`.
+ *
+ * @public
+ */
+export interface HeroBreakerDisturbanceBatch {
+  readonly kind: "hero-breaker";
+  readonly count: number;
+  /** Caller identities, unique across this batch and all active Disturbances. */
+  readonly ids: Uint32Array;
+  /** Tightly packed XYZ centers in the current Host frame. */
+  readonly positions: Float32Array;
+  /** Tightly packed normalized XYZ directions with horizontal support. */
+  readonly directions: Float32Array;
+  /** Authored footprint radii in the inclusive range 0.0001 to 48 metres. */
+  readonly radii: Float32Array;
+  /** Authored crest amplitudes in the inclusive range 0 to 4 metres. */
+  readonly amplitudes: Float32Array;
+  /** Dedicated foam amounts in the inclusive range 0 to 1. */
+  readonly foamAmounts: Float32Array;
+  /** Shared-pool spray amounts in the inclusive range 0 to 1. */
+  readonly sprayAmounts: Float32Array;
+  /** Fixed-tick lifetimes in the inclusive range 1 to 600. */
+  readonly lifetimeTicks: Uint16Array;
+  /** Unsigned visual priority; overflow preserves older equal-priority input. */
+  readonly priorities: Uint8Array;
+}
+
+/**
+ * Batched Disturbance input supported by this runtime slice.
+ *
+ * @public
+ */
+export type DisturbanceBatch =
+  | RadialImpactDisturbanceBatch
+  | DirectionalWakeDisturbanceBatch
+  | HeroBreakerDisturbanceBatch;
+
+/**
+ * Deterministic accepted/dropped outcome of one Disturbance submission.
+ *
+ * @public
+ */
+export interface DisturbanceSubmissionReceipt {
+  readonly tick: number;
+  readonly acceptedDisturbanceIds: readonly number[];
+  readonly droppedDisturbanceIds: readonly number[];
+  readonly displacedBodyWakeSources: readonly BodyWakeSourceIdentity[];
+  readonly activeDisturbanceCount: number;
 }
 
 /**
@@ -168,6 +546,7 @@ export interface GameplayQueryResults {
   readonly foam: Float32Array;
   readonly ticks: Float64Array;
   readonly controlRevisions: Float64Array;
+  /** Age in Host ticks of the published local correction snapshot (0 or 1). */
   readonly snapshotAges: Uint8Array;
 }
 
@@ -195,12 +574,25 @@ export interface RealWaterRuntime {
     controls: ArtisticControls,
     options?: ArtisticControlUpdateOptions,
   ): ArtisticControlUpdateReceipt;
+  updateInteractionAnchor(
+    anchor: InteractionAnchor,
+  ): InteractionAnchorUpdateReceipt;
+  submitDisturbances(batch: DisturbanceBatch): DisturbanceSubmissionReceipt;
   queryGameplay(batch: GameplayQueryBatch): GameplayQueryResults;
+  attachBody(options: BodyAttachmentOptions): BodyAttachment;
   inspectRuntime(): OpenWaterRuntimeSnapshot;
 }
 
+export interface RealWaterRuntimeController extends RealWaterRuntime {
+  disposeBodyAttachments(): void;
+}
+
 export interface RuntimeStateSink {
-  synchronize(snapshot: OpenWaterRuntimeSnapshot): void;
+  synchronize(
+    snapshot: OpenWaterRuntimeSnapshot,
+    interaction: LocalInteractionRenderSnapshot,
+  ): void;
+  observe?(snapshot: OpenWaterRuntimeSnapshot): void;
 }
 
 export function createRealWaterRuntime(
@@ -208,16 +600,70 @@ export function createRealWaterRuntime(
   simulation: HostSimulationAdapter,
   presentation: HostPresentationAdapter,
   sink?: RuntimeStateSink,
-): RealWaterRuntime {
+): RealWaterRuntimeController {
   readHostPresentationState(presentation);
   let artisticControls = DEFAULT_ARTISTIC_CONTROLS;
   let controlRevision = 0;
   let seaStateCutRevision = 0;
   let queryTick = -1;
   let queriesUsedThisTick = 0;
-  const originRevisions = createOriginRevisionTracker(
-    readHostSimulationState(simulation),
-  );
+  const initialSimulationState = readHostSimulationState(simulation);
+  const originRevisions = createOriginRevisionTracker(initialSimulationState);
+  const localInteraction = createLocalInteractionField(initialSimulationState);
+  const whitecapHistory = createWhitecapHistoryTracker(initialSimulationState);
+  let synchronizedInteractionRevision = localInteraction.renderRevision();
+
+  const synchronizeSink = (snapshot: OpenWaterRuntimeSnapshot): void => {
+    const interaction = localInteraction.renderSnapshot();
+    sink?.synchronize(snapshot, interaction);
+    synchronizedInteractionRevision = interaction.revision;
+  };
+
+  const queryGameplay = (batch: GameplayQueryBatch): GameplayQueryResults => {
+    assertActive();
+    readHostPresentationState(presentation);
+    validateGameplayQueryBatch(batch);
+    const state = readHostSimulationState(simulation);
+    originRevisions.observe(state);
+    const usedThisTick = state.tick === queryTick ? queriesUsedThisTick : 0;
+    if (usedThisTick + batch.count > MAX_GAMEPLAY_QUERY_POINTS) {
+      throw queryCapacityError(batch.count, usedThisTick);
+    }
+    writeSpectralBandQueries(
+      batch,
+      state,
+      artisticControls,
+      whitecapHistory.observe(state, seaStateCutRevision),
+    );
+    const snapshotAge = localInteraction.applyQueries(batch, state);
+    for (let point = 0; point < batch.count; point += 1) {
+      batch.results.ticks[point] = state.tick;
+      batch.results.controlRevisions[point] = controlRevision;
+      batch.results.snapshotAges[point] = snapshotAge;
+    }
+    queryTick = state.tick;
+    queriesUsedThisTick = usedThisTick + batch.count;
+    return batch.results;
+  };
+  const synchronizeBodyInteraction = (): void => {
+    synchronizeSink(
+      readSnapshot(
+        simulation,
+        readHostPresentationState(presentation),
+        artisticControls,
+        controlRevision,
+        originRevisions,
+        seaStateCutRevision,
+        localInteraction,
+        bodies.inspect().attachedBodyCount,
+      ),
+    );
+  };
+  const bodies = createBodyCoupling(assertActive, queryGameplay, {
+    readSimulationState: () => readHostSimulationState(simulation),
+    localInteraction,
+    synchronize: synchronizeBodyInteraction,
+  });
 
   return Object.freeze({
     updateArtisticControls(
@@ -237,7 +683,7 @@ export function createRealWaterRuntime(
         seaStateCutRevision += 1;
       }
       if (changed || nextTransition === "sea-state-cut") {
-        sink?.synchronize(
+        synchronizeSink(
           readSnapshot(
             simulation,
             presentationState,
@@ -245,6 +691,8 @@ export function createRealWaterRuntime(
             controlRevision,
             originRevisions,
             seaStateCutRevision,
+            localInteraction,
+            bodies.inspect().attachedBodyCount,
           ),
         );
       }
@@ -256,37 +704,100 @@ export function createRealWaterRuntime(
         seaStateCutRevision,
       });
     },
-    queryGameplay(batch: GameplayQueryBatch): GameplayQueryResults {
+    updateInteractionAnchor(
+      anchor: InteractionAnchor,
+    ): InteractionAnchorUpdateReceipt {
       assertActive();
       readHostPresentationState(presentation);
-      validateGameplayQueryBatch(batch);
+      const accepted = readInteractionAnchor(anchor);
+      if (bodies.ownsInteractionAnchor()) {
+        throw new RealWaterRuntimeError({
+          code: "INTERACTION_ANCHOR_OWNED_BY_BODY",
+          message:
+            "The Interaction Anchor is driven by an attached Body socket.",
+          diagnostics: {
+            attachedBodyCount: bodies.inspect().attachedBodyCount,
+          },
+        });
+      }
       const state = readHostSimulationState(simulation);
-      originRevisions.observe(state);
-      const usedThisTick = state.tick === queryTick ? queriesUsedThisTick : 0;
-      if (usedThisTick + batch.count > MAX_GAMEPLAY_QUERY_POINTS) {
-        throw queryCapacityError(batch.count, usedThisTick);
+      const receipt = localInteraction.updateAnchor(accepted, state);
+      if (receipt.changed) {
+        synchronizeSink(
+          readSnapshot(
+            simulation,
+            readHostPresentationState(presentation),
+            artisticControls,
+            controlRevision,
+            originRevisions,
+            seaStateCutRevision,
+            localInteraction,
+            bodies.inspect().attachedBodyCount,
+          ),
+        );
       }
-      writeSpectralBandQueries(batch, state, artisticControls);
-      for (let point = 0; point < batch.count; point += 1) {
-        batch.results.ticks[point] = state.tick;
-        batch.results.controlRevisions[point] = controlRevision;
-        batch.results.snapshotAges[point] = 0;
-      }
-      queryTick = state.tick;
-      queriesUsedThisTick = usedThisTick + batch.count;
-      return batch.results;
+      return receipt;
     },
+    submitDisturbances(batch: DisturbanceBatch): DisturbanceSubmissionReceipt {
+      assertActive();
+      readHostPresentationState(presentation);
+      const state = readHostSimulationState(simulation);
+      let receipt: DisturbanceSubmissionReceipt;
+      switch (batch.kind) {
+        case "radial-impact":
+          validateRadialImpactDisturbanceBatch(batch);
+          receipt = localInteraction.submitRadialImpacts(batch, state);
+          break;
+        case "directional-wake":
+          validateDirectionalWakeDisturbanceBatch(batch);
+          receipt = localInteraction.submitDirectionalWakes(batch, state);
+          break;
+        case "hero-breaker":
+          validateHeroBreakerDisturbanceBatch(batch);
+          receipt = localInteraction.submitHeroBreakers(batch, state);
+          break;
+        default:
+          throw new TypeError("Unsupported Disturbance batch kind.");
+      }
+      if (batch.count > 0) {
+        synchronizeSink(
+          readSnapshot(
+            simulation,
+            readHostPresentationState(presentation),
+            artisticControls,
+            controlRevision,
+            originRevisions,
+            seaStateCutRevision,
+            localInteraction,
+            bodies.inspect().attachedBodyCount,
+          ),
+        );
+      }
+      return receipt;
+    },
+    queryGameplay,
+    attachBody: bodies.attachBody,
     inspectRuntime(): OpenWaterRuntimeSnapshot {
       assertActive();
-      return readSnapshot(
+      const snapshot = readSnapshot(
         simulation,
         readHostPresentationState(presentation),
         artisticControls,
         controlRevision,
         originRevisions,
         seaStateCutRevision,
+        localInteraction,
+        bodies.inspect().attachedBodyCount,
       );
+      if (
+        localInteraction.renderRevision() !== synchronizedInteractionRevision
+      ) {
+        synchronizeSink(snapshot);
+      }
+      sink?.observe?.(snapshot);
+      return snapshot;
     },
+    disposeBodyAttachments: bodies.dispose,
   });
 }
 
@@ -303,6 +814,7 @@ export function createStaticHostSimulationAdapter(): HostSimulationAdapter {
     paused: true,
     originX: 0,
     originZ: 0,
+    seaLevelMetres: 0,
     simulationResetRevision: 0,
   });
   return Object.freeze({ snapshot: () => snapshot });
@@ -335,6 +847,9 @@ export function readHostSimulationState(
   if (!Number.isFinite(state.originX) || !Number.isFinite(state.originZ)) {
     throw new RangeError("Open Water origin must be finite.");
   }
+  if (!Number.isFinite(state.seaLevelMetres)) {
+    throw new RangeError("Open Water sea level must be finite metres.");
+  }
   if (
     !Number.isSafeInteger(state.simulationResetRevision) ||
     state.simulationResetRevision < 0
@@ -354,39 +869,36 @@ function freezeArtisticControls(controls: ArtisticControls): ArtisticControls {
     );
   }
 
-  assertControlRange(value.waveStrength, 0, 2, "waveStrength");
-  assertControlRange(value.swellDrama, 0, 2, "swellDrama");
-  assertControlRange(value.directionality, 0, 1, "directionality");
-  assertControlRange(value.choppiness, 0, 2, "choppiness");
-  assertControlRange(value.crestSharpness, 0, 2, "crestSharpness");
-  assertControlRange(value.microDetail, 0, 2, "microDetail");
-  assertControlRange(value.timeScale, 0, 2, "timeScale");
-  assertControlRange(value.grazingReflection, 0, 2, "grazingReflection");
-  assertControlRange(
-    value.environmentReflection,
-    0,
-    2,
-    "environmentReflection",
-  );
-  assertControlRange(value.depthSeeThrough, 0, 2, "depthSeeThrough");
-  assertControlRange(value.depthColoring, 0, 2, "depthColoring");
-  assertControlRange(value.inWaterGlow, 0, 2, "inWaterGlow");
-  assertControlRange(value.crestGlow, 0, 2, "crestGlow");
+  for (const descriptor of ARTISTIC_CONTROL_DESCRIPTORS) {
+    assertControlRange(
+      controls[descriptor.key],
+      descriptor.min,
+      descriptor.max,
+      descriptor.key,
+    );
+  }
 
   return Object.freeze({
-    waveStrength: value.waveStrength,
-    swellDrama: value.swellDrama,
-    directionality: value.directionality,
-    choppiness: value.choppiness,
-    crestSharpness: value.crestSharpness,
-    microDetail: value.microDetail,
-    timeScale: value.timeScale,
-    grazingReflection: value.grazingReflection,
-    environmentReflection: value.environmentReflection,
-    depthSeeThrough: value.depthSeeThrough,
-    depthColoring: value.depthColoring,
-    inWaterGlow: value.inWaterGlow,
-    crestGlow: value.crestGlow,
+    waveStrength: controls.waveStrength,
+    swellDrama: controls.swellDrama,
+    directionality: controls.directionality,
+    choppiness: controls.choppiness,
+    crestSharpness: controls.crestSharpness,
+    microDetail: controls.microDetail,
+    timeScale: controls.timeScale,
+    grazingReflection: controls.grazingReflection,
+    environmentReflection: controls.environmentReflection,
+    depthSeeThrough: controls.depthSeeThrough,
+    depthColoring: controls.depthColoring,
+    inWaterGlow: controls.inWaterGlow,
+    crestGlow: controls.crestGlow,
+    whitecapAmount: controls.whitecapAmount,
+    foamPersistence: controls.foamPersistence,
+    underwaterHaze: controls.underwaterHaze,
+    underwaterTurbidity: controls.underwaterTurbidity,
+    underwaterLightShafts: controls.underwaterLightShafts,
+    underwaterColor: controls.underwaterColor,
+    underwaterExposure: controls.underwaterExposure,
   });
 }
 
@@ -395,6 +907,44 @@ function artisticControlsChanged(
   next: ArtisticControls,
 ): boolean {
   return ARTISTIC_CONTROL_KEYS.some((key) => current[key] !== next[key]);
+}
+
+interface WhitecapHistoryTracker {
+  observe(state: HostSimulationState, seaStateCutRevision: number): number;
+}
+
+function createWhitecapHistoryTracker(
+  initial: HostSimulationState,
+): WhitecapHistoryTracker {
+  let seed = initial.seed;
+  let tick = initial.tick;
+  let timeSeconds = initial.timeSeconds;
+  let simulationResetRevision = initial.simulationResetRevision;
+  let seaStateCutRevision = 0;
+  let historyStartTick = 0;
+
+  return {
+    observe(
+      state: HostSimulationState,
+      nextSeaStateCutRevision: number,
+    ): number {
+      if (
+        state.seed !== seed ||
+        state.simulationResetRevision !== simulationResetRevision ||
+        state.tick < tick ||
+        state.timeSeconds < timeSeconds ||
+        nextSeaStateCutRevision !== seaStateCutRevision
+      ) {
+        historyStartTick = state.tick;
+      }
+      seed = state.seed;
+      tick = state.tick;
+      timeSeconds = state.timeSeconds;
+      simulationResetRevision = state.simulationResetRevision;
+      seaStateCutRevision = nextSeaStateCutRevision;
+      return Math.max(0, state.tick - historyStartTick);
+    },
+  };
 }
 
 function assertControlRange(
@@ -448,8 +998,11 @@ function readSnapshot(
   controlRevision: number,
   originRevisions: OriginRevisionTracker,
   seaStateCutRevision: number,
+  localInteraction: LocalInteractionField,
+  attachedBodyCount: number,
 ): OpenWaterRuntimeSnapshot {
   const state = readHostSimulationState(simulation);
+  const interaction = localInteraction.inspect(state);
   return freezeSnapshot({
     seed: state.seed,
     tick: state.tick,
@@ -457,13 +1010,354 @@ function readSnapshot(
     paused: state.paused,
     originX: state.originX,
     originZ: state.originZ,
+    seaLevelMetres: state.seaLevelMetres,
     simulationResetRevision: state.simulationResetRevision,
     artisticControls,
     controlRevision,
     originRevision: originRevisions.observe(state),
     seaStateCutRevision,
     cameraCutRevision: presentationState.cameraCutRevision,
+    interactionAnchor: interaction.anchor,
+    interactionAnchorRevision: interaction.revision,
+    activeDisturbanceCount: interaction.activeDisturbanceCount,
+    activeHeroBreakerCount: interaction.activeHeroBreakerCount,
+    activeBodyWakeCount: interaction.activeBodyWakeCount,
+    attachedBodyCount,
   });
+}
+
+function readInteractionAnchor(anchor: InteractionAnchor): InteractionAnchor {
+  const value: unknown = anchor;
+  if (!isRecord(value) || !hasExactKeys(value, ["x", "z"])) {
+    throw new TypeError(
+      "The Interaction Anchor must use exact XZ coordinates.",
+    );
+  }
+  if (!Number.isFinite(value.x) || !Number.isFinite(value.z)) {
+    throw new RangeError("The Interaction Anchor must contain finite values.");
+  }
+  return Object.freeze({ x: anchor.x, z: anchor.z });
+}
+
+function validateRadialImpactDisturbanceBatch(
+  batch: RadialImpactDisturbanceBatch,
+): void {
+  const value: unknown = batch;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "kind",
+      "count",
+      "ids",
+      "positions",
+      "radii",
+      "amplitudes",
+      "priorities",
+    ]) ||
+    value.kind !== "radial-impact"
+  ) {
+    throw new TypeError(
+      "Disturbance batches must use the exact radial-impact contract.",
+    );
+  }
+  validateDisturbanceBatchStorage(batch, "Radial-impact");
+}
+
+function validateDirectionalWakeDisturbanceBatch(
+  batch: DirectionalWakeDisturbanceBatch,
+): void {
+  const value: unknown = batch;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "kind",
+      "count",
+      "ids",
+      "positions",
+      "directions",
+      "radii",
+      "amplitudes",
+      "priorities",
+    ]) ||
+    value.kind !== "directional-wake"
+  ) {
+    throw new TypeError(
+      "Directional-wake batches must use the exact supported contract.",
+    );
+  }
+  validateDisturbanceBatchStorage(
+    batch,
+    "Directional-wake",
+    () =>
+      requireFloat32DisturbanceLength(
+        batch.directions,
+        batch.count * 3,
+        "Directional-wake",
+        "directions",
+      ),
+    (_index, vectorIndex) => {
+      const directionX = batch.directions[vectorIndex];
+      const directionY = batch.directions[vectorIndex + 1];
+      const directionZ = batch.directions[vectorIndex + 2];
+      const directionLength = Math.hypot(
+        directionX ?? Number.NaN,
+        directionY ?? Number.NaN,
+        directionZ ?? Number.NaN,
+      );
+      if (
+        !Number.isFinite(directionLength) ||
+        Math.abs(directionLength - 1) > 1e-5 ||
+        Math.hypot(directionX ?? 0, directionZ ?? 0) < 1e-6
+      ) {
+        throw new RangeError(
+          "Directional-wake directions must be normalized with a horizontal component.",
+        );
+      }
+    },
+  );
+}
+
+function validateHeroBreakerDisturbanceBatch(
+  batch: HeroBreakerDisturbanceBatch,
+): void {
+  const value: unknown = batch;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "kind",
+      "count",
+      "ids",
+      "positions",
+      "directions",
+      "radii",
+      "amplitudes",
+      "foamAmounts",
+      "sprayAmounts",
+      "lifetimeTicks",
+      "priorities",
+    ]) ||
+    value.kind !== "hero-breaker"
+  ) {
+    throw new TypeError(
+      "Hero-breaker batches must use the exact supported contract.",
+    );
+  }
+  validateDisturbanceBatchStorage(
+    batch,
+    "Hero-breaker",
+    () => {
+      requireFloat32DisturbanceLength(
+        batch.directions,
+        batch.count * 3,
+        "Hero-breaker",
+        "directions",
+      );
+      requireFloat32DisturbanceLength(
+        batch.foamAmounts,
+        batch.count,
+        "Hero-breaker",
+        "foamAmounts",
+      );
+      requireFloat32DisturbanceLength(
+        batch.sprayAmounts,
+        batch.count,
+        "Hero-breaker",
+        "sprayAmounts",
+      );
+      requireUint16DisturbanceLength(
+        batch.lifetimeTicks,
+        batch.count,
+        "lifetimeTicks",
+      );
+    },
+    (index, vectorIndex) => {
+      validateNormalizedDisturbanceDirection(
+        batch.directions,
+        vectorIndex,
+        "Hero-breaker",
+      );
+      const foamAmount = batch.foamAmounts[index];
+      const sprayAmount = batch.sprayAmounts[index];
+      if (
+        !Number.isFinite(foamAmount) ||
+        foamAmount === undefined ||
+        foamAmount < 0 ||
+        foamAmount > 1
+      ) {
+        throw new RangeError(
+          "Hero-breaker foamAmounts must be between 0 and 1.",
+        );
+      }
+      if (
+        !Number.isFinite(sprayAmount) ||
+        sprayAmount === undefined ||
+        sprayAmount < 0 ||
+        sprayAmount > 1
+      ) {
+        throw new RangeError(
+          "Hero-breaker sprayAmounts must be between 0 and 1.",
+        );
+      }
+      const lifetimeTicks = batch.lifetimeTicks[index];
+      if (
+        lifetimeTicks === undefined ||
+        lifetimeTicks < 1 ||
+        lifetimeTicks > 600
+      ) {
+        throw new RangeError(
+          "Hero-breaker lifetimeTicks must be between 1 and 600 ticks.",
+        );
+      }
+    },
+    0,
+  );
+}
+
+type SharedDisturbanceBatch = Pick<
+  RadialImpactDisturbanceBatch,
+  "amplitudes" | "count" | "ids" | "positions" | "priorities" | "radii"
+>;
+
+function validateDisturbanceBatchStorage(
+  batch: SharedDisturbanceBatch,
+  label: "Directional-wake" | "Hero-breaker" | "Radial-impact",
+  validateAdditionalStorage?: () => void,
+  validatePoint?: (index: number, vectorIndex: number) => void,
+  minimumAmplitude = -MAX_RADIAL_IMPACT_AMPLITUDE_METRES,
+): void {
+  if (!Number.isSafeInteger(batch.count) || batch.count < 0) {
+    throw new RangeError(
+      "Disturbance counts must be non-negative safe integers.",
+    );
+  }
+  requireUint32Length(batch.ids, batch.count, "ids");
+  requireFloat32DisturbanceLength(
+    batch.positions,
+    batch.count * 3,
+    label,
+    "positions",
+  );
+  requireFloat32DisturbanceLength(batch.radii, batch.count, label, "radii");
+  requireFloat32DisturbanceLength(
+    batch.amplitudes,
+    batch.count,
+    label,
+    "amplitudes",
+  );
+  requireUint8DisturbanceLength(batch.priorities, batch.count, "priorities");
+  validateAdditionalStorage?.();
+  const ids = new Set<number>();
+  for (let index = 0; index < batch.count; index += 1) {
+    const vectorIndex = index * 3;
+    if (
+      !Number.isFinite(batch.positions[vectorIndex]) ||
+      !Number.isFinite(batch.positions[vectorIndex + 1]) ||
+      !Number.isFinite(batch.positions[vectorIndex + 2])
+    ) {
+      throw new RangeError(`${label} positions must contain finite values.`);
+    }
+    validatePoint?.(index, vectorIndex);
+    const radius = batch.radii[index];
+    if (
+      !Number.isFinite(radius) ||
+      radius === undefined ||
+      radius < MIN_RADIAL_IMPACT_RADIUS_METRES ||
+      radius > MAX_RADIAL_IMPACT_RADIUS_METRES
+    ) {
+      throw new RangeError(
+        `${label} radii must be at least 0.0001 metres and at most 48 metres.`,
+      );
+    }
+    const amplitude = batch.amplitudes[index];
+    if (
+      !Number.isFinite(amplitude) ||
+      amplitude === undefined ||
+      amplitude < minimumAmplitude ||
+      amplitude > MAX_RADIAL_IMPACT_AMPLITUDE_METRES
+    ) {
+      throw new RangeError(
+        `${label} amplitudes must be between ${String(minimumAmplitude)} and 4 metres.`,
+      );
+    }
+    const id = batch.ids[index] ?? 0;
+    if (ids.has(id)) {
+      throw new TypeError(`${label} batches require unique Disturbance ids.`);
+    }
+    ids.add(id);
+  }
+}
+
+function validateNormalizedDisturbanceDirection(
+  directions: Float32Array,
+  vectorIndex: number,
+  label: "Directional-wake" | "Hero-breaker",
+): void {
+  const directionX = directions[vectorIndex];
+  const directionY = directions[vectorIndex + 1];
+  const directionZ = directions[vectorIndex + 2];
+  const directionLength = Math.hypot(
+    directionX ?? Number.NaN,
+    directionY ?? Number.NaN,
+    directionZ ?? Number.NaN,
+  );
+  if (
+    !Number.isFinite(directionLength) ||
+    Math.abs(directionLength - 1) > 1e-5 ||
+    Math.hypot(directionX ?? 0, directionZ ?? 0) < 1e-6
+  ) {
+    throw new RangeError(
+      `${label} directions must be normalized with a horizontal component.`,
+    );
+  }
+}
+
+function requireUint32Length(
+  buffer: Uint32Array,
+  required: number,
+  label: string,
+): void {
+  if (!(buffer instanceof Uint32Array) || buffer.length < required) {
+    throw new RangeError(
+      `The Disturbance ${label} buffer requires at least ${required} Uint32 values.`,
+    );
+  }
+}
+
+function requireUint8DisturbanceLength(
+  buffer: Uint8Array,
+  required: number,
+  label: string,
+): void {
+  if (!(buffer instanceof Uint8Array) || buffer.length < required) {
+    throw new RangeError(
+      `The Disturbance ${label} buffer requires at least ${required} Uint8 values.`,
+    );
+  }
+}
+
+function requireFloat32DisturbanceLength(
+  buffer: Float32Array,
+  required: number,
+  disturbance: "Directional-wake" | "Hero-breaker" | "Radial-impact",
+  field: string,
+): void {
+  if (!(buffer instanceof Float32Array) || buffer.length < required) {
+    throw new RangeError(
+      `The ${disturbance} Disturbance ${field} buffer requires at least ${required} Float32 values.`,
+    );
+  }
+}
+
+function requireUint16DisturbanceLength(
+  buffer: Uint16Array,
+  required: number,
+  label: string,
+): void {
+  if (!(buffer instanceof Uint16Array) || buffer.length < required) {
+    throw new RangeError(
+      `The Disturbance ${label} buffer requires at least ${required} Uint16 values.`,
+    );
+  }
 }
 
 function validateGameplayQueryBatch(batch: GameplayQueryBatch): void {

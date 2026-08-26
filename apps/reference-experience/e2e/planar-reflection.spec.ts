@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createWaterPreset, type ArtisticControls } from "real-water";
 import type {
   QaCameraV1,
-  QaHarnessV8,
+  QaHarness,
   QaPlanarReflectionFixtureHotColor,
   QaPlanarReflectionFixtureState,
 } from "../src/qa-harness.js";
@@ -23,6 +24,16 @@ const BELOW_CAMERA = {
   position: [-20, -8, -20] as const,
   target: [-20, 0, -40] as const,
 } satisfies QaCameraV1;
+const PLANAR_CONTROLS = {
+  ...createWaterPreset("swell").artisticControls,
+  whitecapAmount: 0,
+  foamPersistence: 0,
+  underwaterHaze: 1,
+  underwaterTurbidity: 1,
+  underwaterLightShafts: 1,
+  underwaterColor: 1,
+  underwaterExposure: 1,
+} satisfies ArtisticControls;
 
 async function openQaStage(page: Page): Promise<void> {
   await page.setViewportSize(VIEWPORT);
@@ -52,12 +63,15 @@ async function presentPlanarEvidence(
   readonly fixture: QaPlanarReflectionFixtureState;
 }> {
   return page.evaluate(
-    async ({ fixtureEnabled, fixtureColor, camera }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    async ({ fixtureEnabled, fixtureColor, camera, controls }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
       await harness.reset({ seed: 0x4000_0000 });
+      await harness.updateArtisticControls(controls, {
+        transition: "continuous",
+      });
       await harness.setCamera(camera, { transition: "camera-cut" });
       await harness.advanceTicks(24);
       await harness.present();
@@ -97,7 +111,12 @@ async function presentPlanarEvidence(
         fixture: await harness.readHostScenePlanarReflectionFixture(),
       };
     },
-    { fixtureEnabled: enabled, fixtureColor: hotColor, camera: HIT_CAMERA },
+    {
+      fixtureEnabled: enabled,
+      fixtureColor: hotColor,
+      camera: HIT_CAMERA,
+      controls: PLANAR_CONTROLS,
+    },
   );
 }
 
@@ -108,7 +127,7 @@ test("keeps the BackSide planar fixture visible and scale-disabled through ready
 }) => {
   await openQaStage(page);
   const ready = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -277,7 +296,7 @@ test("keeps Host environment fallback independent of scene.environment", async (
 }) => {
   await openQaStage(page);
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -307,7 +326,7 @@ test("restores planar output on the same lease after rising above the plane", as
   await openQaStage(page);
   const result = await page.evaluate(
     async ({ below, above }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }

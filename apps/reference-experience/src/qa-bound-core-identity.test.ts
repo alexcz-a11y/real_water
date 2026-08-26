@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   createMinimalWaterPrewarmManifest,
   createMinimalWaterQualityProfile,
+  MAX_ATTACHED_BODIES,
+  MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
   MAX_GAMEPLAY_QUERY_POINTS,
   type RealWaterCapabilities,
 } from "real-water";
@@ -65,6 +68,7 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
             "camera-cut",
             "origin-shift",
             "sea-state-cut",
+            "waterline-crossing",
           ] as const,
           updateCadence: "host-present",
         },
@@ -80,9 +84,109 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
         },
       },
     },
+    secondaryParticles: {
+      capacity: 131_072,
+      maximumCandidateCount: 147_456,
+      contributionReference: {
+        width: 320,
+        height: 180,
+        space: "output-drawing-buffer",
+        screenAreaDivisor: 3_600,
+        quantization: "q16-unorm-round-nearest",
+      },
+      hysteresis: {
+        retainedContributionBonusQ16: 4_096,
+        minimumResidenceTicks: 4,
+        reentryCooldownTicks: 4,
+      },
+      consumers: [
+        {
+          consumerId: "spray-droplet-mist",
+          maximumRequestCount: 65_536,
+          softRequestCeiling: 32_768,
+          minimumRetainedSlots: 2_048,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "underwater-suspended-particles",
+          maximumRequestCount: 49_152,
+          softRequestCeiling: 24_576,
+          minimumRetainedSlots: 2_048,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "subsurface-foam-bubble-cloud",
+          maximumRequestCount: 24_576,
+          softRequestCeiling: 12_288,
+          minimumRetainedSlots: 1_024,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "rising-bubbles",
+          maximumRequestCount: 8_192,
+          softRequestCeiling: 4_096,
+          minimumRetainedSlots: 256,
+          pressureReentryPolicy: "forbidden-until-absent",
+        },
+      ],
+      selection: "q16-global-contribution-radix",
+      updateCadence: "host-fixed-tick",
+      renderPhaseKnowledge: "none",
+    },
+    stormFront: {
+      mode: "prepared-deterministic-route",
+      updateCadence: "host-fixed-tick",
+      rain: {
+        surfaceRoute: "additive-spectral-ripples",
+        secondaryParticleConsumerId: "spray-droplet-mist",
+        maximumCandidateCount: 8_192,
+      },
+      stormAerosol: {
+        secondaryParticleConsumerId: "spray-droplet-mist",
+        maximumCandidateCount: 8_192,
+      },
+      cloudAndLightning: {
+        illuminationRoute: "coherent-glint-foam-reflection-atmosphere",
+        atmosphereStageId: "storm-atmosphere",
+      },
+      diagnostics: {
+        resolutionPolicy: "drawing-buffer-exact",
+        format: "rgba16float",
+        samples: 0,
+      },
+    },
+    postTraaComposition: {
+      width: 320,
+      height: 180,
+      stages: [
+        { id: "secondary-particles", after: "traa" },
+        { id: "storm-atmosphere", after: "secondary-particles" },
+        { id: "lens-wetness", after: "storm-atmosphere" },
+      ],
+      accumulationFormat: "rgba16float",
+      finalColorFormat: "rgba8unorm-srgb",
+    },
   },
   gameplay: {
+    maxAttachedBodies: MAX_ATTACHED_BODIES,
     maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
+    maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+    maxActiveHeroBreakers: MAX_ACTIVE_HERO_BREAKERS,
+    interactionField: {
+      radiusMetres: 48,
+      edgeFadeMetres: 8,
+      maxSnapshotAgeTicks: 1,
+      disturbanceKinds: ["radial-impact", "directional-wake", "hero-breaker"],
+    },
+    bodyInteraction: {
+      fixedTickHz: 60,
+      maxShapeSamplesPerBody: 32,
+      maxConvexHullVertices: 64,
+      maxSocketsPerBody: 8,
+      shapeKinds: ["sphere", "box", "capsule", "convex-hull", "compound"],
+      socketKinds: ["bow", "stern", "propeller", "wake", "interaction-anchor"],
+      generatedDisturbanceKinds: ["directional-wake", "propeller-wash"],
+    },
   },
 };
 
@@ -266,6 +370,41 @@ describe("Ready capabilities", () => {
     ).toThrowError(/Quality Profile temporal/i);
   });
 
+  it("rejects a Hero Breaker capacity that disagrees with Core", () => {
+    expect(() =>
+      readReadyCapabilities(
+        {
+          ...READY_CAPABILITIES,
+          gameplay: {
+            ...READY_CAPABILITIES.gameplay,
+            maxActiveHeroBreakers: 7,
+          },
+        } as unknown,
+        CORE.qualityProfile,
+        CORE.drawingBuffer,
+      ),
+    ).toThrowError(/maxActiveHeroBreakers/i);
+  });
+
+  it("rejects an interaction field without the Hero Breaker disturbance kind", () => {
+    expect(() =>
+      readReadyCapabilities(
+        {
+          ...READY_CAPABILITIES,
+          gameplay: {
+            ...READY_CAPABILITIES.gameplay,
+            interactionField: {
+              ...READY_CAPABILITIES.gameplay.interactionField,
+              disturbanceKinds: ["radial-impact", "directional-wake"],
+            },
+          },
+        } as unknown,
+        CORE.qualityProfile,
+        CORE.drawingBuffer,
+      ),
+    ).toThrowError(/interactionField/i);
+  });
+
   it("rejects planar dimensions that disagree with the Core drawing buffer", () => {
     expect(() =>
       readReadyCapabilities(
@@ -372,6 +511,34 @@ describe("Ready capabilities", () => {
         CORE.drawingBuffer,
       ),
     ).toThrowError(/host-adapter/i);
+  });
+
+  it("rejects a consumer pressure-reentry policy that disagrees with the Quality Profile", () => {
+    expect(() =>
+      readReadyCapabilities(
+        {
+          ...READY_CAPABILITIES,
+          rendering: {
+            ...READY_CAPABILITIES.rendering,
+            secondaryParticles: {
+              ...READY_CAPABILITIES.rendering.secondaryParticles,
+              consumers:
+                READY_CAPABILITIES.rendering.secondaryParticles.consumers.map(
+                  (consumer, index) =>
+                    index === 3
+                      ? {
+                          ...consumer,
+                          pressureReentryPolicy: "after-shared-cooldown",
+                        }
+                      : consumer,
+                ),
+            },
+          },
+        } as unknown,
+        CORE.qualityProfile,
+        CORE.drawingBuffer,
+      ),
+    ).toThrowError(/consumer capabilities/i);
   });
 });
 

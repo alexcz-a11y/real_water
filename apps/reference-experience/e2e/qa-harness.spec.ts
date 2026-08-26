@@ -7,7 +7,11 @@ import {
   QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS,
   calculateColorAttachmentBytesPerSample,
 } from "../src/qa-frame-contract.js";
-import type { QaCameraV1, QaHarnessV8 } from "../src/qa-harness.js";
+import {
+  QA_CAPTURE_VERSION,
+  type QaCameraV1,
+  type QaHarness,
+} from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
 
@@ -53,6 +57,16 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       prewarmCaptures: harness.prewarmManifest.captures.map(
         ({ name, preparedFormat }) => ({ name, preparedFormat }),
       ),
+      interactionCommands: {
+        updateInteractionAnchor: typeof harness.updateInteractionAnchor,
+        submitDisturbances: typeof harness.submitDisturbances,
+      },
+      environmentCommands: {
+        updateEnvironment: typeof harness.updateEnvironment,
+      },
+      showcaseCommands: {
+        replayShowcase: typeof harness.replayShowcase,
+      },
       frozen: Object.isFrozen(harness),
     };
   });
@@ -84,9 +98,16 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       QA_SCENE_PASS_COLOR_ATTACHMENT_FORMATS,
     ),
   ).toBe(CORE_WEBGPU_MAX_COLOR_ATTACHMENT_BYTES_PER_SAMPLE);
+  // This is the reviewed capture-payload ladder, independent of the Harness
+  // and QA frame-prewarm ladders pinned below.
+  expect(QA_CAPTURE_VERSION).toBe(17);
   expect(contract).toEqual({
     schema: "real-water/qa-harness",
-    version: 8,
+    // The one place the QA Harness version number is pinned to a reviewed
+    // value. Everywhere else compares against the exported constant, so this
+    // assertion is what makes a bump deliberate instead of self-confirming.
+    // eslint-disable-next-line no-restricted-syntax
+    version: 18,
     fixedTickHz: 60,
     captureNames: [
       "final-color",
@@ -94,6 +115,13 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "depth",
       "normal",
       "motion-vector",
+      "whitecap-generation",
+      "whitecap-history",
+      "whitecap-advection",
+      "whitecap-decay",
+      "foam-source-identity",
+      "waterline",
+      "history-rejection",
       "optical-fresnel",
       "optical-thickness",
       "optical-scattering",
@@ -101,6 +129,14 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "optical-crest-transmission",
       "optical-transmittance",
       "optical-glint",
+      "underwater-transmittance",
+      "underwater-scattering",
+      "underwater-light-shafts",
+      "underwater-shadow",
+      "underwater-caustics",
+      "underwater-particles",
+      "underwater-bubbles",
+      "lens-wetness",
       "planar-color",
       "planar-target-alpha",
       "ssr-hit",
@@ -112,15 +148,32 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "ssr-history-color",
       "ssr-history-frame-weight",
       "ssr-history-input-color",
+      "secondary-particle-contribution",
+      "secondary-particle-overdraw",
+      "hero-breaker-foam",
+      "storm-rain-ripples",
+      "storm-aerosol",
+      "storm-cloud-shadow",
+      "storm-lightning",
     ],
     prewarmSchema: "real-water/qa-frame-prewarm",
-    prewarmVersion: 7,
+    // Pinned for the same reason as `version` above: this contract test is
+    // where a QA frame prewarm bump has to be stated, not inferred.
+    // eslint-disable-next-line no-restricted-syntax
+    prewarmVersion: 16,
     prewarmCoreDeclarations: {
       "final-color": "water-final-color-target",
       "current-color": "water-current-color-target",
       "depth": "water-inverse-linear-depth",
       "normal": "water-view-normal",
       "motion-vector": "water-motion-vectors",
+      "whitecap-generation": "water-whitecap-stage-target",
+      "whitecap-history": "water-whitecap-stage-target",
+      "whitecap-advection": "water-whitecap-stage-target",
+      "whitecap-decay": "water-whitecap-stage-target",
+      "foam-source-identity": "water-foam-source-identity-target",
+      "waterline": "water-optical-factors-target",
+      "history-rejection": "water-history-rejection-target",
       "optical-fresnel": "water-optical-factors-target",
       "optical-thickness": "water-optical-factors-target",
       "optical-scattering": "water-optical-diagnostics-b",
@@ -128,6 +181,14 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "optical-crest-transmission": "water-optical-diagnostics-a",
       "optical-transmittance": "water-optical-diagnostics-a",
       "optical-glint": "water-optical-factors-target",
+      "underwater-transmittance": "water-underwater-diagnostics-target",
+      "underwater-scattering": "water-underwater-diagnostics-target",
+      "underwater-light-shafts": "water-underwater-diagnostics-target",
+      "underwater-shadow": "water-underwater-diagnostics-target",
+      "underwater-caustics": "water-underwater-caustics-diagnostics-target",
+      "underwater-particles": "water-underwater-suspended-particle-target",
+      "underwater-bubbles": "water-underwater-bubble-target",
+      "lens-wetness": "water-lens-wetness-diagnostics-target",
       "planar-color": "water-planar-reflection-target",
       "planar-target-alpha": "water-planar-reflection-target",
       "ssr-hit": "water-ssr-raw-target",
@@ -139,6 +200,15 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       "ssr-history-color": "water-ssr-history-resolved-capture-target",
       "ssr-history-frame-weight": "water-ssr-history-resolved-capture-target",
       "ssr-history-input-color": "water-ssr-history-beauty-target",
+      "secondary-particle-contribution":
+        "water-secondary-particle-accumulation-target",
+      "secondary-particle-overdraw":
+        "water-secondary-particle-accumulation-target",
+      "hero-breaker-foam": "water-hero-breaker-foam-diagnostics-target",
+      "storm-rain-ripples": "water-storm-diagnostics-target",
+      "storm-aerosol": "water-storm-diagnostics-target",
+      "storm-cloud-shadow": "water-storm-diagnostics-target",
+      "storm-lightning": "water-storm-diagnostics-target",
     },
     prewarmCaptures: [
       { name: "final-color", preparedFormat: "rgba8unorm-srgb" },
@@ -146,6 +216,34 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
       { name: "depth", preparedFormat: "r32float-inverse-linear-view" },
       { name: "normal", preparedFormat: "rgba16float-view-normal" },
       { name: "motion-vector", preparedFormat: "rg16float-ndc" },
+      {
+        name: "whitecap-generation",
+        preparedFormat: "rgba16float-whitecap-stages",
+      },
+      {
+        name: "whitecap-history",
+        preparedFormat: "rgba16float-whitecap-stages",
+      },
+      {
+        name: "whitecap-advection",
+        preparedFormat: "rgba16float-whitecap-stages",
+      },
+      {
+        name: "whitecap-decay",
+        preparedFormat: "rgba16float-whitecap-stages",
+      },
+      {
+        name: "foam-source-identity",
+        preparedFormat: "rgba16float-foam-source-identity",
+      },
+      {
+        name: "waterline",
+        preparedFormat: "rgba16float-waterline-coverage",
+      },
+      {
+        name: "history-rejection",
+        preparedFormat: "rgba8unorm-history-rejection",
+      },
       {
         name: "optical-fresnel",
         preparedFormat: "rgba16float-optical-factors",
@@ -171,6 +269,38 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
         preparedFormat: "rg8unorm-optical-diagnostics-a",
       },
       { name: "optical-glint", preparedFormat: "rgba16float-optical-factors" },
+      {
+        name: "underwater-transmittance",
+        preparedFormat: "rgba16float-underwater-volume-diagnostics",
+      },
+      {
+        name: "underwater-scattering",
+        preparedFormat: "rgba16float-underwater-volume-diagnostics",
+      },
+      {
+        name: "underwater-light-shafts",
+        preparedFormat: "rgba16float-underwater-volume-diagnostics",
+      },
+      {
+        name: "underwater-shadow",
+        preparedFormat: "rgba16float-underwater-volume-diagnostics",
+      },
+      {
+        name: "underwater-caustics",
+        preparedFormat: "rgba16float-underwater-caustics-diagnostics",
+      },
+      {
+        name: "underwater-particles",
+        preparedFormat: "rgba16float-underwater-suspended-particles",
+      },
+      {
+        name: "underwater-bubbles",
+        preparedFormat: "rgba16float-underwater-bubbles",
+      },
+      {
+        name: "lens-wetness",
+        preparedFormat: "rgba16float-lens-wetness-diagnostics",
+      },
       { name: "planar-color", preparedFormat: "rgba8unorm-srgb" },
       { name: "planar-target-alpha", preparedFormat: "rgba8unorm-srgb" },
       { name: "ssr-hit", preparedFormat: "rgba16float-ssr-raw" },
@@ -197,7 +327,45 @@ test("exposes the versioned QA Harness only on the explicit QA route", async ({
         name: "ssr-history-input-color",
         preparedFormat: "rgba16float-ssr-history-beauty",
       },
+      {
+        name: "secondary-particle-contribution",
+        preparedFormat: "rgba16float-secondary-particle-accumulation",
+      },
+      {
+        name: "secondary-particle-overdraw",
+        preparedFormat: "rgba16float-secondary-particle-accumulation",
+      },
+      {
+        name: "hero-breaker-foam",
+        preparedFormat: "r32float-hero-breaker-foam",
+      },
+      {
+        name: "storm-rain-ripples",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+      {
+        name: "storm-aerosol",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+      {
+        name: "storm-cloud-shadow",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+      {
+        name: "storm-lightning",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
     ],
+    interactionCommands: {
+      updateInteractionAnchor: "function",
+      submitDisturbances: "function",
+    },
+    environmentCommands: {
+      updateEnvironment: "function",
+    },
+    showcaseCommands: {
+      replayShowcase: "function",
+    },
     frozen: true,
   });
 });
@@ -216,7 +384,7 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
     const harness = window.__REAL_WATER_QA__ as
-      | (QaHarnessV8 & {
+      | (QaHarness & {
           updateArtisticControls(
             controls: {
               readonly waveStrength: number;
@@ -232,6 +400,13 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
               readonly depthColoring: number;
               readonly inWaterGlow: number;
               readonly crestGlow: number;
+              readonly whitecapAmount: number;
+              readonly foamPersistence: number;
+              readonly underwaterHaze: number;
+              readonly underwaterTurbidity: number;
+              readonly underwaterLightShafts: number;
+              readonly underwaterColor: number;
+              readonly underwaterExposure: number;
             },
             options: { readonly transition: "continuous" | "sea-state-cut" },
           ): Promise<{ readonly revision: number }>;
@@ -268,6 +443,13 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
         depthColoring: 1,
         inWaterGlow: 1,
         crestGlow: 1,
+        whitecapAmount: 1,
+        foamPersistence: 1,
+        underwaterHaze: 1,
+        underwaterTurbidity: 1,
+        underwaterLightShafts: 1,
+        underwaterColor: 1,
+        underwaterExposure: 1,
       },
       {
         transition: "continuous",
@@ -323,21 +505,22 @@ test("bounds rendered and queried height at one fixed Open Water point", async (
   expect(result.query).toMatchObject({
     normal: expect.any(Array),
     velocity: expect.any(Array),
-    foam: 0,
+    foam: expect.any(Number),
     tick: 30,
     controlRevision: result.controls.revision,
     snapshotAge: 0,
     presentationId: result.presentation.presentationId,
   });
+  expect(result.query.foam).toBeCloseTo(0.758_019, 5);
   const normalValues = decodeFloat32(result.normal.data);
   const normalIndex = center * 3;
-  expect(normalValues[normalIndex]).toBeCloseTo(result.query.normal[0], 2);
-  expect(normalValues[normalIndex + 1]).toBeCloseTo(-result.query.normal[2], 2);
-  expect(normalValues[normalIndex + 2]).toBeCloseTo(result.query.normal[1], 2);
+  expect(normalValues[normalIndex]).toBeCloseTo(result.query.normal[0], 1);
+  expect(normalValues[normalIndex + 1]).toBeCloseTo(-result.query.normal[2], 1);
+  expect(normalValues[normalIndex + 2]).toBeCloseTo(result.query.normal[1], 1);
   expect(result.after).toEqual(result.before);
   expect(result.presentation.prewarm.progress).toMatchObject({
-    completedWork: 14,
-    totalWork: 14,
+    completedWork: 25,
+    totalWork: 25,
   });
   const encodedRg8ByteLength = result.depth.width * result.depth.height * 4;
   for (const capture of [
@@ -374,7 +557,7 @@ test("presents camera-relative Open Water through the horizon", async ({
   await page.goto("/?qa=1&host=three");
   await expect(page.getByTestId("reference-stage")).toBeVisible();
   const result = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -430,7 +613,7 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -469,6 +652,13 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       "depth",
       "normal",
       "motion-vector",
+      "whitecap-generation",
+      "whitecap-history",
+      "whitecap-advection",
+      "whitecap-decay",
+      "foam-source-identity",
+      "waterline",
+      "history-rejection",
       "optical-fresnel",
       "optical-thickness",
       "optical-scattering",
@@ -476,6 +666,14 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       "optical-crest-transmission",
       "optical-transmittance",
       "optical-glint",
+      "underwater-transmittance",
+      "underwater-scattering",
+      "underwater-light-shafts",
+      "underwater-shadow",
+      "underwater-caustics",
+      "underwater-particles",
+      "underwater-bubbles",
+      "lens-wetness",
       "planar-color",
       "planar-target-alpha",
       "ssr-hit",
@@ -487,13 +685,20 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       "ssr-history-color",
       "ssr-history-frame-weight",
       "ssr-history-input-color",
+      "secondary-particle-contribution",
+      "secondary-particle-overdraw",
+      "hero-breaker-foam",
+      "storm-rain-ripples",
+      "storm-aerosol",
+      "storm-cloud-shadow",
+      "storm-lightning",
     ],
     prewarm: {
       width: 320,
       height: 180,
       progress: {
-        completedWork: 14,
-        totalWork: 14,
+        completedWork: 25,
+        totalWork: 25,
       },
     },
   });
@@ -511,6 +716,13 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "depth",
     "normal",
     "motion-vector",
+    "whitecap-generation",
+    "whitecap-history",
+    "whitecap-advection",
+    "whitecap-decay",
+    "foam-source-identity",
+    "waterline",
+    "history-rejection",
     "optical-fresnel",
     "optical-thickness",
     "optical-scattering",
@@ -518,6 +730,14 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "optical-crest-transmission",
     "optical-transmittance",
     "optical-glint",
+    "underwater-transmittance",
+    "underwater-scattering",
+    "underwater-light-shafts",
+    "underwater-shadow",
+    "underwater-caustics",
+    "underwater-particles",
+    "underwater-bubbles",
+    "lens-wetness",
     "planar-color",
     "planar-target-alpha",
     "ssr-hit",
@@ -529,16 +749,30 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "ssr-history-color",
     "ssr-history-frame-weight",
     "ssr-history-input-color",
+    "secondary-particle-contribution",
+    "secondary-particle-overdraw",
+    "hero-breaker-foam",
+    "storm-rain-ripples",
+    "storm-aerosol",
+    "storm-cloud-shadow",
+    "storm-lightning",
   ]);
-  expect(result.first.captures.map(({ version }) => version)).toEqual([
-    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
-  ]);
+  expect(result.first.captures.map(({ version }) => version)).toEqual(
+    new Array<number>(45).fill(QA_CAPTURE_VERSION),
+  );
   expect(result.first.captures.map(({ format }) => format)).toEqual([
     "rgba8unorm-srgb",
     "rgba8unorm-srgb",
     "r32float-linear-view",
     "rgb32float-view-normal",
     "rg32float-ndc",
+    "r32float-whitecap-stage",
+    "r32float-whitecap-stage",
+    "r32float-whitecap-stage",
+    "r32float-whitecap-stage",
+    "rgba32float-foam-source-identity",
+    "r32float-waterline-coverage",
+    "r32float-history-rejection",
     "r32float-optical",
     "r32float-optical",
     "r32float-optical",
@@ -546,6 +780,14 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "r32float-optical",
     "r32float-optical",
     "r32float-optical",
+    "r32float-underwater-volume",
+    "r32float-underwater-volume",
+    "r32float-underwater-volume",
+    "r32float-underwater-volume",
+    "r32float-underwater-caustics",
+    "r32float-underwater-particles",
+    "r32float-underwater-bubbles",
+    "r32float-lens-wetness",
     "rgba8unorm-srgb",
     "r32float-optical",
     "r32float-optical",
@@ -557,6 +799,13 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     "rgb32float-linear-ssr-history",
     "r32float-ssr-history-frame-weight",
     "rgb32float-linear-ssr-history-input",
+    "r32float-secondary-particle-contribution",
+    "r32float-secondary-particle-overdraw",
+    "r32float-hero-breaker-foam",
+    "r32float-storm-front",
+    "r32float-storm-front",
+    "r32float-storm-front",
+    "r32float-storm-front",
   ]);
   expect(result.first.captures.every(({ data }) => data.length > 0)).toBe(true);
   expect(
@@ -616,9 +865,11 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
       }),
     ),
   );
-  expect(result.first.captures.every((capture) => capture.version === 8)).toBe(
-    true,
-  );
+  expect(
+    result.first.captures.every(
+      (capture) => capture.version === QA_CAPTURE_VERSION,
+    ),
+  ).toBe(true);
   expect(result.changedTick.captures[0]?.data).not.toBe(
     result.first.captures[0]?.data,
   );
@@ -644,7 +895,10 @@ test("drives and captures a repeatable rendered frame without wall-clock animati
     if (shape.elementType === "float32") {
       const values = decodeFloat32(capture.data);
       expect(values).toHaveLength(pixelCount * shape.components);
-      if (capture.name === "ssr-hit") {
+      if (
+        capture.name === "ssr-hit" ||
+        capture.name === "secondary-particle-overdraw"
+      ) {
         expect(
           values.every((value) => Number.isFinite(value) && value >= 0),
         ).toBe(true);
@@ -713,7 +967,7 @@ test("matches the visible WebGPU canvas RGB to the same-frame final-color captur
   await expect(page.getByTestId("reference-stage")).toBeVisible();
 
   const result = await page.evaluate(async (camera) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }

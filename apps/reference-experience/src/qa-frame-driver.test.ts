@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   createMinimalWaterPrewarmManifest,
+  MAX_ATTACHED_BODIES,
+  MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
   MAX_GAMEPLAY_QUERY_POINTS,
   type PrewarmManifest,
   type RealWaterCapabilities,
@@ -69,6 +72,7 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
             "camera-cut",
             "origin-shift",
             "sea-state-cut",
+            "waterline-crossing",
           ] as const,
           updateCadence: "host-present",
         },
@@ -84,9 +88,109 @@ const READY_CAPABILITIES: RealWaterCapabilities = {
         },
       },
     },
+    secondaryParticles: {
+      capacity: 131_072,
+      maximumCandidateCount: 147_456,
+      contributionReference: {
+        width: 320,
+        height: 180,
+        space: "output-drawing-buffer",
+        screenAreaDivisor: 3_600,
+        quantization: "q16-unorm-round-nearest",
+      },
+      hysteresis: {
+        retainedContributionBonusQ16: 4_096,
+        minimumResidenceTicks: 4,
+        reentryCooldownTicks: 4,
+      },
+      consumers: [
+        {
+          consumerId: "spray-droplet-mist",
+          maximumRequestCount: 65_536,
+          softRequestCeiling: 32_768,
+          minimumRetainedSlots: 2_048,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "underwater-suspended-particles",
+          maximumRequestCount: 49_152,
+          softRequestCeiling: 24_576,
+          minimumRetainedSlots: 2_048,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "subsurface-foam-bubble-cloud",
+          maximumRequestCount: 24_576,
+          softRequestCeiling: 12_288,
+          minimumRetainedSlots: 1_024,
+          pressureReentryPolicy: "after-shared-cooldown",
+        },
+        {
+          consumerId: "rising-bubbles",
+          maximumRequestCount: 8_192,
+          softRequestCeiling: 4_096,
+          minimumRetainedSlots: 256,
+          pressureReentryPolicy: "forbidden-until-absent",
+        },
+      ],
+      selection: "q16-global-contribution-radix",
+      updateCadence: "host-fixed-tick",
+      renderPhaseKnowledge: "none",
+    },
+    stormFront: {
+      mode: "prepared-deterministic-route",
+      updateCadence: "host-fixed-tick",
+      rain: {
+        surfaceRoute: "additive-spectral-ripples",
+        secondaryParticleConsumerId: "spray-droplet-mist",
+        maximumCandidateCount: 8_192,
+      },
+      stormAerosol: {
+        secondaryParticleConsumerId: "spray-droplet-mist",
+        maximumCandidateCount: 8_192,
+      },
+      cloudAndLightning: {
+        illuminationRoute: "coherent-glint-foam-reflection-atmosphere",
+        atmosphereStageId: "storm-atmosphere",
+      },
+      diagnostics: {
+        resolutionPolicy: "drawing-buffer-exact",
+        format: "rgba16float",
+        samples: 0,
+      },
+    },
+    postTraaComposition: {
+      width: 320,
+      height: 180,
+      stages: [
+        { id: "secondary-particles", after: "traa" },
+        { id: "storm-atmosphere", after: "secondary-particles" },
+        { id: "lens-wetness", after: "storm-atmosphere" },
+      ],
+      accumulationFormat: "rgba16float",
+      finalColorFormat: "rgba8unorm-srgb",
+    },
   },
   gameplay: {
+    maxAttachedBodies: MAX_ATTACHED_BODIES,
     maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
+    maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+    maxActiveHeroBreakers: MAX_ACTIVE_HERO_BREAKERS,
+    interactionField: {
+      radiusMetres: 48,
+      edgeFadeMetres: 8,
+      maxSnapshotAgeTicks: 1,
+      disturbanceKinds: ["radial-impact", "directional-wake", "hero-breaker"],
+    },
+    bodyInteraction: {
+      fixedTickHz: 60,
+      maxShapeSamplesPerBody: 32,
+      maxConvexHullVertices: 64,
+      maxSocketsPerBody: 8,
+      shapeKinds: ["sphere", "box", "capsule", "convex-hull", "compound"],
+      socketKinds: ["bow", "stern", "propeller", "wake", "interaction-anchor"],
+      generatedDisturbanceKinds: ["directional-wake", "propeller-wash"],
+    },
   },
 };
 
@@ -107,6 +211,56 @@ function createCapture(
       height,
       origin: "top-left",
       data: new Uint8Array(width * height * 4),
+    };
+  }
+  if (name === "underwater-caustics") {
+    return {
+      name,
+      format: "r32float-underwater-caustics",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "underwater-particles") {
+    return {
+      name,
+      format: "r32float-underwater-particles",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "underwater-bubbles") {
+    return {
+      name,
+      format: "r32float-underwater-bubbles",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "lens-wetness") {
+    return {
+      name,
+      format: "r32float-lens-wetness",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "foam-source-identity") {
+    return {
+      name,
+      format: "rgba32float-foam-source-identity",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height * 4),
     };
   }
   if (name === "ssr-color") {
@@ -209,6 +363,101 @@ function createCapture(
       data: new Float32Array(width * height * 2),
     };
   }
+  if (
+    name === "whitecap-generation" ||
+    name === "whitecap-history" ||
+    name === "whitecap-advection" ||
+    name === "whitecap-decay"
+  ) {
+    return {
+      name,
+      format: "r32float-whitecap-stage",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "waterline") {
+    return {
+      name,
+      format: "r32float-waterline-coverage",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "history-rejection") {
+    return {
+      name,
+      format: "r32float-history-rejection",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (
+    name === "underwater-transmittance" ||
+    name === "underwater-scattering" ||
+    name === "underwater-light-shafts" ||
+    name === "underwater-shadow"
+  ) {
+    return {
+      name,
+      format: "r32float-underwater-volume",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "secondary-particle-contribution") {
+    return {
+      name,
+      format: "r32float-secondary-particle-contribution",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "secondary-particle-overdraw") {
+    return {
+      name,
+      format: "r32float-secondary-particle-overdraw",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (name === "hero-breaker-foam") {
+    return {
+      name,
+      format: "r32float-hero-breaker-foam",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
+  if (
+    name === "storm-rain-ripples" ||
+    name === "storm-aerosol" ||
+    name === "storm-cloud-shadow" ||
+    name === "storm-lightning"
+  ) {
+    return {
+      name,
+      format: "r32float-storm-front",
+      width,
+      height,
+      origin: "top-left",
+      data: new Float32Array(width * height),
+    };
+  }
   return {
     name,
     format: "r32float-optical",
@@ -258,6 +507,144 @@ function coreFrame(
       resetReason: "simulation-reset",
       resetFrame: true,
     },
+    waterline: {
+      classification: "above",
+      seaLevelMetres: 0,
+      surfaceHeightMetres: 0,
+      signedDistanceMetres: 1,
+      submersion: 0,
+      transitionRevision: 0,
+      lensWetnessImpulse: false,
+    },
+    secondaryParticles: {
+      capacity: 131_072,
+      maximumCandidateCount: 147_456,
+      requested: 0,
+      retained: 0,
+      thinned: 0,
+      invisibleOrOccluded: 0,
+      reentryCooldown: 0,
+      lifecycleReentryForbidden: 0,
+      retainedByFloor: 0,
+      retainedByGlobalCompetition: 0,
+      retainedIncumbents: 0,
+      requestedAboveSoftCeiling: 0,
+      overSubscribed: false,
+      contributionMinimumQ16: null,
+      contributionMaximumQ16: null,
+      dropReasons: {
+        invisibleOrOccluded: 0,
+        globalContributionPressure: 0,
+        reentryCooldown: 0,
+        lifecycleReentryForbidden: 0,
+      },
+      consumers: [
+        {
+          consumerId: "spray-droplet-mist",
+          maximumRequestCount: 65_536,
+          minimumRetainedSlots: 2_048,
+          softRequestCeiling: 32_768,
+          pressureReentryPolicy: "after-shared-cooldown",
+          requested: 0,
+          retained: 0,
+          thinned: 0,
+          invisibleOrOccluded: 0,
+          reentryCooldown: 0,
+          lifecycleReentryForbidden: 0,
+          retainedByFloor: 0,
+          retainedByGlobalCompetition: 0,
+          retainedIncumbents: 0,
+          requestedAboveSoftCeiling: 0,
+          overSubscribed: false,
+          contributionMinimumQ16: null,
+          contributionMaximumQ16: null,
+          dropReasons: {
+            invisibleOrOccluded: 0,
+            globalContributionPressure: 0,
+            reentryCooldown: 0,
+            lifecycleReentryForbidden: 0,
+          },
+        },
+        {
+          consumerId: "underwater-suspended-particles",
+          maximumRequestCount: 49_152,
+          minimumRetainedSlots: 2_048,
+          softRequestCeiling: 24_576,
+          pressureReentryPolicy: "after-shared-cooldown",
+          requested: 0,
+          retained: 0,
+          thinned: 0,
+          invisibleOrOccluded: 0,
+          reentryCooldown: 0,
+          lifecycleReentryForbidden: 0,
+          retainedByFloor: 0,
+          retainedByGlobalCompetition: 0,
+          retainedIncumbents: 0,
+          requestedAboveSoftCeiling: 0,
+          overSubscribed: false,
+          contributionMinimumQ16: null,
+          contributionMaximumQ16: null,
+          dropReasons: {
+            invisibleOrOccluded: 0,
+            globalContributionPressure: 0,
+            reentryCooldown: 0,
+            lifecycleReentryForbidden: 0,
+          },
+        },
+        {
+          consumerId: "subsurface-foam-bubble-cloud",
+          maximumRequestCount: 24_576,
+          minimumRetainedSlots: 1_024,
+          softRequestCeiling: 12_288,
+          pressureReentryPolicy: "after-shared-cooldown",
+          requested: 0,
+          retained: 0,
+          thinned: 0,
+          invisibleOrOccluded: 0,
+          reentryCooldown: 0,
+          lifecycleReentryForbidden: 0,
+          retainedByFloor: 0,
+          retainedByGlobalCompetition: 0,
+          retainedIncumbents: 0,
+          requestedAboveSoftCeiling: 0,
+          overSubscribed: false,
+          contributionMinimumQ16: null,
+          contributionMaximumQ16: null,
+          dropReasons: {
+            invisibleOrOccluded: 0,
+            globalContributionPressure: 0,
+            reentryCooldown: 0,
+            lifecycleReentryForbidden: 0,
+          },
+        },
+        {
+          consumerId: "rising-bubbles",
+          maximumRequestCount: 8_192,
+          minimumRetainedSlots: 256,
+          softRequestCeiling: 4_096,
+          pressureReentryPolicy: "forbidden-until-absent",
+          requested: 0,
+          retained: 0,
+          thinned: 0,
+          invisibleOrOccluded: 0,
+          reentryCooldown: 0,
+          lifecycleReentryForbidden: 0,
+          retainedByFloor: 0,
+          retainedByGlobalCompetition: 0,
+          retainedIncumbents: 0,
+          requestedAboveSoftCeiling: 0,
+          overSubscribed: false,
+          contributionMinimumQ16: null,
+          contributionMaximumQ16: null,
+          dropReasons: {
+            invisibleOrOccluded: 0,
+            globalContributionPressure: 0,
+            reentryCooldown: 0,
+            lifecycleReentryForbidden: 0,
+          },
+        },
+      ],
+    },
     outputs: request.outputs.map((name) =>
       createCapture(
         name,
@@ -276,11 +663,104 @@ function coreFrame(
 }
 
 describe("QA frame driver Core association", () => {
-  it("publishes a v7 capture-contract mapped to actual Core declaration IDs", () => {
-    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(7);
+  it("publishes a v16 capture-contract mapped to actual Core declaration IDs", () => {
+    expect(QA_FRAME_PREWARM_MANIFEST.version).toBe(16);
+    expect(QA_FRAME_PREWARM_MANIFEST.captures).toHaveLength(45);
     expect(QA_FRAME_PREWARM_MANIFEST.coreDeclarations).toEqual(
       QA_TO_CORE_DECLARATION_IDS,
     );
+    expect(QA_TO_CORE_DECLARATION_IDS.waterline).toBe(
+      "water-optical-factors-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["history-rejection"]).toBe(
+      "water-history-rejection-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["foam-source-identity"]).toBe(
+      "water-foam-source-identity-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["secondary-particle-contribution"]).toBe(
+      "water-secondary-particle-accumulation-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["secondary-particle-overdraw"]).toBe(
+      "water-secondary-particle-accumulation-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["hero-breaker-foam"]).toBe(
+      "water-hero-breaker-foam-diagnostics-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["underwater-caustics"]).toBe(
+      "water-underwater-caustics-diagnostics-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["underwater-particles"]).toBe(
+      "water-underwater-suspended-particle-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["underwater-bubbles"]).toBe(
+      "water-underwater-bubble-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["lens-wetness"]).toBe(
+      "water-lens-wetness-diagnostics-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["storm-rain-ripples"]).toBe(
+      "water-storm-diagnostics-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["storm-aerosol"]).toBe(
+      "water-storm-diagnostics-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["storm-cloud-shadow"]).toBe(
+      "water-storm-diagnostics-target",
+    );
+    expect(QA_TO_CORE_DECLARATION_IDS["storm-lightning"]).toBe(
+      "water-storm-diagnostics-target",
+    );
+    expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(23, 27)).toEqual([
+      {
+        name: "underwater-caustics",
+        preparedFormat: "rgba16float-underwater-caustics-diagnostics",
+      },
+      {
+        name: "underwater-particles",
+        preparedFormat: "rgba16float-underwater-suspended-particles",
+      },
+      {
+        name: "underwater-bubbles",
+        preparedFormat: "rgba16float-underwater-bubbles",
+      },
+      {
+        name: "lens-wetness",
+        preparedFormat: "rgba16float-lens-wetness-diagnostics",
+      },
+    ]);
+    expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(9, 12)).toEqual([
+      {
+        name: "foam-source-identity",
+        preparedFormat: "rgba16float-foam-source-identity",
+      },
+      {
+        name: "waterline",
+        preparedFormat: "rgba16float-waterline-coverage",
+      },
+      {
+        name: "history-rejection",
+        preparedFormat: "rgba8unorm-history-rejection",
+      },
+    ]);
+    expect(QA_FRAME_PREWARM_MANIFEST.captures.slice(-4)).toEqual([
+      {
+        name: "storm-rain-ripples",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+      {
+        name: "storm-aerosol",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+      {
+        name: "storm-cloud-shadow",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+      {
+        name: "storm-lightning",
+        preparedFormat: "rgba16float-storm-front-diagnostics",
+      },
+    ]);
     expect(JSON.stringify(QA_FRAME_PREWARM_MANIFEST)).not.toMatch(
       /qa-(?:final|current|inverse|view|motion|optical|stock|traa|single|eight|named|main|transform)-/,
     );
@@ -311,18 +791,29 @@ describe("QA frame driver Core association", () => {
       "water-inverse-linear-depth",
       "water-view-normal",
       "water-motion-vectors",
+      "water-whitecap-stage-target",
+      "water-foam-source-identity-target",
       "water-optical-factors-target",
+      "water-history-rejection-target",
       "water-optical-diagnostics-b",
       "water-optical-diagnostics-a",
+      "water-underwater-diagnostics-target",
+      "water-underwater-caustics-diagnostics-target",
+      "water-underwater-suspended-particle-target",
+      "water-underwater-bubble-target",
+      "water-lens-wetness-diagnostics-target",
       "water-planar-reflection-target",
       "water-ssr-raw-target",
       "water-ssr-composite-target",
       "water-render-target",
       "water-ssr-history-resolved-capture-target",
       "water-ssr-history-beauty-target",
+      "water-secondary-particle-accumulation-target",
+      "water-hero-breaker-foam-diagnostics-target",
+      "water-storm-diagnostics-target",
     ]);
-    expect(receipt.progress.completedWork).toBe(14);
-    expect(receipt.progress.totalWork).toBe(14);
+    expect(receipt.progress.completedWork).toBe(25);
+    expect(receipt.progress.totalWork).toBe(25);
   });
 
   it("rejects a Core manifest that is missing a mapped declaration", () => {
@@ -363,21 +854,61 @@ describe("QA frame driver Core association", () => {
       seed: 0x4000_0000,
       tick: 0,
       timeSeconds: 0,
+      seaLevelMetres: 0,
       simulationResetRevision: 1,
     });
     const frame = await driver.present({
       advanceFixedTicks: 6,
-      captures: ["final-color", "depth"],
+      captures: [
+        "final-color",
+        "depth",
+        "underwater-caustics",
+        "underwater-particles",
+        "underwater-bubbles",
+        "lens-wetness",
+      ],
     });
     expect(frame.seed).toBe(0x4000_0000);
     expect(frame.tick).toBe(6);
     expect(frame.timeSeconds).toBe(6 / 60);
     expect(frame.simulationResetRevision).toBe(1);
     expect(frame.manifestHash).toBe(CORE_MANIFEST.manifestHash);
+    expect(frame.waterline).toEqual({
+      classification: "above",
+      seaLevelMetres: 0,
+      surfaceHeightMetres: 0,
+      signedDistanceMetres: 1,
+      submersion: 0,
+      transitionRevision: 0,
+      lensWetnessImpulse: false,
+    });
     expect(frame.temporal.resetReason).toBe("qa-reset");
+    expect(frame.secondaryParticles.lifecycleReentryForbidden).toBe(0);
+    expect(frame.secondaryParticles.dropReasons.lifecycleReentryForbidden).toBe(
+      0,
+    );
     expect(frame.captures.map((capture) => capture.name)).toEqual([
       "final-color",
       "depth",
+      "underwater-caustics",
+      "underwater-particles",
+      "underwater-bubbles",
+      "lens-wetness",
+    ]);
+    expect(frame.captures[2]).toMatchObject({
+      name: "underwater-caustics",
+      format: "r32float-underwater-caustics",
+    });
+    expect(frame.captures.slice(3)).toMatchObject([
+      {
+        name: "underwater-particles",
+        format: "r32float-underwater-particles",
+      },
+      {
+        name: "underwater-bubbles",
+        format: "r32float-underwater-bubbles",
+      },
+      { name: "lens-wetness", format: "r32float-lens-wetness" },
     ]);
 
     const mismatching = createQaFrameDriver({

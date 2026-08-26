@@ -9,7 +9,7 @@ import type {
   QaCameraV1,
   QaCurrentSsrFixtureHotColor,
   QaCurrentSsrFixtureState,
-  QaHarnessV8,
+  QaHarness,
 } from "../src/qa-harness.js";
 import { hasCoreWebGPU } from "./core-webgpu-support.js";
 import { decodeFloat32, decodeUint8 } from "./qa-capture-bytes.js";
@@ -33,7 +33,26 @@ const FAR_WATER_CAMERA = {
   near: 1,
   far: 2000,
 } satisfies QaCameraV1;
-const FAR_WATER_CONTROLS = createWaterPreset("storm").artisticControls;
+const SSR_CONTROLS = {
+  ...createWaterPreset("swell").artisticControls,
+  whitecapAmount: 0,
+  foamPersistence: 0,
+  underwaterHaze: 1,
+  underwaterTurbidity: 1,
+  underwaterLightShafts: 1,
+  underwaterColor: 1,
+  underwaterExposure: 1,
+} satisfies ArtisticControls;
+const FAR_WATER_CONTROLS = {
+  ...createWaterPreset("storm").artisticControls,
+  whitecapAmount: 0,
+  foamPersistence: 0,
+  underwaterHaze: 1,
+  underwaterTurbidity: 1,
+  underwaterLightShafts: 1,
+  underwaterColor: 1,
+  underwaterExposure: 1,
+} satisfies ArtisticControls;
 const OFFSCREEN_CAMERA = {
   ...HIT_CAMERA,
   position: [40, 12, 40] as const,
@@ -43,6 +62,7 @@ const ROUGHNESS_CUTOFF = 0.5;
 const HALF_FLOAT_EPSILON = 2 ** -10;
 
 interface CurrentSsrEvidence {
+  readonly whitecapDensity?: string;
   readonly occupancy: string;
   readonly environment: string;
   readonly fresnel: string;
@@ -78,14 +98,18 @@ async function presentCurrentSsrEvidence(
   enabled: boolean,
   hotColor: QaCurrentSsrFixtureHotColor = "magenta",
   camera: QaCameraV1 = HIT_CAMERA,
+  controls: ArtisticControls = SSR_CONTROLS,
 ): Promise<CurrentSsrEvidence> {
   return page.evaluate(
-    async ({ fixtureEnabled, fixtureColor, cameraPose }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    async ({ fixtureEnabled, fixtureColor, cameraPose, artisticControls }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
       await harness.reset({ seed: 0x4000_0000 });
+      await harness.updateArtisticControls(artisticControls, {
+        transition: "continuous",
+      });
       await harness.setCamera(cameraPose, { transition: "camera-cut" });
       await harness.setHostSceneForegroundFixture(false);
       await harness.advanceTicks(24);
@@ -95,6 +119,7 @@ async function presentCurrentSsrEvidence(
       await harness.advanceTicks(1);
       const presentation = await harness.present();
       const [
+        whitecapDensity,
         occupancy,
         environment,
         fresnel,
@@ -111,6 +136,7 @@ async function presentCurrentSsrEvidence(
         normal,
         motion,
       ] = await Promise.all([
+        harness.capture("whitecap-decay"),
         harness.capture("planar-target-alpha"),
         harness.capture("optical-environment-reflection"),
         harness.capture("optical-fresnel"),
@@ -128,6 +154,7 @@ async function presentCurrentSsrEvidence(
         harness.capture("motion-vector"),
       ]);
       return {
+        whitecapDensity: whitecapDensity.data,
         occupancy: occupancy.data,
         environment: environment.data,
         fresnel: fresnel.data,
@@ -151,6 +178,7 @@ async function presentCurrentSsrEvidence(
       fixtureEnabled: enabled,
       fixtureColor: hotColor,
       cameraPose: camera,
+      artisticControls: controls,
     },
   );
 }
@@ -163,7 +191,7 @@ async function presentFarWaterSsrEvidence(
 ): Promise<CurrentSsrEvidence> {
   return page.evaluate(
     async ({ fixtureEnabled, cameraPose, artisticControls }) => {
-      const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
       if (harness === undefined) {
         throw new Error("QA Harness is unavailable.");
       }
@@ -219,6 +247,13 @@ function waterPixels(fresnelA: readonly number[], fresnelB: readonly number[]) {
       value > 0.001 && (fresnelB[index] ?? 0) > 0.001 ? index : -1,
     )
     .filter((index) => index >= 0);
+}
+
+function mean(values: readonly number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 function luminance(color: Uint8Array, pixel: number): number {
@@ -391,7 +426,7 @@ test("keeps the FrontSide current-frame SSR fixture visible and scale-disabled t
 }) => {
   await openQaStage(page);
   const ready = await page.evaluate(async () => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
+    const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
     if (harness === undefined) {
       throw new Error("QA Harness is unavailable.");
     }
@@ -634,6 +669,48 @@ test("overlays current-frame SSR hits over planar-plus-environment base without 
     }),
   ).toBe(true);
   expect(hit.compileCount).toBe(miss.compileCount);
+});
+
+test("suppresses current-frame SSR confidence across default active whitecaps", async ({
+  page,
+}) => {
+  await openQaStage(page);
+  const frame = await presentCurrentSsrEvidence(
+    page,
+    true,
+    "magenta",
+    HIT_CAMERA,
+    createWaterPreset("swell").artisticControls,
+  );
+  if (frame.whitecapDensity === undefined) {
+    throw new Error("Default whitecap density capture is unavailable.");
+  }
+  const density = decodeFloat32(frame.whitecapDensity);
+  const fresnel = decodeFloat32(frame.fresnel);
+  const hit = decodeFloat32(frame.hit);
+  const confidence = decodeFloat32(frame.confidence);
+  const roughness = decodeFloat32(frame.roughness);
+  const activeRawHits = density
+    .map((value, index) =>
+      value > 0.5 &&
+      (fresnel[index] ?? 0) > 0.001 &&
+      (hit[index] ?? 0) > HALF_FLOAT_EPSILON
+        ? index
+        : -1,
+    )
+    .filter((index) => index >= 0);
+  const activeDensity = activeRawHits.map((index) => density[index] ?? 0);
+  const activeRoughness = activeRawHits.map((index) => roughness[index] ?? 0);
+  const meanDensity = mean(activeDensity);
+  const meanRoughness = mean(activeRoughness);
+
+  expect(activeRawHits.length).toBeGreaterThan(1_000);
+  expect(meanDensity).toBeGreaterThan(0.75);
+  expect(meanDensity).toBeLessThan(0.86);
+  expect(Math.min(...activeRoughness)).toBeGreaterThanOrEqual(ROUGHNESS_CUTOFF);
+  expect(meanRoughness).toBeGreaterThan(0.65);
+  expect(meanRoughness).toBeLessThan(0.78);
+  expect(activeRawHits.every((index) => confidence[index] === 0)).toBe(true);
 });
 
 test("keeps a black main-visible fixture as an SSR hit that darkens same-frame composite", async ({
@@ -888,35 +965,41 @@ test("updates raw SSR and TRAA final on the same JS task after a miss-to-hit pre
   page,
 }) => {
   await openQaStage(page);
-  const result = await page.evaluate(async (cameraPose) => {
-    const harness = window.__REAL_WATER_QA__ as QaHarnessV8 | undefined;
-    if (harness === undefined) {
-      throw new Error("QA Harness is unavailable.");
-    }
-    await harness.reset({ seed: 0x4000_0000 });
-    await harness.setCamera(cameraPose, { transition: "camera-cut" });
-    await harness.setHostSceneForegroundFixture(false);
-    await harness.advanceTicks(24);
-    await harness.setHostSceneCurrentSsrFixture(false);
-    const missPresentation = await harness.present();
-    const miss = {
-      hit: (await harness.capture("ssr-hit")).data,
-      confidence: (await harness.capture("ssr-confidence")).data,
-      color: (await harness.capture("ssr-color")).data,
-      finalColor: (await harness.capture("final-color")).data,
-      compileCount: missPresentation.compileCount,
-    };
-    await harness.setHostSceneCurrentSsrFixture(true);
-    const hitPresentation = await harness.present();
-    const hit = {
-      hit: (await harness.capture("ssr-hit")).data,
-      confidence: (await harness.capture("ssr-confidence")).data,
-      color: (await harness.capture("ssr-color")).data,
-      finalColor: (await harness.capture("final-color")).data,
-      compileCount: hitPresentation.compileCount,
-    };
-    return { miss, hit };
-  }, HIT_CAMERA);
+  const result = await page.evaluate(
+    async ({ cameraPose, controls }) => {
+      const harness = window.__REAL_WATER_QA__ as QaHarness | undefined;
+      if (harness === undefined) {
+        throw new Error("QA Harness is unavailable.");
+      }
+      await harness.reset({ seed: 0x4000_0000 });
+      await harness.updateArtisticControls(controls, {
+        transition: "continuous",
+      });
+      await harness.setCamera(cameraPose, { transition: "camera-cut" });
+      await harness.setHostSceneForegroundFixture(false);
+      await harness.advanceTicks(24);
+      await harness.setHostSceneCurrentSsrFixture(false);
+      const missPresentation = await harness.present();
+      const miss = {
+        hit: (await harness.capture("ssr-hit")).data,
+        confidence: (await harness.capture("ssr-confidence")).data,
+        color: (await harness.capture("ssr-color")).data,
+        finalColor: (await harness.capture("final-color")).data,
+        compileCount: missPresentation.compileCount,
+      };
+      await harness.setHostSceneCurrentSsrFixture(true);
+      const hitPresentation = await harness.present();
+      const hit = {
+        hit: (await harness.capture("ssr-hit")).data,
+        confidence: (await harness.capture("ssr-confidence")).data,
+        color: (await harness.capture("ssr-color")).data,
+        finalColor: (await harness.capture("final-color")).data,
+        compileCount: hitPresentation.compileCount,
+      };
+      return { miss, hit };
+    },
+    { cameraPose: HIT_CAMERA, controls: SSR_CONTROLS },
+  );
   const missHit = decodeFloat32(result.miss.hit);
   const hitHit = decodeFloat32(result.hit.hit);
   const missConfidence = decodeFloat32(result.miss.confidence);

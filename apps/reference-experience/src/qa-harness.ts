@@ -12,14 +12,27 @@ import {
   type ArtisticControls,
   type ArtisticControlUpdateOptions,
   type ArtisticControlUpdateReceipt,
+  type BodyPhysicsPose,
+  type DisturbanceBatch,
+  type DisturbanceSubmissionReceipt,
+  type HostEnvironmentSnapshot,
   type HostEnvironmentState,
   type HostLifecycleAdapter,
   type HostPreparationRequest,
   type HostPreparationResult,
   type HostPreparedLease,
+  type InteractionAnchor,
+  type InteractionAnchorUpdateReceipt,
   type PrewarmManifest,
   type RealWaterLease,
+  type ShowcaseCapturePoint,
+  type ShowcasePreset,
+  type ShowcasePresetIdentity,
 } from "real-water";
+import type {
+  DiagnosticsSecondaryParticles,
+  DiagnosticsWaterlineState,
+} from "real-water/diagnostics";
 import {
   QA_FRAME_PREWARM_MANIFEST,
   createBoundCoreDiagnosticsPrewarmReceipt,
@@ -76,11 +89,11 @@ export type { QaHostPresentationController } from "./qa-presentation-controller.
 export type { QaTemporalResetReason } from "./qa-frame-driver.js";
 
 export const QA_HARNESS_SCHEMA = "real-water/qa-harness" as const;
-export const QA_HARNESS_VERSION = 8 as const;
+export const QA_HARNESS_VERSION = 18 as const;
 export const QA_HARNESS_FIXED_TICK_HZ = QA_FRAME_FIXED_TICK_HZ;
 export const QA_HARNESS_CAPTURE_NAMES = QA_FRAME_CAPTURE_NAMES;
 export const QA_CAPTURE_SCHEMA = "real-water/qa-capture" as const;
-export const QA_CAPTURE_VERSION = 8 as const;
+export const QA_CAPTURE_VERSION = 17 as const;
 
 export type QaCaptureName = QaFrameCaptureName;
 
@@ -94,13 +107,14 @@ export interface QaCameraV1 {
   readonly far: number;
 }
 
-export interface QaFrameStateReceiptV4 {
+export interface QaFrameStateReceiptV17 {
   readonly seed: number;
   readonly tick: number;
   readonly timeSeconds: number;
   readonly simulationResetRevision: number;
   readonly originX: number;
   readonly originZ: number;
+  readonly seaLevelMetres: number;
   readonly originRevision: number;
 }
 
@@ -112,6 +126,10 @@ export interface QaOriginReceiptV4 {
   readonly originX: number;
   readonly originZ: number;
   readonly originRevision: number;
+}
+
+export interface QaSeaLevelReceiptV17 {
+  readonly seaLevelMetres: number;
 }
 
 export type QaCameraTransition = "continuous" | "camera-cut";
@@ -134,13 +152,13 @@ export interface QaMotionAssociationV5 {
   readonly current: QaPresentedMotionStateV5;
 }
 
-export interface QaTemporalReceiptV5 {
+export interface QaTemporalReceiptV17 {
   readonly historyEpoch: number;
   readonly resetReason: QaTemporalResetReason | null;
   readonly resetFrame: boolean;
 }
 
-export interface QaPresentationReceiptV8 extends QaFrameStateReceiptV4 {
+export interface QaPresentationReceiptV17 extends QaFrameStateReceiptV17 {
   readonly generation: number;
   readonly presentationId: number;
   readonly manifestHash: string;
@@ -150,13 +168,15 @@ export interface QaPresentationReceiptV8 extends QaFrameStateReceiptV4 {
   readonly seaStateCutRevision: number;
   readonly compileCount: number;
   readonly probeCount: number;
-  readonly captureNames: typeof QA_HARNESS_CAPTURE_NAMES;
+  readonly captureNames: readonly QaCaptureName[];
   readonly prewarm: QaFramePrewarmReceipt;
   readonly motion: QaMotionAssociationV5;
-  readonly temporal: QaTemporalReceiptV5;
+  readonly waterline: DiagnosticsWaterlineState;
+  readonly secondaryParticles: DiagnosticsSecondaryParticles;
+  readonly temporal: QaTemporalReceiptV17;
 }
 
-export interface QaCaptureV8 extends QaPresentationReceiptV8 {
+export interface QaCaptureV17 extends QaPresentationReceiptV17 {
   readonly schema: typeof QA_CAPTURE_SCHEMA;
   readonly version: typeof QA_CAPTURE_VERSION;
   readonly name: QaCaptureName;
@@ -168,7 +188,20 @@ export interface QaCaptureV8 extends QaPresentationReceiptV8 {
     | "r32float-linear-view"
     | "rgb32float-view-normal"
     | "rg32float-ndc"
+    | "r32float-whitecap-stage"
+    | "rgba32float-foam-source-identity"
+    | "r32float-waterline-coverage"
+    | "r32float-history-rejection"
     | "r32float-optical"
+    | "r32float-underwater-volume"
+    | "r32float-secondary-particle-contribution"
+    | "r32float-secondary-particle-overdraw"
+    | "r32float-hero-breaker-foam"
+    | "r32float-underwater-caustics"
+    | "r32float-underwater-particles"
+    | "r32float-underwater-bubbles"
+    | "r32float-lens-wetness"
+    | "r32float-storm-front"
     | "rgb32float-linear-ssr"
     | "r32float-ssr-roughness"
     | "rgb32float-linear-reflection-base"
@@ -191,7 +224,9 @@ export interface QaFrameSource {
   setCamera(camera: QaCameraV1): void;
   incrementCameraCut(): void;
   setOrigin(originX: number, originZ: number): void;
+  setSeaLevel(seaLevelMetres: number): void;
   setEnvironmentLighting(state: HostEnvironmentState): void;
+  setEnvironmentState(state: HostEnvironmentSnapshot): void;
   setHostSceneLightingDecoy(enabled: boolean): void;
   setHostSceneForegroundFixture(visible: boolean): void;
   setHostScenePlanarReflectionFixture(enabled: boolean): void;
@@ -205,6 +240,7 @@ export interface QaFrameSource {
   ): void;
   readHostSceneCurrentSsrFixture(): QaCurrentSsrFixtureState;
   readEnvironmentLighting(): HostEnvironmentState;
+  readEnvironmentState(): HostEnvironmentSnapshot;
 }
 
 export interface QaGameplayQueryV4 {
@@ -219,23 +255,83 @@ export interface QaGameplayQueryV4 {
   readonly presentationId: number;
 }
 
+export interface QaShowcaseReplayLookV18 {
+  readonly id: string;
+  readonly waterPreset: ShowcasePreset["waterPreset"];
+  readonly environmentPreset: ShowcasePreset["environmentPreset"];
+}
+
+export interface QaShowcaseReplayBodyControlsV18 {
+  readonly throttle: number;
+  readonly steering: number;
+}
+
+export interface QaShowcaseReplayBodyV18 {
+  readonly id: string;
+  readonly controls: QaShowcaseReplayBodyControlsV18;
+  readonly fixedStepCount: number;
+  readonly pose: BodyPhysicsPose;
+}
+
+export interface QaShowcaseReplayEventV18 {
+  readonly id: string;
+  readonly tick: number;
+}
+
+/**
+ * A schedule-owned replay snapshot. The injected controller must return a
+ * deeply immutable value so the Harness observes the production Showcase
+ * state without copying its timeline implementation.
+ */
+export interface QaShowcaseReplaySnapshotV18 {
+  readonly look: QaShowcaseReplayLookV18;
+  readonly camera: QaCameraV1;
+  readonly body: QaShowcaseReplayBodyV18;
+  readonly environment: HostEnvironmentSnapshot;
+  readonly events: readonly QaShowcaseReplayEventV18[];
+}
+
+/** The narrow production Showcase seam injected into the test-only Harness. */
+export interface QaShowcaseReplayController {
+  preset(): ShowcasePreset;
+  activate(): void;
+  deactivate(): void;
+  snapshot(): QaShowcaseReplaySnapshotV18;
+}
+
+export interface QaShowcaseReplayReceiptV18 extends QaShowcaseReplaySnapshotV18 {
+  readonly showcase: ShowcasePresetIdentity;
+  readonly capturePoint: ShowcaseCapturePoint | null;
+  readonly seed: number;
+  readonly tick: number;
+  readonly presentation: QaPresentationReceiptV17;
+}
+
+export type QaShowcaseReplayRequestV18 =
+  | { readonly capturePoint: string }
+  | {
+      readonly tick: number;
+      readonly captures?: readonly QaCaptureName[];
+    };
+
 export interface QaHarnessOptions {
   applySecondQualityProfile(): Promise<void>;
   dispose(): Promise<void>;
   frameSource(): QaFrameSource | null;
   signalLongSuspension(): Promise<void>;
+  readonly showcaseReplay?: QaShowcaseReplayController;
   snapshot(): ReferenceExperienceSnapshot;
   synthesizeDeviceLoss(): void;
 }
 
-export interface QaHarnessV8 {
+export interface QaHarnessV18 {
   readonly schema: typeof QA_HARNESS_SCHEMA;
   readonly version: typeof QA_HARNESS_VERSION;
   readonly fixedTickHz: typeof QA_HARNESS_FIXED_TICK_HZ;
   readonly captureNames: typeof QA_HARNESS_CAPTURE_NAMES;
   readonly prewarmManifest: typeof QA_FRAME_PREWARM_MANIFEST;
-  reset(request: { readonly seed: number }): Promise<QaFrameStateReceiptV4>;
-  advanceTicks(count: number): Promise<QaFrameStateReceiptV4>;
+  reset(request: { readonly seed: number }): Promise<QaFrameStateReceiptV17>;
+  advanceTicks(count: number): Promise<QaFrameStateReceiptV17>;
   setCamera(
     camera: QaCameraV1,
     options: QaCameraUpdateOptions,
@@ -244,15 +340,30 @@ export interface QaHarnessV8 {
     readonly x: number;
     readonly z: number;
   }): Promise<QaOriginReceiptV4>;
-  present(): Promise<QaPresentationReceiptV8>;
-  capture(name: QaCaptureName): Promise<QaCaptureV8>;
+  setSeaLevel(seaLevel: {
+    readonly metres: number;
+  }): Promise<QaSeaLevelReceiptV17>;
+  present(): Promise<QaPresentationReceiptV17>;
+  replayShowcase(
+    request: QaShowcaseReplayRequestV18,
+  ): Promise<QaShowcaseReplayReceiptV18>;
+  capture(name: QaCaptureName): Promise<QaCaptureV17>;
   updateArtisticControls(
     controls: ArtisticControls,
     options: ArtisticControlUpdateOptions,
   ): Promise<ArtisticControlUpdateReceipt>;
+  updateInteractionAnchor(
+    anchor: InteractionAnchor,
+  ): Promise<InteractionAnchorUpdateReceipt>;
+  submitDisturbances(
+    batch: DisturbanceBatch,
+  ): Promise<DisturbanceSubmissionReceipt>;
   updateEnvironmentLighting(
     state: HostEnvironmentState,
   ): Promise<HostEnvironmentState>;
+  updateEnvironment(
+    state: HostEnvironmentSnapshot,
+  ): Promise<HostEnvironmentSnapshot>;
   setHostSceneLightingDecoy(enabled: boolean): Promise<void>;
   setHostSceneForegroundFixture(visible: boolean): Promise<void>;
   setHostScenePlanarReflectionFixture(enabled: boolean): Promise<void>;
@@ -275,6 +386,9 @@ export interface QaHarnessV8 {
   synthesizeDeviceLoss(): void;
 }
 
+/** The current test-only QA Harness contract for ordinary consumers. */
+export type QaHarness = QaHarnessV18;
+
 interface ActiveRecipe {
   readonly source: QaFrameSource;
   readonly driver: QaFrameDriver;
@@ -283,16 +397,18 @@ interface ActiveRecipe {
   tick: number;
   originX: number;
   originZ: number;
+  seaLevelMetres: number;
   pendingTicks: number;
   cameraRevision: number;
   cameraSet: boolean;
-  captures: ReadonlyMap<QaCaptureName, QaCaptureV8> | null;
-  presentation: QaPresentationReceiptV8 | null;
+  captures: ReadonlyMap<QaCaptureName, QaCaptureV17> | null;
+  presentation: QaPresentationReceiptV17 | null;
   lastPresentedMotion: QaPresentedMotionStateV5 | null;
 }
 
-export function createQaHarness(options: QaHarnessOptions): QaHarnessV8 {
+export function createQaHarness(options: QaHarnessOptions): QaHarnessV18 {
   let active: ActiveRecipe | null = null;
+  let showcaseReplayActive = false;
   let queue = Promise.resolve();
 
   const enqueue = <Result>(
@@ -306,11 +422,165 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV8 {
     return result;
   };
 
-  const invalidateRecipe = (): void => {
-    active = null;
+  const deactivateShowcaseReplay = (): void => {
+    if (!showcaseReplayActive) {
+      return;
+    }
+    try {
+      options.showcaseReplay?.deactivate();
+    } finally {
+      showcaseReplayActive = false;
+    }
   };
 
-  const harness: QaHarnessV8 = {
+  const invalidateRecipe = (): void => {
+    try {
+      deactivateShowcaseReplay();
+    } finally {
+      active = null;
+    }
+  };
+
+  const resetRecipe = async (
+    seed: number,
+  ): Promise<{
+    readonly recipe: ActiveRecipe;
+    readonly receipt: QaFrameStateReceiptV17;
+  }> => {
+    invalidateRecipe();
+    const source = requireFrameSource(options.frameSource());
+    const driver = requirePreparedDriver(source.driver());
+    const lease = requirePreparedLease(source.lease());
+    if (driver.fixedTickHz !== QA_HARNESS_FIXED_TICK_HZ) {
+      throw qaError(
+        "QA_INVALIDATED",
+        "The prepared Host uses an unsupported fixed-tick cadence.",
+      );
+    }
+    const resetReceipt = await driver.reset({ seed });
+    const recipe: ActiveRecipe = {
+      source,
+      driver,
+      lease,
+      seed: resetReceipt.seed,
+      tick: resetReceipt.tick,
+      originX: 0,
+      originZ: 0,
+      seaLevelMetres: 0,
+      pendingTicks: 0,
+      cameraRevision: 0,
+      cameraSet: false,
+      captures: null,
+      presentation: null,
+      lastPresentedMotion: null,
+    };
+    active = recipe;
+    const runtime = lease.inspectRuntime();
+    return Object.freeze({
+      recipe,
+      receipt: Object.freeze({
+        seed: resetReceipt.seed,
+        tick: resetReceipt.tick,
+        timeSeconds: resetReceipt.timeSeconds,
+        simulationResetRevision: resetReceipt.simulationResetRevision,
+        originX: 0,
+        originZ: 0,
+        seaLevelMetres: 0,
+        originRevision: runtime.originRevision,
+      }),
+    });
+  };
+
+  const presentRecipe = async (
+    recipe: ActiveRecipe,
+    captureNames: readonly QaCaptureName[] = QA_HARNESS_CAPTURE_NAMES,
+  ): Promise<QaPresentationReceiptV17> => {
+    if (!recipe.cameraSet) {
+      throw qaError(
+        "QA_CAMERA_REQUIRED",
+        "Set a deterministic camera before presenting a QA frame.",
+      );
+    }
+    const frame = await recipe.driver.present({
+      advanceFixedTicks: recipe.pendingTicks,
+      captures: captureNames,
+    });
+    if (frame.seed !== recipe.seed || frame.tick !== recipe.tick) {
+      throw qaError(
+        "QA_INVALIDATED",
+        "The prepared Host frame state diverged from the QA Harness.",
+      );
+    }
+    const runtime = recipe.lease.inspectRuntime();
+    if (
+      runtime.seed !== frame.seed ||
+      runtime.tick !== frame.tick ||
+      runtime.timeSeconds !== frame.timeSeconds ||
+      runtime.simulationResetRevision !== frame.simulationResetRevision ||
+      runtime.controlRevision !== frame.controlRevision ||
+      runtime.originRevision !== frame.originRevision ||
+      runtime.cameraCutRevision !== frame.cameraCutRevision ||
+      runtime.seaStateCutRevision !== frame.seaStateCutRevision ||
+      runtime.originX !== recipe.originX ||
+      runtime.originZ !== recipe.originZ ||
+      runtime.seaLevelMetres !== recipe.seaLevelMetres ||
+      frame.manifestHash !== recipe.driver.prewarm.core.manifestHash
+    ) {
+      throw qaError(
+        "QA_INVALIDATED",
+        "The ready runtime state diverged from the presented Host frame.",
+      );
+    }
+    const generation = options.snapshot().generation;
+    const currentMotion = Object.freeze({
+      tick: frame.tick,
+      controlRevision: frame.controlRevision,
+      originRevision: frame.originRevision,
+      cameraRevision: recipe.cameraRevision,
+      cameraCutRevision: frame.cameraCutRevision,
+      seaStateCutRevision: frame.seaStateCutRevision,
+    });
+    const previousMotion = presentedMotionPrevious(
+      recipe.lastPresentedMotion,
+      currentMotion,
+      frame.temporal.resetFrame,
+    );
+    const receipt = Object.freeze({
+      seed: frame.seed,
+      tick: frame.tick,
+      timeSeconds: frame.timeSeconds,
+      simulationResetRevision: frame.simulationResetRevision,
+      originX: runtime.originX,
+      originZ: runtime.originZ,
+      seaLevelMetres: runtime.seaLevelMetres,
+      generation,
+      presentationId: frame.presentationId,
+      manifestHash: frame.manifestHash,
+      cameraRevision: recipe.cameraRevision,
+      cameraCutRevision: frame.cameraCutRevision,
+      controlRevision: frame.controlRevision,
+      seaStateCutRevision: frame.seaStateCutRevision,
+      compileCount: frame.compileCount,
+      probeCount: frame.probeCount,
+      originRevision: frame.originRevision,
+      captureNames: Object.freeze([...captureNames]),
+      prewarm: frame.prewarm,
+      motion: Object.freeze({
+        previous: previousMotion,
+        current: currentMotion,
+      }),
+      waterline: frame.waterline,
+      secondaryParticles: frame.secondaryParticles,
+      temporal: frame.temporal,
+    });
+    recipe.captures = cacheCaptures(frame.captures, receipt);
+    recipe.presentation = receipt;
+    recipe.lastPresentedMotion = currentMotion;
+    recipe.pendingTicks = 0;
+    return receipt;
+  };
+
+  const harness: QaHarnessV18 = {
     schema: QA_HARNESS_SCHEMA,
     version: QA_HARNESS_VERSION,
     fixedTickHz: QA_HARNESS_FIXED_TICK_HZ,
@@ -319,43 +589,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV8 {
     reset(request) {
       const seed = request.seed;
       assertSeed(seed);
-      return enqueue(async () => {
-        const source = requireFrameSource(options.frameSource());
-        const driver = requirePreparedDriver(source.driver());
-        const lease = requirePreparedLease(source.lease());
-        if (driver.fixedTickHz !== QA_HARNESS_FIXED_TICK_HZ) {
-          throw qaError(
-            "QA_INVALIDATED",
-            "The prepared Host uses an unsupported fixed-tick cadence.",
-          );
-        }
-        const receipt = await driver.reset({ seed });
-        active = {
-          source,
-          driver,
-          lease,
-          seed: receipt.seed,
-          tick: receipt.tick,
-          originX: 0,
-          originZ: 0,
-          pendingTicks: 0,
-          cameraRevision: 0,
-          cameraSet: false,
-          captures: null,
-          presentation: null,
-          lastPresentedMotion: null,
-        };
-        const runtime = lease.inspectRuntime();
-        return Object.freeze({
-          seed: receipt.seed,
-          tick: receipt.tick,
-          timeSeconds: receipt.timeSeconds,
-          simulationResetRevision: receipt.simulationResetRevision,
-          originX: 0,
-          originZ: 0,
-          originRevision: runtime.originRevision,
-        });
-      });
+      return enqueue(async () => (await resetRecipe(seed)).receipt);
     },
     advanceTicks(count) {
       assertTickCount(count);
@@ -379,6 +613,7 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV8 {
           simulationResetRevision: runtime.simulationResetRevision,
           originX: recipe.originX,
           originZ: recipe.originZ,
+          seaLevelMetres: recipe.seaLevelMetres,
           originRevision: runtime.originRevision,
         });
       });
@@ -406,6 +641,23 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV8 {
         });
       });
     },
+    setSeaLevel(seaLevel) {
+      const seaLevelMetres = seaLevel.metres;
+      if (!Number.isFinite(seaLevelMetres)) {
+        return Promise.reject(
+          qaError("QA_INVALID_ARGUMENT", "The QA sea level must be finite."),
+        );
+      }
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        recipe.source.setSeaLevel(seaLevelMetres);
+        recipe.seaLevelMetres = seaLevelMetres;
+        recipe.captures = null;
+        recipe.presentation = null;
+        const runtime = recipe.lease.inspectRuntime();
+        return Object.freeze({ seaLevelMetres: runtime.seaLevelMetres });
+      });
+    },
     setCamera(camera, cameraOptions) {
       const normalized = normalizeCamera(camera);
       const transition = readQaCameraUpdateOptions(cameraOptions);
@@ -425,85 +677,57 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV8 {
     present() {
       return enqueue(async () => {
         const recipe = requireActiveRecipe(active, options.frameSource());
-        if (!recipe.cameraSet) {
+        return presentRecipe(recipe);
+      });
+    },
+    replayShowcase(request) {
+      const requestedReplay = readShowcaseReplayRequest(request);
+      return enqueue(async () => {
+        const controller = options.showcaseReplay;
+        if (controller === undefined) {
           throw qaError(
-            "QA_CAMERA_REQUIRED",
-            "Set a deterministic camera before presenting a QA frame.",
+            "QA_SHOWCASE_UNSUPPORTED",
+            "The prepared Host does not expose Showcase replay.",
           );
         }
-        const frame = await recipe.driver.present({
-          advanceFixedTicks: recipe.pendingTicks,
-          captures: QA_HARNESS_CAPTURE_NAMES,
-        });
-        if (frame.seed !== recipe.seed || frame.tick !== recipe.tick) {
-          throw qaError(
-            "QA_INVALIDATED",
-            "The prepared Host frame state diverged from the QA Harness.",
-          );
-        }
-        const runtime = recipe.lease.inspectRuntime();
-        if (
-          runtime.seed !== frame.seed ||
-          runtime.tick !== frame.tick ||
-          runtime.timeSeconds !== frame.timeSeconds ||
-          runtime.simulationResetRevision !== frame.simulationResetRevision ||
-          runtime.controlRevision !== frame.controlRevision ||
-          runtime.originRevision !== frame.originRevision ||
-          runtime.cameraCutRevision !== frame.cameraCutRevision ||
-          runtime.seaStateCutRevision !== frame.seaStateCutRevision ||
-          runtime.originX !== recipe.originX ||
-          runtime.originZ !== recipe.originZ ||
-          frame.manifestHash !== recipe.driver.prewarm.core.manifestHash
-        ) {
-          throw qaError(
-            "QA_INVALIDATED",
-            "The ready runtime state diverged from the presented Host frame.",
-          );
-        }
-        const generation = options.snapshot().generation;
-        const currentMotion = Object.freeze({
-          tick: frame.tick,
-          controlRevision: frame.controlRevision,
-          originRevision: frame.originRevision,
-          cameraRevision: recipe.cameraRevision,
-          cameraCutRevision: frame.cameraCutRevision,
-          seaStateCutRevision: frame.seaStateCutRevision,
-        });
-        const previousMotion = presentedMotionPrevious(
-          recipe.lastPresentedMotion,
-          currentMotion,
-          frame.temporal.resetFrame,
+        const preset = controller.preset();
+        const replayRequest = resolveShowcaseReplayRequest(
+          requestedReplay,
+          preset,
         );
-        const receipt = Object.freeze({
-          seed: frame.seed,
-          tick: frame.tick,
-          timeSeconds: frame.timeSeconds,
-          simulationResetRevision: frame.simulationResetRevision,
-          originX: runtime.originX,
-          originZ: runtime.originZ,
-          generation,
-          presentationId: frame.presentationId,
-          manifestHash: frame.manifestHash,
-          cameraRevision: recipe.cameraRevision,
-          cameraCutRevision: frame.cameraCutRevision,
-          controlRevision: frame.controlRevision,
-          seaStateCutRevision: frame.seaStateCutRevision,
-          compileCount: frame.compileCount,
-          probeCount: frame.probeCount,
-          originRevision: frame.originRevision,
-          captureNames: QA_HARNESS_CAPTURE_NAMES,
-          prewarm: frame.prewarm,
-          motion: Object.freeze({
-            previous: previousMotion,
-            current: currentMotion,
-          }),
-          temporal: frame.temporal,
-        });
-        recipe.captures = cacheCaptures(frame.captures, receipt);
-        recipe.presentation = receipt;
-        recipe.lastPresentedMotion = currentMotion;
-        recipe.pendingTicks = 0;
-        return receipt;
+        const { tick } = replayRequest;
+        if (tick > preset.durationTicks) {
+          throw qaError(
+            "QA_INVALID_ARGUMENT",
+            "The Showcase replay tick exceeds the preset duration.",
+          );
+        }
+        assertSeed(preset.seed);
+        const { recipe } = await resetRecipe(preset.seed);
+        try {
+          showcaseReplayActive = true;
+          controller.activate();
+          recipe.cameraSet = true;
+          recipe.cameraRevision = 1;
+          recipe.tick = tick;
+          recipe.pendingTicks = tick;
+          const presentation = await presentRecipe(
+            recipe,
+            replayRequest.captures,
+          );
+          const replay = freezeShowcaseReplaySnapshot(controller.snapshot());
+          return Object.freeze({
+            ...replay,
+            showcase: freezeShowcasePresetIdentity(preset),
+            capturePoint: replayRequest.capturePoint,
+            seed: preset.seed,
+            tick,
+            presentation,
+          });
+        } catch (cause) {
+          invalidateRecipe();
+          throw cause;
+        }
       });
     },
     capture(name) {
@@ -532,6 +756,24 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV8 {
         return receipt;
       });
     },
+    updateInteractionAnchor(anchor) {
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        const receipt = recipe.lease.updateInteractionAnchor(anchor);
+        recipe.captures = null;
+        recipe.presentation = null;
+        return receipt;
+      });
+    },
+    submitDisturbances(batch) {
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        const receipt = recipe.lease.submitDisturbances(batch);
+        recipe.captures = null;
+        recipe.presentation = null;
+        return receipt;
+      });
+    },
     updateEnvironmentLighting(state) {
       return enqueue(async () => {
         const recipe = requireActiveRecipe(active, options.frameSource());
@@ -539,6 +781,15 @@ export function createQaHarness(options: QaHarnessOptions): QaHarnessV8 {
         recipe.captures = null;
         recipe.presentation = null;
         return Object.freeze({ ...recipe.source.readEnvironmentLighting() });
+      });
+    },
+    updateEnvironment(state) {
+      return enqueue(async () => {
+        const recipe = requireActiveRecipe(active, options.frameSource());
+        recipe.source.setEnvironmentState(state);
+        recipe.captures = null;
+        recipe.presentation = null;
+        return recipe.source.readEnvironmentState();
       });
     },
     setHostSceneLightingDecoy(enabled) {
@@ -686,7 +937,8 @@ export function createQaThreeFrameSource(
   simulation: QaHostSimulationController,
   environmentLighting: {
     setLighting(state: HostEnvironmentState): void;
-    snapshot(): HostEnvironmentState;
+    setEnvironmentState(state: HostEnvironmentSnapshot): void;
+    snapshot(): HostEnvironmentSnapshot;
   },
   presentation: QaHostPresentationController,
 ): QaFrameSource {
@@ -763,8 +1015,14 @@ export function createQaThreeFrameSource(
     setOrigin(originX: number, originZ: number) {
       simulation.setOrigin(originX, originZ);
     },
+    setSeaLevel(seaLevelMetres: number) {
+      simulation.setSeaLevel(seaLevelMetres);
+    },
     setEnvironmentLighting(state: HostEnvironmentState) {
       environmentLighting.setLighting(state);
+    },
+    setEnvironmentState(state: HostEnvironmentSnapshot) {
+      environmentLighting.setEnvironmentState(state);
     },
     setHostSceneLightingDecoy(enabled: boolean) {
       if (enabled) {
@@ -847,6 +1105,9 @@ export function createQaThreeFrameSource(
       return readQaCurrentSsrFixture(requireCurrentSsrFixture(scene));
     },
     readEnvironmentLighting() {
+      return environmentLighting.snapshot().lighting;
+    },
+    readEnvironmentState() {
       return environmentLighting.snapshot();
     },
   });
@@ -1029,10 +1290,10 @@ function readArtisticControlUpdateOptions(
 
 function cacheCaptures(
   captures: readonly QaFrameDriverCapture[],
-  receipt: QaPresentationReceiptV8,
-): ReadonlyMap<QaCaptureName, QaCaptureV8> {
-  const byName = new Map<QaCaptureName, QaCaptureV8>();
-  for (const name of QA_HARNESS_CAPTURE_NAMES) {
+  receipt: QaPresentationReceiptV17,
+): ReadonlyMap<QaCaptureName, QaCaptureV17> {
+  const byName = new Map<QaCaptureName, QaCaptureV17>();
+  for (const name of receipt.captureNames) {
     const capture = captures.find((candidate) => candidate.name === name);
     if (capture === undefined) {
       throw qaError(
@@ -1042,7 +1303,7 @@ function cacheCaptures(
     }
     byName.set(name, encodeCapture(capture, receipt));
   }
-  if (captures.length !== QA_HARNESS_CAPTURE_NAMES.length) {
+  if (captures.length !== receipt.captureNames.length) {
     throw qaError(
       "QA_INVALIDATED",
       "The prepared frame returned an unsupported capture set.",
@@ -1053,8 +1314,8 @@ function cacheCaptures(
 
 function encodeCapture(
   capture: QaFrameDriverCapture,
-  receipt: QaPresentationReceiptV8,
-): QaCaptureV8 {
+  receipt: QaPresentationReceiptV17,
+): QaCaptureV17 {
   const shape = QA_FRAME_CAPTURE_SHAPES[capture.name];
   return Object.freeze({
     schema: QA_CAPTURE_SCHEMA,
@@ -1142,6 +1403,172 @@ function normalizeCamera(candidate: QaCameraV1): QaCameraV1 {
   });
 }
 
+function freezeShowcaseReplaySnapshot(
+  snapshot: QaShowcaseReplaySnapshotV18,
+): QaShowcaseReplaySnapshotV18 {
+  const pose = Object.freeze({
+    position: Object.freeze({ ...snapshot.body.pose.position }),
+    rotation: Object.freeze({ ...snapshot.body.pose.rotation }),
+  });
+  const body = Object.freeze({
+    id: snapshot.body.id,
+    controls: Object.freeze({ ...snapshot.body.controls }),
+    fixedStepCount: snapshot.body.fixedStepCount,
+    pose,
+  });
+  const environment = Object.freeze({
+    lighting: Object.freeze({ ...snapshot.environment.lighting }),
+    weather: Object.freeze({ ...snapshot.environment.weather }),
+    atmosphere: Object.freeze({ ...snapshot.environment.atmosphere }),
+  });
+  const events = Object.freeze(
+    snapshot.events.map(({ id, tick }) => Object.freeze({ id, tick })),
+  );
+  return Object.freeze({
+    look: Object.freeze({
+      id: snapshot.look.id,
+      waterPreset: Object.freeze({ ...snapshot.look.waterPreset }),
+      environmentPreset: Object.freeze({
+        ...snapshot.look.environmentPreset,
+      }),
+    }),
+    camera: normalizeCamera(snapshot.camera),
+    body,
+    environment,
+    events,
+  });
+}
+
+function freezeShowcasePresetIdentity(
+  preset: ShowcasePreset,
+): ShowcasePresetIdentity {
+  return Object.freeze({
+    schema: preset.schema,
+    version: preset.version,
+    id: preset.id,
+    presetHash: preset.presetHash,
+  });
+}
+
+type ReadShowcaseReplayRequest =
+  | Readonly<{ kind: "capture-point"; capturePoint: string }>
+  | Readonly<{
+      kind: "ad-hoc";
+      tick: number;
+      captures: readonly QaCaptureName[];
+    }>;
+
+interface ResolvedShowcaseReplayRequest {
+  readonly tick: number;
+  readonly captures: readonly QaCaptureName[];
+  readonly capturePoint: ShowcaseCapturePoint | null;
+}
+
+function readShowcaseReplayRequest(
+  request: QaShowcaseReplayRequestV18,
+): ReadShowcaseReplayRequest {
+  const value: unknown = request;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw qaError(
+      "QA_INVALID_ARGUMENT",
+      "Showcase replay requests must select a capture point or tick.",
+    );
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (
+    keys.length === 1 &&
+    Object.hasOwn(record, "capturePoint") &&
+    typeof record.capturePoint === "string" &&
+    record.capturePoint.trim().length > 0
+  ) {
+    return Object.freeze({
+      kind: "capture-point",
+      capturePoint: record.capturePoint,
+    });
+  }
+  if (
+    (keys.length !== 1 && keys.length !== 2) ||
+    !Object.hasOwn(record, "tick") ||
+    (keys.length === 2 && !Object.hasOwn(record, "captures")) ||
+    typeof record.tick !== "number" ||
+    !isQaFrameTickCount(record.tick)
+  ) {
+    throw qaError(
+      "QA_INVALID_ARGUMENT",
+      "Showcase replay ticks must be non-negative safe integers.",
+    );
+  }
+  const captures = normalizeShowcaseCaptureNames(
+    record.captures ?? QA_HARNESS_CAPTURE_NAMES,
+  );
+  return Object.freeze({
+    kind: "ad-hoc",
+    tick: record.tick,
+    captures,
+  });
+}
+
+function resolveShowcaseReplayRequest(
+  request: ReadShowcaseReplayRequest,
+  preset: ShowcasePreset,
+): Readonly<ResolvedShowcaseReplayRequest> {
+  if (request.kind === "ad-hoc") {
+    return Object.freeze({
+      tick: request.tick,
+      captures: request.captures,
+      capturePoint: null,
+    });
+  }
+  const capturePoint = preset.captureTimeline.find(
+    ({ id }) => id === request.capturePoint,
+  );
+  if (capturePoint === undefined) {
+    throw qaError(
+      "QA_INVALID_ARGUMENT",
+      `Unknown Showcase capture point: ${request.capturePoint}`,
+    );
+  }
+  return Object.freeze({
+    tick: capturePoint.tick,
+    captures: normalizeShowcaseCaptureNames(capturePoint.captureNames),
+    capturePoint: freezeShowcaseCapturePoint(capturePoint),
+  });
+}
+
+function normalizeShowcaseCaptureNames(
+  captures: unknown,
+): readonly QaCaptureName[] {
+  if (!Array.isArray(captures) || captures.length === 0) {
+    throw qaError(
+      "QA_INVALID_ARGUMENT",
+      "Showcase replay captures require at least one named output.",
+    );
+  }
+  const unique = new Set<QaCaptureName>();
+  for (const name of captures) {
+    assertCaptureName(name);
+    if (unique.has(name)) {
+      throw qaError(
+        "QA_INVALID_ARGUMENT",
+        "Showcase replay captures must be unique.",
+      );
+    }
+    unique.add(name);
+  }
+  return Object.freeze([...unique]);
+}
+
+function freezeShowcaseCapturePoint(
+  capturePoint: ShowcaseCapturePoint,
+): ShowcaseCapturePoint {
+  return Object.freeze({
+    id: capturePoint.id,
+    tick: capturePoint.tick,
+    captureNames: Object.freeze([...capturePoint.captureNames]),
+  });
+}
+
 function normalizeVector(
   value: readonly [number, number, number],
   label: string,
@@ -1188,7 +1615,7 @@ function assertTickCount(count: number): void {
   }
 }
 
-function assertCaptureName(name: QaCaptureName): void {
+function assertCaptureName(name: unknown): asserts name is QaCaptureName {
   if (!isQaFrameCaptureName(name)) {
     throw qaError(
       "QA_CAPTURE_UNSUPPORTED",
@@ -1265,6 +1692,7 @@ type QaErrorCode =
   | "QA_CAMERA_REQUIRED"
   | "QA_PRESENT_REQUIRED"
   | "QA_CAPTURE_UNSUPPORTED"
+  | "QA_SHOWCASE_UNSUPPORTED"
   | "QA_INVALID_ARGUMENT"
   | "QA_INVALIDATED";
 

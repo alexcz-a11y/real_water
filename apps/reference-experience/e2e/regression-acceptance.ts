@@ -81,6 +81,7 @@ export interface RegressionAcceptanceScreenshot {
 export interface RegressionAcceptanceDetails {
   readonly seed: number;
   readonly tick: number;
+  readonly seaLevelMetres?: number;
   readonly camera: QaCameraV1;
   readonly controlRevision: number;
   readonly coreManifest: {
@@ -157,7 +158,7 @@ export async function attachRegressionAcceptance(
     createMinimalWaterQualityProfile(coreIdentity.qualityProfile.id),
     coreIdentity.drawingBuffer,
   );
-  assertQaPrewarmV6(details.qaPrewarm);
+  assertQaPrewarmV16(details.qaPrewarm);
   const [userAgent, hardwareConcurrency, drawingBuffer, navigatorGpuAdapter] =
     await Promise.all([
       page.evaluate(() => navigator.userAgent),
@@ -177,7 +178,10 @@ export async function attachRegressionAcceptance(
       width: details.qaPrewarm.width,
       height: details.qaPrewarm.height,
     },
-    captures: details.captures,
+    // Spread rather than assign: `exactOptionalPropertyTypes` distinguishes an
+    // absent key from an explicit `undefined`, and the assertion reads
+    // `input.captures ?? []`, so both mean the same thing to it.
+    ...(details.captures === undefined ? {} : { captures: details.captures }),
   });
   const temporalStress =
     details.temporalStress === undefined
@@ -229,6 +233,7 @@ export async function attachRegressionAcceptance(
       asserted: screenshotAsserted,
       authoritative: screenshotAuthoritative,
     },
+    seaLevelMetres: details.seaLevelMetres ?? 0,
     seed: details.seed,
     tick: details.tick,
     camera: details.camera,
@@ -285,7 +290,29 @@ export async function attachRegressionAcceptance(
 
 async function readNavigatorGpuAdapterEvidence(page: Page): Promise<unknown> {
   return page.evaluate(async () => {
-    const gpu = navigator.gpu;
+    // Narrowed at the use site, the same way `core-webgpu-support.ts` does it.
+    // The repository installs no WebGPU type package, and hand-writing a global
+    // `Navigator` augmentation here would be a second, drifting copy of a
+    // browser contract nothing else in the tree declares.
+    const gpu = (
+      navigator as Navigator & {
+        gpu?: {
+          requestAdapter(): Promise<{
+            info?: {
+              vendor: string;
+              architecture: string;
+              device: string;
+              description: string;
+            };
+            limits: {
+              maxTextureDimension2D: number;
+              maxColorAttachmentBytesPerSample: number;
+              maxStorageBufferBindingSize: number;
+            };
+          } | null>;
+        };
+      }
+    ).gpu;
     if (gpu === undefined) {
       return null;
     }
@@ -354,23 +381,23 @@ function chromeVersionFromUserAgent(userAgent: string): string {
   return /(?:Chrome|Chromium)\/([\d.]+)/u.exec(userAgent)?.[1] ?? userAgent;
 }
 
-function assertQaPrewarmV6(prewarm: QaFramePrewarmReceipt): void {
+function assertQaPrewarmV16(prewarm: QaFramePrewarmReceipt): void {
   if (
     prewarm.manifest.schema !== QA_FRAME_PREWARM_MANIFEST.schema ||
     prewarm.manifest.version !== QA_FRAME_PREWARM_MANIFEST.version ||
     prewarm.manifest.id !== QA_FRAME_PREWARM_MANIFEST.id
   ) {
-    throw new Error("Regression acceptance requires QA prewarm v7.");
+    throw new Error("Regression acceptance requires QA prewarm v16.");
   }
   if (
     canonicalJson(prewarm.manifest.captures) !==
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.captures) ||
     canonicalJson(prewarm.manifest.coreDeclarations) !==
       canonicalJson(QA_FRAME_PREWARM_MANIFEST.coreDeclarations) ||
-    QA_FRAME_PREWARM_MANIFEST.captures.length !== 23
+    QA_FRAME_PREWARM_MANIFEST.captures.length !== 45
   ) {
     throw new Error(
-      "Regression acceptance requires the exact QA v7 23-name capture mapping.",
+      "Regression acceptance requires the exact QA v16 45-name capture mapping.",
     );
   }
   if (prewarm.rendererDevice === null || prewarm.rendererDevice === undefined) {

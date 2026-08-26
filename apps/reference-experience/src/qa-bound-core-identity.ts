@@ -1,16 +1,22 @@
 import {
   createMinimalWaterPrewarmManifest,
   createMinimalWaterQualityProfile,
+  MAX_ATTACHED_BODIES,
+  MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
   MAX_GAMEPLAY_QUERY_POINTS,
+  MAX_SECONDARY_PARTICLES,
   type HostEnvironmentReflectionDescriptor,
   type PrewarmDeclaration,
   type PrewarmDrawingBuffer,
   type PrewarmEffectVariant,
   type PrewarmManifest,
   type QualityProfile,
+  type QualityProfileStormFront,
   type QualityProfileTemporal,
   type RealWaterCapabilities,
   type RenderingCapabilitiesTemporal,
+  type RenderingCapabilitiesStormFront,
 } from "real-water";
 
 export interface QaBoundCoreQualityProfileIdentity {
@@ -87,6 +93,9 @@ const RENDERING_CAPABILITY_KEYS = [
   "timestampQuery",
   "temporal",
   "reflection",
+  "secondaryParticles",
+  "stormFront",
+  "postTraaComposition",
 ] as const;
 const REFLECTION_CAPABILITY_KEYS = ["environment", "planar", "ssr"] as const;
 const REFLECTION_SSR_KEYS = [
@@ -132,7 +141,110 @@ const REFLECTION_PLANAR_KEYS = [
   "format",
   "samples",
 ] as const;
-const GAMEPLAY_CAPABILITY_KEYS = ["maxQueryPointsPerTick"] as const;
+const SECONDARY_PARTICLE_CAPABILITY_KEYS = [
+  "capacity",
+  "maximumCandidateCount",
+  "contributionReference",
+  "hysteresis",
+  "consumers",
+  "selection",
+  "updateCadence",
+  "renderPhaseKnowledge",
+] as const;
+const SECONDARY_PARTICLE_REFERENCE_KEYS = [
+  "width",
+  "height",
+  "space",
+  "screenAreaDivisor",
+  "quantization",
+] as const;
+const SECONDARY_PARTICLE_HYSTERESIS_KEYS = [
+  "retainedContributionBonusQ16",
+  "minimumResidenceTicks",
+  "reentryCooldownTicks",
+] as const;
+const SECONDARY_PARTICLE_CONSUMER_KEYS = [
+  "consumerId",
+  "maximumRequestCount",
+  "softRequestCeiling",
+  "minimumRetainedSlots",
+  "pressureReentryPolicy",
+] as const;
+const POST_TRAA_CAPABILITY_KEYS = [
+  "width",
+  "height",
+  "stages",
+  "accumulationFormat",
+  "finalColorFormat",
+] as const;
+const POST_TRAA_STAGE_KEYS = ["id", "after"] as const;
+const STORM_FRONT_CAPABILITY_KEYS = [
+  "mode",
+  "updateCadence",
+  "rain",
+  "stormAerosol",
+  "cloudAndLightning",
+  "diagnostics",
+] as const;
+const STORM_FRONT_RAIN_KEYS = [
+  "surfaceRoute",
+  "secondaryParticleConsumerId",
+  "maximumCandidateCount",
+] as const;
+const STORM_FRONT_AEROSOL_KEYS = [
+  "secondaryParticleConsumerId",
+  "maximumCandidateCount",
+] as const;
+const STORM_FRONT_ILLUMINATION_KEYS = [
+  "illuminationRoute",
+  "atmosphereStageId",
+] as const;
+const STORM_FRONT_DIAGNOSTICS_KEYS = [
+  "resolutionPolicy",
+  "format",
+  "samples",
+] as const;
+const GAMEPLAY_CAPABILITY_KEYS = [
+  "maxAttachedBodies",
+  "maxQueryPointsPerTick",
+  "maxActiveDisturbances",
+  "maxActiveHeroBreakers",
+  "interactionField",
+  "bodyInteraction",
+] as const;
+const INTERACTION_FIELD_CAPABILITY_KEYS = [
+  "radiusMetres",
+  "edgeFadeMetres",
+  "maxSnapshotAgeTicks",
+  "disturbanceKinds",
+] as const;
+const BODY_INTERACTION_CAPABILITY_KEYS = [
+  "fixedTickHz",
+  "maxShapeSamplesPerBody",
+  "maxConvexHullVertices",
+  "maxSocketsPerBody",
+  "shapeKinds",
+  "socketKinds",
+  "generatedDisturbanceKinds",
+] as const;
+const BODY_INTERACTION_SHAPE_KINDS = [
+  "sphere",
+  "box",
+  "capsule",
+  "convex-hull",
+  "compound",
+] as const;
+const BODY_INTERACTION_SOCKET_KINDS = [
+  "bow",
+  "stern",
+  "propeller",
+  "wake",
+  "interaction-anchor",
+] as const;
+const BODY_GENERATED_DISTURBANCE_KINDS = [
+  "directional-wake",
+  "propeller-wash",
+] as const;
 const CAPABILITIES_TEMPORAL_KEYS = [
   ...TEMPORAL_KEYS,
   "motionFormat",
@@ -183,7 +295,15 @@ export function createQaBoundCoreManifestIdentity(
 
 export function readReadyCapabilities(
   value: unknown,
-  profile: Pick<QualityProfile, "temporal" | "reflection">,
+  profile: Pick<
+    QualityProfile,
+    | "bodyCoupling"
+    | "temporal"
+    | "reflection"
+    | "secondaryParticles"
+    | "stormFront"
+    | "postTraaComposition"
+  >,
   drawingBuffer: PrewarmDrawingBuffer,
 ): RealWaterCapabilities {
   if (!isRecord(value) || !hasExactKeys(value, CAPABILITIES_KEYS)) {
@@ -204,7 +324,7 @@ export function readReadyCapabilities(
     !hasExactKeys(value.gameplay, GAMEPLAY_CAPABILITY_KEYS)
   ) {
     throw new TypeError(
-      "Ready capabilities.gameplay must include maxQueryPointsPerTick.",
+      "Ready capabilities.gameplay must include the exact Body, Query, Disturbance, and interaction-field limits.",
     );
   }
   if (value.rendering.backend !== "core-webgpu") {
@@ -222,6 +342,42 @@ export function readReadyCapabilities(
       "Ready capabilities.gameplay.maxQueryPointsPerTick disagrees with Core.",
     );
   }
+  if (value.gameplay.maxAttachedBodies !== MAX_ATTACHED_BODIES) {
+    throw new Error(
+      "Ready capabilities.gameplay.maxAttachedBodies disagrees with Core.",
+    );
+  }
+  if (value.gameplay.maxActiveDisturbances !== MAX_ACTIVE_DISTURBANCES) {
+    throw new Error(
+      "Ready capabilities.gameplay.maxActiveDisturbances disagrees with Core.",
+    );
+  }
+  if (value.gameplay.maxActiveHeroBreakers !== MAX_ACTIVE_HERO_BREAKERS) {
+    throw new Error(
+      "Ready capabilities.gameplay.maxActiveHeroBreakers disagrees with Core.",
+    );
+  }
+  const interactionField = value.gameplay.interactionField;
+  if (
+    !isRecord(interactionField) ||
+    !hasExactKeys(interactionField, INTERACTION_FIELD_CAPABILITY_KEYS) ||
+    interactionField.radiusMetres !== 48 ||
+    interactionField.edgeFadeMetres !== 8 ||
+    interactionField.maxSnapshotAgeTicks !== 1 ||
+    !Array.isArray(interactionField.disturbanceKinds) ||
+    interactionField.disturbanceKinds.length !== 3 ||
+    interactionField.disturbanceKinds[0] !== "radial-impact" ||
+    interactionField.disturbanceKinds[1] !== "directional-wake" ||
+    interactionField.disturbanceKinds[2] !== "hero-breaker"
+  ) {
+    throw new Error(
+      "Ready capabilities.gameplay.interactionField disagrees with Core.",
+    );
+  }
+  const bodyInteraction = readCapabilitiesBodyInteraction(
+    value.gameplay.bodyInteraction,
+    profile.bodyCoupling,
+  );
   const temporal = readCapabilitiesTemporal(
     value.rendering.temporal,
     profile.temporal,
@@ -231,6 +387,20 @@ export function readReadyCapabilities(
     profile.reflection,
     drawingBuffer,
   );
+  const secondaryParticles = readCapabilitiesSecondaryParticles(
+    value.rendering.secondaryParticles,
+    profile.secondaryParticles,
+    drawingBuffer,
+  );
+  const stormFront = readCapabilitiesStormFront(
+    value.rendering.stormFront,
+    profile.stormFront,
+  );
+  const postTraaComposition = readCapabilitiesPostTraaComposition(
+    value.rendering.postTraaComposition,
+    profile.postTraaComposition,
+    drawingBuffer,
+  );
   return deepFreeze(
     deepClone({
       rendering: {
@@ -238,11 +408,74 @@ export function readReadyCapabilities(
         timestampQuery: value.rendering.timestampQuery,
         temporal,
         reflection,
+        secondaryParticles,
+        stormFront,
+        postTraaComposition,
       },
       gameplay: {
+        maxAttachedBodies: MAX_ATTACHED_BODIES,
         maxQueryPointsPerTick: MAX_GAMEPLAY_QUERY_POINTS,
+        maxActiveDisturbances: MAX_ACTIVE_DISTURBANCES,
+        maxActiveHeroBreakers: MAX_ACTIVE_HERO_BREAKERS,
+        interactionField: {
+          radiusMetres: 48 as const,
+          edgeFadeMetres: 8 as const,
+          maxSnapshotAgeTicks: 1 as const,
+          disturbanceKinds: [
+            "radial-impact" as const,
+            "directional-wake" as const,
+            "hero-breaker" as const,
+          ],
+        },
+        bodyInteraction,
       },
     }),
+  );
+}
+
+function readCapabilitiesBodyInteraction(
+  value: unknown,
+  policy: QualityProfile["bodyCoupling"],
+): RealWaterCapabilities["gameplay"]["bodyInteraction"] {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, BODY_INTERACTION_CAPABILITY_KEYS) ||
+    value.fixedTickHz !== policy.fixedTickHz ||
+    value.maxShapeSamplesPerBody !== policy.maxShapeSamplesPerBody ||
+    value.maxConvexHullVertices !== policy.maxConvexHullVertices ||
+    value.maxSocketsPerBody !== policy.maxSocketsPerBody ||
+    !matchesExactArray(value.shapeKinds, BODY_INTERACTION_SHAPE_KINDS) ||
+    !matchesExactArray(value.socketKinds, BODY_INTERACTION_SOCKET_KINDS) ||
+    !matchesExactArray(
+      value.generatedDisturbanceKinds,
+      BODY_GENERATED_DISTURBANCE_KINDS,
+    )
+  ) {
+    throw new Error(
+      "Ready capabilities.gameplay.bodyInteraction disagrees with Core.",
+    );
+  }
+  return deepFreeze(
+    deepClone({
+      fixedTickHz: 60 as const,
+      maxShapeSamplesPerBody: 32 as const,
+      maxConvexHullVertices: 64 as const,
+      maxSocketsPerBody: 8 as const,
+      shapeKinds: BODY_INTERACTION_SHAPE_KINDS,
+      socketKinds: BODY_INTERACTION_SOCKET_KINDS,
+      generatedDisturbanceKinds: BODY_GENERATED_DISTURBANCE_KINDS,
+    }),
+  );
+}
+
+function matchesExactArray(
+  value: unknown,
+  expected: readonly string[],
+): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === expected.length &&
+    expected.every((entry, index) => value[index] === entry)
   );
 }
 
@@ -749,9 +982,151 @@ function readCapabilitiesSsrHistory(
       "camera-cut",
       "origin-shift",
       "sea-state-cut",
+      "waterline-crossing",
     ],
     updateCadence: "host-present",
   };
+}
+
+function readCapabilitiesSecondaryParticles(
+  value: unknown,
+  policy: QualityProfile["secondaryParticles"],
+  drawingBuffer: PrewarmDrawingBuffer,
+): RealWaterCapabilities["rendering"]["secondaryParticles"] {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, SECONDARY_PARTICLE_CAPABILITY_KEYS) ||
+    value.capacity !== MAX_SECONDARY_PARTICLES ||
+    value.maximumCandidateCount !== policy.maximumCandidateCount ||
+    value.selection !== policy.selection ||
+    value.updateCadence !== policy.updateCadence ||
+    value.renderPhaseKnowledge !== policy.renderPhaseKnowledge ||
+    !isRecord(value.contributionReference) ||
+    !hasExactKeys(
+      value.contributionReference,
+      SECONDARY_PARTICLE_REFERENCE_KEYS,
+    ) ||
+    value.contributionReference.width !== drawingBuffer.width ||
+    value.contributionReference.height !== drawingBuffer.height ||
+    value.contributionReference.space !== "output-drawing-buffer" ||
+    value.contributionReference.screenAreaDivisor !==
+      policy.contribution.screenAreaDivisor ||
+    value.contributionReference.quantization !==
+      policy.contribution.quantization ||
+    !isRecord(value.hysteresis) ||
+    !hasExactKeys(value.hysteresis, SECONDARY_PARTICLE_HYSTERESIS_KEYS) ||
+    value.hysteresis.retainedContributionBonusQ16 !==
+      policy.hysteresis.retainedContributionBonusQ16 ||
+    value.hysteresis.minimumResidenceTicks !==
+      policy.hysteresis.minimumResidenceTicks ||
+    value.hysteresis.reentryCooldownTicks !==
+      policy.hysteresis.reentryCooldownTicks ||
+    !Array.isArray(value.consumers) ||
+    value.consumers.length !== policy.consumers.length
+  ) {
+    throw new Error(
+      "Ready capabilities.rendering.secondaryParticles disagrees with the prepared Quality Profile and output ruler.",
+    );
+  }
+  for (const [index, consumer] of policy.consumers.entries()) {
+    const candidate = value.consumers[index];
+    if (
+      !isRecord(candidate) ||
+      !hasExactKeys(candidate, SECONDARY_PARTICLE_CONSUMER_KEYS) ||
+      candidate.consumerId !== consumer.consumerId ||
+      candidate.maximumRequestCount !== consumer.maximumRequestCount ||
+      candidate.softRequestCeiling !== consumer.softRequestCeiling ||
+      candidate.minimumRetainedSlots !== consumer.minimumRetainedSlots ||
+      candidate.pressureReentryPolicy !== consumer.pressureReentryPolicy
+    ) {
+      throw new Error(
+        "Ready secondary-particle consumer capabilities disagree with the prepared Quality Profile.",
+      );
+    }
+  }
+  return deepFreeze(
+    deepClone(value),
+  ) as unknown as RealWaterCapabilities["rendering"]["secondaryParticles"];
+}
+
+function readCapabilitiesStormFront(
+  value: unknown,
+  policy: QualityProfileStormFront,
+): RenderingCapabilitiesStormFront {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, STORM_FRONT_CAPABILITY_KEYS) ||
+    !isRecord(value.rain) ||
+    !hasExactKeys(value.rain, STORM_FRONT_RAIN_KEYS) ||
+    !isRecord(value.stormAerosol) ||
+    !hasExactKeys(value.stormAerosol, STORM_FRONT_AEROSOL_KEYS) ||
+    !isRecord(value.cloudAndLightning) ||
+    !hasExactKeys(value.cloudAndLightning, STORM_FRONT_ILLUMINATION_KEYS) ||
+    !isRecord(value.diagnostics) ||
+    !hasExactKeys(value.diagnostics, STORM_FRONT_DIAGNOSTICS_KEYS) ||
+    value.mode !== policy.mode ||
+    value.updateCadence !== policy.updateCadence ||
+    value.rain.surfaceRoute !== policy.rain.surfaceRoute ||
+    value.rain.secondaryParticleConsumerId !==
+      policy.rain.secondaryParticleConsumerId ||
+    value.rain.maximumCandidateCount !== policy.rain.maximumCandidateCount ||
+    value.stormAerosol.secondaryParticleConsumerId !==
+      policy.stormAerosol.secondaryParticleConsumerId ||
+    value.stormAerosol.maximumCandidateCount !==
+      policy.stormAerosol.maximumCandidateCount ||
+    value.cloudAndLightning.illuminationRoute !==
+      policy.cloudAndLightning.illuminationRoute ||
+    value.cloudAndLightning.atmosphereStageId !==
+      policy.cloudAndLightning.atmosphereStageId ||
+    value.diagnostics.resolutionPolicy !==
+      policy.diagnostics.resolutionPolicy ||
+    value.diagnostics.format !== policy.diagnostics.format ||
+    value.diagnostics.samples !== policy.diagnostics.samples
+  ) {
+    throw new Error(
+      "Ready capabilities.rendering.stormFront disagrees with the prepared Quality Profile.",
+    );
+  }
+  return deepFreeze(
+    deepClone(value as unknown as RenderingCapabilitiesStormFront),
+  );
+}
+
+function readCapabilitiesPostTraaComposition(
+  value: unknown,
+  policy: QualityProfile["postTraaComposition"],
+  drawingBuffer: PrewarmDrawingBuffer,
+): RealWaterCapabilities["rendering"]["postTraaComposition"] {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, POST_TRAA_CAPABILITY_KEYS) ||
+    value.width !== drawingBuffer.width ||
+    value.height !== drawingBuffer.height ||
+    value.accumulationFormat !== policy.accumulationFormat ||
+    value.finalColorFormat !== policy.finalColorFormat ||
+    !Array.isArray(value.stages) ||
+    value.stages.length !== policy.stages.length
+  ) {
+    throw new Error(
+      "Ready capabilities.rendering.postTraaComposition disagrees with the prepared Quality Profile.",
+    );
+  }
+  for (const [index, stage] of policy.stages.entries()) {
+    const candidate = value.stages[index];
+    if (
+      !isRecord(candidate) ||
+      !hasExactKeys(candidate, POST_TRAA_STAGE_KEYS) ||
+      candidate.id !== stage.id ||
+      candidate.after !== stage.after
+    ) {
+      throw new Error(
+        "Ready post-TRAA stage capabilities disagree with the prepared order.",
+      );
+    }
+  }
+  return deepFreeze(
+    deepClone(value),
+  ) as unknown as RealWaterCapabilities["rendering"]["postTraaComposition"];
 }
 
 function readCapabilitiesTemporal(

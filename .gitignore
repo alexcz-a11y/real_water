@@ -11,3 +11,10 @@ test-results/
 *.tgz
 *.tsbuildinfo
 packages/real-water/temp/
+
+# Local planning scratch: handoffs and session-local notes.
+.scratch/
+
+# img2threejs reconstruction workspace: specs, renders, comparison sheets.
+# Pixels stay out of git (ADR-0022); the text record lives under docs/.
+.img2threejs/

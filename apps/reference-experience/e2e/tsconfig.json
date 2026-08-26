@@ -12,14 +12,27 @@
     "tsBuildInfoFile": "dist-types/tsconfig.tsbuildinfo",
     "types": ["node"]
   },
-  "include": [
-    "./regression-acceptance-evidence.ts",
-    "./optical-screenshot-profile.ts",
-    "./host-power-profile.ts"
+  // A glob, deliberately. This used to be a hand-listed whitelist of three
+  // helpers, which meant every spec and every shared helper sat outside the
+  // compile graph while `satisfies` and `type` annotations in them looked like
+  // they were being checked. A list that has to be maintained by hand is the
+  // same defect one level up: it reads like an inventory and behaves like an
+  // allowlist, and nothing goes red when it falls behind. New files are in the
+  // graph by default now; anything that must stay out has to say so below.
+  "include": ["./**/*.ts"],
+  "exclude": [
+    // Its own composite project (referenced below). Compiling its sources here
+    // as well would build another project's files a second time.
+    "./temporal-metrics/**",
+    // This project's own declaration output.
+    "./dist-types/**"
   ],
   "references": [
     {
       "path": ".."
+    },
+    {
+      "path": "./temporal-metrics"
     },
     {
       "path": "../../../packages/real-water"

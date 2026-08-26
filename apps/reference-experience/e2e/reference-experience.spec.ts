@@ -22,12 +22,25 @@ const MEMORY_SUCCESS_RETRY_DELAY_MS = 180;
 const MEMORY_HOST_PREPARE_TURNS = DECLARED_STARTUP_ITEMS + 1;
 /** Async Loading Presenter + reveal allowance, not a performance gate. */
 const LOADING_PRESENTER_REVEAL_BUDGET_MS = 2_000;
-const MEMORY_SUCCESS_PLACEHOLDER_TIMEOUT_MS =
-  MEMORY_HOST_PREPARE_TURNS * MEMORY_SUCCESS_DELAY_MS +
-  LOADING_PRESENTER_REVEAL_BUDGET_MS;
-const MEMORY_SUCCESS_RETRY_PLACEHOLDER_TIMEOUT_MS =
-  MEMORY_HOST_PREPARE_TURNS * MEMORY_SUCCESS_RETRY_DELAY_MS +
-  LOADING_PRESENTER_REVEAL_BUDGET_MS;
+/**
+ * The Memory Host advances one declared manifest unit per turn, so preparation
+ * costs `units x stepDelay` before the stage can be revealed. Every wait for
+ * that reveal is derived from the live manifest rather than written as a
+ * constant: a fixed timeout silently moves closer to expiring each time a
+ * ticket declares another unit, and then fails on the ticket that crosses it.
+ */
+function placeholderTimeoutMs(stepDelayMs: number): number {
+  return (
+    MEMORY_HOST_PREPARE_TURNS * stepDelayMs + LOADING_PRESENTER_REVEAL_BUDGET_MS
+  );
+}
+
+const MEMORY_SUCCESS_PLACEHOLDER_TIMEOUT_MS = placeholderTimeoutMs(
+  MEMORY_SUCCESS_DELAY_MS,
+);
+const MEMORY_SUCCESS_RETRY_PLACEHOLDER_TIMEOUT_MS = placeholderTimeoutMs(
+  MEMORY_SUCCESS_RETRY_DELAY_MS,
+);
 
 test("shows an accessible Loading Experience before an atomic ready reveal", async ({
   page,
@@ -284,6 +297,43 @@ test("applies a changed Quality Profile through a complete hidden preparation", 
   expect(readyFrame?.frame).toBeLessThan(revealFrame?.frame ?? 0);
 });
 
+test("re-enters the Loading Experience when the active Quality Profile is applied", async ({
+  page,
+}) => {
+  await page.goto("/?qa=1&host=memory&scenario=success&delay=10");
+  const placeholder = page.getByTestId("reference-placeholder");
+  await expect(placeholder).toBeVisible();
+
+  await page.evaluate(async () => {
+    const qa = window.__REAL_WATER_QA__;
+    if (qa === undefined) {
+      throw new Error("QA session is unavailable.");
+    }
+    await qa.applySecondQualityProfile();
+  });
+  await expect(placeholder).toBeVisible();
+  const before = await readQaSnapshot(page);
+
+  const concealedSynchronously = await page.evaluate(() => {
+    const qa = window.__REAL_WATER_QA__;
+    if (qa === undefined) {
+      throw new Error("QA session is unavailable.");
+    }
+    void qa.applySecondQualityProfile();
+    return (
+      document.querySelector('[data-testid="loading-experience"]') !== null &&
+      document.querySelector('[data-testid="reference-placeholder"]') === null
+    );
+  });
+
+  expect(concealedSynchronously).toBe(true);
+  await expect(page.getByTestId("loading-experience")).toBeVisible();
+  await expect(placeholder).toBeVisible();
+  const after = await readQaSnapshot(page);
+  expect(after.generation).toBe(before.generation + 1);
+  expect(after.manifestHash).toBe(before.manifestHash);
+});
+
 test("reprepares after long suspension without spending device recovery", async ({
   page,
 }) => {
@@ -323,7 +373,9 @@ test("reprepares on bfcache resume and disposes on ordinary pagehide", async ({
   page,
 }) => {
   await page.goto("/?qa=1&host=memory&scenario=success&delay=20");
-  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible({
+    timeout: placeholderTimeoutMs(20),
+  });
   const before = await readQaSnapshot(page);
 
   const lifecycleResult = await page.evaluate(() => {
@@ -368,7 +420,9 @@ test("automatically rebuilds once with a fresh host after device loss", async ({
 }) => {
   await page.goto("/?qa=1&host=memory&scenario=success&delay=25");
 
-  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible({
+    timeout: placeholderTimeoutMs(25),
+  });
   const before = await readQaSnapshot(page);
   await page.evaluate(() => {
     const qa = window.__REAL_WATER_QA__;
@@ -382,7 +436,9 @@ test("automatically rebuilds once with a fresh host after device loss", async ({
   await expect
     .poll(() => readQaSnapshot(page))
     .toMatchObject({ generation: before.generation + 1, state: "ready" });
-  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible({
+    timeout: placeholderTimeoutMs(25),
+  });
   const after = await readQaSnapshot(page);
   expect(after.manifestHash).toBe(before.manifestHash);
 });
@@ -394,7 +450,9 @@ test("automatically rebuilds when the first host loses its device during prepara
   await page.goto("/?qa=1&host=memory&scenario=first-device-loss&delay=25");
 
   await expect(page.getByTestId("loading-experience")).toBeVisible();
-  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible({
+    timeout: placeholderTimeoutMs(25),
+  });
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect
     .poll(() => readQaSnapshot(page))
@@ -415,13 +473,17 @@ test("keeps a second device loss terminal without resetting recovery on Retry", 
   page,
 }) => {
   await page.goto("/?qa=1&host=memory&scenario=success&delay=20");
-  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible({
+    timeout: placeholderTimeoutMs(20),
+  });
 
   await synthesizeDeviceLoss(page);
   await expect
     .poll(() => readQaSnapshot(page))
     .toMatchObject({ generation: 2, state: "ready" });
-  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible({
+    timeout: placeholderTimeoutMs(20),
+  });
 
   await synthesizeDeviceLoss(page);
   await expect(page.getByRole("alert")).toContainText("Preparation failed");
@@ -438,7 +500,9 @@ test("keeps a second device loss terminal without resetting recovery on Retry", 
   await expect
     .poll(() => readQaSnapshot(page))
     .toMatchObject({ generation: 3, state: "ready" });
-  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible({
+    timeout: placeholderTimeoutMs(20),
+  });
 
   await synthesizeDeviceLoss(page);
   await expect(page.getByRole("alert")).toContainText("Preparation failed");
@@ -452,7 +516,9 @@ test("serializes racing transitions and disposes every attempt idempotently", as
   page,
 }) => {
   await page.goto("/?qa=1&host=memory&scenario=success&delay=80");
-  await expect(page.getByTestId("reference-placeholder")).toBeVisible();
+  await expect(page.getByTestId("reference-placeholder")).toBeVisible({
+    timeout: placeholderTimeoutMs(80),
+  });
 
   const result = await page.evaluate(async () => {
     const qa = window.__REAL_WATER_QA__;

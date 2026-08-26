@@ -2,25 +2,39 @@ import {
   abs,
   cameraPosition,
   cos,
+  exp,
   float,
   highpModelNormalViewMatrix,
+  If,
   length,
+  Loop,
   Fn,
   mix,
   nodeObject,
   NodeUpdateType,
   positionGeometry,
   positionPrevious,
+  renderGroup,
   sin,
   smoothstep,
+  step,
   uniform,
+  uniformArray,
   vec2,
   vec3,
+  vec4,
 } from "three/tsl";
-import { Node } from "three/webgpu";
+import { Node, Vector2, Vector4 } from "three/webgpu";
+import {
+  INTERACTION_FIELD_EDGE_FADE_METRES,
+  INTERACTION_FIELD_RADIUS_METRES,
+  MAX_ACTIVE_DISTURBANCES,
+  MAX_ACTIVE_HERO_BREAKERS,
+} from "../capabilities.js";
 import type {
   ArtisticControls,
   HostSimulationAdapter,
+  HostSimulationState,
   OpenWaterRuntimeSnapshot,
   RuntimeStateSink,
 } from "../runtime.js";
@@ -52,6 +66,57 @@ import {
 } from "./spectral-bands.js";
 import { snapClipmapToCamera } from "./camera-relative-clipmap.js";
 import { createWaterPreset } from "../water-preset.js";
+import {
+  STORM_FRONT_RAIN_HEIGHT_AMPLITUDE_METRES,
+  STORM_FRONT_RAIN_PRIMARY_WEIGHT,
+  STORM_FRONT_RAIN_PRIMARY_X,
+  STORM_FRONT_RAIN_PRIMARY_Z,
+  STORM_FRONT_RAIN_SECONDARY_PHASE_SCALE,
+  STORM_FRONT_RAIN_SECONDARY_WEIGHT,
+  STORM_FRONT_RAIN_SECONDARY_X,
+  STORM_FRONT_RAIN_SECONDARY_Z,
+  STORM_FRONT_RAIN_TEMPORAL_RADIANS_PER_TICK,
+  type StormFrontController,
+  type StormFrontFramePair,
+} from "../storm-front.js";
+import {
+  DIRECTIONAL_WAKE_HEIGHT_SCALE,
+  DIRECTIONAL_WAKE_LENGTH_RADIUS_MULTIPLIER,
+  DIRECTIONAL_WAKE_SPATIAL_RADIANS,
+  DIRECTIONAL_WAKE_TEMPORAL_RADIANS_PER_SECOND,
+  DIRECTIONAL_WAKE_WIDTH_RADIUS_MULTIPLIER,
+  LOCAL_INTERACTION_KIND_DIRECTIONAL_WAKE,
+  LOCAL_INTERACTION_KIND_PROPELLER_WASH,
+  LOCAL_INTERACTION_KIND_RADIAL_IMPACT,
+  MIN_RADIAL_IMPACT_RADIUS_METRES,
+  PERSISTENT_BODY_WAKE_START_TIME_SECONDS,
+  PROPELLER_WASH_HEIGHT_SCALE,
+  PROPELLER_WASH_LENGTH_RADIUS_MULTIPLIER,
+  PROPELLER_WASH_SPATIAL_RADIANS,
+  PROPELLER_WASH_TEMPORAL_RADIANS_PER_SECOND,
+  PROPELLER_WASH_WIDTH_RADIUS_MULTIPLIER,
+  RADIAL_IMPACT_LIFETIME_SECONDS,
+  type LocalInteractionRenderSnapshot,
+} from "./local-interaction.js";
+import {
+  HERO_BREAKER_ATTACK_FRACTION,
+  HERO_BREAKER_BACK_WIDTH_RADII,
+  HERO_BREAKER_FIXED_TICKS_PER_SECOND,
+  HERO_BREAKER_FORWARD_CURL_STRENGTH,
+  HERO_BREAKER_FORWARD_HOLLOW_CENTER_RADII,
+  HERO_BREAKER_FORWARD_HOLLOW_DEPTH,
+  HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII,
+  HERO_BREAKER_FORWARD_TRAVEL_RADII,
+  HERO_BREAKER_FRONT_WIDTH_RADII,
+  HERO_BREAKER_INITIAL_CREST_CENTER_RADII,
+  HERO_BREAKER_LATERAL_WIDTH_RADII,
+  HERO_BREAKER_RELEASE_START_FRACTION,
+} from "./hero-breaker.js";
+import type { UnifiedFoamField } from "./spectral-whitecap-field.js";
+import {
+  bodyInteractionStableSourceId,
+  manualInteractionStableSourceId,
+} from "../interaction-source-identity.js";
 
 const INITIAL_ARTISTIC_CONTROLS: ArtisticControls =
   createWaterPreset("swell").artisticControls;
@@ -60,11 +125,14 @@ export function createSpectralBandRendering(
   simulation: HostSimulationAdapter,
   presentation: HostPresentationAdapter,
   innerCellMetres: number,
+  foamField: UnifiedFoamField,
+  stormFront: StormFrontController,
 ) {
   const originX = uniform(0);
   const originZ = uniform(0);
   const phaseOffset = uniform(0);
   const timeSeconds = uniform(0);
+  const seaLevelMetres = uniform(0);
   const timeScale = uniform(1);
   const crestSharpness = uniform(0);
   const blendOriginPhaseA = uniform(0);
@@ -90,10 +158,128 @@ export function createSpectralBandRendering(
   const previousBandUniforms = createBandUniforms();
   const previousPhaseOffset = uniform(0);
   const previousTimeSeconds = uniform(0);
+  const previousSeaLevelMetres = uniform(0);
   const previousTimeScale = uniform(1);
   const previousCrestSharpness = uniform(0);
+  const initialStormFront = requireStormFrontFramePair(stormFront);
+  const rainRippleStrength = uniform(
+    initialStormFront.current.rainRippleStrength,
+  )
+    .setName("stormRainRippleStrengthCurrent")
+    .setGroup(renderGroup);
+  const previousRainRippleStrength = uniform(
+    initialStormFront.previous.rainRippleStrength,
+  )
+    .setName("stormRainRippleStrengthPrevious")
+    .setGroup(renderGroup);
+  const rainSpatialPhase = uniform(initialStormFront.current.spatialPhase)
+    .setName("stormRainSpatialPhaseCurrent")
+    .setGroup(renderGroup);
+  const previousRainSpatialPhase = uniform(
+    initialStormFront.previous.spatialPhase,
+  )
+    .setName("stormRainSpatialPhasePrevious")
+    .setGroup(renderGroup);
+  const rainTick = uniform(initialStormFront.current.tick)
+    .setName("stormRainTickCurrent")
+    .setGroup(renderGroup);
+  const previousRainTick = uniform(initialStormFront.previous.tick)
+    .setName("stormRainTickPrevious")
+    .setGroup(renderGroup);
   const previousBlendOriginPhaseA = uniform(0);
   const previousBlendOriginPhaseB = uniform(0);
+  const createImpactVectors = () =>
+    Array.from({ length: MAX_ACTIVE_DISTURBANCES }, () => new Vector4());
+  const currentImpactGeometryValues = createImpactVectors();
+  const currentImpactTimingValues = createImpactVectors();
+  const previousImpactGeometryValues = createImpactVectors();
+  const previousImpactTimingValues = createImpactVectors();
+  const currentImpactGeometry = uniformArray<"vec4">(
+    currentImpactGeometryValues,
+    "vec4",
+  )
+    .setName("localImpactGeometryCurrent")
+    .setGroup(renderGroup);
+  const currentImpactTiming = uniformArray<"vec4">(
+    currentImpactTimingValues,
+    "vec4",
+  )
+    .setName("localImpactTimingCurrent")
+    .setGroup(renderGroup);
+  const previousImpactGeometry = uniformArray<"vec4">(
+    previousImpactGeometryValues,
+    "vec4",
+  )
+    .setName("localImpactGeometryPrevious")
+    .setGroup(renderGroup);
+  const previousImpactTiming = uniformArray<"vec4">(
+    previousImpactTimingValues,
+    "vec4",
+  )
+    .setName("localImpactTimingPrevious")
+    .setGroup(renderGroup);
+  const createHeroBreakerVectors = () =>
+    Array.from({ length: MAX_ACTIVE_HERO_BREAKERS }, () => new Vector4());
+  const currentHeroBreakerGeometryValues = createHeroBreakerVectors();
+  const currentHeroBreakerTimingValues = createHeroBreakerVectors();
+  const previousHeroBreakerGeometryValues = createHeroBreakerVectors();
+  const previousHeroBreakerTimingValues = createHeroBreakerVectors();
+  const currentHeroBreakerGeometry = uniformArray<"vec4">(
+    currentHeroBreakerGeometryValues,
+    "vec4",
+  )
+    .setName("heroBreakerGeometryCurrent")
+    .setGroup(renderGroup);
+  const currentHeroBreakerTiming = uniformArray<"vec4">(
+    currentHeroBreakerTimingValues,
+    "vec4",
+  )
+    .setName("heroBreakerTimingCurrent")
+    .setGroup(renderGroup);
+  const previousHeroBreakerGeometry = uniformArray<"vec4">(
+    previousHeroBreakerGeometryValues,
+    "vec4",
+  )
+    .setName("heroBreakerGeometryPrevious")
+    .setGroup(renderGroup);
+  const previousHeroBreakerTiming = uniformArray<"vec4">(
+    previousHeroBreakerTimingValues,
+    "vec4",
+  )
+    .setName("heroBreakerTimingPrevious")
+    .setGroup(renderGroup);
+  const currentImpactCount = uniform(0, "int")
+    .setName("localImpactCountCurrent")
+    .setGroup(renderGroup);
+  const previousImpactCount = uniform(0, "int")
+    .setName("localImpactCountPrevious")
+    .setGroup(renderGroup);
+  const currentHeroBreakerCount = uniform(0, "int")
+    .setName("heroBreakerCountCurrent")
+    .setGroup(renderGroup);
+  const previousHeroBreakerCount = uniform(0, "int")
+    .setName("heroBreakerCountPrevious")
+    .setGroup(renderGroup);
+  const currentTick = uniform(0)
+    .setName("heroBreakerTickCurrent")
+    .setGroup(renderGroup);
+  const previousTick = uniform(0)
+    .setName("heroBreakerTickPrevious")
+    .setGroup(renderGroup);
+  const currentAnchorValue = new Vector2();
+  const previousAnchorValue = new Vector2();
+  const currentAnchor = uniform(currentAnchorValue)
+    .setName("interactionAnchorCurrent")
+    .setGroup(renderGroup);
+  const previousAnchor = uniform(previousAnchorValue)
+    .setName("interactionAnchorPrevious")
+    .setGroup(renderGroup);
+  const surfaceSampleCameraX = uniform(0)
+    .setName("surfaceSampleCameraX")
+    .setGroup(renderGroup);
+  const surfaceSampleCameraZ = uniform(0)
+    .setName("surfaceSampleCameraZ")
+    .setGroup(renderGroup);
 
   const createHostSample = () => {
     // Clipmap snap uniforms stay in the Host frame. positionLocal includes that
@@ -110,6 +296,526 @@ export function createSpectralBandRendering(
   };
   type HostSample = ReturnType<typeof createHostSample>;
   type WaveAxis = HostSample["hostX"];
+  type ImpactGeometry = typeof currentImpactGeometry;
+  type ImpactTiming = typeof currentImpactTiming;
+  type ImpactCount = typeof currentImpactCount;
+  type AnchorUniform = typeof currentAnchor;
+  type TimeUniform = typeof timeSeconds;
+  const evaluateLocalInteraction = (
+    hostX: WaveAxis,
+    hostZ: WaveAxis,
+    sampleTime: TimeUniform,
+    anchor: AnchorUniform,
+    count: ImpactCount,
+    geometry: ImpactGeometry,
+    timing: ImpactTiming,
+  ) =>
+    Fn(() => {
+      const anchorDx = hostX.sub(anchor.x);
+      const anchorDz = hostZ.sub(anchor.y);
+      const anchorDistance = length(vec2(anchorDx, anchorDz));
+      const fadeStart =
+        INTERACTION_FIELD_RADIUS_METRES - INTERACTION_FIELD_EDGE_FADE_METRES;
+      const fadeT = anchorDistance
+        .sub(fadeStart)
+        .div(INTERACTION_FIELD_EDGE_FADE_METRES)
+        .clamp(0, 1);
+      const fieldFade = float(1).sub(
+        fadeT.mul(fadeT).mul(float(3).sub(fadeT.mul(2))),
+      );
+      const fieldFadeDerivative = fadeT
+        .mul(float(1).sub(fadeT))
+        .mul(-6 / INTERACTION_FIELD_EDGE_FADE_METRES);
+      const inverseAnchorDistance = float(1).div(anchorDistance.max(1e-5));
+      const accumulated = vec4(0).toVar();
+      If(fieldFade.greaterThan(0), () => {
+        Loop({ start: 0, end: count, type: "int", condition: "<" }, ({ i }) => {
+          const descriptor = vec4(geometry.element(i));
+          const timingDescriptor = vec4(timing.element(i));
+          const dx = hostX.sub(descriptor.x);
+          const dz = hostZ.sub(descriptor.y);
+          const radius = descriptor.z.max(MIN_RADIAL_IMPACT_RADIUS_METRES);
+          const kind = timingDescriptor.y;
+          const radialKind = float(1).sub(step(0.5, kind));
+          const directionalKind = step(0.5, kind);
+          const propellerKind = step(1.5, kind);
+          const distance = length(vec2(dx, dz));
+          const normalizedRadius = distance.div(radius);
+          const age = sampleTime.sub(timingDescriptor.x);
+          const progress = age.div(RADIAL_IMPACT_LIFETIME_SECONDS).clamp(0, 1);
+          const remaining = float(1).sub(progress);
+          const decay = remaining.mul(remaining);
+          const radialT = normalizedRadius.clamp(0, 1);
+          const radialWindow = float(1).sub(
+            radialT.mul(radialT).mul(float(3).sub(radialT.mul(2))),
+          );
+          const radialWindowDerivative = radialT
+            .mul(float(1).sub(radialT))
+            .mul(-6);
+          const phase = normalizedRadius.sub(progress.mul(2)).mul(Math.PI);
+          const phaseCosine = cos(phase);
+          const phaseSine = sin(phase);
+          const active = step(0, age)
+            .mul(float(1).sub(step(RADIAL_IMPACT_LIFETIME_SECONDS, age)))
+            .mul(float(1).sub(step(1, normalizedRadius)));
+          const impactHeight = descriptor.w
+            .mul(decay)
+            .mul(phaseCosine)
+            .mul(radialWindow)
+            .mul(active);
+          const heightDerivativeRadius = descriptor.w
+            .mul(decay)
+            .mul(
+              phaseSine
+                .mul(-Math.PI)
+                .mul(radialWindow)
+                .add(phaseCosine.mul(radialWindowDerivative)),
+            )
+            .div(radius)
+            .mul(active);
+          const inverseDistance = float(1).div(distance.max(1e-5));
+          const impactVelocity = descriptor.w
+            .mul(radialWindow)
+            .mul(
+              remaining
+                .mul(-2 / RADIAL_IMPACT_LIFETIME_SECONDS)
+                .mul(phaseCosine)
+                .add(
+                  decay
+                    .mul((2 * Math.PI) / RADIAL_IMPACT_LIFETIME_SECONDS)
+                    .mul(phaseSine),
+                ),
+            )
+            .mul(active);
+          accumulated.x.addAssign(impactHeight.mul(radialKind));
+          accumulated.y.addAssign(
+            heightDerivativeRadius.mul(dx).mul(inverseDistance).mul(radialKind),
+          );
+          accumulated.z.addAssign(
+            heightDerivativeRadius.mul(dz).mul(inverseDistance).mul(radialKind),
+          );
+          accumulated.w.addAssign(impactVelocity.mul(radialKind));
+
+          const directionX = timingDescriptor.z;
+          const directionZ = timingDescriptor.w;
+          const along = dx.mul(directionX).add(dz.mul(directionZ));
+          const lateral = dx.mul(directionZ).mul(-1).add(dz.mul(directionX));
+          const lengthMultiplier = mix(
+            float(DIRECTIONAL_WAKE_LENGTH_RADIUS_MULTIPLIER),
+            float(PROPELLER_WASH_LENGTH_RADIUS_MULTIPLIER),
+            propellerKind,
+          );
+          const widthMultiplier = mix(
+            float(DIRECTIONAL_WAKE_WIDTH_RADIUS_MULTIPLIER),
+            float(PROPELLER_WASH_WIDTH_RADIUS_MULTIPLIER),
+            propellerKind,
+          );
+          const wakeLength = radius.mul(lengthMultiplier);
+          const wakeWidth = radius.mul(widthMultiplier);
+          const alongT = along.div(wakeLength).clamp(0, 1);
+          const lateralT = abs(lateral).div(wakeWidth).clamp(0, 1);
+          const longitudinalWindow = float(1).sub(
+            alongT.mul(alongT).mul(float(3).sub(alongT.mul(2))),
+          );
+          const lateralWindow = float(1).sub(
+            lateralT.mul(lateralT).mul(float(3).sub(lateralT.mul(2))),
+          );
+          const longitudinalDerivative = alongT
+            .mul(float(1).sub(alongT))
+            .mul(-6)
+            .div(wakeLength);
+          const lateralDerivative = lateralT
+            .mul(float(1).sub(lateralT))
+            .mul(-6)
+            .div(wakeWidth);
+          const spatialRadians = mix(
+            float(DIRECTIONAL_WAKE_SPATIAL_RADIANS),
+            float(PROPELLER_WASH_SPATIAL_RADIANS),
+            propellerKind,
+          );
+          const temporalFrequency = mix(
+            float(DIRECTIONAL_WAKE_TEMPORAL_RADIANS_PER_SECOND),
+            float(PROPELLER_WASH_TEMPORAL_RADIANS_PER_SECOND),
+            propellerKind,
+          );
+          const spatialFrequency = spatialRadians.div(radius);
+          const directionalPhase = along
+            .mul(spatialFrequency)
+            .sub(sampleTime.mul(temporalFrequency));
+          const directionalCosine = cos(directionalPhase);
+          const directionalSine = sin(directionalPhase);
+          const persistent = float(1).sub(
+            step(
+              PERSISTENT_BODY_WAKE_START_TIME_SECONDS + 1,
+              timingDescriptor.x,
+            ),
+          );
+          const lifetimeActive = step(0, age).mul(
+            float(1).sub(step(RADIAL_IMPACT_LIFETIME_SECONDS, age)),
+          );
+          const directionalActive = persistent
+            .max(lifetimeActive)
+            .mul(step(0, along))
+            .mul(float(1).sub(step(1, along.div(wakeLength))))
+            .mul(float(1).sub(step(1, abs(lateral).div(wakeWidth))))
+            .mul(directionalKind);
+          const directionalDecay = mix(decay, float(1), persistent);
+          const directionalDecayDerivative = mix(
+            remaining.mul(-2 / RADIAL_IMPACT_LIFETIME_SECONDS),
+            float(0),
+            persistent,
+          );
+          const directionalHeightScale = mix(
+            float(DIRECTIONAL_WAKE_HEIGHT_SCALE),
+            float(PROPELLER_WASH_HEIGHT_SCALE),
+            propellerKind,
+          );
+          const scaledAmplitude = descriptor.w.mul(directionalHeightScale);
+          const directionalHeight = scaledAmplitude
+            .mul(directionalDecay)
+            .mul(directionalCosine)
+            .mul(longitudinalWindow)
+            .mul(lateralWindow)
+            .mul(directionalActive);
+          const derivativeAlong = scaledAmplitude
+            .mul(directionalDecay)
+            .mul(lateralWindow)
+            .mul(
+              longitudinalDerivative
+                .mul(directionalCosine)
+                .sub(
+                  longitudinalWindow.mul(directionalSine).mul(spatialFrequency),
+                ),
+            )
+            .mul(directionalActive);
+          const lateralSign = step(0, lateral).mul(2).sub(1);
+          const derivativeLateral = scaledAmplitude
+            .mul(directionalDecay)
+            .mul(directionalCosine)
+            .mul(longitudinalWindow)
+            .mul(lateralDerivative)
+            .mul(lateralSign)
+            .mul(directionalActive);
+          const directionalVelocity = scaledAmplitude
+            .mul(longitudinalWindow)
+            .mul(lateralWindow)
+            .mul(
+              directionalDecayDerivative
+                .mul(directionalCosine)
+                .add(
+                  directionalDecay.mul(temporalFrequency).mul(directionalSine),
+                ),
+            )
+            .mul(directionalActive);
+          accumulated.x.addAssign(directionalHeight);
+          accumulated.y.addAssign(
+            derivativeAlong
+              .mul(directionX)
+              .sub(derivativeLateral.mul(directionZ)),
+          );
+          accumulated.z.addAssign(
+            derivativeAlong
+              .mul(directionZ)
+              .add(derivativeLateral.mul(directionX)),
+          );
+          accumulated.w.addAssign(directionalVelocity);
+        });
+      });
+      return vec4(
+        accumulated.x.mul(fieldFade),
+        accumulated.y
+          .mul(fieldFade)
+          .add(
+            accumulated.x
+              .mul(fieldFadeDerivative)
+              .mul(anchorDx)
+              .mul(inverseAnchorDistance),
+          ),
+        accumulated.z
+          .mul(fieldFade)
+          .add(
+            accumulated.x
+              .mul(fieldFadeDerivative)
+              .mul(anchorDz)
+              .mul(inverseAnchorDistance),
+          ),
+        accumulated.w.mul(fieldFade),
+      );
+    })();
+  type HeroBreakerGeometry = typeof currentHeroBreakerGeometry;
+  type HeroBreakerTiming = typeof currentHeroBreakerTiming;
+  type HeroBreakerCount = typeof currentHeroBreakerCount;
+  type TickUniform = typeof currentTick;
+  // TSL form of hero-breaker.ts's authored CPU evaluator. The imported profile
+  // constants keep visible height/slopes and Gameplay Query on one source.
+  const evaluateHeroBreakerSurface = (
+    hostX: WaveAxis,
+    hostZ: WaveAxis,
+    sampleTick: TickUniform,
+    anchor: AnchorUniform,
+    count: HeroBreakerCount,
+    geometry: HeroBreakerGeometry,
+    timing: HeroBreakerTiming,
+  ) =>
+    Fn(() => {
+      const anchorDx = hostX.sub(anchor.x);
+      const anchorDz = hostZ.sub(anchor.y);
+      const anchorDistance = length(vec2(anchorDx, anchorDz));
+      const fadeStart =
+        INTERACTION_FIELD_RADIUS_METRES - INTERACTION_FIELD_EDGE_FADE_METRES;
+      const fadeT = anchorDistance
+        .sub(fadeStart)
+        .div(INTERACTION_FIELD_EDGE_FADE_METRES)
+        .clamp(0, 1);
+      const fieldFade = float(1).sub(
+        fadeT.mul(fadeT).mul(float(3).sub(fadeT.mul(2))),
+      );
+      const fieldFadeDerivative = fadeT
+        .mul(float(1).sub(fadeT))
+        .mul(-6 / INTERACTION_FIELD_EDGE_FADE_METRES);
+      const inverseAnchorDistance = float(1).div(anchorDistance.max(1e-5));
+      const accumulated = vec4(0).toVar();
+      If(fieldFade.greaterThan(0), () => {
+        Loop({ start: 0, end: count, type: "int", condition: "<" }, ({ i }) => {
+          const descriptor = vec4(geometry.element(i));
+          const timingDescriptor = vec4(timing.element(i));
+          const directionX = timingDescriptor.z;
+          const directionZ = timingDescriptor.w;
+          const dx = hostX.sub(descriptor.x);
+          const dz = hostZ.sub(descriptor.y);
+          const along = dx.mul(directionX).add(dz.mul(directionZ));
+          const lateral = dx.mul(directionZ).mul(-1).add(dz.mul(directionX));
+          const radius = descriptor.z;
+          const lifetimeTicks = timingDescriptor.y.max(1);
+          const ageTicks = sampleTick.sub(timingDescriptor.x);
+          const progress = ageTicks.div(lifetimeTicks).clamp(0, 1);
+          const active = step(0, ageTicks).mul(
+            float(1).sub(step(lifetimeTicks, ageTicks)),
+          );
+          const attackT = progress
+            .div(HERO_BREAKER_ATTACK_FRACTION)
+            .clamp(0, 1);
+          const attack = attackT.mul(attackT).mul(float(3).sub(attackT.mul(2)));
+          const attackDerivative = attackT
+            .mul(float(1).sub(attackT))
+            .mul(6 / HERO_BREAKER_ATTACK_FRACTION);
+          const releaseDuration = 1 - HERO_BREAKER_RELEASE_START_FRACTION;
+          const releaseT = progress
+            .sub(HERO_BREAKER_RELEASE_START_FRACTION)
+            .div(releaseDuration)
+            .clamp(0, 1);
+          const release = float(1).sub(
+            releaseT.mul(releaseT).mul(float(3).sub(releaseT.mul(2))),
+          );
+          const releaseDerivative = releaseT
+            .mul(float(1).sub(releaseT))
+            .mul(-6 / releaseDuration);
+          const envelope = attack.mul(release);
+          const envelopeDerivative = attackDerivative
+            .mul(release)
+            .add(attack.mul(releaseDerivative));
+          const lateralWidth = radius.mul(HERO_BREAKER_LATERAL_WIDTH_RADII);
+          const lateralT = abs(lateral).div(lateralWidth);
+          const lateralWindow = float(1).sub(
+            lateralT
+              .clamp(0, 1)
+              .mul(lateralT.clamp(0, 1))
+              .mul(float(3).sub(lateralT.clamp(0, 1).mul(2))),
+          );
+          const lateralActive = float(1).sub(step(1, lateralT));
+          const lateralSign = step(0, lateral).mul(2).sub(1);
+          const lateralDerivative = lateralT
+            .mul(float(1).sub(lateralT))
+            .mul(-6)
+            .div(lateralWidth)
+            .mul(lateralSign)
+            .mul(lateralActive);
+          const crestCenter = float(
+            HERO_BREAKER_INITIAL_CREST_CENTER_RADII,
+          ).add(progress.mul(HERO_BREAKER_FORWARD_TRAVEL_RADII));
+          const localAlong = along.div(radius).sub(crestCenter);
+          const crestWidth = mix(
+            float(HERO_BREAKER_BACK_WIDTH_RADII),
+            float(HERO_BREAKER_FRONT_WIDTH_RADII),
+            step(0, localAlong),
+          );
+          const crestNormalized = localAlong.div(crestWidth);
+          const crest = exp(crestNormalized.mul(crestNormalized).mul(-0.5));
+          const crestDerivative = localAlong
+            .mul(crest)
+            .mul(-1)
+            .div(crestWidth.mul(crestWidth));
+          const hollowAlong = localAlong.sub(
+            HERO_BREAKER_FORWARD_HOLLOW_CENTER_RADII,
+          );
+          const hollowNormalized = hollowAlong.div(
+            HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII,
+          );
+          const forwardHollow = exp(
+            hollowNormalized.mul(hollowNormalized).mul(-0.5),
+          );
+          const forwardHollowDerivative = hollowAlong
+            .mul(forwardHollow)
+            .mul(-1)
+            .div(
+              HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII *
+                HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII,
+            );
+          const shape = crest.sub(
+            forwardHollow.mul(HERO_BREAKER_FORWARD_HOLLOW_DEPTH),
+          );
+          const shapeDerivative = crestDerivative.sub(
+            forwardHollowDerivative.mul(HERO_BREAKER_FORWARD_HOLLOW_DEPTH),
+          );
+          const amplitudeEnvelope = descriptor.w.mul(envelope);
+          const height = amplitudeEnvelope
+            .mul(lateralWindow)
+            .mul(shape)
+            .mul(lateralActive)
+            .mul(active);
+          const slopeAlong = amplitudeEnvelope
+            .mul(lateralWindow)
+            .mul(shapeDerivative)
+            .div(radius)
+            .mul(lateralActive)
+            .mul(active);
+          const slopeLateral = amplitudeEnvelope
+            .mul(lateralDerivative)
+            .mul(shape)
+            .mul(active);
+          const velocityY = descriptor.w
+            .mul(lateralWindow)
+            .mul(
+              envelopeDerivative
+                .mul(shape)
+                .sub(
+                  envelope
+                    .mul(shapeDerivative)
+                    .mul(HERO_BREAKER_FORWARD_TRAVEL_RADII),
+                ),
+            )
+            .mul(HERO_BREAKER_FIXED_TICKS_PER_SECOND)
+            .div(lifetimeTicks)
+            .mul(lateralActive)
+            .mul(active);
+          accumulated.x.addAssign(height);
+          accumulated.y.addAssign(
+            slopeAlong.mul(directionX).sub(slopeLateral.mul(directionZ)),
+          );
+          accumulated.z.addAssign(
+            slopeAlong.mul(directionZ).add(slopeLateral.mul(directionX)),
+          );
+          accumulated.w.addAssign(velocityY);
+        });
+      });
+      return vec4(
+        accumulated.x.mul(fieldFade),
+        accumulated.y
+          .mul(fieldFade)
+          .add(
+            accumulated.x
+              .mul(fieldFadeDerivative)
+              .mul(anchorDx)
+              .mul(inverseAnchorDistance),
+          ),
+        accumulated.z
+          .mul(fieldFade)
+          .add(
+            accumulated.x
+              .mul(fieldFadeDerivative)
+              .mul(anchorDz)
+              .mul(inverseAnchorDistance),
+          ),
+        accumulated.w.mul(fieldFade),
+      );
+    })();
+  const evaluateHeroBreakerForwardCurl = (
+    hostX: WaveAxis,
+    hostZ: WaveAxis,
+    sampleTick: TickUniform,
+    anchor: AnchorUniform,
+    count: HeroBreakerCount,
+    geometry: HeroBreakerGeometry,
+    timing: HeroBreakerTiming,
+  ) =>
+    Fn(() => {
+      const anchorDistance = length(
+        vec2(hostX.sub(anchor.x), hostZ.sub(anchor.y)),
+      );
+      const fadeStart =
+        INTERACTION_FIELD_RADIUS_METRES - INTERACTION_FIELD_EDGE_FADE_METRES;
+      const fadeT = anchorDistance
+        .sub(fadeStart)
+        .div(INTERACTION_FIELD_EDGE_FADE_METRES)
+        .clamp(0, 1);
+      const fieldFade = float(1).sub(
+        fadeT.mul(fadeT).mul(float(3).sub(fadeT.mul(2))),
+      );
+      const curl = vec2(0).toVar();
+      If(fieldFade.greaterThan(0), () => {
+        Loop({ start: 0, end: count, type: "int", condition: "<" }, ({ i }) => {
+          const descriptor = vec4(geometry.element(i));
+          const timingDescriptor = vec4(timing.element(i));
+          const directionX = timingDescriptor.z;
+          const directionZ = timingDescriptor.w;
+          const dx = hostX.sub(descriptor.x);
+          const dz = hostZ.sub(descriptor.y);
+          const along = dx.mul(directionX).add(dz.mul(directionZ));
+          const lateral = dx.mul(directionZ).mul(-1).add(dz.mul(directionX));
+          const radius = descriptor.z;
+          const lifetimeTicks = timingDescriptor.y.max(1);
+          const ageTicks = sampleTick.sub(timingDescriptor.x);
+          const progress = ageTicks.div(lifetimeTicks).clamp(0, 1);
+          const active = step(0, ageTicks).mul(
+            float(1).sub(step(lifetimeTicks, ageTicks)),
+          );
+          const attackT = progress
+            .div(HERO_BREAKER_ATTACK_FRACTION)
+            .clamp(0, 1);
+          const attack = attackT.mul(attackT).mul(float(3).sub(attackT.mul(2)));
+          const releaseT = progress
+            .sub(HERO_BREAKER_RELEASE_START_FRACTION)
+            .div(1 - HERO_BREAKER_RELEASE_START_FRACTION)
+            .clamp(0, 1);
+          const release = float(1).sub(
+            releaseT.mul(releaseT).mul(float(3).sub(releaseT.mul(2))),
+          );
+          const envelope = attack.mul(release);
+          const lateralWidth = radius.mul(HERO_BREAKER_LATERAL_WIDTH_RADII);
+          const lateralT = abs(lateral).div(lateralWidth);
+          const clampedLateralT = lateralT.clamp(0, 1);
+          const lateralWindow = float(1).sub(
+            clampedLateralT
+              .mul(clampedLateralT)
+              .mul(float(3).sub(clampedLateralT.mul(2))),
+          );
+          const lateralActive = float(1).sub(step(1, lateralT));
+          const crestCenter = float(
+            HERO_BREAKER_INITIAL_CREST_CENTER_RADII,
+          ).add(progress.mul(HERO_BREAKER_FORWARD_TRAVEL_RADII));
+          const localAlong = along.div(radius).sub(crestCenter);
+          const hollowAlong = localAlong.sub(
+            HERO_BREAKER_FORWARD_HOLLOW_CENTER_RADII,
+          );
+          const hollowNormalized = hollowAlong.div(
+            HERO_BREAKER_FORWARD_HOLLOW_WIDTH_RADII,
+          );
+          const forwardHollow = exp(
+            hollowNormalized.mul(hollowNormalized).mul(-0.5),
+          );
+          const forwardCurl = descriptor.w
+            .mul(HERO_BREAKER_FORWARD_CURL_STRENGTH)
+            .mul(envelope)
+            .mul(lateralWindow)
+            .mul(forwardHollow)
+            .mul(lateralActive)
+            .mul(active);
+          curl.x.addAssign(forwardCurl.mul(directionX));
+          curl.y.addAssign(forwardCurl.mul(directionZ));
+        });
+      });
+      return curl.mul(fieldFade);
+    })();
   const viewDistanceNode = (hostX: WaveAxis, hostZ: WaveAxis) =>
     length(vec2(hostX.sub(cameraPosition.x), hostZ.sub(cameraPosition.z)));
   const slopeFadeNode = (viewDistance: ReturnType<typeof viewDistanceNode>) =>
@@ -125,6 +831,7 @@ export function createSpectralBandRendering(
   type WaveFieldNodes = Readonly<{
     readonly phaseOffset: typeof phaseOffset;
     readonly timeSeconds: typeof timeSeconds;
+    readonly seaLevelMetres: typeof seaLevelMetres;
     readonly timeScale: typeof timeScale;
     readonly crestSharpness: typeof crestSharpness;
     readonly blendOriginPhaseA: typeof blendOriginPhaseA;
@@ -134,6 +841,7 @@ export function createSpectralBandRendering(
   const currentWaveField: WaveFieldNodes = {
     phaseOffset,
     timeSeconds,
+    seaLevelMetres,
     timeScale,
     crestSharpness,
     blendOriginPhaseA,
@@ -143,6 +851,7 @@ export function createSpectralBandRendering(
   const previousWaveField: WaveFieldNodes = {
     phaseOffset: previousPhaseOffset,
     timeSeconds: previousTimeSeconds,
+    seaLevelMetres: previousSeaLevelMetres,
     timeScale: previousTimeScale,
     crestSharpness: previousCrestSharpness,
     blendOriginPhaseA: previousBlendOriginPhaseA,
@@ -320,6 +1029,86 @@ export function createSpectralBandRendering(
     };
   };
 
+  const evaluateRainSurface = (
+    hostX: WaveAxis,
+    hostZ: WaveAxis,
+    strength: WaveAxis,
+    spatialPhase: WaveAxis,
+    tick: WaveAxis,
+  ) => {
+    const amplitude = strength.mul(STORM_FRONT_RAIN_HEIGHT_AMPLITUDE_METRES);
+    const phase = spatialPhase
+      .mul(Math.PI * 2)
+      .add(tick.mul(STORM_FRONT_RAIN_TEMPORAL_RADIANS_PER_TICK));
+    const argumentA = hostX
+      .mul(STORM_FRONT_RAIN_PRIMARY_X)
+      .add(hostZ.mul(STORM_FRONT_RAIN_PRIMARY_Z))
+      .add(phase);
+    const argumentB = hostX
+      .mul(STORM_FRONT_RAIN_SECONDARY_X)
+      .add(hostZ.mul(STORM_FRONT_RAIN_SECONDARY_Z))
+      .sub(phase.mul(STORM_FRONT_RAIN_SECONDARY_PHASE_SCALE));
+    return {
+      height: amplitude.mul(
+        sin(argumentA)
+          .mul(STORM_FRONT_RAIN_PRIMARY_WEIGHT)
+          .add(sin(argumentB).mul(STORM_FRONT_RAIN_SECONDARY_WEIGHT)),
+      ),
+      slopeX: amplitude.mul(
+        cos(argumentA)
+          .mul(STORM_FRONT_RAIN_PRIMARY_WEIGHT * STORM_FRONT_RAIN_PRIMARY_X)
+          .add(
+            cos(argumentB).mul(
+              STORM_FRONT_RAIN_SECONDARY_WEIGHT * STORM_FRONT_RAIN_SECONDARY_X,
+            ),
+          ),
+      ),
+      slopeZ: amplitude.mul(
+        cos(argumentA)
+          .mul(STORM_FRONT_RAIN_PRIMARY_WEIGHT * STORM_FRONT_RAIN_PRIMARY_Z)
+          .add(
+            cos(argumentB).mul(
+              STORM_FRONT_RAIN_SECONDARY_WEIGHT * STORM_FRONT_RAIN_SECONDARY_Z,
+            ),
+          ),
+      ),
+    };
+  };
+
+  const sampleCurrentSurface = (hostX: WaveAxis, hostZ: WaveAxis) => {
+    const viewDistance = length(
+      vec2(hostX.sub(surfaceSampleCameraX), hostZ.sub(surfaceSampleCameraZ)),
+    );
+    const slopeFade = slopeFadeNode(viewDistance);
+    const surface = evaluateBlendedSurface(
+      hostX,
+      hostZ,
+      viewDistance,
+      slopeFade,
+      currentWaveField,
+    );
+    const rain = evaluateRainSurface(
+      hostX,
+      hostZ,
+      rainRippleStrength,
+      rainSpatialPhase,
+      rainTick,
+    );
+    // Caustics sample this path at drawing-buffer resolution. Reuse the
+    // fixed-resolution current local-surface field produced by the authoritative
+    // fixed-tick resolve instead of scanning all 128 Disturbances per receiver
+    // pixel. Visible water geometry keeps the exact analytic route below.
+    const localInteraction = foamField.sampleLocalSurface(hostX, hostZ);
+    return {
+      height: surface.height
+        .add(rain.height)
+        .add(localInteraction.height)
+        .add(currentWaveField.seaLevelMetres),
+      slopeX: surface.slopeX.add(rain.slopeX).add(localInteraction.slopeX),
+      slopeZ: surface.slopeZ.add(rain.slopeZ).add(localInteraction.slopeZ),
+    };
+  };
+
   // Vertex displacement and fragment shading own separate TSL graphs. Sharing
   // ocean-domain sample nodes with color, highlights, or white-detail lets the
   // compiler evaluate the non-periodic mix in fragment and leave camera-relative
@@ -337,7 +1126,46 @@ export function createSpectralBandRendering(
     vertexSlopeFade,
     currentWaveField,
   );
-  const vertexHeight = vertexSurface.height.toVertexStage();
+  const vertexLocalInteraction = evaluateLocalInteraction(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    timeSeconds,
+    currentAnchor,
+    currentImpactCount,
+    currentImpactGeometry,
+    currentImpactTiming,
+  );
+  const vertexHeroBreaker = evaluateHeroBreakerSurface(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    currentTick,
+    currentAnchor,
+    currentHeroBreakerCount,
+    currentHeroBreakerGeometry,
+    currentHeroBreakerTiming,
+  );
+  const vertexHeroBreakerCurl = evaluateHeroBreakerForwardCurl(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    currentTick,
+    currentAnchor,
+    currentHeroBreakerCount,
+    currentHeroBreakerGeometry,
+    currentHeroBreakerTiming,
+  );
+  const vertexRain = evaluateRainSurface(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    rainRippleStrength,
+    rainSpatialPhase,
+    rainTick,
+  );
+  const vertexHeight = vertexSurface.height
+    .add(vertexRain.height)
+    .add(vertexLocalInteraction.x)
+    .add(vertexHeroBreaker.x)
+    .add(currentWaveField.seaLevelMetres)
+    .toVertexStage();
   const previousVertexSurface = evaluateBlendedSurface(
     vertexSample.hostX,
     vertexSample.hostZ,
@@ -345,7 +1173,46 @@ export function createSpectralBandRendering(
     vertexSlopeFade,
     previousWaveField,
   );
-  const previousVertexHeight = previousVertexSurface.height.toVertexStage();
+  const previousVertexLocalInteraction = evaluateLocalInteraction(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    previousTimeSeconds,
+    previousAnchor,
+    previousImpactCount,
+    previousImpactGeometry,
+    previousImpactTiming,
+  );
+  const previousVertexHeroBreaker = evaluateHeroBreakerSurface(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    previousTick,
+    previousAnchor,
+    previousHeroBreakerCount,
+    previousHeroBreakerGeometry,
+    previousHeroBreakerTiming,
+  );
+  const previousVertexHeroBreakerCurl = evaluateHeroBreakerForwardCurl(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    previousTick,
+    previousAnchor,
+    previousHeroBreakerCount,
+    previousHeroBreakerGeometry,
+    previousHeroBreakerTiming,
+  );
+  const previousVertexRain = evaluateRainSurface(
+    vertexSample.hostX,
+    vertexSample.hostZ,
+    previousRainRippleStrength,
+    previousRainSpatialPhase,
+    previousRainTick,
+  );
+  const previousVertexHeight = previousVertexSurface.height
+    .add(previousVertexRain.height)
+    .add(previousVertexLocalInteraction.x)
+    .add(previousVertexHeroBreaker.x)
+    .add(previousWaveField.seaLevelMetres)
+    .toVertexStage();
 
   const fragmentSample = createHostSample();
   const fragmentViewDistance = viewDistanceNode(
@@ -360,11 +1227,44 @@ export function createSpectralBandRendering(
     fragmentSlopeFade,
     currentWaveField,
   );
+  const fragmentLocalInteraction = evaluateLocalInteraction(
+    fragmentSample.hostX,
+    fragmentSample.hostZ,
+    timeSeconds,
+    currentAnchor,
+    currentImpactCount,
+    currentImpactGeometry,
+    currentImpactTiming,
+  );
+  const fragmentHeroBreaker = evaluateHeroBreakerSurface(
+    fragmentSample.hostX,
+    fragmentSample.hostZ,
+    currentTick,
+    currentAnchor,
+    currentHeroBreakerCount,
+    currentHeroBreakerGeometry,
+    currentHeroBreakerTiming,
+  );
+  const fragmentRain = evaluateRainSurface(
+    fragmentSample.hostX,
+    fragmentSample.hostZ,
+    rainRippleStrength,
+    rainSpatialPhase,
+    rainTick,
+  );
+  const fragmentSlopeX = fragmentSurface.slopeX
+    .add(fragmentRain.slopeX)
+    .add(fragmentLocalInteraction.y)
+    .add(fragmentHeroBreaker.y);
+  const fragmentSlopeZ = fragmentSurface.slopeZ
+    .add(fragmentRain.slopeZ)
+    .add(fragmentLocalInteraction.z)
+    .add(fragmentHeroBreaker.z);
 
   const localNormal = vec3(
-    fragmentSurface.slopeX.mul(-1),
+    fragmentSlopeX.mul(-1),
     1,
-    fragmentSurface.slopeZ.mul(-1),
+    fragmentSlopeZ.mul(-1),
   ).normalize();
   const roughnessNode = mix(
     float(0.08),
@@ -377,7 +1277,7 @@ export function createSpectralBandRendering(
   const nearWhite = smoothstep(
     0.22,
     0.9,
-    length(vec2(fragmentSurface.slopeX, fragmentSurface.slopeZ)),
+    length(vec2(fragmentSlopeX, fragmentSlopeZ)),
   );
   const farWhite = smoothstep(
     0.12,
@@ -402,6 +1302,14 @@ export function createSpectralBandRendering(
     ),
   );
   const detailStrengthNode = mix(nearWhite, farWhite, fragmentSlopeFade);
+  const whitecapStagesNode = foamField.sampleStages(
+    fragmentSample.hostX,
+    fragmentSample.hostZ,
+  );
+  const foamSourcesNode = foamField.sampleSources(
+    fragmentSample.hostX,
+    fragmentSample.hostZ,
+  );
   const writeOriginPhases = (
     originXValue: number,
     originZValue: number,
@@ -454,13 +1362,19 @@ export function createSpectralBandRendering(
     field: WaveFieldNodes,
     snapshot: Pick<
       OpenWaterRuntimeSnapshot,
-      "seed" | "timeSeconds" | "originX" | "originZ" | "artisticControls"
+      | "seed"
+      | "timeSeconds"
+      | "originX"
+      | "originZ"
+      | "seaLevelMetres"
+      | "artisticControls"
     >,
     writeFarWhite: boolean,
   ): void => {
     const prepared = prepareSpectralBands(snapshot.artisticControls);
     field.phaseOffset.value = spectralBandPhaseOffset(snapshot.seed);
     field.timeSeconds.value = snapshot.timeSeconds;
+    field.seaLevelMetres.value = snapshot.seaLevelMetres;
     field.timeScale.value = snapshot.artisticControls.timeScale;
     field.crestSharpness.value = snapshot.artisticControls.crestSharpness;
     for (let index = 0; index < field.bands.length; index += 1) {
@@ -475,12 +1389,98 @@ export function createSpectralBandRendering(
     }
     writeOriginPhases(snapshot.originX, snapshot.originZ, field, writeFarWhite);
   };
+  const initialSimulationState = readHostSimulationState(simulation);
+  const emptyLocalInteraction: LocalInteractionRenderSnapshot = Object.freeze({
+    revision: 0,
+    anchorX: initialSimulationState.originX,
+    anchorZ: initialSimulationState.originZ,
+    impacts: Object.freeze([]),
+  });
+  let desiredLocalInteraction = emptyLocalInteraction;
+  let committedLocalInteraction: LocalInteractionRenderSnapshot | null = null;
+  let pendingLocalInteraction: LocalInteractionRenderSnapshot | null = null;
+  const writeLocalInteractionBank = (
+    interaction: LocalInteractionRenderSnapshot,
+    state: HostSimulationState,
+    geometryValues: Vector4[],
+    timingValues: Vector4[],
+    countUniform: typeof currentImpactCount,
+    heroGeometryValues: Vector4[],
+    heroTimingValues: Vector4[],
+    heroCountUniform: typeof currentHeroBreakerCount,
+    anchorValue: Vector2,
+  ): void => {
+    const sourceCount = Math.min(
+      interaction.impacts.length,
+      MAX_ACTIVE_DISTURBANCES,
+    );
+    let count = 0;
+    let heroCount = 0;
+    anchorValue.set(
+      interaction.anchorX - state.originX,
+      interaction.anchorZ - state.originZ,
+    );
+    for (let index = 0; index < sourceCount; index += 1) {
+      const impact = interaction.impacts[index];
+      if (impact === undefined) {
+        continue;
+      }
+      switch (impact.kind) {
+        case "hero-breaker":
+          if (heroCount >= MAX_ACTIVE_HERO_BREAKERS) {
+            throw new Error(
+              "Spectral rendering Hero Breaker capacity was exceeded.",
+            );
+          }
+          heroGeometryValues[heroCount]?.set(
+            impact.x - state.originX,
+            impact.z - state.originZ,
+            impact.radius,
+            impact.amplitude,
+          );
+          heroTimingValues[heroCount]?.set(
+            impact.startTick - (interaction.revision === -1 ? 1 : 0),
+            impact.lifetimeTicks,
+            impact.directionX,
+            impact.directionZ,
+          );
+          heroCount += 1;
+          break;
+        case "radial-impact":
+        case "directional-wake":
+        case "propeller-wash": {
+          geometryValues[count]?.set(
+            impact.x - state.originX,
+            impact.z - state.originZ,
+            impact.radius,
+            impact.amplitude,
+          );
+          const kind = localInteractionKindValue(impact.kind);
+          timingValues[count]?.set(
+            impact.startTimeSeconds,
+            kind,
+            impact.directionX,
+            impact.directionZ,
+          );
+          count += 1;
+          break;
+        }
+        default:
+          throw new Error(
+            "Spectral rendering received an unknown local-interaction kind.",
+          );
+      }
+    }
+    countUniform.value = count;
+    heroCountUniform.value = heroCount;
+  };
   type PresentedWaveField = Readonly<{
     readonly seed: number;
     readonly tick: number;
     readonly timeSeconds: number;
     readonly originX: number;
     readonly originZ: number;
+    readonly seaLevelMetres: number;
     readonly simulationResetRevision: number;
     readonly cameraCutRevision: number;
     readonly seaStateCutRevision: number;
@@ -516,14 +1516,52 @@ export function createSpectralBandRendering(
         timeSeconds: state.timeSeconds,
         originX: state.originX,
         originZ: state.originZ,
+        seaLevelMetres: state.seaLevelMetres,
         simulationResetRevision: state.simulationResetRevision,
         cameraCutRevision: presentationState.cameraCutRevision,
         seaStateCutRevision: desiredSeaStateCutRevision,
         artisticControls: desiredControls,
       };
-      const previous = shouldResetWaveHistory(current) ? current : committed;
+      const resetHistory = shouldResetWaveHistory(current);
+      const previous = resetHistory ? current : committed;
+      const stormFrames = requireStormFrontFramePair(stormFront);
       writeWaveField(currentWaveField, current, true);
       writeWaveField(previousWaveField, previous ?? current, false);
+      rainRippleStrength.value = stormFrames.current.rainRippleStrength;
+      previousRainRippleStrength.value =
+        stormFrames.previous.rainRippleStrength;
+      rainSpatialPhase.value = stormFrames.current.spatialPhase;
+      previousRainSpatialPhase.value = stormFrames.previous.spatialPhase;
+      rainTick.value = stormFrames.current.tick;
+      previousRainTick.value = stormFrames.previous.tick;
+      const previousLocalInteraction =
+        resetHistory || committedLocalInteraction === null
+          ? desiredLocalInteraction
+          : committedLocalInteraction;
+      writeLocalInteractionBank(
+        desiredLocalInteraction,
+        state,
+        currentImpactGeometryValues,
+        currentImpactTimingValues,
+        currentImpactCount,
+        currentHeroBreakerGeometryValues,
+        currentHeroBreakerTimingValues,
+        currentHeroBreakerCount,
+        currentAnchorValue,
+      );
+      writeLocalInteractionBank(
+        previousLocalInteraction,
+        state,
+        previousImpactGeometryValues,
+        previousImpactTimingValues,
+        previousImpactCount,
+        previousHeroBreakerGeometryValues,
+        previousHeroBreakerTimingValues,
+        previousHeroBreakerCount,
+        previousAnchorValue,
+      );
+      currentTick.value = current.tick;
+      previousTick.value = (previous ?? current).tick;
       const camera = frame.camera;
       if (
         camera !== null &&
@@ -531,17 +1569,16 @@ export function createSpectralBandRendering(
         "updateMatrixWorld" in camera &&
         "matrixWorld" in camera
       ) {
-        snapClipmapToCamera(
-          camera as {
-            updateMatrixWorld(): void;
-            readonly matrixWorld: { readonly elements: ArrayLike<number> };
-          },
-          originX,
-          originZ,
-          innerCellMetres,
-        );
+        const hostCamera = camera as {
+          updateMatrixWorld(): void;
+          readonly matrixWorld: { readonly elements: ArrayLike<number> };
+        };
+        snapClipmapToCamera(hostCamera, originX, originZ, innerCellMetres);
+        surfaceSampleCameraX.value = hostCamera.matrixWorld.elements[12] ?? 0;
+        surfaceSampleCameraZ.value = hostCamera.matrixWorld.elements[14] ?? 0;
       }
       pending = current;
+      pendingLocalInteraction = desiredLocalInteraction;
     }
 
     override updateAfter(): undefined {
@@ -549,20 +1586,42 @@ export function createSpectralBandRendering(
         committed = pending;
         pending = null;
       }
+      if (pendingLocalInteraction !== null) {
+        committedLocalInteraction = pendingLocalInteraction;
+        pendingLocalInteraction = null;
+      }
     }
   }
   const presentationNode = new WaveFieldPresentationNode();
   const positionNode = Fn(() => {
     nodeObject(presentationNode).toStack();
     positionPrevious.assign(
-      vec3(vertexSample.hostX, previousVertexHeight, vertexSample.hostZ),
+      vec3(
+        vertexSample.hostX.add(previousVertexHeroBreakerCurl.x),
+        previousVertexHeight,
+        vertexSample.hostZ.add(previousVertexHeroBreakerCurl.y),
+      ),
     );
-    return vec3(vertexSample.hostX, vertexHeight, vertexSample.hostZ);
+    return vec3(
+      vertexSample.hostX.add(vertexHeroBreakerCurl.x),
+      vertexHeight,
+      vertexSample.hostZ.add(vertexHeroBreakerCurl.y),
+    );
   })();
   const sink: RuntimeStateSink = Object.freeze({
-    synchronize(snapshot: OpenWaterRuntimeSnapshot): void {
+    synchronize(
+      snapshot: OpenWaterRuntimeSnapshot,
+      interaction: LocalInteractionRenderSnapshot,
+    ): void {
+      stormFront.synchronize(snapshot);
       desiredControls = snapshot.artisticControls;
       desiredSeaStateCutRevision = snapshot.seaStateCutRevision;
+      desiredLocalInteraction = interaction;
+      foamField.runtimeStateSink.synchronize(snapshot, interaction);
+    },
+    observe(snapshot: OpenWaterRuntimeSnapshot): void {
+      stormFront.synchronize(snapshot);
+      foamField.runtimeStateSink.observe?.(snapshot);
     },
   });
 
@@ -576,11 +1635,129 @@ export function createSpectralBandRendering(
     hostXNode: fragmentSample.hostX,
     hostZNode: fragmentSample.hostZ,
     heightNode: vertexHeight,
-    slopeStrengthNode: length(
-      vec2(fragmentSurface.slopeX, fragmentSurface.slopeZ),
-    ),
+    slopeStrengthNode: length(vec2(fragmentSlopeX, fragmentSlopeZ)),
     roughnessNode,
     detailStrengthNode,
+    whitecapStagesNode,
+    foamSourcesNode,
+    foamDensityNode: foamSourcesNode.a,
+    // Package-private receiver sampler. It deliberately closes over the
+    // current prepared wave and local-interaction uniforms instead of exposing
+    // a vertex-bound node or constructing a second wave implementation. Its
+    // Host-camera uniforms avoid accidentally taking distance LOD from a
+    // full-frame post pipeline's camera.
+    surfaceSampler: Object.freeze({
+      sampleSurface: sampleCurrentSurface,
+    }),
     sink,
+    stagePrewarmLocalInteractionRoutes(): LocalInteractionRenderSnapshot {
+      desiredLocalInteraction = Object.freeze({
+        revision: -1,
+        anchorX: initialSimulationState.originX,
+        anchorZ: initialSimulationState.originZ,
+        impacts: Object.freeze([
+          Object.freeze({
+            stableSourceId: manualInteractionStableSourceId(1),
+            kind: "radial-impact",
+            x: initialSimulationState.originX,
+            z: initialSimulationState.originZ,
+            directionX: 0,
+            directionZ: 0,
+            radius: 8,
+            amplitude: 0.25,
+            startTimeSeconds: initialSimulationState.timeSeconds,
+            startTick: initialSimulationState.tick,
+            lifetimeTicks: 120,
+            foamAmount: 1,
+            sprayAmount: 1,
+          }),
+          Object.freeze({
+            stableSourceId: manualInteractionStableSourceId(2),
+            kind: "directional-wake",
+            x: initialSimulationState.originX,
+            z: initialSimulationState.originZ,
+            directionX: 0,
+            directionZ: 1,
+            radius: 2,
+            amplitude: 0.2,
+            startTimeSeconds: initialSimulationState.timeSeconds,
+            startTick: initialSimulationState.tick,
+            lifetimeTicks: 120,
+            foamAmount: 1,
+            sprayAmount: 1,
+          }),
+          Object.freeze({
+            stableSourceId: bodyInteractionStableSourceId(
+              0,
+              "prewarm-propeller",
+            ),
+            kind: "propeller-wash",
+            x: initialSimulationState.originX + 1,
+            z: initialSimulationState.originZ,
+            directionX: 0,
+            directionZ: 1,
+            radius: 1,
+            amplitude: 0.25,
+            startTimeSeconds: PERSISTENT_BODY_WAKE_START_TIME_SECONDS,
+            startTick: initialSimulationState.tick,
+            lifetimeTicks: 0,
+            foamAmount: 1,
+            sprayAmount: 1,
+          }),
+          Object.freeze({
+            stableSourceId: manualInteractionStableSourceId(3),
+            kind: "hero-breaker",
+            x: initialSimulationState.originX,
+            z: initialSimulationState.originZ,
+            directionX: 1,
+            directionZ: 0,
+            radius: 6,
+            amplitude: 1,
+            startTimeSeconds: Math.max(
+              0,
+              initialSimulationState.timeSeconds -
+                1 / HERO_BREAKER_FIXED_TICKS_PER_SECOND,
+            ),
+            startTick: initialSimulationState.tick,
+            lifetimeTicks: 120,
+            foamAmount: 1,
+            sprayAmount: 1,
+          }),
+        ]),
+      });
+      return desiredLocalInteraction;
+    },
+    clearPrewarmLocalInteractionRoutes(): void {
+      desiredLocalInteraction = emptyLocalInteraction;
+    },
   });
+}
+
+function requireStormFrontFramePair(
+  stormFront: StormFrontController,
+): StormFrontFramePair {
+  const pair = stormFront.inspect();
+  if (pair === null) {
+    throw new Error(
+      "Storm Front must be synchronized before spectral rendering is prepared.",
+    );
+  }
+  return pair;
+}
+
+function localInteractionKindValue(
+  kind: "radial-impact" | "directional-wake" | "propeller-wash",
+): number {
+  switch (kind) {
+    case "radial-impact":
+      return LOCAL_INTERACTION_KIND_RADIAL_IMPACT;
+    case "directional-wake":
+      return LOCAL_INTERACTION_KIND_DIRECTIONAL_WAKE;
+    case "propeller-wash":
+      return LOCAL_INTERACTION_KIND_PROPELLER_WASH;
+    default:
+      throw new Error(
+        "Spectral rendering received an unknown local-interaction kind.",
+      );
+  }
 }

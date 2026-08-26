@@ -15,6 +15,7 @@ import {
   type Scene,
 } from "three/webgpu";
 import {
+  float,
   mrt,
   normalView,
   output,
@@ -30,9 +31,23 @@ import {
   readHostDiagnosticsPresentRequest,
   type DiagnosticsCapture,
   type DiagnosticsCaptureName,
+  type DiagnosticsFoamSourceIdentityCapture,
+  type DiagnosticsHeroBreakerFoamCapture,
   type DiagnosticsMotionVectorCapture,
   type DiagnosticsOpticalScalarCapture,
   type DiagnosticsSsrRoughnessCapture,
+  type DiagnosticsStormFrontCapture,
+  type DiagnosticsSecondaryParticleConsumer,
+  type DiagnosticsSecondaryParticleContributionCapture,
+  type DiagnosticsSecondaryParticleOverdrawCapture,
+  type DiagnosticsSecondaryParticleReceipt,
+  type DiagnosticsSecondaryParticles,
+  type DiagnosticsLensWetnessCapture,
+  type DiagnosticsUnderwaterBubblesCapture,
+  type DiagnosticsUnderwaterCausticsCapture,
+  type DiagnosticsUnderwaterParticlesCapture,
+  type DiagnosticsUnderwaterVolumeCapture,
+  type DiagnosticsWhitecapStageCapture,
   type HostDiagnosticsPresentRequest,
   type HostDiagnosticsPresentedFrame,
   type HostDiagnosticsRoute,
@@ -40,10 +55,17 @@ import {
 import type {
   HostPresentationRoute,
   HostPresentedFrame,
-  HostTemporalResetReason,
 } from "../presentation.js";
 import type { OpenWaterRuntimeSnapshot } from "../runtime.js";
+import type { StormFrontController } from "../storm-front.js";
+import type { HostEnvironmentAdapter } from "../environment.js";
+import type {
+  QualityProfilePostTraaComposition,
+  QualityProfileSecondaryParticles,
+  QualityProfileUnderwaterVolume,
+} from "../quality-profile.js";
 import { unpackPackedViewNormalRgb } from "../ssr.js";
+import { createHostSnapshotContinuityTracker } from "../temporal-continuity.js";
 import { installHostDiagnosticsRoute } from "./diagnostics-route-bridge.js";
 import type { HostPresentationRouteBridge } from "./presentation-route-bridge.js";
 import {
@@ -72,6 +94,41 @@ import {
   renderCurrentFrameSsrHistory,
   type CurrentFrameSsrStack,
 } from "./ssr-stack.js";
+import {
+  createUnifiedFoamDiagnostics,
+  type UnifiedFoamDiagnostics,
+} from "./spectral-whitecap-diagnostics.js";
+import type { UnifiedFoamField } from "./spectral-whitecap-field.js";
+import type {
+  WaterlineFrameState,
+  WaterlineStateController,
+} from "./waterline-state.js";
+import { createUnderwaterVolumeRendering } from "./underwater-volume-rendering.js";
+import {
+  createPostTraaComposition,
+  type PostTraaCompositionPlan,
+  type PreparedPostTraaComposition,
+} from "../post-traa-composition.js";
+import { createSecondaryParticlePostTraaStageRegistration } from "./secondary-particle-post-traa-stage.js";
+import {
+  createLensWetnessPostTraaStageRegistration,
+  type LensWetnessPostTraaStageRegistration,
+} from "./lens-wetness-post-traa-stage.js";
+import {
+  createStormFrontPostTraaStageRegistration,
+  type StormFrontPostTraaStageRegistration,
+} from "./storm-front-post-traa-stage.js";
+import type {
+  SecondaryParticleConsumerReceipt,
+  SecondaryParticlePool,
+} from "../secondary-particle-pool.js";
+import { createSecondaryParticleContributionQuantizer } from "../secondary-particle-pool.js";
+import type { SecondarySprayParticles } from "./secondary-spray-particles.js";
+import type { PreparedUnderwaterSurfaceSampler } from "./underwater-caustics-rendering.js";
+import {
+  createUnderwaterSecondaryParticles,
+  type UnderwaterSecondaryParticles,
+} from "./underwater-secondary-particles.js";
 
 export const PREWARM_HISTORY_EPOCH = 1;
 export const HIDDEN_STABILIZATION_FRAME_COUNT = 8;
@@ -97,13 +154,40 @@ export interface PreparedWaterPresentationResources {
   readonly presentationPipeline: RenderPipeline;
   readonly currentColorPipeline: RenderPipeline;
   readonly temporalPipeline: RenderPipeline;
+  readonly postTraaComposition: PreparedPostTraaComposition;
   readonly traaNode: ReturnType<typeof traa>;
   readonly jitterAdapter: TraaJitterAdapter;
   readonly resetUniform: ReturnType<typeof createTraaResetUniform>;
+  readonly historyRejectionPipeline: RenderPipeline;
+  readonly historyRejectionTarget: RenderTarget;
   readonly currentColorTarget: RenderTarget;
+  readonly traaResolvedTarget: RenderTarget;
   readonly finalColorTarget: RenderTarget;
+  readonly secondaryParticleDiagnosticsTarget: RenderTarget;
+  readonly stormFront: StormFrontPostTraaStageRegistration;
+  readonly stormFrontController: StormFrontController;
+  readonly stormFrontDiagnosticsTarget: RenderTarget;
+  readonly lensWetness: LensWetnessPostTraaStageRegistration;
+  readonly lensWetnessDiagnosticsTarget: RenderTarget;
   readonly scenePass: ReturnType<typeof pass>;
   readonly ssr: CurrentFrameSsrStack;
+  readonly underwater: ReturnType<typeof createUnderwaterVolumeRendering>;
+  readonly underwaterVolumePipeline: RenderPipeline;
+  readonly underwaterVolumeTarget: RenderTarget;
+  readonly underwaterDiagnosticsPipeline: RenderPipeline;
+  readonly underwaterDiagnosticsTarget: RenderTarget;
+  readonly underwaterCausticsDiagnosticsPipeline: RenderPipeline;
+  readonly underwaterCausticsDiagnosticsTarget: RenderTarget;
+  readonly underwaterParticles: UnderwaterSecondaryParticles;
+  readonly underwaterSuspendedParticleTarget: RenderTarget;
+  readonly underwaterBubbleTarget: RenderTarget;
+  readonly underwaterTracerCompositePipeline: RenderPipeline;
+  readonly underwaterTracerCompositeTarget: RenderTarget;
+  readonly foamField: UnifiedFoamField;
+  readonly secondaryParticlePool: SecondaryParticlePool;
+  readonly secondaryParticlePolicy: QualityProfileSecondaryParticles;
+  readonly secondarySpray: SecondarySprayParticles;
+  readonly foamDiagnostics: UnifiedFoamDiagnostics;
   readonly inverseLinearDepthTextureIndex: number;
   readonly viewNormalTextureIndex: number;
   readonly motionVectorsTextureIndex: number;
@@ -111,6 +195,7 @@ export interface PreparedWaterPresentationResources {
   readonly opticalDiagnosticsATextureIndex: number;
   readonly opticalDiagnosticsBTextureIndex: number;
   readonly planar: PlanarReflectionPass;
+  readonly waterline: { current: WaterlineFrameState };
   readonly width: number;
   readonly height: number;
   readonly counters: PresentationReadinessCounters;
@@ -127,6 +212,17 @@ export function createPreparedWaterPresentationResources(
   scene: Scene,
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
+  foamField: UnifiedFoamField,
+  secondaryParticlePool: SecondaryParticlePool,
+  secondaryParticlePolicy: QualityProfileSecondaryParticles,
+  secondarySpray: SecondarySprayParticles,
+  stormFrontController: StormFrontController,
+  postTraaPolicy: QualityProfilePostTraaComposition,
+  environment: HostEnvironmentAdapter,
+  underwaterPolicy: QualityProfileUnderwaterVolume,
+  surfaceSampler: PreparedUnderwaterSurfaceSampler,
+  initialSnapshot: OpenWaterRuntimeSnapshot,
+  initialWaterline: WaterlineFrameState,
 ): {
   readonly resources: PreparedWaterPresentationResources;
   readonly partial: PartialPreparedWaterPresentationResources;
@@ -138,6 +234,17 @@ export function createPreparedWaterPresentationResources(
       scene,
       camera,
       drawingBuffer,
+      foamField,
+      secondaryParticlePool,
+      secondaryParticlePolicy,
+      secondarySpray,
+      stormFrontController,
+      postTraaPolicy,
+      environment,
+      underwaterPolicy,
+      surfaceSampler,
+      initialSnapshot,
+      initialWaterline,
       partial,
     );
   } catch (error) {
@@ -151,6 +258,17 @@ function constructPreparedWaterPresentationResources(
   scene: Scene,
   camera: PerspectiveCamera,
   drawingBuffer: Readonly<{ width: number; height: number }>,
+  foamField: UnifiedFoamField,
+  secondaryParticlePool: SecondaryParticlePool,
+  secondaryParticlePolicy: QualityProfileSecondaryParticles,
+  secondarySpray: SecondarySprayParticles,
+  stormFrontController: StormFrontController,
+  postTraaPolicy: QualityProfilePostTraaComposition,
+  environment: HostEnvironmentAdapter,
+  underwaterPolicy: QualityProfileUnderwaterVolume,
+  surfaceSampler: PreparedUnderwaterSurfaceSampler,
+  initialSnapshot: OpenWaterRuntimeSnapshot,
+  initialWaterline: WaterlineFrameState,
   partial: PartialPreparedWaterPresentationResources,
 ): {
   readonly resources: PreparedWaterPresentationResources;
@@ -163,6 +281,11 @@ function constructPreparedWaterPresentationResources(
     diagnosticReadbackCount: 0,
     sceneRenderCount: 0,
   };
+  partial.secondarySpray = secondarySpray;
+  const waterline = { current: initialWaterline };
+  partial.waterline = waterline;
+  const resetUniform = createTraaResetUniform();
+  partial.resetUniform = resetUniform;
   const scenePass = pass(scene, camera, { samples: 0 });
   partial.scenePass = scenePass;
   scenePass.updateBeforeType = "render";
@@ -173,7 +296,7 @@ function constructPreparedWaterPresentationResources(
       output,
       [VIEW_NORMAL_ATTACHMENT]: vec4(packNormalToRGB(normalView), 1),
       [MOTION_VECTORS_ATTACHMENT]: velocity,
-      [OPTICAL_FACTORS_ATTACHMENT]: vec4(0, 0, 0, 1),
+      [OPTICAL_FACTORS_ATTACHMENT]: vec4(0, 0, 0, 0),
       [OPTICAL_DIAGNOSTICS_A_ATTACHMENT]: vec4(0, 0, 0, 1),
       [OPTICAL_DIAGNOSTICS_B_ATTACHMENT]: vec4(0, 0, 0, 1),
     }),
@@ -205,9 +328,47 @@ function constructPreparedWaterPresentationResources(
   opticalDiagnosticsBTexture.type = UnsignedByteType;
   opticalDiagnosticsBTexture.colorSpace = LinearSRGBColorSpace;
   assertCoreScenePassColorByteBudget(scenePass.renderTarget.textures);
+  const underwaterParticles = createUnderwaterSecondaryParticles({
+    sceneDepth: scenePass.getTexture("depth"),
+    contributionReference: Object.freeze({
+      width: drawingBuffer.width,
+      height: drawingBuffer.height,
+      space: "output-drawing-buffer" as const,
+    }),
+    contributionQuantizer: createSecondaryParticleContributionQuantizer({
+      projectedAreaResolution: drawingBuffer,
+      referenceResolution: drawingBuffer,
+    }),
+  });
+  partial.underwaterParticles = underwaterParticles;
+  const foamDiagnostics = createUnifiedFoamDiagnostics(
+    renderer,
+    camera,
+    scenePass.getTexture("depth"),
+    opticalFactorsTexture,
+    drawingBuffer,
+    foamField,
+  );
+  partial.foamDiagnostics = foamDiagnostics;
 
-  const resetUniform = createTraaResetUniform();
-  partial.resetUniform = resetUniform;
+  const historyRejectionTarget = new RenderTarget(
+    drawingBuffer.width,
+    drawingBuffer.height,
+    {
+      depthBuffer: false,
+      stencilBuffer: false,
+      type: UnsignedByteType,
+    },
+  );
+  partial.historyRejectionTarget = historyRejectionTarget;
+  historyRejectionTarget.texture.name = "Real Water history rejection";
+  const historyRejectionPipeline = new RenderPipeline(
+    renderer,
+    vec4(resetUniform, 0, 0, 1),
+  );
+  partial.historyRejectionPipeline = historyRejectionPipeline;
+  historyRejectionPipeline.outputColorTransform = false;
+
   const ssr = createCurrentFrameSsrStack(
     renderer,
     scenePass,
@@ -220,8 +381,122 @@ function constructPreparedWaterPresentationResources(
     },
   );
   partial.ssr = ssr;
+  const underwater = createUnderwaterVolumeRendering(
+    ssr.compositeTarget.texture,
+    scenePass.getTexture("depth"),
+    viewNormalTexture,
+    opticalFactorsTexture,
+    camera,
+    environment,
+    initialWaterline,
+    underwaterPolicy,
+    surfaceSampler,
+    initialSnapshot,
+  );
+  partial.underwater = underwater;
+  const underwaterVolumeTarget = new RenderTarget(
+    drawingBuffer.width,
+    drawingBuffer.height,
+    {
+      depthBuffer: false,
+      stencilBuffer: false,
+      type: HalfFloatType,
+      format: RGBAFormat,
+    },
+  );
+  partial.underwaterVolumeTarget = underwaterVolumeTarget;
+  underwaterVolumeTarget.texture.name = "Real Water underwater volume color";
+  const underwaterVolumePipeline = new RenderPipeline(
+    renderer,
+    underwater.colorNode,
+  );
+  partial.underwaterVolumePipeline = underwaterVolumePipeline;
+  underwaterVolumePipeline.outputColorTransform = false;
+  const underwaterDiagnosticsTarget = new RenderTarget(
+    drawingBuffer.width,
+    drawingBuffer.height,
+    {
+      depthBuffer: false,
+      stencilBuffer: false,
+      type: HalfFloatType,
+      format: RGBAFormat,
+    },
+  );
+  partial.underwaterDiagnosticsTarget = underwaterDiagnosticsTarget;
+  underwaterDiagnosticsTarget.texture.name =
+    "Real Water underwater volume diagnostics";
+  const underwaterDiagnosticsPipeline = new RenderPipeline(
+    renderer,
+    underwater.diagnosticsNode,
+  );
+  partial.underwaterDiagnosticsPipeline = underwaterDiagnosticsPipeline;
+  underwaterDiagnosticsPipeline.outputColorTransform = false;
+  const underwaterCausticsDiagnosticsTarget = new RenderTarget(
+    drawingBuffer.width,
+    drawingBuffer.height,
+    {
+      depthBuffer: false,
+      stencilBuffer: false,
+      type: HalfFloatType,
+      format: RGBAFormat,
+    },
+  );
+  partial.underwaterCausticsDiagnosticsTarget =
+    underwaterCausticsDiagnosticsTarget;
+  underwaterCausticsDiagnosticsTarget.texture.name =
+    "Real Water underwater caustics diagnostics";
+  const underwaterCausticsDiagnosticsPipeline = new RenderPipeline(
+    renderer,
+    underwater.causticsDiagnosticsNode,
+  );
+  partial.underwaterCausticsDiagnosticsPipeline =
+    underwaterCausticsDiagnosticsPipeline;
+  underwaterCausticsDiagnosticsPipeline.outputColorTransform = false;
+  const createUnderwaterTracerTarget = (name: string): RenderTarget => {
+    const target = new RenderTarget(drawingBuffer.width, drawingBuffer.height, {
+      depthBuffer: false,
+      stencilBuffer: false,
+      type: HalfFloatType,
+      format: RGBAFormat,
+    });
+    target.texture.name = name;
+    target.texture.colorSpace = LinearSRGBColorSpace;
+    return target;
+  };
+  const underwaterSuspendedParticleTarget = createUnderwaterTracerTarget(
+    "Real Water underwater suspended particles",
+  );
+  partial.underwaterSuspendedParticleTarget = underwaterSuspendedParticleTarget;
+  const underwaterBubbleTarget = createUnderwaterTracerTarget(
+    "Real Water underwater bubbles",
+  );
+  partial.underwaterBubbleTarget = underwaterBubbleTarget;
+  const underwaterTracerCompositeTarget = createUnderwaterTracerTarget(
+    "Real Water underwater tracer composite",
+  );
+  partial.underwaterTracerCompositeTarget = underwaterTracerCompositeTarget;
+  const underwaterBase = texture(underwaterVolumeTarget.texture);
+  const suspendedAccumulation = texture(
+    underwaterSuspendedParticleTarget.texture,
+  );
+  const bubbleAccumulation = texture(underwaterBubbleTarget.texture);
+  const withSuspended = suspendedAccumulation.rgb.add(
+    underwaterBase.rgb.mul(float(1).sub(suspendedAccumulation.a)),
+  );
+  const withBubbles = bubbleAccumulation.rgb.add(
+    withSuspended.mul(float(1).sub(bubbleAccumulation.a)),
+  );
+  const underwaterTracerCompositePipeline = new RenderPipeline(
+    renderer,
+    vec4(withBubbles.clamp(0, 1), underwaterBase.a),
+  );
+  partial.underwaterTracerCompositePipeline = underwaterTracerCompositePipeline;
+  underwaterTracerCompositePipeline.outputColorTransform = false;
   const traaNode = traa(
-    vec4(texture(ssr.compositeTarget.texture).rgb, texture(outputTexture).a),
+    vec4(
+      texture(underwaterTracerCompositeTarget.texture).rgb,
+      texture(outputTexture).a,
+    ),
     texture(scenePass.getTexture("depth")),
     createResettableVelocityTextureNode(
       texture(motionVectorsTexture),
@@ -235,7 +510,7 @@ function constructPreparedWaterPresentationResources(
   partial.jitterAdapter = jitterAdapter;
   const temporalPipeline = new RenderPipeline(renderer, traaNode);
   partial.temporalPipeline = temporalPipeline;
-  const finalColorTarget = new RenderTarget(
+  const traaResolvedTarget = new RenderTarget(
     drawingBuffer.width,
     drawingBuffer.height,
     {
@@ -244,8 +519,64 @@ function constructPreparedWaterPresentationResources(
       type: UnsignedByteType,
     },
   );
+  partial.traaResolvedTarget = traaResolvedTarget;
+  traaResolvedTarget.texture.name = "Real Water TRAA resolved color";
+  const secondaryParticleStage =
+    createSecondaryParticlePostTraaStageRegistration({
+      onProbe(): void {
+        counters.probeCount += 1;
+      },
+      renderAccumulation(stageRenderer): void {
+        secondarySpray.renderAccumulation(stageRenderer, camera);
+      },
+    });
+  const stormFront = createStormFrontPostTraaStageRegistration({
+    onProbe(): void {
+      counters.probeCount += 1;
+    },
+  });
+  const initialStormFrame = stormFrontController.inspect()?.current;
+  if (initialStormFrame === undefined) {
+    throw new Error(
+      "Storm Front must be synchronized before presentation is prepared.",
+    );
+  }
+  stormFront.synchronize(initialStormFrame);
+  partial.stormFront = stormFront;
+  partial.stormFrontController = stormFrontController;
+  const lensWetness = createLensWetnessPostTraaStageRegistration({
+    onProbe(): void {
+      counters.probeCount += 1;
+    },
+  });
+  partial.lensWetness = lensWetness;
+  const postTraaPlan: PostTraaCompositionPlan = Object.freeze({
+    mode: postTraaPolicy.mode,
+    resolutionPolicy: postTraaPolicy.resolutionPolicy,
+    stages: postTraaPolicy.stages,
+  });
+  const postTraaComposition = createPostTraaComposition({
+    renderer,
+    source: traaResolvedTarget,
+    drawingBuffer,
+    plan: postTraaPlan,
+    factories: [
+      secondaryParticleStage.factory,
+      stormFront.factory,
+      lensWetness.factory,
+    ],
+  });
+  partial.postTraaComposition = postTraaComposition;
+  const finalColorTarget = postTraaComposition.output;
   partial.finalColorTarget = finalColorTarget;
-  finalColorTarget.texture.name = "Real Water final color";
+  const secondaryParticleDiagnosticsTarget =
+    secondaryParticleStage.diagnosticsTarget();
+  partial.secondaryParticleDiagnosticsTarget =
+    secondaryParticleDiagnosticsTarget;
+  const stormFrontDiagnosticsTarget = stormFront.diagnosticsTarget();
+  partial.stormFrontDiagnosticsTarget = stormFrontDiagnosticsTarget;
+  const lensWetnessDiagnosticsTarget = lensWetness.diagnosticsTarget();
+  partial.lensWetnessDiagnosticsTarget = lensWetnessDiagnosticsTarget;
   const currentColorTarget = new RenderTarget(
     drawingBuffer.width,
     drawingBuffer.height,
@@ -259,7 +590,10 @@ function constructPreparedWaterPresentationResources(
   currentColorTarget.texture.name = "Real Water current color";
   const currentColorPipeline = new RenderPipeline(
     renderer,
-    vec4(texture(ssr.compositeTarget.texture).rgb, texture(outputTexture).a),
+    vec4(
+      texture(underwaterTracerCompositeTarget.texture).rgb,
+      texture(outputTexture).a,
+    ),
   );
   partial.currentColorPipeline = currentColorPipeline;
   const presentationPipeline = new RenderPipeline(
@@ -275,13 +609,40 @@ function constructPreparedWaterPresentationResources(
     presentationPipeline,
     currentColorPipeline,
     temporalPipeline,
+    postTraaComposition,
     traaNode,
     jitterAdapter,
     resetUniform,
+    historyRejectionPipeline,
+    historyRejectionTarget,
     currentColorTarget,
+    traaResolvedTarget,
     finalColorTarget,
+    secondaryParticleDiagnosticsTarget,
+    stormFront,
+    stormFrontController,
+    stormFrontDiagnosticsTarget,
+    lensWetness,
+    lensWetnessDiagnosticsTarget,
     scenePass,
     ssr,
+    underwater,
+    underwaterVolumePipeline,
+    underwaterVolumeTarget,
+    underwaterDiagnosticsPipeline,
+    underwaterDiagnosticsTarget,
+    underwaterCausticsDiagnosticsPipeline,
+    underwaterCausticsDiagnosticsTarget,
+    underwaterParticles,
+    underwaterSuspendedParticleTarget,
+    underwaterBubbleTarget,
+    underwaterTracerCompositePipeline,
+    underwaterTracerCompositeTarget,
+    foamField,
+    secondaryParticlePool,
+    secondaryParticlePolicy,
+    secondarySpray,
+    foamDiagnostics,
     inverseLinearDepthTextureIndex: 0,
     viewNormalTextureIndex: textureIndex(
       scenePass.renderTarget,
@@ -304,6 +665,7 @@ function constructPreparedWaterPresentationResources(
       OPTICAL_DIAGNOSTICS_B_ATTACHMENT,
     ),
     planar,
+    waterline,
     width: drawingBuffer.width,
     height: drawingBuffer.height,
     counters,
@@ -320,7 +682,12 @@ export async function compileAndPrimePreparedWaterPresentation(
 ): Promise<void> {
   throwIfAborted(signal);
   resources.counters.compileCount += 1;
-  await resources.planar.prime(renderer, scene, camera);
+  await resources.planar.prime(
+    renderer,
+    scene,
+    camera,
+    resources.waterline.current.seaLevelMetres,
+  );
   resources.counters.sceneRenderCount += 1;
   throwIfAborted(signal);
   resources.counters.compileCount += 1;
@@ -328,10 +695,23 @@ export async function compileAndPrimePreparedWaterPresentation(
   throwIfAborted(signal);
   resources.ssr.ensureGraphPrepared(renderer);
   resources.resetUniform.value = 1;
-  renderTemporalFrame(renderer, scene, camera, resources);
+  renderTemporalFrame(
+    renderer,
+    scene,
+    camera,
+    resources,
+    true,
+    true,
+    true,
+    true,
+    true,
+  );
+  renderHistoryRejection(renderer, resources);
   resources.resetUniform.value = 0;
   renderCurrentColorConversion(renderer, resources);
-  await probeNamedOutputRoutes(renderer, resources);
+  await resources.postTraaComposition.prepare(signal);
+  throwIfAborted(signal);
+  await probeNamedOutputRoutes(renderer, resources, signal);
   throwIfAborted(signal);
 }
 
@@ -341,9 +721,31 @@ export function renderHiddenStabilizationFrames(
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
   signal: AbortSignal,
+  resetFirstFrame = false,
 ): void {
   for (let frame = 0; frame < HIDDEN_STABILIZATION_FRAME_COUNT; frame += 1) {
-    renderTemporalFrame(renderer, scene, camera, resources);
+    const resetFrame = resetFirstFrame && frame === 0;
+    if (resetFrame) {
+      resources.resetUniform.value = 1;
+      resources.jitterAdapter.realign();
+    }
+    try {
+      renderPreparedPresentationColor(
+        renderer,
+        scene,
+        camera,
+        resources,
+        false,
+        false,
+        false,
+        false,
+        false,
+      );
+    } finally {
+      if (resetFrame) {
+        resources.resetUniform.value = 0;
+      }
+    }
     throwIfAborted(signal);
   }
 }
@@ -353,7 +755,7 @@ export async function probePreparedCompletion(
   resources: PreparedWaterPresentationResources,
   signal: AbortSignal,
 ): Promise<void> {
-  await probeNamedOutputRoutes(renderer, resources);
+  await probeNamedOutputRoutes(renderer, resources, signal);
   throwIfAborted(signal);
 }
 
@@ -364,7 +766,17 @@ export async function renderMainCameraGuard(
   resources: PreparedWaterPresentationResources,
   signal: AbortSignal,
 ): Promise<void> {
-  renderTemporalFrame(renderer, scene, camera, resources);
+  renderPreparedPresentationColor(
+    renderer,
+    scene,
+    camera,
+    resources,
+    false,
+    false,
+    false,
+    false,
+    false,
+  );
   renderCurrentColorConversion(renderer, resources);
   renderer.setRenderTarget(null);
   resources.presentationPipeline.render();
@@ -377,6 +789,8 @@ export function createPresentationRouteBridge(
   scene: Scene,
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
+  waterline: WaterlineStateController,
+  waterlineOptics: { synchronize(state: WaterlineFrameState): void },
   drawingBuffer: Readonly<{ width: number; height: number }>,
   manifestHash: string,
 ): HostPresentationRouteBridge {
@@ -384,7 +798,7 @@ export function createPresentationRouteBridge(
   let connected = false;
   let activated = false;
   let inspectRuntime: (() => OpenWaterRuntimeSnapshot) | undefined;
-  let lastPresented: PresentedSnapshotKeys | undefined;
+  const continuity = createHostSnapshotContinuityTracker();
   let historyEpoch = PREWARM_HISTORY_EPOCH;
   let presentationId = 0;
   let tail = Promise.resolve();
@@ -409,10 +823,29 @@ export function createPresentationRouteBridge(
       );
     }
     const snapshot = inspectRuntime();
+    const stormFrame = resources.stormFrontController.inspect()?.current;
+    if (stormFrame === undefined || stormFrame.tick !== snapshot.tick) {
+      throw new Error(
+        "Storm Front presentation is not synchronized to the ready runtime tick.",
+      );
+    }
+    resources.stormFront.synchronize(stormFrame);
+    await resources.foamField.synchronize(renderer, snapshot);
+    const snapshotResetReason = continuity.preview(snapshot);
+    const waterlineCandidate = waterline.preview(
+      camera,
+      snapshot,
+      snapshotResetReason,
+    );
     const resetReason =
-      lastPresented === undefined
-        ? null
-        : detectPresentationReset(lastPresented, snapshot);
+      snapshotResetReason ??
+      (waterlineCandidate.transitioned ? "waterline-crossing" : null);
+    resources.waterline.current = waterlineCandidate.state;
+    waterlineOptics.synchronize(waterlineCandidate.state);
+    const lensWetnessCandidate = resources.lensWetness.preview(
+      snapshot,
+      waterlineCandidate.state,
+    );
     const hostState = captureHostState(renderer, scene, camera);
     const outputs: DiagnosticsCapture[] = [];
     let temporalSceneStarted = false;
@@ -422,15 +855,80 @@ export function createPresentationRouteBridge(
         resources.jitterAdapter.realign();
       }
       temporalSceneStarted = true;
-      renderTemporalFrame(renderer, scene, camera, resources);
+      const captureWhitecapStages = accepted.outputs.some(
+        isWhitecapCaptureName,
+      );
+      const captureFoamSources = accepted.outputs.includes(
+        "foam-source-identity",
+      );
+      const captureHeroBreakerFoam =
+        accepted.outputs.includes("hero-breaker-foam");
+      renderPreparedPresentationColor(
+        renderer,
+        scene,
+        camera,
+        resources,
+        captureWhitecapStages,
+        captureFoamSources,
+        accepted.outputs.some(isUnderwaterVolumeCaptureName),
+        accepted.outputs.includes("underwater-caustics"),
+        captureHeroBreakerFoam,
+      );
       if (accepted.outputs.includes("current-color")) {
         renderCurrentColorConversion(renderer, resources);
       }
+      if (accepted.outputs.includes("history-rejection")) {
+        renderHistoryRejection(renderer, resources);
+      }
       renderer.setRenderTarget(null);
       resources.presentationPipeline.render();
-      for (const name of accepted.outputs) {
-        outputs.push(await readNamedOutput(renderer, camera, resources, name));
+      const whitecapCaptures = accepted.outputs.some(isWhitecapCaptureName)
+        ? await readWhitecapStageCaptures(renderer, resources)
+        : undefined;
+      const underwaterCaptures = accepted.outputs.some(
+        isUnderwaterVolumeCaptureName,
+      )
+        ? await readUnderwaterVolumeCaptures(renderer, resources)
+        : undefined;
+      const secondaryParticleCaptures = accepted.outputs.some(
+        isSecondaryParticleCaptureName,
+      )
+        ? await readSecondaryParticleCaptures(renderer, resources)
+        : undefined;
+      if (whitecapCaptures !== undefined) {
         resources.counters.diagnosticReadbackCount += 1;
+      }
+      if (underwaterCaptures !== undefined) {
+        resources.counters.diagnosticReadbackCount += 1;
+      }
+      if (secondaryParticleCaptures !== undefined) {
+        resources.counters.diagnosticReadbackCount += 1;
+      }
+      for (const name of accepted.outputs) {
+        if (isWhitecapCaptureName(name)) {
+          const capture = whitecapCaptures?.get(name);
+          if (capture === undefined) {
+            throw new Error(`The ${name} packed capture is unavailable.`);
+          }
+          outputs.push(capture);
+        } else if (isUnderwaterVolumeCaptureName(name)) {
+          const capture = underwaterCaptures?.get(name);
+          if (capture === undefined) {
+            throw new Error(`The ${name} packed capture is unavailable.`);
+          }
+          outputs.push(capture);
+        } else if (isSecondaryParticleCaptureName(name)) {
+          const capture = secondaryParticleCaptures?.get(name);
+          if (capture === undefined) {
+            throw new Error(`The ${name} packed capture is unavailable.`);
+          }
+          outputs.push(capture);
+        } else {
+          outputs.push(
+            await readNamedOutput(renderer, camera, resources, name),
+          );
+          resources.counters.diagnosticReadbackCount += 1;
+        }
       }
       if (resetReason !== null) {
         resources.resetUniform.value = 0;
@@ -438,8 +936,10 @@ export function createPresentationRouteBridge(
           historyEpoch += 1;
         }
       }
+      resources.lensWetness.commit(lensWetnessCandidate);
       presentationId += 1;
-      lastPresented = readPresentedSnapshotKeys(snapshot);
+      continuity.commit(snapshot);
+      waterline.commit(waterlineCandidate);
       return Object.freeze({
         presentationId,
         manifestHash,
@@ -456,6 +956,11 @@ export function createPresentationRouteBridge(
           resetReason,
           resetFrame: resetReason !== null,
         }),
+        waterline: waterlineCandidate.state,
+        secondaryParticles: snapshotSecondaryParticleDiagnostics(
+          resources.secondaryParticlePool,
+          resources.secondaryParticlePolicy,
+        ),
         outputs: Object.freeze(outputs),
         compileCount: resources.counters.compileCount,
         probeCount: resources.counters.probeCount,
@@ -507,7 +1012,7 @@ export function createPresentationRouteBridge(
       }
       connected = true;
       inspectRuntime = nextInspectRuntime;
-      lastPresented = readPresentedSnapshotKeys(nextInspectRuntime());
+      continuity.commit(nextInspectRuntime());
       const route = { present };
       installHostDiagnosticsRoute(route, diagnostics);
       return Object.freeze(route) satisfies HostPresentationRoute;
@@ -534,11 +1039,27 @@ export function disposePreparedWaterPresentationResources(
   resources: PreparedWaterPresentationResources,
 ): void {
   resources.presentationPipeline.dispose();
+  resources.postTraaComposition.dispose();
+  resources.secondarySpray.dispose();
   resources.currentColorPipeline.dispose();
   resources.temporalPipeline.dispose();
   resources.traaNode.dispose();
   resources.currentColorTarget.dispose();
-  resources.finalColorTarget.dispose();
+  resources.traaResolvedTarget.dispose();
+  resources.underwaterCausticsDiagnosticsPipeline.dispose();
+  resources.underwaterCausticsDiagnosticsTarget.dispose();
+  resources.underwaterParticles.dispose();
+  resources.underwaterTracerCompositePipeline.dispose();
+  resources.underwaterTracerCompositeTarget.dispose();
+  resources.underwaterBubbleTarget.dispose();
+  resources.underwaterSuspendedParticleTarget.dispose();
+  resources.underwaterDiagnosticsPipeline.dispose();
+  resources.underwaterDiagnosticsTarget.dispose();
+  resources.underwaterVolumePipeline.dispose();
+  resources.underwaterVolumeTarget.dispose();
+  resources.historyRejectionPipeline.dispose();
+  resources.historyRejectionTarget.dispose();
+  resources.foamDiagnostics.dispose();
   resources.scenePass.dispose();
   disposeCurrentFrameSsrStack(resources.ssr);
   resources.planar.dispose();
@@ -549,11 +1070,27 @@ export function disposePartialPreparedWaterPresentationResources(
 ): void {
   const disposals = [
     () => resources.presentationPipeline?.dispose(),
+    () => resources.postTraaComposition?.dispose(),
+    () => resources.secondarySpray?.dispose(),
     () => resources.currentColorPipeline?.dispose(),
     () => resources.temporalPipeline?.dispose(),
     () => resources.traaNode?.dispose(),
     () => resources.currentColorTarget?.dispose(),
-    () => resources.finalColorTarget?.dispose(),
+    () => resources.traaResolvedTarget?.dispose(),
+    () => resources.underwaterCausticsDiagnosticsPipeline?.dispose(),
+    () => resources.underwaterCausticsDiagnosticsTarget?.dispose(),
+    () => resources.underwaterParticles?.dispose(),
+    () => resources.underwaterTracerCompositePipeline?.dispose(),
+    () => resources.underwaterTracerCompositeTarget?.dispose(),
+    () => resources.underwaterBubbleTarget?.dispose(),
+    () => resources.underwaterSuspendedParticleTarget?.dispose(),
+    () => resources.underwaterDiagnosticsPipeline?.dispose(),
+    () => resources.underwaterDiagnosticsTarget?.dispose(),
+    () => resources.underwaterVolumePipeline?.dispose(),
+    () => resources.underwaterVolumeTarget?.dispose(),
+    () => resources.historyRejectionPipeline?.dispose(),
+    () => resources.historyRejectionTarget?.dispose(),
+    () => resources.foamDiagnostics?.dispose(),
     () => resources.scenePass?.dispose(),
     () => {
       if (resources.ssr !== undefined) {
@@ -569,56 +1106,6 @@ export function disposePartialPreparedWaterPresentationResources(
       // Startup continues to reject with the primary preparation failure.
     }
   }
-}
-
-interface PresentedSnapshotKeys {
-  readonly seed: number;
-  readonly tick: number;
-  readonly timeSeconds: number;
-  readonly simulationResetRevision: number;
-  readonly controlRevision: number;
-  readonly originRevision: number;
-  readonly cameraCutRevision: number;
-  readonly seaStateCutRevision: number;
-}
-
-function readPresentedSnapshotKeys(
-  snapshot: OpenWaterRuntimeSnapshot,
-): PresentedSnapshotKeys {
-  return {
-    seed: snapshot.seed,
-    tick: snapshot.tick,
-    timeSeconds: snapshot.timeSeconds,
-    simulationResetRevision: snapshot.simulationResetRevision,
-    controlRevision: snapshot.controlRevision,
-    originRevision: snapshot.originRevision,
-    cameraCutRevision: snapshot.cameraCutRevision,
-    seaStateCutRevision: snapshot.seaStateCutRevision,
-  };
-}
-
-function detectPresentationReset(
-  previous: PresentedSnapshotKeys,
-  current: OpenWaterRuntimeSnapshot,
-): HostTemporalResetReason | null {
-  if (
-    current.simulationResetRevision !== previous.simulationResetRevision ||
-    current.seed !== previous.seed ||
-    current.tick < previous.tick ||
-    current.timeSeconds < previous.timeSeconds
-  ) {
-    return "simulation-reset";
-  }
-  if (current.cameraCutRevision !== previous.cameraCutRevision) {
-    return "camera-cut";
-  }
-  if (current.originRevision !== previous.originRevision) {
-    return "origin-shift";
-  }
-  if (current.seaStateCutRevision !== previous.seaStateCutRevision) {
-    return "sea-state-cut";
-  }
-  return null;
 }
 
 function toRootPresentedFrame(
@@ -639,11 +1126,106 @@ function toRootPresentedFrame(
   });
 }
 
+function snapshotSecondaryParticleDiagnostics(
+  pool: SecondaryParticlePool,
+  policy: QualityProfileSecondaryParticles,
+): DiagnosticsSecondaryParticles {
+  const frame = pool.current();
+  const consumers: DiagnosticsSecondaryParticleConsumer[] =
+    policy.consumers.map((consumer) => {
+      const receipt = pool.consumer(consumer.consumerId).receipt;
+      return Object.freeze({
+        consumerId: consumer.consumerId,
+        maximumRequestCount: consumer.maximumRequestCount,
+        minimumRetainedSlots: consumer.minimumRetainedSlots,
+        softRequestCeiling: consumer.softRequestCeiling,
+        pressureReentryPolicy: consumer.pressureReentryPolicy,
+        ...snapshotSecondaryParticleReceipt(
+          receipt,
+          receipt.requested > consumer.softRequestCeiling,
+        ),
+      });
+    });
+  return Object.freeze({
+    capacity: policy.capacity,
+    maximumCandidateCount: policy.maximumCandidateCount,
+    ...snapshotSecondaryParticleReceipt(
+      frame.globalReceipt,
+      frame.globalReceipt.thinned > 0,
+    ),
+    consumers: Object.freeze(consumers),
+  });
+}
+
+function snapshotSecondaryParticleReceipt(
+  receipt: SecondaryParticleConsumerReceipt,
+  overSubscribed: boolean,
+): DiagnosticsSecondaryParticleReceipt {
+  const visibleCount =
+    receipt.retained +
+    receipt.thinned +
+    receipt.reentryCooldown +
+    receipt.lifecycleReentryForbidden;
+  return Object.freeze({
+    requested: receipt.requested,
+    retained: receipt.retained,
+    thinned: receipt.thinned,
+    invisibleOrOccluded: receipt.invisibleOrOccluded,
+    reentryCooldown: receipt.reentryCooldown,
+    lifecycleReentryForbidden: receipt.lifecycleReentryForbidden,
+    retainedByFloor: receipt.floorRetained,
+    retainedByGlobalCompetition: receipt.globalRetained,
+    retainedIncumbents: receipt.residenceRetained,
+    requestedAboveSoftCeiling: receipt.requestedAboveSoftCeiling,
+    overSubscribed,
+    contributionMinimumQ16:
+      visibleCount === 0 ? null : receipt.contributionMinimumQ16,
+    contributionMaximumQ16:
+      visibleCount === 0 ? null : receipt.contributionMaximumQ16,
+    dropReasons: Object.freeze({
+      invisibleOrOccluded: receipt.invisibleOrOccluded,
+      globalContributionPressure: receipt.thinned,
+      reentryCooldown: receipt.reentryCooldown,
+      lifecycleReentryForbidden: receipt.lifecycleReentryForbidden,
+    }),
+  });
+}
+
+function renderPreparedPresentationColor(
+  renderer: Renderer,
+  scene: Scene,
+  camera: PerspectiveCamera,
+  resources: PreparedWaterPresentationResources,
+  captureWhitecapStages: boolean,
+  captureFoamSources: boolean,
+  captureUnderwaterDiagnostics: boolean,
+  captureUnderwaterCaustics: boolean,
+  captureHeroBreakerFoam: boolean,
+): void {
+  renderTemporalFrame(
+    renderer,
+    scene,
+    camera,
+    resources,
+    captureWhitecapStages,
+    captureFoamSources,
+    captureUnderwaterDiagnostics,
+    captureUnderwaterCaustics,
+    captureHeroBreakerFoam,
+  );
+  resources.postTraaComposition.render();
+}
+
 function renderTemporalFrame(
   renderer: Renderer,
   scene: Scene,
   camera: PerspectiveCamera,
   resources: PreparedWaterPresentationResources,
+  captureWhitecapStages: boolean,
+  captureFoamSources: boolean,
+  captureUnderwaterDiagnostics: boolean,
+  captureUnderwaterCaustics: boolean,
+  captureHeroBreakerFoam: boolean,
 ): void {
   const actual = readDrawingBufferSize(renderer);
   if (actual.width !== resources.width || actual.height !== resources.height) {
@@ -652,7 +1234,13 @@ function renderTemporalFrame(
     );
   }
   assertNativeTraaCamera(camera);
-  resources.planar.render(renderer, scene, camera);
+  resources.planar.render(
+    renderer,
+    scene,
+    camera,
+    resources.waterline.current.seaLevelMetres,
+    resources.waterline.current.classification !== "below",
+  );
   if (resources.planar.hasOutput.value === 1) {
     resources.counters.sceneRenderCount += 1;
   }
@@ -666,6 +1254,15 @@ function renderTemporalFrame(
       renderer.setRenderTarget(resources.currentColorTarget);
       resources.ssr.sceneTriggerPipeline.render();
       resources.counters.sceneRenderCount += 1;
+      if (captureWhitecapStages) {
+        resources.foamDiagnostics.renderStages(renderer, camera);
+      }
+      if (captureFoamSources) {
+        resources.foamDiagnostics.renderSources(renderer);
+      }
+      if (captureHeroBreakerFoam) {
+        resources.foamDiagnostics.renderHeroBreakerFoam(renderer);
+      }
       renderCurrentFrameSsr(renderer, resources.ssr);
       const historyHostState = captureHostState(renderer, scene, camera);
       try {
@@ -680,10 +1277,32 @@ function renderTemporalFrame(
       renderer.setRenderTarget(resources.ssr.compositeTarget);
       resources.ssr.compositePipeline.render();
       assertCurrentFrameSsrPreparedSize(resources.ssr);
+      resources.underwater.syncCamera(camera);
+      renderer.setRenderTarget(resources.underwaterVolumeTarget);
+      resources.underwaterVolumePipeline.render();
+      if (captureUnderwaterDiagnostics) {
+        renderer.setRenderTarget(resources.underwaterDiagnosticsTarget);
+        resources.underwaterDiagnosticsPipeline.render();
+      }
+      if (captureUnderwaterCaustics) {
+        renderer.setRenderTarget(resources.underwaterCausticsDiagnosticsTarget);
+        resources.underwaterCausticsDiagnosticsPipeline.render();
+      }
+      renderer.setMRT(null);
+      renderer.setRenderTarget(resources.underwaterSuspendedParticleTarget);
+      renderer.setClearColor(0x000000, 0);
+      renderer.clear();
+      resources.underwaterParticles.renderSuspended(renderer, camera);
+      renderer.setRenderTarget(resources.underwaterBubbleTarget);
+      renderer.setClearColor(0x000000, 0);
+      renderer.clear();
+      resources.underwaterParticles.renderBubbles(renderer, camera);
+      renderer.setRenderTarget(resources.underwaterTracerCompositeTarget);
+      resources.underwaterTracerCompositePipeline.render();
       renderer.setRenderTarget(resources.ssr.depthConversionTarget);
       resources.ssr.depthConversionPipeline.render();
       resources.jitterAdapter.clearHostCameraViewOffset(camera);
-      renderer.setRenderTarget(resources.finalColorTarget);
+      renderer.setRenderTarget(resources.traaResolvedTarget);
       resources.temporalPipeline.render();
       succeeded = true;
     } catch (cause) {
@@ -703,6 +1322,14 @@ function renderCurrentColorConversion(
 ): void {
   renderer.setRenderTarget(resources.currentColorTarget);
   resources.currentColorPipeline.render();
+}
+
+function renderHistoryRejection(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): void {
+  renderer.setRenderTarget(resources.historyRejectionTarget);
+  resources.historyRejectionPipeline.render();
 }
 
 export function readDrawingBufferSize(renderer: Renderer): Readonly<{
@@ -728,9 +1355,15 @@ export function readDrawingBufferSize(renderer: Renderer): Readonly<{
 async function probeNamedOutputRoutes(
   renderer: Renderer,
   resources: PreparedWaterPresentationResources,
+  signal: AbortSignal,
 ): Promise<void> {
-  await probeCompletedFrame(renderer, resources, resources.finalColorTarget);
+  await resources.postTraaComposition.probe(signal);
   await probeCompletedFrame(renderer, resources, resources.currentColorTarget);
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.historyRejectionTarget,
+  );
   await probeCompletedFrame(
     renderer,
     resources,
@@ -743,6 +1376,36 @@ async function probeNamedOutputRoutes(
     resources.ssr.ssrNode.getRenderTarget(),
   );
   await probeCompletedFrame(renderer, resources, resources.ssr.compositeTarget);
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.underwaterVolumeTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.underwaterDiagnosticsTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.underwaterCausticsDiagnosticsTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.underwaterSuspendedParticleTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.underwaterBubbleTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.underwaterTracerCompositeTarget,
+  );
   await probeCompletedFrame(renderer, resources, resources.ssr.beautyTarget);
   await probeCompletedFrame(
     renderer,
@@ -780,6 +1443,52 @@ async function probeNamedOutputRoutes(
     resources.opticalDiagnosticsBTextureIndex,
   );
   await probeCompletedFrame(renderer, resources, resources.planar.target);
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.foamDiagnostics.stageTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.foamDiagnostics.sourceIdentityTarget,
+  );
+  await probeCompletedFrame(
+    renderer,
+    resources,
+    resources.foamDiagnostics.heroBreakerFoamTarget,
+  );
+}
+
+function isWhitecapCaptureName(name: DiagnosticsCaptureName): boolean {
+  return (
+    name === "whitecap-generation" ||
+    name === "whitecap-history" ||
+    name === "whitecap-advection" ||
+    name === "whitecap-decay"
+  );
+}
+
+function isUnderwaterVolumeCaptureName(
+  name: DiagnosticsCaptureName,
+): name is DiagnosticsUnderwaterVolumeCapture["name"] {
+  return (
+    name === "underwater-transmittance" ||
+    name === "underwater-scattering" ||
+    name === "underwater-light-shafts" ||
+    name === "underwater-shadow"
+  );
+}
+
+function isSecondaryParticleCaptureName(
+  name: DiagnosticsCaptureName,
+): name is
+  | DiagnosticsSecondaryParticleContributionCapture["name"]
+  | DiagnosticsSecondaryParticleOverdrawCapture["name"] {
+  return (
+    name === "secondary-particle-contribution" ||
+    name === "secondary-particle-overdraw"
+  );
 }
 
 async function probeCompletedFrame(
@@ -923,6 +1632,19 @@ async function readNamedOutput(
     }
     case "motion-vector":
       return readMotionVectorCapture(renderer, resources);
+    case "whitecap-generation":
+    case "whitecap-history":
+    case "whitecap-advection":
+    case "whitecap-decay":
+      throw new Error(
+        "The spectral-whitecap diagnostic route has not been prepared.",
+      );
+    case "foam-source-identity":
+      return readFoamSourceIdentityCapture(renderer, resources);
+    case "waterline":
+      return readWaterlineCapture(renderer, resources);
+    case "history-rejection":
+      return readHistoryRejectionCapture(renderer, resources);
     case "optical-fresnel":
       return readOpticalScalarCapture(
         renderer,
@@ -978,6 +1700,84 @@ async function readNamedOutput(
         name,
         resources.opticalFactorsTextureIndex,
         2,
+      );
+    case "underwater-transmittance":
+    case "underwater-scattering":
+    case "underwater-light-shafts":
+    case "underwater-shadow":
+      throw new Error(
+        "The packed underwater diagnostic route has not been prepared.",
+      );
+    case "underwater-caustics":
+      return readUnderwaterCausticsCapture(renderer, resources);
+    case "underwater-particles":
+      return readNormalizedScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.underwaterSuspendedParticleTarget,
+        3,
+      );
+    case "underwater-bubbles":
+      return readNormalizedScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.underwaterBubbleTarget,
+        3,
+      );
+    case "lens-wetness":
+      return readNormalizedScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.lensWetnessDiagnosticsTarget,
+        0,
+      );
+    case "secondary-particle-contribution":
+    case "secondary-particle-overdraw":
+      throw new Error(
+        "The packed secondary-particle diagnostic route has not been prepared.",
+      );
+    case "hero-breaker-foam":
+      return readNormalizedScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.foamDiagnostics.heroBreakerFoamTarget,
+        0,
+      );
+    case "storm-rain-ripples":
+      return readNormalizedScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.stormFrontDiagnosticsTarget,
+        0,
+      );
+    case "storm-aerosol":
+      return readNormalizedScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.stormFrontDiagnosticsTarget,
+        1,
+      );
+    case "storm-cloud-shadow":
+      return readNormalizedScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.stormFrontDiagnosticsTarget,
+        2,
+      );
+    case "storm-lightning":
+      return readNormalizedScalarCapture(
+        renderer,
+        resources,
+        name,
+        resources.stormFrontDiagnosticsTarget,
+        3,
       );
     case "planar-color":
       return readPlanarColorCapture(renderer, resources);
@@ -1071,6 +1871,438 @@ async function readMotionVectorCapture(
     height: resources.height,
     origin: "top-left",
     format: DIAGNOSTICS_CAPTURE_SHAPES["motion-vector"].format,
+    data,
+  });
+}
+
+async function readWhitecapStageCaptures(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<
+  ReadonlyMap<DiagnosticsCaptureName, DiagnosticsWhitecapStageCapture>
+> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.foamDiagnostics.stageTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array) && !(raw instanceof Float32Array)) {
+    throw new TypeError(
+      "Spectral-whitecap stage readback did not return Float16 or Float32 data.",
+    );
+  }
+  const packed = compactRows(raw, resources.width, resources.height, 4);
+  const names = [
+    "whitecap-generation",
+    "whitecap-history",
+    "whitecap-advection",
+    "whitecap-decay",
+  ] as const;
+  const result = new Map<
+    DiagnosticsCaptureName,
+    DiagnosticsWhitecapStageCapture
+  >();
+  for (const [channel, name] of names.entries()) {
+    const data = new Float32Array(resources.width * resources.height);
+    for (let pixel = 0; pixel < data.length; pixel += 1) {
+      const encoded = packed[pixel * 4 + channel] ?? 0;
+      const value =
+        packed instanceof Uint16Array
+          ? DataUtils.fromHalfFloat(encoded)
+          : encoded;
+      if (!Number.isFinite(value) || value < 0 || value > 1) {
+        throw new RangeError(
+          `The ${name} capture must contain finite unit density.`,
+        );
+      }
+      data[pixel] = value;
+    }
+    result.set(
+      name,
+      Object.freeze({
+        name,
+        width: resources.width,
+        height: resources.height,
+        origin: "top-left",
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+        data,
+      }),
+    );
+  }
+  return result;
+}
+
+async function readUnderwaterVolumeCaptures(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<
+  ReadonlyMap<
+    DiagnosticsUnderwaterVolumeCapture["name"],
+    DiagnosticsUnderwaterVolumeCapture
+  >
+> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.underwaterDiagnosticsTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array)) {
+    throw new TypeError(
+      "Underwater diagnostics readback did not return Float16 RGBA data.",
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const names = [
+    "underwater-transmittance",
+    "underwater-scattering",
+    "underwater-light-shafts",
+    "underwater-shadow",
+  ] as const;
+  const captures = new Map<
+    DiagnosticsUnderwaterVolumeCapture["name"],
+    DiagnosticsUnderwaterVolumeCapture
+  >();
+  for (const [channel, name] of names.entries()) {
+    const data = new Float32Array(resources.width * resources.height);
+    for (let pixel = 0; pixel < data.length; pixel += 1) {
+      const value = DataUtils.fromHalfFloat(rgba[pixel * 4 + channel] ?? 0);
+      if (!Number.isFinite(value) || value < 0 || value > 1) {
+        throw new RangeError(
+          `The ${name} capture must contain finite normalized volume data.`,
+        );
+      }
+      data[pixel] = value;
+    }
+    captures.set(
+      name,
+      Object.freeze({
+        name,
+        width: resources.width,
+        height: resources.height,
+        origin: "top-left",
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+        data,
+      }),
+    );
+  }
+  return captures;
+}
+
+async function readSecondaryParticleCaptures(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<
+  ReadonlyMap<
+    | DiagnosticsSecondaryParticleContributionCapture["name"]
+    | DiagnosticsSecondaryParticleOverdrawCapture["name"],
+    | DiagnosticsSecondaryParticleContributionCapture
+    | DiagnosticsSecondaryParticleOverdrawCapture
+  >
+> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.secondaryParticleDiagnosticsTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array) && !(raw instanceof Float32Array)) {
+    throw new TypeError(
+      "Secondary-particle diagnostics readback did not return Float16 or Float32 RGBA data.",
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const contribution = new Float32Array(resources.width * resources.height);
+  const overdraw = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < contribution.length; pixel += 1) {
+    const source = pixel * 4;
+    const red = decodePackedFloat(rgba, source);
+    const green = decodePackedFloat(rgba, source + 1);
+    const blue = decodePackedFloat(rgba, source + 2);
+    const samples = decodePackedFloat(rgba, source + 3);
+    if (
+      !Number.isFinite(red) ||
+      !Number.isFinite(green) ||
+      !Number.isFinite(blue) ||
+      !Number.isFinite(samples) ||
+      red < 0 ||
+      green < 0 ||
+      blue < 0 ||
+      samples < 0
+    ) {
+      throw new RangeError(
+        "Secondary-particle diagnostics must contain finite nonnegative contribution and overdraw.",
+      );
+    }
+    contribution[pixel] = Math.min(1, Math.max(red, green, blue));
+    overdraw[pixel] = samples;
+  }
+  const captures = new Map<
+    | DiagnosticsSecondaryParticleContributionCapture["name"]
+    | DiagnosticsSecondaryParticleOverdrawCapture["name"],
+    | DiagnosticsSecondaryParticleContributionCapture
+    | DiagnosticsSecondaryParticleOverdrawCapture
+  >();
+  captures.set(
+    "secondary-particle-contribution",
+    Object.freeze({
+      name: "secondary-particle-contribution",
+      width: resources.width,
+      height: resources.height,
+      origin: "top-left",
+      format:
+        DIAGNOSTICS_CAPTURE_SHAPES["secondary-particle-contribution"].format,
+      data: contribution,
+    }),
+  );
+  captures.set(
+    "secondary-particle-overdraw",
+    Object.freeze({
+      name: "secondary-particle-overdraw",
+      width: resources.width,
+      height: resources.height,
+      origin: "top-left",
+      format: DIAGNOSTICS_CAPTURE_SHAPES["secondary-particle-overdraw"].format,
+      data: overdraw,
+    }),
+  );
+  return captures;
+}
+
+function decodePackedFloat(
+  data: Uint16Array | Float32Array,
+  index: number,
+): number {
+  const encoded = data[index] ?? 0;
+  return data instanceof Uint16Array
+    ? DataUtils.fromHalfFloat(encoded)
+    : encoded;
+}
+
+async function readUnderwaterCausticsCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsUnderwaterCausticsCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.underwaterCausticsDiagnosticsTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array)) {
+    throw new TypeError(
+      "Underwater caustics diagnostics readback did not return Float16 RGBA data.",
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    const value = DataUtils.fromHalfFloat(rgba[pixel * 4] ?? 0);
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new RangeError(
+        "The underwater-caustics capture must contain finite normalized data.",
+      );
+    }
+    data[pixel] = value;
+  }
+  return Object.freeze({
+    name: "underwater-caustics",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["underwater-caustics"].format,
+    data,
+  });
+}
+
+type NormalizedScalarCapture =
+  | DiagnosticsUnderwaterParticlesCapture
+  | DiagnosticsUnderwaterBubblesCapture
+  | DiagnosticsLensWetnessCapture
+  | DiagnosticsHeroBreakerFoamCapture
+  | DiagnosticsStormFrontCapture;
+
+async function readNormalizedScalarCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+  name: NormalizedScalarCapture["name"],
+  target: RenderTarget,
+  channel: 0 | 1 | 2 | 3,
+): Promise<NormalizedScalarCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    target,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array)) {
+    throw new TypeError(
+      `The ${name} readback did not return Float16 RGBA data.`,
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    const value = DataUtils.fromHalfFloat(rgba[pixel * 4 + channel] ?? 0);
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new RangeError(
+        `The ${name} capture must contain finite normalized data.`,
+      );
+    }
+    data[pixel] = value;
+  }
+  const base = {
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left" as const,
+    data,
+  };
+  switch (name) {
+    case "underwater-particles":
+      return Object.freeze({
+        ...base,
+        name,
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+      });
+    case "underwater-bubbles":
+      return Object.freeze({
+        ...base,
+        name,
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+      });
+    case "lens-wetness":
+      return Object.freeze({
+        ...base,
+        name,
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+      });
+    case "hero-breaker-foam":
+      return Object.freeze({
+        ...base,
+        name,
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+      });
+    case "storm-rain-ripples":
+    case "storm-aerosol":
+    case "storm-cloud-shadow":
+    case "storm-lightning":
+      return Object.freeze({
+        ...base,
+        name,
+        format: DIAGNOSTICS_CAPTURE_SHAPES[name].format,
+      });
+  }
+}
+
+async function readFoamSourceIdentityCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsFoamSourceIdentityCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.foamDiagnostics.sourceIdentityTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint16Array) && !(raw instanceof Float32Array)) {
+    throw new TypeError(
+      "Unified-foam source readback did not return Float16 or Float32 data.",
+    );
+  }
+  const packed = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height * 4);
+  for (let index = 0; index < data.length; index += 1) {
+    const encoded = packed[index] ?? 0;
+    const value =
+      packed instanceof Uint16Array
+        ? DataUtils.fromHalfFloat(encoded)
+        : encoded;
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new RangeError(
+        "The foam-source-identity capture must contain finite unit density.",
+      );
+    }
+    data[index] = value;
+  }
+  return Object.freeze({
+    name: "foam-source-identity",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["foam-source-identity"].format,
+    data,
+  });
+}
+
+async function readWaterlineCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsCapture> {
+  const raw = await readAttachmentPixels(
+    renderer,
+    resources,
+    resources.opticalFactorsTextureIndex,
+  );
+  if (!(raw instanceof Uint16Array)) {
+    throw new TypeError(
+      "Waterline readback did not return Float16 coverage data.",
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    const coverage = DataUtils.fromHalfFloat(rgba[pixel * 4 + 3] ?? 0);
+    if (!Number.isFinite(coverage) || coverage < 0 || coverage > 1) {
+      throw new RangeError(
+        "Waterline coverage readback must contain normalized samples.",
+      );
+    }
+    data[pixel] = coverage;
+  }
+  return Object.freeze({
+    name: "waterline",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left" as const,
+    format: DIAGNOSTICS_CAPTURE_SHAPES.waterline.format,
+    data,
+  });
+}
+
+async function readHistoryRejectionCapture(
+  renderer: Renderer,
+  resources: PreparedWaterPresentationResources,
+): Promise<DiagnosticsCapture> {
+  const raw = await renderer.readRenderTargetPixelsAsync(
+    resources.historyRejectionTarget,
+    0,
+    0,
+    resources.width,
+    resources.height,
+  );
+  if (!(raw instanceof Uint8Array)) {
+    throw new TypeError(
+      "History-rejection readback did not return RGBA8 data.",
+    );
+  }
+  const rgba = compactRows(raw, resources.width, resources.height, 4);
+  const data = new Float32Array(resources.width * resources.height);
+  for (let pixel = 0; pixel < data.length; pixel += 1) {
+    data[pixel] = (rgba[pixel * 4] ?? 0) / 255;
+  }
+  return Object.freeze({
+    name: "history-rejection",
+    width: resources.width,
+    height: resources.height,
+    origin: "top-left",
+    format: DIAGNOSTICS_CAPTURE_SHAPES["history-rejection"].format,
     data,
   });
 }

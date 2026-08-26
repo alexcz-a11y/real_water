@@ -1,6 +1,7 @@
 import {
   type BufferGeometry,
   DataTexture,
+  DoubleSide,
   type PerspectiveCamera,
   Mesh,
   NoBlending,
@@ -26,9 +27,25 @@ import type {
   ThreeHostScene,
 } from "../three-host.js";
 import type { HostEnvironmentAdapter } from "../environment.js";
-import { assertHostEnvironmentMatchesManifest } from "../environment.js";
-import type { HostSimulationAdapter } from "../runtime.js";
-import type { HostPresentationAdapter } from "../presentation.js";
+import {
+  assertHostEnvironmentMatchesManifest,
+  readHostEnvironmentSnapshot,
+} from "../environment.js";
+import {
+  createStormFrontController,
+  type StormFrontController,
+} from "../storm-front.js";
+import {
+  readHostSimulationState,
+  type HostSimulationAdapter,
+  type OpenWaterRuntimeSnapshot,
+  type RuntimeStateSink,
+} from "../runtime.js";
+import {
+  readHostPresentationState,
+  type HostPresentationAdapter,
+} from "../presentation.js";
+import { createWaterPreset } from "../water-preset.js";
 import { HOST_RUNTIME_STATE_BRIDGE } from "./runtime-state-bridge.js";
 import { HOST_PRESENTATION_ROUTE_BRIDGE } from "./presentation-route-bridge.js";
 import {
@@ -37,6 +54,30 @@ import {
 } from "./camera-relative-clipmap.js";
 import { createWaterOpticsRendering } from "./water-optics-rendering.js";
 import { createSpectralBandRendering } from "./spectral-bands-rendering.js";
+import {
+  createUnifiedFoamField,
+  type UnifiedFoamField,
+} from "./spectral-whitecap-field.js";
+import {
+  createSecondaryParticleContributionQuantizer,
+  createSecondaryParticlePool,
+  type SecondaryParticlePool,
+} from "../secondary-particle-pool.js";
+import {
+  createSecondarySprayAllocationParticipant,
+  createSecondarySprayParticles,
+  type SecondarySprayParticles,
+} from "./secondary-spray-particles.js";
+import { createUnderwaterSecondaryParticleAllocationParticipants } from "./underwater-secondary-particles.js";
+import type { LocalInteractionRenderSnapshot } from "./local-interaction.js";
+import {
+  createSecondaryParticleAllocationRoute,
+  type SecondaryParticleAllocationRoute,
+} from "../secondary-particle-allocation-route.js";
+import {
+  createInitialWaterlineSampleState,
+  createWaterlineStateController,
+} from "./waterline-state.js";
 import {
   captureHostState,
   compileAndPrimePreparedWaterPresentation,
@@ -69,8 +110,13 @@ interface PreparedResources {
   readonly geometry: BufferGeometry;
   readonly material: NodeMaterial;
   readonly waterTexture: DataTexture;
+  readonly foamField: UnifiedFoamField;
+  readonly secondaryParticlePool: SecondaryParticlePool;
+  readonly secondaryParticleAllocationRoute: SecondaryParticleAllocationRoute;
+  readonly stormFront: StormFrontController;
   readonly spectralBand: ReturnType<typeof createSpectralBandRendering>;
   readonly opticalPath: ReturnType<typeof createWaterOpticsRendering>;
+  readonly waterline: ReturnType<typeof createWaterlineStateController>;
   readonly presentation: PreparedWaterPresentationResources;
 }
 
@@ -81,6 +127,7 @@ type PartialPreparedResources = {
 } & {
   presentation?: PreparedWaterPresentationResources;
   presentationPartial?: PartialPreparedWaterPresentationResources;
+  secondarySpray?: SecondarySprayParticles;
 };
 
 export async function prepareMinimalWaterPlane(
@@ -117,15 +164,23 @@ export async function prepareMinimalWaterPlane(
       // Preserve the authoritative preparation or abort failure.
     }
   };
-  const cleanupAfterAbort = (): void => {
-    cleanupPreparation();
+  const cleanupImmediatelyAfterDeviceLossAbort = (): void => {
+    const reason: unknown = options.request.signal.reason;
+    // The Three Host device-loss race returns before its pending preparation,
+    // so a lost device keeps the prompt cleanup path. A live-device cancel
+    // instead reaches the catch below after the current async GPU call settles.
+    if (isDeviceLossAbortReason(reason)) {
+      cleanupPreparation();
+    }
   };
   if (options.request.signal.aborted) {
-    cleanupAfterAbort();
+    cleanupImmediatelyAfterDeviceLossAbort();
   } else {
-    options.request.signal.addEventListener("abort", cleanupAfterAbort, {
-      once: true,
-    });
+    options.request.signal.addEventListener(
+      "abort",
+      cleanupImmediatelyAfterDeviceLossAbort,
+      { once: true },
+    );
   }
 
   try {
@@ -148,29 +203,79 @@ export async function prepareMinimalWaterPlane(
       options.environment.texture,
       "environment radiance",
     );
+    const preparationSnapshot = createPreparationFoamSnapshot(
+      options.simulation,
+      options.presentation,
+    );
+    const stormFront = createStormFrontController(() =>
+      readHostEnvironmentSnapshot(options.environment),
+    );
+    stormFront.synchronize(preparationSnapshot);
+    partial.stormFront = stormFront;
+    const secondaryParticlePolicy =
+      options.request.manifest.qualityProfile.secondaryParticles;
+    const secondaryParticlePool = createSecondaryParticlePool({
+      capacity: secondaryParticlePolicy.capacity,
+      contribution: {
+        projectedAreaReference: "output-drawing-buffer",
+        referenceWidth: declaredDrawingBuffer.width,
+        referenceHeight: declaredDrawingBuffer.height,
+        screenAreaDivisor:
+          secondaryParticlePolicy.contribution.screenAreaDivisor,
+        quantization: secondaryParticlePolicy.contribution.quantization,
+      },
+      hysteresis: secondaryParticlePolicy.hysteresis,
+      consumers: secondaryParticlePolicy.consumers.map((consumer) => ({
+        consumerId: consumer.consumerId,
+        contributionReference: {
+          width: declaredDrawingBuffer.width,
+          height: declaredDrawingBuffer.height,
+          space: "output-drawing-buffer" as const,
+        },
+        maximumRequestCount: consumer.maximumRequestCount,
+        minimumRetainedSlots: consumer.minimumRetainedSlots,
+        softRequestCeiling: consumer.softRequestCeiling,
+        pressureReentryPolicy: consumer.pressureReentryPolicy,
+      })),
+    });
+    partial.secondaryParticlePool = secondaryParticlePool;
+    const contributionReference = Object.freeze({
+      width: declaredDrawingBuffer.width,
+      height: declaredDrawingBuffer.height,
+      space: "output-drawing-buffer" as const,
+    });
+    const secondarySpray = createSecondarySprayParticles({
+      contributionReference,
+      contributionQuantizer: createSecondaryParticleContributionQuantizer({
+        projectedAreaResolution: declaredDrawingBuffer,
+        referenceResolution: declaredDrawingBuffer,
+      }),
+      stormFront,
+    });
+    partial.secondarySpray = secondarySpray;
     const waterTexture = createWaterTexture();
     partial.waterTexture = waterTexture;
-
-    throwIfAborted(options.request.signal);
-    const createdPresentation = createPreparedWaterPresentationResources(
-      renderer,
-      scene,
-      camera,
-      declaredDrawingBuffer,
+    const foamField = createUnifiedFoamField(
+      options.request.manifest.qualityProfile.whitecaps,
     );
-    partial.presentation = createdPresentation.resources;
-    partial.presentationPartial = createdPresentation.partial;
+    partial.foamField = foamField;
+    const waterline = createWaterlineStateController();
+    partial.waterline = waterline;
+    const initialWaterline = waterline.commit(
+      waterline.preview(
+        camera,
+        createInitialWaterlineSampleState(
+          preparationSnapshot,
+          preparationSnapshot.artisticControls,
+        ),
+      ),
+    );
 
     throwIfAborted(options.request.signal);
     const geometry = createCameraRelativeClipmapGeometry(
       geometrySegments.widthSegments,
     );
     partial.geometry = geometry;
-    const material = new NodeMaterial();
-    partial.material = material;
-    material.name = "Real Water minimal material";
-    material.lights = false;
-    material.fog = false;
     const innerCellMetres = clipmapInnerCellMetres(
       geometrySegments.widthSegments,
     );
@@ -178,17 +283,63 @@ export async function prepareMinimalWaterPlane(
       options.simulation,
       options.presentation,
       innerCellMetres,
+      foamField,
+      stormFront,
     );
     partial.spectralBand = spectralBand;
+
+    throwIfAborted(options.request.signal);
+    const createdPresentation = createPreparedWaterPresentationResources(
+      renderer,
+      scene,
+      camera,
+      declaredDrawingBuffer,
+      foamField,
+      secondaryParticlePool,
+      secondaryParticlePolicy,
+      secondarySpray,
+      stormFront,
+      options.request.manifest.qualityProfile.postTraaComposition,
+      options.environment,
+      options.request.manifest.qualityProfile.underwater,
+      spectralBand.surfaceSampler,
+      preparationSnapshot,
+      initialWaterline,
+    );
+    partial.presentation = createdPresentation.resources;
+    partial.presentationPartial = createdPresentation.partial;
+    const secondaryParticleAllocationRoute =
+      createSecondaryParticleAllocationRoute({
+        pool: secondaryParticlePool,
+        participants: [
+          createSecondarySprayAllocationParticipant(secondarySpray, camera),
+          ...createUnderwaterSecondaryParticleAllocationParticipants(
+            createdPresentation.resources.underwaterParticles,
+            camera,
+          ),
+        ],
+      });
+    partial.secondaryParticleAllocationRoute = secondaryParticleAllocationRoute;
+    secondaryParticleAllocationRoute.advance(
+      preparationSnapshot,
+      createPreparationLocalInteraction(preparationSnapshot),
+    );
+    const material = new NodeMaterial();
+    partial.material = material;
+    material.name = "Real Water minimal material";
+    material.lights = false;
+    material.fog = false;
     const opticalPath = createWaterOpticsRendering(
       spectralBand,
       options.environment,
+      stormFront,
       waterTexture,
       {
         texture: createdPresentation.resources.planar.target.texture,
         viewProjection: createdPresentation.resources.planar.viewProjection,
         hasOutput: createdPresentation.resources.planar.hasOutput,
       },
+      initialWaterline,
     );
     partial.opticalPath = opticalPath;
     material.positionNode = spectralBand.positionNode;
@@ -197,6 +348,7 @@ export async function prepareMinimalWaterPlane(
     material.mrtNode = opticalPath.mrtNode;
     material.transparent = true;
     material.blending = NoBlending;
+    material.side = DoubleSide;
     const plane = new Mesh(geometry, material);
     partial.plane = plane;
     plane.name = "Real Water clipmap";
@@ -209,13 +361,58 @@ export async function prepareMinimalWaterPlane(
     renderer.initTexture(waterTexture);
     renderer.initTexture(environmentRadiance);
     renderer.initTexture(createdPresentation.resources.planar.target.texture);
-    await compileAndPrimePreparedWaterPresentation(
-      renderer,
-      scene,
-      camera,
-      createdPresentation.resources,
-      options.request.signal,
+    await foamField.prewarm(renderer, preparationSnapshot);
+    await completeDeclaredWork(options.request.progress, [
+      "whitecapFieldA",
+      "whitecapFieldB",
+      "whitecapResetRoute",
+      "whitecapGenerationRoute",
+      "whitecapHistory",
+      "whitecapAdvectionRoute",
+      "whitecapDiffusionRoute",
+      "whitecapDecayRoute",
+      "foamLocalFieldA",
+      "foamLocalFieldB",
+      "underwaterCausticsLocalSurfaceField",
+      "foamSourceHistory",
+      "foamLocalAdvectionRoute",
+      "foamLocalResolveRoute",
+    ]);
+    const stagedPrewarmInteraction =
+      spectralBand.stagePrewarmLocalInteractionRoutes();
+    const heroBreakerCanarySnapshot =
+      createHeroBreakerCanarySnapshot(preparationSnapshot);
+    spectralBand.sink.synchronize(
+      heroBreakerCanarySnapshot,
+      stagedPrewarmInteraction,
     );
+    secondaryParticleAllocationRoute.advance(
+      heroBreakerCanarySnapshot,
+      stagedPrewarmInteraction,
+    );
+    try {
+      await foamField.synchronize(renderer, heroBreakerCanarySnapshot);
+      await compileAndPrimePreparedWaterPresentation(
+        renderer,
+        scene,
+        camera,
+        createdPresentation.resources,
+        options.request.signal,
+      );
+    } finally {
+      spectralBand.clearPrewarmLocalInteractionRoutes();
+      const clearedPrewarmInteraction =
+        createPreparationLocalInteraction(preparationSnapshot);
+      spectralBand.sink.synchronize(
+        preparationSnapshot,
+        clearedPrewarmInteraction,
+      );
+      secondaryParticleAllocationRoute.advance(
+        preparationSnapshot,
+        clearedPrewarmInteraction,
+      );
+      await foamField.synchronize(renderer, preparationSnapshot);
+    }
     await completeDeclaredWork(options.request.progress, [
       "texture",
       "environmentRadiance",
@@ -223,12 +420,35 @@ export async function prepareMinimalWaterPlane(
       "sceneDepth",
       "renderTarget",
       "clipmap",
+      "localInteractionField",
+      "localInteractionBuffers",
+      "localInteractionRadialImpactRoute",
+      "localInteractionDirectionalWakeRoute",
+      "heroBreakerState",
+      "heroBreakerDeformationRoute",
+      "heroBreakerFoamRoute",
+      "heroBreakerSprayRoute",
+      "heroBreakerFoamDiagnosticsTarget",
+      "heroBreakerFoamDiagnosticsRoute",
+      "stormFrontState",
+      "bodySocketEmissionRoute",
       "spectralBandSwell",
       "spectralBandWind",
       "spectralBandChop",
       "spectralBandRipple",
+      "stormRainRippleRoute",
+      "whitecapStageTarget",
+      "whitecapStageRoute",
+      "foamSourceIdentityTarget",
+      "foamSourceIdentityRoute",
       "material",
       "opticalRoute",
+      "stormCloudShadowRoute",
+      "stormLightningRoute",
+      "waterlineState",
+      "undersideOpticalRoute",
+      "waterlineHistoryResetRoute",
+      "lensWetnessTransition",
       "planarReflectionTarget",
       "planarReflectionRoute",
       "planarEnvironmentFallback",
@@ -237,12 +457,31 @@ export async function prepareMinimalWaterPlane(
       "ssrCompositeTarget",
       "ssrRoute",
       "ssrCompositeRoute",
+      "underwaterVolumeTarget",
+      "underwaterVolumeRoute",
+      "underwaterDepthCompositionRoute",
+      "underwaterSunShaftShadowRoute",
+      "underwaterDiagnosticsTarget",
+      "underwaterDiagnosticsRoute",
+      "underwaterCausticsReceiverRoute",
+      "underwaterCausticsDiagnosticsTarget",
+      "underwaterCausticsDiagnosticsRoute",
+      "underwaterParticleCandidateState",
+      "underwaterParticleAllocationRoutes",
+      "underwaterSuspendedParticleTarget",
+      "underwaterSuspendedParticleRoute",
+      "underwaterBubbleTarget",
+      "underwaterBubbleRoute",
+      "underwaterTracerCompositeTarget",
+      "underwaterTracerCompositeRoute",
       "renderRoute",
       "proceduralMotion",
       "motionVectors",
       "inverseLinearDepth",
       "viewNormal",
       "opticalFactorsTarget",
+      "historyRejectionTarget",
+      "historyRejectionRoute",
       "opticalDiagnosticsA",
       "opticalDiagnosticsB",
       "finalColorTarget",
@@ -250,6 +489,24 @@ export async function prepareMinimalWaterPlane(
       "stockTraaHistory",
       "traaResolveJitter",
       "traaResetRoute",
+      "secondaryParticlePool",
+      "secondaryParticleAllocationRoute",
+      "postTraaCompositionPlan",
+      "traaResolvedTarget",
+      "secondaryParticleAccumulationTarget",
+      "secondaryParticleCompositeTarget",
+      "secondaryParticleStageRoute",
+      "secondaryParticleCompositeRoute",
+      "secondaryParticleDiagnosticsRoute",
+      "stormRainSprayRoute",
+      "stormAerosolRoute",
+      "stormAtmosphereTarget",
+      "stormAtmosphereStageRoute",
+      "stormDiagnosticsTarget",
+      "stormDiagnosticsRoute",
+      "lensWetnessDiagnosticsTarget",
+      "lensWetnessStageRoute",
+      "lensWetnessDiagnosticsRoute",
       "currentColorConversion",
       "namedOutputRoutes",
     ]);
@@ -260,6 +517,7 @@ export async function prepareMinimalWaterPlane(
       camera,
       createdPresentation.resources,
       options.request.signal,
+      true,
     );
     await completeDeclaredWork(options.request.progress, [
       "ssrBlurTarget",
@@ -290,6 +548,15 @@ export async function prepareMinimalWaterPlane(
       "ssrHistoryResetVelocityTarget",
       "ssrHistoryResetVelocityRoute",
       "ssrHistoryProbe",
+      "underwaterProbe",
+      "underwaterCausticsProbe",
+      "underwaterTracerProbe",
+      "whitecapProbe",
+      "foamSourceIdentityProbe",
+      "secondaryParticleProbe",
+      "lensWetnessProbe",
+      "stormProbe",
+      "heroBreakerFoamProbe",
       "completionProbe",
     ]);
 
@@ -313,8 +580,13 @@ export async function prepareMinimalWaterPlane(
         geometry,
         material,
         waterTexture,
+        foamField,
+        secondaryParticlePool,
+        secondaryParticleAllocationRoute,
+        stormFront,
         spectralBand,
         opticalPath,
+        waterline,
         presentation: createdPresentation.resources,
       },
       options.invalidated,
@@ -327,7 +599,10 @@ export async function prepareMinimalWaterPlane(
     cleanupPreparation();
     throw cause;
   } finally {
-    options.request.signal.removeEventListener("abort", cleanupAfterAbort);
+    options.request.signal.removeEventListener(
+      "abort",
+      cleanupImmediatelyAfterDeviceLossAbort,
+    );
   }
 }
 
@@ -377,17 +652,53 @@ function createPreparedLease(
   drawingBuffer: Readonly<{ width: number; height: number }>,
   manifestHash: string,
 ): HostPreparedLease {
+  const leasePreparationSnapshot = createPreparationFoamSnapshot(
+    simulation,
+    presentation,
+  );
+  let secondaryParticleInteraction = createPreparationLocalInteraction(
+    leasePreparationSnapshot,
+  );
+  const waterlineComposition = Object.freeze({
+    synchronize(
+      state: Parameters<typeof resources.opticalPath.waterline.synchronize>[0],
+    ): void {
+      resources.opticalPath.waterline.synchronize(state);
+      resources.presentation.underwater.waterline.synchronize(state);
+    },
+  });
+  const runtimeSink: RuntimeStateSink = Object.freeze({
+    synchronize(
+      snapshot: Parameters<RuntimeStateSink["synchronize"]>[0],
+      interaction: Parameters<RuntimeStateSink["synchronize"]>[1],
+    ): void {
+      resources.opticalPath.sink.synchronize(snapshot, interaction);
+      resources.presentation.underwater.sink.synchronize(snapshot, interaction);
+      secondaryParticleInteraction = interaction;
+      resources.secondaryParticleAllocationRoute.advance(snapshot, interaction);
+    },
+    observe(snapshot: OpenWaterRuntimeSnapshot): void {
+      resources.opticalPath.sink.observe?.(snapshot);
+      resources.presentation.underwater.sink.observe?.(snapshot);
+      resources.secondaryParticleAllocationRoute.advance(
+        snapshot,
+        secondaryParticleInteraction,
+      );
+    },
+  });
   const presentationRoute = createPresentationRouteBridge(
     renderer,
     scene,
     camera,
     resources.presentation,
+    resources.waterline,
+    waterlineComposition,
     drawingBuffer,
     manifestHash,
   );
   let disposal: Promise<void> | undefined;
   return Object.freeze({
-    [HOST_RUNTIME_STATE_BRIDGE]: resources.opticalPath.sink,
+    [HOST_RUNTIME_STATE_BRIDGE]: runtimeSink,
     [HOST_PRESENTATION_ROUTE_BRIDGE]: presentationRoute,
     invalidated,
     simulation,
@@ -412,6 +723,7 @@ function disposePreparedResources(
   resources.material.dispose();
   resources.geometry.dispose();
   resources.waterTexture.dispose();
+  resources.foamField.dispose();
 }
 
 function disposePartialResourcesSilently(
@@ -438,6 +750,8 @@ function disposePartialResourcesSilently(
     () => resources.material?.dispose(),
     () => resources.geometry?.dispose(),
     () => resources.waterTexture?.dispose(),
+    () => resources.foamField?.dispose(),
+    () => resources.secondarySpray?.dispose(),
   ];
   for (const dispose of disposals) {
     try {
@@ -448,8 +762,61 @@ function disposePartialResourcesSilently(
   }
 }
 
+function createPreparationFoamSnapshot(
+  simulation: HostSimulationAdapter,
+  presentation: HostPresentationAdapter,
+): OpenWaterRuntimeSnapshot {
+  const state = readHostSimulationState(simulation);
+  return Object.freeze({
+    ...state,
+    artisticControls: createWaterPreset("swell").artisticControls,
+    controlRevision: 0,
+    originRevision: 0,
+    seaStateCutRevision: 0,
+    cameraCutRevision:
+      readHostPresentationState(presentation).cameraCutRevision,
+    interactionAnchor: Object.freeze({ x: 0, z: 0 }),
+    interactionAnchorRevision: 0,
+    activeDisturbanceCount: 0,
+    activeHeroBreakerCount: 0,
+    // Prewarm runs before any Host body is attached, so the Body coupling
+    // counts #25 added are zero for the same reason the disturbance count is.
+    attachedBodyCount: 0,
+    activeBodyWakeCount: 0,
+  });
+}
+
+function createPreparationLocalInteraction(
+  snapshot: OpenWaterRuntimeSnapshot,
+): LocalInteractionRenderSnapshot {
+  return Object.freeze({
+    revision: 0,
+    anchorX: snapshot.interactionAnchor.x,
+    anchorZ: snapshot.interactionAnchor.z,
+    impacts: Object.freeze([]),
+  });
+}
+
+function createHeroBreakerCanarySnapshot(
+  snapshot: OpenWaterRuntimeSnapshot,
+): OpenWaterRuntimeSnapshot {
+  return Object.freeze({
+    ...snapshot,
+    activeHeroBreakerCount: 1,
+  });
+}
+
 function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) {
     throw new Error("Three Host preparation was cancelled.");
   }
+}
+
+function isDeviceLossAbortReason(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    value.code === "WEBGPU_DEVICE_LOST"
+  );
 }

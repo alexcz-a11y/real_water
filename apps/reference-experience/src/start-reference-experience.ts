@@ -16,10 +16,12 @@ import {
   type WebGPUDeviceLoss,
 } from "real-water";
 import { DomLoadingPresenter } from "./loading-presenter.js";
+import type { LocalPresetLibrary } from "./local-preset-library.js";
 
 export interface ReferenceHostAttempt {
   readonly host: HostLifecycleAdapter;
   readonly createReadyStage?: ReadyStageFactory;
+  readonly decorateReadyStage?: ReadyStageDecorator;
   dispose(): void | Promise<void>;
 }
 
@@ -29,10 +31,20 @@ export interface StartReferenceExperienceOptions {
   ) => ReferenceHostAttempt;
   readonly initialDrawingBuffer: PrewarmDrawingBuffer;
   readonly initialQualityProfile?: QualityProfile;
+  readonly presetLibrary: LocalPresetLibrary;
   readonly revealDelayFrames?: number;
 }
 
 type ReadyStageFactory = (lease: RealWaterLease) => HTMLElement;
+
+export interface ReadyStageDecoration {
+  dispose(): void;
+}
+
+type ReadyStageDecorator = (
+  stage: HTMLElement,
+  lease: RealWaterLease,
+) => ReadyStageDecoration;
 
 export interface ReferenceExperienceSnapshot {
   readonly generation: number;
@@ -51,6 +63,7 @@ export interface ReferenceViewport {
 }
 
 export interface ReferenceExperienceSession {
+  readonly presets: LocalPresetLibrary;
   applyQualityProfile(profile: QualityProfile): Promise<void>;
   applyViewport(viewport: ReferenceViewport): Promise<void>;
   signalLongSuspension(): Promise<void>;
@@ -67,6 +80,8 @@ interface ActiveAttempt {
   lease: RealWaterLease | null;
   revealController: AbortController | null;
   retirement?: Promise<void>;
+  stageDecoration: ReadyStageDecoration | null;
+  stageDisposalFailure?: unknown;
   run: PreparationRun;
   stage: HTMLElement | null;
 }
@@ -137,9 +152,8 @@ export function startReferenceExperience(
   function concealActiveStage(reason: string): void {
     activeAttempt?.run.cancel(reason);
     activeAttempt?.revealController?.abort(reason);
-    activeAttempt?.stage?.remove();
     if (activeAttempt !== null) {
-      activeAttempt.stage = null;
+      disposeReadyStage(activeAttempt);
     }
   }
 
@@ -218,6 +232,7 @@ export function startReferenceExperience(
         host: host.adapter,
         loading: request.presenter,
       }),
+      stageDecoration: null,
       stage: null,
     };
     generation += 1;
@@ -288,8 +303,12 @@ export function startReferenceExperience(
     try {
       const stage =
         record.attempt.createReadyStage?.(lease) ?? createPlaceholder(lease);
+      record.stage = stage;
+      const decoration =
+        record.attempt.decorateReadyStage?.(stage, lease) ?? null;
+      record.stageDecoration = decoration;
       if (!isCurrent(request) || activeAttempt !== record) {
-        stage.remove();
+        disposeReadyStage(record);
         return;
       }
 
@@ -299,7 +318,6 @@ export function startReferenceExperience(
       }
       mount.replaceChildren(stage);
       stage.focus({ preventScroll: true });
-      record.stage = stage;
       state = "ready";
     } catch (cause) {
       await presentApplicationFailure(
@@ -356,10 +374,9 @@ export function startReferenceExperience(
     record.retirement ??= (async () => {
       record.run.cancel("Reference host attempt retired.");
       record.revealController?.abort("Reference host attempt retired.");
-      record.stage?.remove();
-      record.stage = null;
+      disposeReadyStage(record);
 
-      let firstFailure: unknown;
+      let firstFailure: unknown = record.stageDisposalFailure;
       let resolvedLease: RealWaterLease | null = null;
       try {
         resolvedLease = await record.run.ready;
@@ -458,6 +475,7 @@ export function startReferenceExperience(
   void initialTransition.catch(() => {});
 
   return Object.freeze({
+    presets: options.presetLibrary,
     applyQualityProfile(profile: QualityProfile): Promise<void> {
       // Derivation validates the complete structural input before desired state
       // or the visible Reference Experience is mutated.
@@ -465,9 +483,6 @@ export function startReferenceExperience(
         profile,
         desiredDrawingBuffer,
       );
-      if (manifest.manifestHash === desiredManifest.manifestHash) {
-        return latestTransition;
-      }
       return scheduleTransition(manifest, "quality-profile");
     },
     applyViewport(viewport: ReferenceViewport): Promise<void> {
@@ -571,6 +586,19 @@ export function startReferenceExperience(
       return disposal;
     },
   });
+}
+
+function disposeReadyStage(record: ActiveAttempt): void {
+  const decoration = record.stageDecoration;
+  const stage = record.stage;
+  record.stageDecoration = null;
+  record.stage = null;
+  try {
+    decoration?.dispose();
+  } catch (cause) {
+    record.stageDisposalFailure ??= cause;
+  }
+  stage?.remove();
 }
 
 function trackHost(host: HostLifecycleAdapter): TrackedHost {

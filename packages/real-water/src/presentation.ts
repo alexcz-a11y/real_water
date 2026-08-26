@@ -26,6 +26,7 @@ const HOST_TEMPORAL_RESET_REASONS = [
   "camera-cut",
   "origin-shift",
   "sea-state-cut",
+  "waterline-crossing",
 ] as const;
 const SHA_256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 
@@ -51,7 +52,11 @@ export interface HostPresentationState {
  * @public
  */
 export type HostTemporalResetReason =
-  "simulation-reset" | "camera-cut" | "origin-shift" | "sea-state-cut";
+  | "simulation-reset"
+  | "camera-cut"
+  | "origin-shift"
+  | "sea-state-cut"
+  | "waterline-crossing";
 
 /**
  * Temporal history carried by one Host-presented frame receipt.

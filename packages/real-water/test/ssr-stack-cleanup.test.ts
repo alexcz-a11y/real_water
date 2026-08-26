@@ -53,7 +53,10 @@ describe("current-frame SSR stack cleanup", () => {
       disposeCounts.set(this, (disposeCounts.get(this) ?? 0) + 1);
       return originalDispose.call(this);
     };
-    pipelineFailure.remaining = 4;
+    // Fail the first pipeline constructed after the SSR stack is allocated.
+    // Unified foam adds source-identity and Hero-foam diagnostics pipelines
+    // before SSR.
+    pipelineFailure.remaining = 8;
     const radiance = new DataTexture(
       createSupportedHostEnvironmentRadianceBytes(),
       8,

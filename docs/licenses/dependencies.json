@@ -22,6 +22,14 @@
       "declaredBy": ["package.json#devDependencies (1.62.1)"]
     },
     {
+      "name": "@tweakpane/core",
+      "version": "2.0.5",
+      "license": "MIT",
+      "declaredBy": [
+        "apps/reference-experience/package.json#dependencies (2.0.5)"
+      ]
+    },
+    {
       "name": "@types/node",
       "version": "24.13.3",
       "license": "MIT",
@@ -59,6 +67,12 @@
         "package.json#devDependencies (0.185.1)",
         "packages/real-water/package.json#peerDependencies (>=0.185.1 <0.186.0)"
       ]
+    },
+    {
+      "name": "tweakpane",
+      "version": "4.0.5",
+      "license": "MIT",
+      "declaredBy": ["apps/reference-experience/package.json#dependencies (4.0.5)"]
     },
     {
       "name": "typescript",

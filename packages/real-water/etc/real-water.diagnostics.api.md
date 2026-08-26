@@ -5,7 +5,7 @@
 ```ts
 
 // @public
-export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color"];
+export const DIAGNOSTICS_CAPTURE_NAMES: readonly ["final-color", "current-color", "depth", "normal", "motion-vector", "whitecap-generation", "whitecap-history", "whitecap-advection", "whitecap-decay", "foam-source-identity", "waterline", "history-rejection", "optical-fresnel", "optical-thickness", "optical-scattering", "optical-environment-reflection", "optical-crest-transmission", "optical-transmittance", "optical-glint", "underwater-transmittance", "underwater-scattering", "underwater-light-shafts", "underwater-shadow", "underwater-caustics", "underwater-particles", "underwater-bubbles", "lens-wetness", "planar-color", "planar-target-alpha", "ssr-hit", "ssr-confidence", "ssr-color", "ssr-roughness", "reflection-base-color", "ssr-composite-color", "ssr-history-color", "ssr-history-frame-weight", "ssr-history-input-color", "secondary-particle-contribution", "secondary-particle-overdraw", "hero-breaker-foam", "storm-rain-ripples", "storm-aerosol", "storm-cloud-shadow", "storm-lightning"];
 
 // @public
 export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
@@ -33,6 +33,41 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
         format: "rg32float-ndc";
         elementType: "float32";
         components: 2;
+    }>;
+    "whitecap-generation": Readonly<{
+        format: "r32float-whitecap-stage";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "whitecap-history": Readonly<{
+        format: "r32float-whitecap-stage";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "whitecap-advection": Readonly<{
+        format: "r32float-whitecap-stage";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "whitecap-decay": Readonly<{
+        format: "r32float-whitecap-stage";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "foam-source-identity": Readonly<{
+        format: "rgba32float-foam-source-identity";
+        elementType: "float32";
+        components: 4;
+    }>;
+    waterline: Readonly<{
+        format: "r32float-waterline-coverage";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "history-rejection": Readonly<{
+        format: "r32float-history-rejection";
+        elementType: "float32";
+        components: 1;
     }>;
     "optical-fresnel": Readonly<{
         format: "r32float-optical";
@@ -66,6 +101,46 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
     }>;
     "optical-glint": Readonly<{
         format: "r32float-optical";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "underwater-transmittance": Readonly<{
+        format: "r32float-underwater-volume";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "underwater-scattering": Readonly<{
+        format: "r32float-underwater-volume";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "underwater-light-shafts": Readonly<{
+        format: "r32float-underwater-volume";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "underwater-shadow": Readonly<{
+        format: "r32float-underwater-volume";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "underwater-caustics": Readonly<{
+        format: "r32float-underwater-caustics";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "underwater-particles": Readonly<{
+        format: "r32float-underwater-particles";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "underwater-bubbles": Readonly<{
+        format: "r32float-underwater-bubbles";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "lens-wetness": Readonly<{
+        format: "r32float-lens-wetness";
         elementType: "float32";
         components: 1;
     }>;
@@ -124,10 +199,45 @@ export const DIAGNOSTICS_CAPTURE_SHAPES: Readonly<{
         elementType: "float32";
         components: 3;
     }>;
+    "secondary-particle-contribution": Readonly<{
+        format: "r32float-secondary-particle-contribution";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "secondary-particle-overdraw": Readonly<{
+        format: "r32float-secondary-particle-overdraw";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "hero-breaker-foam": Readonly<{
+        format: "r32float-hero-breaker-foam";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "storm-rain-ripples": Readonly<{
+        format: "r32float-storm-front";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "storm-aerosol": Readonly<{
+        format: "r32float-storm-front";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "storm-cloud-shadow": Readonly<{
+        format: "r32float-storm-front";
+        elementType: "float32";
+        components: 1;
+    }>;
+    "storm-lightning": Readonly<{
+        format: "r32float-storm-front";
+        elementType: "float32";
+        components: 1;
+    }>;
 }>;
 
 // @public
-export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsOpticalScalarCapture;
+export type DiagnosticsCapture = DiagnosticsFinalColorCapture | DiagnosticsCurrentColorCapture | DiagnosticsPlanarColorCapture | DiagnosticsSsrColorCapture | DiagnosticsSsrRoughnessCapture | DiagnosticsReflectionBaseColorCapture | DiagnosticsSsrCompositeColorCapture | DiagnosticsSsrHistoryColorCapture | DiagnosticsSsrHistoryFrameWeightCapture | DiagnosticsSsrHistoryInputColorCapture | DiagnosticsDepthCapture | DiagnosticsNormalCapture | DiagnosticsMotionVectorCapture | DiagnosticsWhitecapStageCapture | DiagnosticsFoamSourceIdentityCapture | DiagnosticsWaterlineCapture | DiagnosticsHistoryRejectionCapture | DiagnosticsOpticalScalarCapture | DiagnosticsUnderwaterVolumeCapture | DiagnosticsUnderwaterCausticsCapture | DiagnosticsUnderwaterParticlesCapture | DiagnosticsUnderwaterBubblesCapture | DiagnosticsLensWetnessCapture | DiagnosticsSecondaryParticleContributionCapture | DiagnosticsSecondaryParticleOverdrawCapture | DiagnosticsHeroBreakerFoamCapture | DiagnosticsStormFrontCapture;
 
 // @public
 export interface DiagnosticsCaptureBase {
@@ -158,6 +268,34 @@ export interface DiagnosticsFinalColorCapture extends DiagnosticsCaptureBase {
     readonly data: Uint8Array;
     readonly format: "rgba8unorm-srgb";
     readonly name: "final-color";
+}
+
+// @public
+export interface DiagnosticsFoamSourceIdentityCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "rgba32float-foam-source-identity";
+    readonly name: "foam-source-identity";
+}
+
+// @public
+export interface DiagnosticsHeroBreakerFoamCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-hero-breaker-foam";
+    readonly name: "hero-breaker-foam";
+}
+
+// @public
+export interface DiagnosticsHistoryRejectionCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-history-rejection";
+    readonly name: "history-rejection";
+}
+
+// @public
+export interface DiagnosticsLensWetnessCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-lens-wetness";
+    readonly name: "lens-wetness";
 }
 
 // @public
@@ -193,6 +331,62 @@ export interface DiagnosticsReflectionBaseColorCapture extends DiagnosticsCaptur
     readonly data: Float32Array;
     readonly format: "rgb32float-linear-reflection-base";
     readonly name: "reflection-base-color";
+}
+
+// @public
+export interface DiagnosticsSecondaryParticleConsumer extends DiagnosticsSecondaryParticleReceipt {
+    readonly consumerId: string;
+    readonly maximumRequestCount: number;
+    readonly minimumRetainedSlots: number;
+    readonly pressureReentryPolicy: "after-shared-cooldown" | "forbidden-until-absent";
+    readonly softRequestCeiling: number;
+}
+
+// @public
+export interface DiagnosticsSecondaryParticleContributionCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-secondary-particle-contribution";
+    readonly name: "secondary-particle-contribution";
+}
+
+// @public
+export interface DiagnosticsSecondaryParticleDropReasons {
+    readonly globalContributionPressure: number;
+    readonly invisibleOrOccluded: number;
+    readonly lifecycleReentryForbidden: number;
+    readonly reentryCooldown: number;
+}
+
+// @public
+export interface DiagnosticsSecondaryParticleOverdrawCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-secondary-particle-overdraw";
+    readonly name: "secondary-particle-overdraw";
+}
+
+// @public
+export interface DiagnosticsSecondaryParticleReceipt {
+    readonly contributionMaximumQ16: number | null;
+    readonly contributionMinimumQ16: number | null;
+    readonly dropReasons: DiagnosticsSecondaryParticleDropReasons;
+    readonly invisibleOrOccluded: number;
+    readonly lifecycleReentryForbidden: number;
+    readonly overSubscribed: boolean;
+    readonly reentryCooldown: number;
+    readonly requested: number;
+    readonly requestedAboveSoftCeiling: number;
+    readonly retained: number;
+    readonly retainedByFloor: number;
+    readonly retainedByGlobalCompetition: number;
+    readonly retainedIncumbents: number;
+    readonly thinned: number;
+}
+
+// @public
+export interface DiagnosticsSecondaryParticles extends DiagnosticsSecondaryParticleReceipt {
+    readonly capacity: 131_072;
+    readonly consumers: readonly DiagnosticsSecondaryParticleConsumer[];
+    readonly maximumCandidateCount: number;
 }
 
 // @public
@@ -238,6 +432,66 @@ export interface DiagnosticsSsrRoughnessCapture extends DiagnosticsCaptureBase {
 }
 
 // @public
+export interface DiagnosticsStormFrontCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-storm-front";
+    readonly name: "storm-rain-ripples" | "storm-aerosol" | "storm-cloud-shadow" | "storm-lightning";
+}
+
+// @public
+export interface DiagnosticsUnderwaterBubblesCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-underwater-bubbles";
+    readonly name: "underwater-bubbles";
+}
+
+// @public
+export interface DiagnosticsUnderwaterCausticsCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-underwater-caustics";
+    readonly name: "underwater-caustics";
+}
+
+// @public
+export interface DiagnosticsUnderwaterParticlesCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-underwater-particles";
+    readonly name: "underwater-particles";
+}
+
+// @public
+export interface DiagnosticsUnderwaterVolumeCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-underwater-volume";
+    readonly name: "underwater-transmittance" | "underwater-scattering" | "underwater-light-shafts" | "underwater-shadow";
+}
+
+// @public
+export interface DiagnosticsWaterlineCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-waterline-coverage";
+    readonly name: "waterline";
+}
+
+// @public
+export interface DiagnosticsWaterlineState {
+    readonly classification: "above" | "crossing" | "below";
+    readonly lensWetnessImpulse: boolean;
+    readonly seaLevelMetres: number;
+    readonly signedDistanceMetres: number;
+    readonly submersion: number;
+    readonly surfaceHeightMetres: number;
+    readonly transitionRevision: number;
+}
+
+// @public
+export interface DiagnosticsWhitecapStageCapture extends DiagnosticsCaptureBase {
+    readonly data: Float32Array;
+    readonly format: "r32float-whitecap-stage";
+    readonly name: "whitecap-generation" | "whitecap-history" | "whitecap-advection" | "whitecap-decay";
+}
+
+// @public
 export interface HostDiagnosticsPresentedFrame extends HostPresentedFrame {
     readonly compileCount: number;
     readonly diagnosticReadbackCount: number;
@@ -245,6 +499,8 @@ export interface HostDiagnosticsPresentedFrame extends HostPresentedFrame {
     readonly outputs: readonly DiagnosticsCapture[];
     readonly probeCount: number;
     readonly sceneRenderCount: number;
+    readonly secondaryParticles: DiagnosticsSecondaryParticles;
+    readonly waterline: DiagnosticsWaterlineState;
     readonly width: number;
 }
 
@@ -286,7 +542,7 @@ export interface HostPresentedTemporal {
 }
 
 // @public
-export type HostTemporalResetReason = "simulation-reset" | "camera-cut" | "origin-shift" | "sea-state-cut";
+export type HostTemporalResetReason = "simulation-reset" | "camera-cut" | "origin-shift" | "sea-state-cut" | "waterline-crossing";
 
 // @public
 export function isDiagnosticsCaptureName(value: unknown): value is DiagnosticsCaptureName;

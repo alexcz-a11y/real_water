@@ -105,6 +105,61 @@ export interface HostEnvironmentState {
 }
 
 /**
+ * Host-authored hot weather inputs for the prepared Storm Front route.
+ *
+ * @public
+ */
+export interface HostEnvironmentWeatherState {
+  readonly windDirectionX: number;
+  readonly windDirectionZ: number;
+  readonly windStrength: number;
+  readonly gustStrength: number;
+  readonly rainIntensity: number;
+}
+
+/**
+ * Host-authored hot atmosphere inputs for the prepared Storm Front route.
+ *
+ * @public
+ */
+export interface HostEnvironmentAtmosphereState {
+  readonly cloudCoverage: number;
+  readonly cloudShadowStrength: number;
+  readonly horizonHaze: number;
+  readonly stormAerosolIntensity: number;
+  readonly lightningIntensity: number;
+}
+
+/**
+ * One coherent hot Environment snapshot. The reflection resource remains
+ * structural on the Adapter while every scalar in this value may change at a
+ * Host fixed tick.
+ *
+ * @public
+ */
+export interface HostEnvironmentSnapshot {
+  readonly lighting: HostEnvironmentState;
+  readonly weather: HostEnvironmentWeatherState;
+  readonly atmosphere: HostEnvironmentAtmosphereState;
+}
+
+const CLEAR_HOST_ENVIRONMENT_WEATHER = Object.freeze({
+  windDirectionX: 1,
+  windDirectionZ: 0,
+  windStrength: 0,
+  gustStrength: 0,
+  rainIntensity: 0,
+}) satisfies HostEnvironmentWeatherState;
+
+const CLEAR_HOST_ENVIRONMENT_ATMOSPHERE = Object.freeze({
+  cloudCoverage: 0,
+  cloudShadowStrength: 0,
+  horizonHaze: 0,
+  stormAerosolIntensity: 0,
+  lightningIntensity: 0,
+}) satisfies HostEnvironmentAtmosphereState;
+
+/**
  * Structural descriptor verified against the Prewarm Manifest.
  *
  * @public
@@ -137,7 +192,7 @@ export interface HostEnvironmentReflectionResource extends HostEnvironmentReflec
 export interface HostEnvironmentAdapter {
   readonly reflection: HostEnvironmentReflectionDescriptor;
   readonly texture: HostTexture | null;
-  snapshot(): HostEnvironmentState;
+  snapshot(): HostEnvironmentSnapshot;
 }
 
 /**
@@ -175,7 +230,9 @@ export function createSupportedHostEnvironmentRadianceBytes(): Uint8Array {
  */
 export function createStaticHostEnvironmentAdapter(
   reflection: HostEnvironmentReflectionResource,
-  state: HostEnvironmentState,
+  lighting: HostEnvironmentState,
+  weather: HostEnvironmentWeatherState = CLEAR_HOST_ENVIRONMENT_WEATHER,
+  atmosphere: HostEnvironmentAtmosphereState = CLEAR_HOST_ENVIRONMENT_ATMOSPHERE,
 ): HostEnvironmentAdapter {
   const adapter = {
     reflection: {
@@ -188,11 +245,11 @@ export function createStaticHostEnvironmentAdapter(
       colorSpace: reflection.colorSpace,
     },
     texture: reflection.texture ?? null,
-    snapshot: () => state,
+    snapshot: () => ({ lighting, weather, atmosphere }),
   };
   const descriptor = readHostEnvironmentReflection(adapter);
   assertSupportedHostEnvironmentReflection(descriptor);
-  readHostEnvironmentState({
+  readHostEnvironmentSnapshot({
     ...adapter,
     reflection: descriptor,
   });
@@ -200,7 +257,7 @@ export function createStaticHostEnvironmentAdapter(
     reflection: descriptor,
     texture: reflection.texture ?? null,
     snapshot: () =>
-      readHostEnvironmentState({
+      readHostEnvironmentSnapshot({
         ...adapter,
         reflection: descriptor,
       }),
@@ -266,7 +323,55 @@ export function readHostEnvironmentReflection(
 export function readHostEnvironmentState(
   environment: HostEnvironmentAdapter,
 ): HostEnvironmentState {
-  const state = environment.snapshot();
+  return readHostEnvironmentSnapshot(environment).lighting;
+}
+
+/**
+ * Reads and validates one atomic hot Environment snapshot.
+ *
+ * @public
+ */
+export function readHostEnvironmentSnapshot(
+  environment: HostEnvironmentAdapter,
+): HostEnvironmentSnapshot {
+  const snapshot = environment.snapshot();
+  if (
+    !isRecord(snapshot) ||
+    !hasExactKeys(snapshot, ["lighting", "weather", "atmosphere"]) ||
+    !isRecord(snapshot.lighting) ||
+    !hasExactKeys(snapshot.lighting, [
+      "sunDirectionX",
+      "sunDirectionY",
+      "sunDirectionZ",
+      "sunColorR",
+      "sunColorG",
+      "sunColorB",
+      "sunIntensity",
+      "environmentIntensity",
+      "sunAngularRadiusRadians",
+    ]) ||
+    !isRecord(snapshot.weather) ||
+    !hasExactKeys(snapshot.weather, [
+      "windDirectionX",
+      "windDirectionZ",
+      "windStrength",
+      "gustStrength",
+      "rainIntensity",
+    ]) ||
+    !isRecord(snapshot.atmosphere) ||
+    !hasExactKeys(snapshot.atmosphere, [
+      "cloudCoverage",
+      "cloudShadowStrength",
+      "horizonHaze",
+      "stormAerosolIntensity",
+      "lightningIntensity",
+    ])
+  ) {
+    throw new TypeError(
+      "Host Environment snapshots require exact lighting, weather, and atmosphere fields.",
+    );
+  }
+  const state = snapshot.lighting;
   const {
     sunDirectionX,
     sunDirectionY,
@@ -314,7 +419,7 @@ export function readHostEnvironmentState(
       "Host sun angular radius must be a positive finite angle.",
     );
   }
-  return Object.freeze({
+  const acceptedLighting = Object.freeze({
     sunDirectionX,
     sunDirectionY,
     sunDirectionZ,
@@ -325,6 +430,88 @@ export function readHostEnvironmentState(
     environmentIntensity,
     sunAngularRadiusRadians,
   });
+  const acceptedWeather = readHostEnvironmentWeatherState(snapshot.weather);
+  const acceptedAtmosphere = readHostEnvironmentAtmosphereState(
+    snapshot.atmosphere,
+  );
+  return Object.freeze({
+    lighting: acceptedLighting,
+    weather: acceptedWeather,
+    atmosphere: acceptedAtmosphere,
+  });
+}
+
+function readHostEnvironmentWeatherState(
+  state: HostEnvironmentWeatherState,
+): HostEnvironmentWeatherState {
+  const {
+    windDirectionX,
+    windDirectionZ,
+    windStrength,
+    gustStrength,
+    rainIntensity,
+  } = state;
+  if (
+    !Number.isFinite(windDirectionX) ||
+    !Number.isFinite(windDirectionZ) ||
+    windDirectionX * windDirectionX + windDirectionZ * windDirectionZ === 0
+  ) {
+    throw new RangeError(
+      "Host weather wind direction must be a non-zero finite vector.",
+    );
+  }
+  assertEnvironmentScalar(windStrength, 0, 4, "wind strength");
+  assertEnvironmentScalar(gustStrength, 0, 4, "gust strength");
+  assertEnvironmentScalar(rainIntensity, 0, 1, "rain intensity");
+  return Object.freeze({
+    windDirectionX,
+    windDirectionZ,
+    windStrength,
+    gustStrength,
+    rainIntensity,
+  });
+}
+
+function readHostEnvironmentAtmosphereState(
+  state: HostEnvironmentAtmosphereState,
+): HostEnvironmentAtmosphereState {
+  const {
+    cloudCoverage,
+    cloudShadowStrength,
+    horizonHaze,
+    stormAerosolIntensity,
+    lightningIntensity,
+  } = state;
+  assertEnvironmentScalar(cloudCoverage, 0, 1, "cloud coverage");
+  assertEnvironmentScalar(cloudShadowStrength, 0, 1, "cloud-shadow strength");
+  assertEnvironmentScalar(horizonHaze, 0, 1, "horizon haze");
+  assertEnvironmentScalar(
+    stormAerosolIntensity,
+    0,
+    1,
+    "storm-aerosol intensity",
+  );
+  assertEnvironmentScalar(lightningIntensity, 0, 1, "lightning intensity");
+  return Object.freeze({
+    cloudCoverage,
+    cloudShadowStrength,
+    horizonHaze,
+    stormAerosolIntensity,
+    lightningIntensity,
+  });
+}
+
+function assertEnvironmentScalar(
+  value: number,
+  minimum: number,
+  maximum: number,
+  label: string,
+): void {
+  if (!Number.isFinite(value) || value < minimum || value > maximum) {
+    throw new RangeError(
+      `Host Environment ${label} must be between ${String(minimum)} and ${String(maximum)}.`,
+    );
+  }
 }
 
 export function assertHostEnvironmentMatchesManifest(
@@ -334,7 +521,7 @@ export function assertHostEnvironmentMatchesManifest(
   },
 ): void {
   const descriptor = readHostEnvironmentReflection(environment);
-  readHostEnvironmentState(environment);
+  readHostEnvironmentSnapshot(environment);
   assertSupportedHostEnvironmentReflection(descriptor);
   const declared = readHostEnvironmentReflection({
     reflection: manifest.environmentReflection,
