@@ -54,9 +54,10 @@ empty. A preview page must never satisfy it: preview pages are not entry points,
 precisely how 1133 approved lines shipped nothing.
 
 What the check keys on is deliberately left to whoever builds it, and this record does not
-prescribe a method. Four candidate methods were tried against the merged tree and all four
-failed, each for a reason the previous attempt did not suggest. They are written down because
-the next reader will think of at least two of them.
+prescribe a method. Four candidates were tried against the merged tree: three failed, one
+survives, and one of the three failed for a reason the previous attempt did not suggest. They
+are written down because the next reader will think of at least two of them, and because the
+one that survives nearly did not.
 
 **Identifiers in the built bundle.** The build minifies. `createReferenceProxyVessel` and
 `REFERENCE_PROXY_VESSEL_NAME` each appear zero times while the proxy vessel is fully composed
@@ -75,18 +76,30 @@ the count went from eight to one rather than to zero. The measurement returns a 
 number is mostly about error prose.
 
 **The production module graph.** Not a text search, and immune to all three failures above: an
-entry-chunk module list separates a wired Subject from an unwired one. It still fails the
-negative control. `main.ts` imports two values from the vessel module, `createReferenceProxyVessel`
-and `REFERENCE_PROXY_VESSEL_SOCKETS`, so removing the composition leaves the second import
-holding the module in the graph. This is a property of Subject modules rather than an accident:
-a Subject exports more than its factory, and any surviving export keeps it reachable.
+entry-chunk module list separates a wired Subject from an unwired one, and it is buildable on
+the pinned Vite. Its first negative control did not reach zero, and that reading was wrong — the
+control had removed one call, `createReferenceProxyVessel`, while leaving `main.ts` still
+importing `REFERENCE_PROXY_VESSEL_SOCKETS` from the same module, which held the module in the
+graph. Re-run with the whole composition removed, the module leaves the graph and the count
+reaches zero. So this method is not disqualified; the first run measured the control, not the
+method.
 
-The shape those four share is the finding, and it is the shape this project keeps meeting: there
-is no proxy readable off the build product that answers "did anyone place it". Every attempt
-measures something the build controls, something adjacent to the question, or something one
-level coarser than the question. Two of the four returned a plausible number while wrong, which
-is the dangerous kind. The direct measurement — ask the running scene which Subjects it contains
-— has not been tried, costs a browser, and is not decided here.
+Three of the four candidates therefore failed, all of the same species — a text search over the
+built bundle has no notion of value identity and no protection against what the build rewrites.
+The fourth is a live candidate, and the episode that nearly buried it is the more useful record:
+a negative control that removes one call rather than the whole composition reads exactly like a
+method that cannot separate the two cases. Whether the module graph survives its control for
+every Subject is not settled by one Subject passing. It passed here because both values
+`main.ts` imports from the vessel module are consumed inside the composition expression itself.
+A Subject whose module also exports something an unrelated module uses would stay in the graph
+after removal, and for that Subject this method would genuinely fail.
+
+That is why the method is not fixed here and the evidence standard is. The four attempts share a
+warning rather than a conclusion: two of them returned a plausible number while wrong, and a
+third was a correct method reporting its own broken control. A number that looks reasonable is
+the failure mode, so the number is not the evidence — the pair of controls is. The direct
+measurement, asking the running scene which Subjects it contains, remains untried and costs a
+browser this ticket already pays for.
 
 What is fixed is the evidence standard rather than the method. The check must ship with both
 controls run and retained: with every Subject composed it is green, and with one Subject removed
