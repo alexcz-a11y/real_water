@@ -71,6 +71,12 @@ below, planar reflection, stock r185 current-frame SSR with dedicated specular
 TemporalReproject history, a per-ray depth-aware underwater volume, bounded
 caustics on visible receivers, and finite post-TRAA lens wetness.
 
+Every stage is inspectable. After conversion, forty-five named diagnostics
+output routes expose the intermediates — Fresnel, metric refraction thickness,
+scattering, crest transmission, packed underwater transmittance, light-shaft and
+shadow factors, and independent caustics — as CPU readbacks of the same bound
+frame the host presented.
+
 ## Two ideas worth stealing
 
 Even if you never use this package, two of its mechanisms generalise.
