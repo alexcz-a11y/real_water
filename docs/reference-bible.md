@@ -92,15 +92,13 @@ One directory per asset, outside the repository, at
 | File | Purpose |
 |---|---|
 | `<asset>-anchor-3q-v001.png` | Identity anchor. **Approved before any other view is generated**; every other view derives from it. |
-| `<asset>-elev-front-v001.png` | Front elevation |
-| `<asset>-elev-port-v001.png` | Side elevation, port |
-| `<asset>-elev-back-v001.png` | Back elevation |
-| `<asset>-plan-top-v001.png` | Top view — **omitted for the basalt sea stack** |
+| `<asset>-elev-*-v001.png` | Geometric elevations — **the count follows the subject's symmetry, it is not fixed**; see 5.1 |
+| `<asset>-plan-top-v001.png` | Top view — **omitted for the basalt sea stack and for any body of revolution** |
 | `<asset>-mat-<material>-v001.png` | Material close-ups, **N per asset** — see section 7 |
 | `<asset>-lookdev-wet-v001.png` | Wet look-dev. Material evidence only; not part of the identity. |
 | `<asset>-v001.glb` | Placed by hand. See section 5.2. |
 
-### 5.1 The right-side elevation is generated but never enters the pack
+### 5.1 The elevation count follows the subject's symmetry
 
 The GLB service needs four views — front, left, right, back. The right elevation is generated for
 that purpose only and is **not** delivered to the reconstruction agent.
@@ -119,6 +117,26 @@ would fire on all of them every time.
 
 **Generating it and then not shipping it is cheaper than shipping it and explaining the rejection
 five times.**
+
+The same argument does not stop at mirrors. The duplicate check fires on **any** pair within a
+pHash Hamming distance of 6, so a subject with higher symmetry loses more than one view. A **body
+of revolution** — the navigation buoy — looks the same from every azimuth, and a single
+orthographic elevation already defines the whole revolve curve. Measured on a buoy set generated
+before this was understood, `check_reference_admission.py` admitted the three-quarter anchor and
+rejected **all four** elevations as near-duplicates.
+
+So the pack carries as many elevations as the subject's symmetry earns, and no more:
+
+| subject symmetry | elevations in the pack |
+|---|---|
+| none / bilateral only | front, port, back, plan-top (starboard for the GLB service only) |
+| body of revolution | one `elev-profile`, no plan-top |
+
+Decide from the symmetry, then **prove it with the gate** — run each candidate view with
+`--against` the pHashes of the already-admitted set before it enters the pack. A rejection has two
+possible causes and they need different responses: the view really is redundant (shorten the
+matrix), or the view should have been distinguishable and the lighting/projection has flattened the
+subject into a silhouette (fix that instead — see the Lighting section of the constraint block).
 
 ### 5.2 The GLB is part of the pack
 
