@@ -129,8 +129,28 @@ So the pack carries as many elevations as the subject's symmetry earns, and no m
 
 | subject symmetry | elevations in the pack |
 |---|---|
-| none / bilateral only | front, port, back, plan-top (starboard for the GLB service only) |
+| none | front, port, back, plan-top (starboard for the GLB service only) |
+| bilateral on one axis | front, port, plan-top — **back is a mirror and is rejected too** |
+| bilateral on both axes | front, port, plan-top |
 | body of revolution | one `elev-profile`, no plan-top |
+
+**The mirror exclusion is wider than the starboard case.** Measured on marine-crate, an unmarked
+box with no asymmetric feature: every one of its three elevations hashes at **Hamming 0** against
+its own mirror, while the three differ from each other by 14-20.
+
+```
+elev-front  vs its mirror   0    rejected
+elev-port   vs its mirror   0    rejected
+plan-top    vs its mirror   0    rejected
+elev-front  vs elev-port   14    admitted
+elev-front  vs plan-top    18    admitted
+elev-port   vs plan-top    20    admitted
+```
+
+So for a subject with no markings and no handed feature, `elev-back` is a duplicate of
+`elev-front` and `elev-starboard` a duplicate of `elev-port` — both are excluded from the pack, and
+both are generated for the GLB service only. The moment the subject gains an asymmetric feature — a
+placard on one face, a hinge, a lifting eye — re-measure; the exclusion no longer holds.
 
 Decide from the symmetry, then **prove it with the gate** — run each candidate view with
 `--against` the pHashes of the already-admitted set before it enters the pack. A rejection has two
