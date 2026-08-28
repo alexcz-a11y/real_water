@@ -290,12 +290,26 @@ than reinvented per view.
 **Fixed**: columnar basalt sea stack; warm grey to graphite; **no beach, no shoreline, no vegetation
 mass**. Distant silhouette and reflection subject only.
 
-The waterline band is a single horizontal dark stain running unbroken around the whole stack, darker
-than the rock above it and free of weed. The stack is a reflection subject, so where its silhouette
-meets the water is what the reflection reads from, and it must not vary by view.
+**There is no waterline band.** v3 required one — "a single horizontal dark stain running unbroken
+around the whole stack, darker than the rock above it and free of weed" — and it was retracted on
+2026-08-28 after seven generation attempts across three separate levers failed to produce it and the
+columnar rock together. Measured, every attempt landed in one of three failure modes:
 
-The base below the waterline continues straight down as the same columnar rock, without flaring into
-a plinth or a skirt of debris.
+```
+geometric wording ("razor-sharp", "like a painted line")
+    -> a level band, and the columnar relief destroyed: fine flat stripes on a smooth cylinder,
+       the band itself a flat area with the texture wiped out of it
+material wording ("the stone itself is dark through", "wet zone")
+    -> the columnar relief kept, and the band dissolved into a bottom-to-top gradient with no
+       boundary, or a blotchy patch dark on one side and pale on the other
+editing an accepted render (silhouette IoU 0.9854 -- the edit did NOT re-render the subject)
+    -> a level unbroken band, rendered as a collar of separate material strapped around the tower,
+       the columns not running through it
+```
+
+The columnar relief is what only pixels can carry; the band's height, depth and tone were prompt
+parameters being read back. So the band goes and the rock stays. The base continues straight down as
+the same columnar rock, without flaring into a plinth or a skirt of debris.
 
 **This is the one asset with no top view** — it is a distant silhouette and is not reconstructed at
 part level.

@@ -541,10 +541,10 @@ growth limited to what does not obscure the silhouette. Upper surfaces read broa
 broad flat concrete deck across the top, unbroken except where the instrument bay opens.
 
 **basalt-sea-stack — 250–300 m**
-Columnar basalt. Warm grey to graphite. **No beach, no shoreline, no vegetation mass.** Waterline
-band is a single horizontal dark stain, unbroken around the whole stack, darker than the rock above
-and free of weed. Base below the waterline continues straight down as the same columnar rock, no
-plinth, no debris skirt. **No top view for this asset.**
+Columnar basalt. Warm grey to graphite. **No beach, no shoreline, no vegetation mass.** **No
+waterline band** — the requirement was retracted on 2026-08-28 because it and the columnar relief
+were never achievable together; see the Reference Bible section 8. The base continues straight down
+as the same columnar rock, no plinth, no debris skirt. **No top view for this asset.**
 
 ---
 
