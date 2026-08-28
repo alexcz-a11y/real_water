@@ -92,15 +92,13 @@ One directory per asset, outside the repository, at
 | File | Purpose |
 |---|---|
 | `<asset>-anchor-3q-v001.png` | Identity anchor. **Approved before any other view is generated**; every other view derives from it. |
-| `<asset>-elev-front-v001.png` | Front elevation |
-| `<asset>-elev-port-v001.png` | Side elevation, port |
-| `<asset>-elev-back-v001.png` | Back elevation |
-| `<asset>-plan-top-v001.png` | Top view — **omitted for the basalt sea stack** |
+| `<asset>-elev-*-v001.png` | Geometric elevations — **the count follows the subject's symmetry, it is not fixed**; see 5.1 |
+| `<asset>-plan-top-v001.png` | Top view — **omitted for the basalt sea stack and for any body of revolution** |
 | `<asset>-mat-<material>-v001.png` | Material close-ups, **N per asset** — see section 7 |
 | `<asset>-lookdev-wet-v001.png` | Wet look-dev. Material evidence only; not part of the identity. |
 | `<asset>-v001.glb` | Placed by hand. See section 5.2. |
 
-### 5.1 The right-side elevation is generated but never enters the pack
+### 5.1 The elevation count follows the subject's symmetry
 
 The GLB service needs four views — front, left, right, back. The right elevation is generated for
 that purpose only and is **not** delivered to the reconstruction agent.
@@ -119,6 +117,46 @@ would fire on all of them every time.
 
 **Generating it and then not shipping it is cheaper than shipping it and explaining the rejection
 five times.**
+
+The same argument does not stop at mirrors. The duplicate check fires on **any** pair within a
+pHash Hamming distance of 6, so a subject with higher symmetry loses more than one view. A **body
+of revolution** — the navigation buoy — looks the same from every azimuth, and a single
+orthographic elevation already defines the whole revolve curve. Measured on a buoy set generated
+before this was understood, `check_reference_admission.py` admitted the three-quarter anchor and
+rejected **all four** elevations as near-duplicates.
+
+So the pack carries as many elevations as the subject's symmetry earns, and no more:
+
+| subject symmetry | elevations in the pack |
+|---|---|
+| none | front, port, back, plan-top (starboard for the GLB service only) |
+| bilateral on one axis | front, port, plan-top — **back is a mirror and is rejected too** |
+| bilateral on both axes | front, port, plan-top |
+| body of revolution | one `elev-profile`, no plan-top |
+
+**The mirror exclusion is wider than the starboard case.** Measured on marine-crate, an unmarked
+box with no asymmetric feature: every one of its three elevations hashes at **Hamming 0** against
+its own mirror, while the three differ from each other by 14-20.
+
+```
+elev-front  vs its mirror   0    rejected
+elev-port   vs its mirror   0    rejected
+plan-top    vs its mirror   0    rejected
+elev-front  vs elev-port   14    admitted
+elev-front  vs plan-top    18    admitted
+elev-port   vs plan-top    20    admitted
+```
+
+So for a subject with no markings and no handed feature, `elev-back` is a duplicate of
+`elev-front` and `elev-starboard` a duplicate of `elev-port` — both are excluded from the pack, and
+both are generated for the GLB service only. The moment the subject gains an asymmetric feature — a
+placard on one face, a hinge, a lifting eye — re-measure; the exclusion no longer holds.
+
+Decide from the symmetry, then **prove it with the gate** — run each candidate view with
+`--against` the pHashes of the already-admitted set before it enters the pack. A rejection has two
+possible causes and they need different responses: the view really is redundant (shorten the
+matrix), or the view should have been distinguishable and the lighting/projection has flattened the
+subject into a silhouette (fix that instead — see the Lighting section of the constraint block).
 
 ### 5.2 The GLB is part of the pack
 
@@ -252,12 +290,26 @@ than reinvented per view.
 **Fixed**: columnar basalt sea stack; warm grey to graphite; **no beach, no shoreline, no vegetation
 mass**. Distant silhouette and reflection subject only.
 
-The waterline band is a single horizontal dark stain running unbroken around the whole stack, darker
-than the rock above it and free of weed. The stack is a reflection subject, so where its silhouette
-meets the water is what the reflection reads from, and it must not vary by view.
+**There is no waterline band.** v3 required one — "a single horizontal dark stain running unbroken
+around the whole stack, darker than the rock above it and free of weed" — and it was retracted on
+2026-08-28 after seven generation attempts across three separate levers failed to produce it and the
+columnar rock together. Measured, every attempt landed in one of three failure modes:
 
-The base below the waterline continues straight down as the same columnar rock, without flaring into
-a plinth or a skirt of debris.
+```
+geometric wording ("razor-sharp", "like a painted line")
+    -> a level band, and the columnar relief destroyed: fine flat stripes on a smooth cylinder,
+       the band itself a flat area with the texture wiped out of it
+material wording ("the stone itself is dark through", "wet zone")
+    -> the columnar relief kept, and the band dissolved into a bottom-to-top gradient with no
+       boundary, or a blotchy patch dark on one side and pale on the other
+editing an accepted render (silhouette IoU 0.9854 -- the edit did NOT re-render the subject)
+    -> a level unbroken band, rendered as a collar of separate material strapped around the tower,
+       the columns not running through it
+```
+
+The columnar relief is what only pixels can carry; the band's height, depth and tone were prompt
+parameters being read back. So the band goes and the rock stays. The base continues straight down as
+the same columnar rock, without flaring into a plinth or a skirt of debris.
 
 **This is the one asset with no top view** — it is a distant silhouette and is not reconstructed at
 part level.
